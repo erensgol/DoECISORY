@@ -1,0 +1,508 @@
+module Lib_Vise
+
+# ======================================================================================
+# DAISHODOE - LIB VISE (STATISTICAL ANALYSIS ENGINE)
+# ======================================================================================
+# Purpose: Advanced regression (OLS), cross-validation (Q²), and
+#          multithreaded search for optimal experimental coordinates.
+# Module Tag: VISE
+# ======================================================================================
+
+using GLM
+using DataFrames
+using Combinatorics
+using Base.Threads
+using LinearAlgebra
+using Statistics
+using Distributions
+using Printf
+using Main.Sys_Fast
+using Main.Lib_Arts
+
+export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
+    VISE_Predict_DDEF, VISE_Execute_DDEF, VISE_CrossValidate_DDEF,
+    VISE_GetTermNames_DDEF, VISE_ClampIndex_DDEF
+
+# --------------------------------------------------------------------------------------
+# SECTION 1: DESIGN MATRIX EXPANSION & NAMING
+# --------------------------------------------------------------------------------------
+
+"""
+    VISE_GetTermNames_DDEF(InNames, ModelType) -> Vector{String}
+Generates human-readable names for regression terms (e.g., "A × B", "A²").
+"""
+function VISE_GetTermNames_DDEF(InNames::Vector{String}, ModelType::String)
+    K = length(InNames)
+    names = Vector{String}(undef, 0)
+    push!(names, "Intercept")
+    append!(names, InNames)
+
+    occursin("linear", lowercase(ModelType)) && return names
+
+    # Quadratic: interactions then squared terms
+    for (c1, c2) in combinations(1:K, 2)
+        push!(names, "$(InNames[c1]) × $(InNames[c2])")
+    end
+    for n in InNames
+        push!(names, "$(n)²")
+    end
+    return names
+end
+
+"""
+    VISE_ExpandDesign_DDEF(X, ModelType) -> Matrix{Float64}
+Expands raw factor matrix into a design matrix (intercept + linear + interactions + quadratic).
+"""
+function VISE_ExpandDesign_DDEF(X::AbstractMatrix{Float64}, ModelType::String)
+    N, K = size(X)
+    occursin("linear", lowercase(ModelType)) && return hcat(ones(N), X)
+
+    combos = collect(combinations(1:K, 2))
+    n_inter = length(combos)
+
+    # Pre-allocate full design matrix: [1 | X | interactions | X²]
+    Xd = Matrix{Float64}(undef, N, 1 + K + n_inter + K)
+    fill!(view(Xd, :, 1), 1.0)
+    copyto!(view(Xd, :, 2:K+1), X)
+    @inbounds for (i, (c1, c2)) in enumerate(combos)
+        Xd[:, K+1+i] .= view(X, :, c1) .* view(X, :, c2)
+    end
+    @. Xd[:, K+n_inter+2:end] = abs2(X)
+
+    return Xd
+end
+
+# --------------------------------------------------------------------------------------
+# SECTION 2: REGRESSION ENGINE (OLS CORE + RIDGE FALLBACK)
+# --------------------------------------------------------------------------------------
+
+"""
+    VISE_ClampIndex_DDEF(idx, len) -> Int
+Clamps an index to the valid range [1, len].
+Prevents BoundsError from floating-point index drift.
+"""
+VISE_ClampIndex_DDEF(idx::Integer, len::Integer) = clamp(Int(idx), 1, Int(len))
+VISE_ClampIndex_DDEF(idx::AbstractFloat, len::Integer) = clamp(round(Int, idx), 1, Int(len))
+
+"""
+    VISE_Regress_DDEF(X, Y, ModelType; InNames) -> Dict
+OLS regression with 3-tier singularity protection:
+  1. QR decomposition (normal path)
+  2. Ridge regularisation (λ=1e-6 on diagonal) if QR fails
+  3. Pseudo-inverse (pinv) as absolute last resort
+Returns a model dictionary containing Coefs, R², Adjusted R², and RMSE.
+"""
+function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Float64},
+    ModelType::String; InNames::Vector{String}=String[])
+    X_Design = VISE_ExpandDesign_DDEF(X_Raw, ModelType)
+
+    try
+        # ── Tier 1: Standard QR-based OLS ──────────────────────────────────────
+        Beta = try
+            X_Design \ Y
+        catch e_qr
+            Sys_Fast.FAST_Log_DDEF("VISE", "SINGULAR_WARN",
+                "QR failed ($(typeof(e_qr))). Activating adaptive Ridge fallback.", "WARN")
+            # ── Tier 2: Ridge regularisation with dynamic λ ─────────────────
+            # λ scales with tr(X'X)/p so it adapts to micro vs macro data ranges
+            try
+                XtX = X_Design' * X_Design
+                p = size(XtX, 1)
+                λ = 1e-6 * (tr(XtX) / max(p, 1))   # Trace-scaled penalty
+                Sys_Fast.FAST_Log_DDEF("VISE", "RIDGE_LAMBDA",
+                    "Dynamic λ = $(@sprintf("%.2e", λ)) (trace=$(round(tr(XtX); digits=2)), p=$p)", "INFO")
+                XtX_reg = XtX + λ * I
+                XtX_reg \ (X_Design' * Y)
+            catch e_ridge
+                Sys_Fast.FAST_Log_DDEF("VISE", "SINGULAR_WARN",
+                    "Ridge also failed. Using pseudo-inverse (pinv).", "WARN")
+                # ── Tier 3: Pseudo-inverse (absolute fallback) ─────────────────
+                pinv(X_Design) * Y
+            end
+        end
+
+        Y_Pred = X_Design * Beta
+        Resid = Y .- Y_Pred
+        SSE = sum(abs2, Resid)
+        SST = var(Y) * (length(Y) - 1)
+
+        R2 = SST > 1e-9 ? 1.0 - SSE / SST : 0.0
+        isnan(R2) && (R2 = 0.0)
+
+        n, p = size(X_Design)
+        R2_Adj = n > p ? max(0.0, 1.0 - (1.0 - R2) * ((n - 1) / (n - p))) : 0.0
+        RMSE = n > p ? sqrt(SSE / (n - p)) : 0.0
+
+        F_Stat, P_Value = NaN, NaN
+        P_Coefs = fill(NaN, p)
+        SE_Coefs = fill(NaN, p)
+
+        try
+            if n > p && SST > 1e-9 && SSE > 1e-9
+                MSR = (SST - SSE) / max(1, p - 1)
+                MSE = SSE / (n - p)
+                if MSE > 0.0
+                    F_Stat = MSR / MSE
+                    P_Value = 1.0 - cdf(FDist(max(1, p - 1), n - p), F_Stat)
+
+                    # Use pinv for covariance when X'X is near-singular
+                    Var_Beta = try
+                        MSE * inv(X_Design' * X_Design)
+                    catch
+                        MSE * pinv(X_Design' * X_Design)
+                    end
+                    SE_Coefs = sqrt.(max.(0.0, diag(Var_Beta)))
+                    t_Stats = Beta ./ max.(SE_Coefs, 1e-15)   # Guard /0
+                    P_Coefs = 2.0 .* (1.0 .- cdf.(TDist(n - p), abs.(t_Stats)))
+                end
+            end
+        catch
+            Sys_Fast.FAST_Log_DDEF("VISE", "ANOVA_WARN", "Failed to compute exact p-values", "WARN")
+        end
+
+        TNames = isempty(InNames) ?
+                 ["Term $i" for i in 1:length(Beta)] :
+                 VISE_GetTermNames_DDEF(InNames, ModelType)
+
+        return Dict(
+            "Coefs" => Beta, "TermNames" => TNames,
+            "R2" => R2, "R2_Adj" => R2_Adj,
+            "RMSE" => RMSE, "F_Stat" => F_Stat,
+            "P_Value" => P_Value, "P_Coefs" => P_Coefs,
+            "SE_Coefs" => SE_Coefs, "ModelType" => ModelType,
+            "Status" => "OK",
+        )
+    catch e
+        Sys_Fast.FAST_Log_DDEF("VISE", "REGRESS_ERROR", sprint(showerror, e, catch_backtrace()), "FAIL")
+        return Dict("Status" => "FAIL", "Error" => string(e))
+    end
+end
+
+"""
+    VISE_Predict_DDEF(Model, X_New) -> Vector{Float64}
+Evaluates the fitted regression model on a new set of data points.
+"""
+function VISE_Predict_DDEF(Model::Dict, X_New::AbstractMatrix{Float64})
+    get(Model, "Status", "FAIL") != "OK" && return zeros(size(X_New, 1))
+    return VISE_ExpandDesign_DDEF(X_New, Model["ModelType"]) * Model["Coefs"]
+end
+
+# --------------------------------------------------------------------------------------
+# SECTION 3: VALIDATION (CROSS-VALIDATION & Q²)
+# --------------------------------------------------------------------------------------
+
+"""
+    VISE_CrossValidate_DDEF(X, Y, ModelType) -> Float64
+Calculates Predicted R² (Q²) using the PRESS statistic.
+Uses the Hat Matrix shortcut: e_press(i) = Resid_i / (1 - h_ii).
+"""
+function VISE_CrossValidate_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Float64},
+    ModelType::String)
+    N = length(Y)
+    N < 4 && return NaN
+
+    X_Design = VISE_ExpandDesign_DDEF(X_Raw, ModelType)
+
+    try
+        F = qr(X_Design)
+        Beta = F \ Y
+        Resid = Y .- (X_Design * Beta)
+        h_ii = vec(sum(abs2, Matrix(F.Q); dims=2))
+
+        denom = max.(1.0 .- h_ii, 1e-6)
+        PRESS = sum(abs2, Resid ./ denom)
+
+        SST = var(Y) * (N - 1)
+        return SST < 1e-9 ? 0.0 : max(0.0, 1.0 - PRESS / SST)
+    catch
+        return NaN
+    end
+end
+
+# --------------------------------------------------------------------------------------
+# SECTION 4: MULTITHREADED GRID SEARCH OPTIMIZATION
+# --------------------------------------------------------------------------------------
+
+"""
+    VISE_GridSearch_DDEF(Models, Goals, Bounds; Steps=21) -> (X, Y_Pred, Scores)
+Performs a high-density grid search across the factor space to find the 'Sweet Spot'.
+Uses multithreading for desirability function evaluation.
+"""
+function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
+    X_Bounds::AbstractMatrix{Float64}; Steps::Int=21)
+    Dim = size(X_Bounds, 1)
+
+    # Thread-aware density balancing
+    compute_threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
+    max_pts = compute_threads >= 4 ? 2_000_000 : 500_000  # Smaller grids on fewer threads
+
+    eff_steps = Steps
+    while eff_steps^Dim > max_pts && eff_steps > 3
+        eff_steps -= 2
+    end
+    Sys_Fast.FAST_Log_DDEF("VISE", "GRID_CONFIG",
+        "Grid: $(eff_steps)^$Dim = $(eff_steps^Dim) pts | Compute threads: $compute_threads", "INFO")
+
+    # Generate coordinate ranges
+    Ranges = [range(X_Bounds[i, 1], X_Bounds[i, 2]; length=eff_steps) for i in 1:Dim]
+
+    # 1. Point Collection (vectorized via product iterator)
+    Iter = Iterators.product(Ranges...)
+    NumPoints = length(Iter)
+    Candidates = Matrix{Float64}(undef, NumPoints, Dim)
+
+    @inbounds for (i, pt) in enumerate(Iter)
+        for d in 1:Dim
+            Candidates[i, d] = pt[d]
+        end
+    end
+
+    # 2. Design Matrix (computed once for the reference model type)
+    RefType = isempty(Models) ? "quadratic" : get(Models[1], "ModelType", "quadratic")
+    X_Design = VISE_ExpandDesign_DDEF(Candidates, RefType)
+
+    NumModels = length(Models)
+    Predictions = zeros(Float64, NumPoints, NumModels)
+    Active_Flags = falses(NumModels)
+
+    # 3. Parallel Prediction (BLAS + thread-level)
+    # Use capped compute thread pool
+    Threads.@threads for m in 1:NumModels
+        Mod = Models[m]
+        Goal = Goals[m]
+        Mod["Status"] != "OK" && continue
+
+        Beta = Mod["Coefs"]::Vector{Float64}
+        local_pred = zeros(Float64, NumPoints)
+
+        if get(Mod, "ModelType", "quadratic") != RefType
+            Xd_Local = VISE_ExpandDesign_DDEF(Candidates, Mod["ModelType"])
+            mul!(local_pred, Xd_Local, Beta)
+        else
+            mul!(local_pred, X_Design, Beta)
+        end
+        Predictions[:, m] = local_pred
+
+        if !occursin("Monitor", get(Goal, "Type", "Nominal"))
+            Active_Flags[m] = true
+        end
+    end
+
+    # 4. Multi-threaded Composite Scoring (Point-level Parallelism)
+    active_idx = findall(Active_Flags)
+    if isempty(active_idx)
+        Scores = ones(NumPoints)
+    else
+        Scores = Vector{Float64}(undef, NumPoints)
+        pow = 1.0 / length(active_idx)
+
+        Threads.@threads for i in 1:NumPoints
+            s = 1.0
+            @inbounds for m_idx in active_idx
+                val = Predictions[i, m_idx]
+                d = Lib_Arts.ARTS_CalcDesirability_DDEF(val, Models[m_idx]["Goal"])
+                s *= d
+            end
+            Scores[i] = s^pow
+        end
+    end
+
+    # Clamp best-point index to valid range before returning
+    best_idx = VISE_ClampIndex_DDEF(argmax(Scores), NumPoints)
+
+    return Candidates, Predictions, Scores
+end
+
+# --------------------------------------------------------------------------------------
+# SECTION 5: EXECUTION ORCHESTRATOR
+# --------------------------------------------------------------------------------------
+
+"""
+    VISE_Execute_DDEF(DataFile, Phase, Goals, [ModelType]) -> Dict
+Higher-level entry point for experimental analysis.
+"""
+function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVector,
+    ModelType::String="Auto"; Opts=Dict{String,Any}())
+    C = Sys_Fast.FAST_Constants_DDEF()
+    Log = Sys_Fast.FAST_Log_DDEF
+
+    Log("VISE", "EXECUTION_START", "Analyzing Phase: $Phase", "WAIT")
+
+    df_raw = Sys_Fast.FAST_ReadExcel_DDEF(DataFile, C.SHEET_DATA)
+    isempty(df_raw) && (df_raw = Sys_Fast.FAST_ReadExcel_DDEF(DataFile, "VERI_KAYITLARI"))
+    isempty(df_raw) && return Dict("Status" => "FAIL", "Message" => "Source data is unreadable or empty.")
+
+    col_phase = Symbol(C.COL_PHASE)
+    df_train = hasproperty(df_raw, col_phase) ?
+               filter(r -> string(r[col_phase]) == Phase, df_raw) :
+               copy(df_raw)
+    nrow(df_train) < 3 && return Dict("Status" => "FAIL", "Message" => "Insufficient data points (N < 3).")
+
+    in_cols = filter(n -> startswith(n, C.PRE_INPUT), names(df_train))
+    out_cols = filter(n -> startswith(n, C.PRE_RESULT), names(df_train))
+
+    # Construct numeric matrices from DataFrame
+    nr = nrow(df_train)
+    X_Raw = Matrix{Float64}(undef, nr, length(in_cols))
+    Y_Raw = Matrix{Float64}(undef, nr, length(out_cols))
+    @inbounds for (ci, c) in enumerate(in_cols), r in 1:nr
+        X_Raw[r, ci] = Sys_Fast.FAST_SafeNum_DDEF(df_train[r, c])
+    end
+    @inbounds for (ci, c) in enumerate(out_cols), r in 1:nr
+        Y_Raw[r, ci] = Sys_Fast.FAST_SafeNum_DDEF(df_train[r, c])
+    end
+
+    valid_mask = vec(all(!isnan, Y_Raw; dims=2))
+    X_Clean = X_Raw[valid_mask, :]
+    Y_Clean = Y_Raw[valid_mask, :]
+    N, K = size(X_Clean)
+
+    P_quad = 1 + 2K + K * (K - 1) ÷ 2
+    eff_model = ModelType == "Auto" ? (N > P_quad + 2 ? "quadratic" : "linear") : lowercase(ModelType)
+
+    Log("VISE", "MODEL_SETUP", "Using '$eff_model' model for $N samples.", "OK")
+
+    InNames = replace.(in_cols, C.PRE_INPUT => "")
+    OutNames = replace.(out_cols, C.PRE_RESULT => "")
+
+    models = map(1:length(out_cols)) do m
+        mod = VISE_Regress_DDEF(X_Clean, view(Y_Clean, :, m), eff_model; InNames)
+        mod["Goal"] = Goals[m]
+        mod
+    end
+
+    r2_vec = [get(m, "R2_Adj", NaN) for m in models]
+    r2_pred_vec = [VISE_CrossValidate_DDEF(X_Clean, view(Y_Clean, :, m), eff_model)
+                   for m in 1:length(out_cols)]
+
+    valid_r2 = filter(!isnan, r2_vec)
+    !isempty(valid_r2) && Log("VISE", "TRAINING_SUMMARY",
+        "Average Model R²_Adj: $(round(mean(valid_r2); digits=3))", "OK")
+
+    Best_Point = Float64[]
+    Leaders_DF = DataFrame()
+
+    if get(Opts, "Optim", true) && K >= 2
+        bounds = hcat(minimum(X_Clean; dims=1)', maximum(X_Clean; dims=1)')
+        XT, YP, SC = VISE_GridSearch_DDEF(models, Goals, bounds)
+
+        # Safe index clamping for leader extraction
+        num_candidates = length(SC)
+        best_idx = VISE_ClampIndex_DDEF(argmax(SC), num_candidates)
+        Best_Point = XT[best_idx, :]
+
+        # --- Leader Candidate Selection (Diversity-Focused) ---
+        used_indices = Int[]
+        cand_indices = Int[]
+        cand_tags = String[]
+        cand_count = 0
+
+        top_indices = partialsortperm(SC, 1:num_candidates; rev=true)
+
+        # 1. Top 8 Global Leaders
+        for k in 1:min(8, length(top_indices))
+            p_idx = VISE_ClampIndex_DDEF(top_indices[k], num_candidates)
+            cand_count += 1
+            push!(cand_indices, p_idx)
+            push!(cand_tags, @sprintf("TOP-%02d", k))
+            push!(used_indices, p_idx)
+        end
+
+        # 2. Input-Based Diversity (best score in the lowest 10% quantile)
+        for i in 1:min(3, size(XT, 2))
+            tag_pre = i <= length(InNames) ? uppercase(first(InNames[i] * "   ", 3)) : "IN$i"
+
+            s_i = sortperm(XT[:, i])
+            slice_len = max(1, round(Int, length(s_i) * 0.1))
+            slice_indices = s_i[1:slice_len]
+
+            slice_scores = SC[slice_indices]
+            best_in_slice_local = sortperm(slice_scores; rev=true)
+            sorted_slice_global = slice_indices[best_in_slice_local]
+
+            selected_idx = -1
+            for m in eachindex(sorted_slice_global)
+                idx_val = VISE_ClampIndex_DDEF(sorted_slice_global[m], num_candidates)
+                if !(idx_val in used_indices)
+                    selected_idx = idx_val
+                    break
+                end
+            end
+
+            if selected_idx == -1
+                selected_idx = VISE_ClampIndex_DDEF(sorted_slice_global[1], num_candidates)
+                tag_str = "$(tag_pre)-01(D)"
+            else
+                tag_str = "$(tag_pre)-01"
+                push!(used_indices, selected_idx)
+            end
+
+            cand_count += 1
+            push!(cand_indices, selected_idx)
+            push!(cand_tags, tag_str)
+        end
+
+        # 3. Output-Based Diversity (respecting sensor limits, highest values)
+        valid_mask = SC .> 1e-4
+
+        for i in 1:min(3, size(YP, 2))
+            tag_pre = i <= length(OutNames) ? uppercase(first(OutNames[i] * "   ", 3)) : "OUT$i"
+
+            sorted_desc = sortperm(YP[:, i]; rev=true)
+            valid_sorted = filter(idx -> valid_mask[idx], sorted_desc)
+            if isempty(valid_sorted)
+                valid_sorted = sorted_desc
+            end
+
+            selected_idx = -1
+            for m in eachindex(valid_sorted)
+                idx_val = VISE_ClampIndex_DDEF(valid_sorted[m], num_candidates)
+                if !(idx_val in used_indices)
+                    selected_idx = idx_val
+                    break
+                end
+            end
+
+            if selected_idx == -1
+                selected_idx = VISE_ClampIndex_DDEF(valid_sorted[1], num_candidates)
+                tag_str = "$(tag_pre)-01(D)"
+            else
+                tag_str = "$(tag_pre)-01"
+                push!(used_indices, selected_idx)
+            end
+
+            cand_count += 1
+            push!(cand_indices, selected_idx)
+            push!(cand_tags, tag_str)
+        end
+
+        Leaders_DF = DataFrame(
+            Symbol(C.COL_ID) => cand_tags,
+            :Score => round.(SC[cand_indices]; digits=4),
+        )
+
+        for (k, n) in enumerate(InNames)
+            Leaders_DF[!, Symbol(C.PRE_INPUT * n)] = round.(XT[cand_indices, k]; digits=3)
+        end
+        for (k, n) in enumerate(OutNames)
+            Leaders_DF[!, Symbol(C.PRE_PRED * n)] = round.(YP[cand_indices, k]; digits=3)
+        end
+
+        # Write candidate sets to the transient file for FLOW leader extraction
+        Sys_Fast.FAST_WriteLeaders_DDEF(DataFile, Phase, Leaders_DF)
+        Log("VISE", "OPTIMIZATION", "Candidate pool (N=14 Diversity-Focused) generated and saved.", "OK")
+    end
+
+    graphs = Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, InNames, OutNames,
+        Goals, r2_vec, r2_pred_vec, Opts, Best_Point)
+
+    return Dict(
+        "Status" => "OK", "Graphs" => graphs,
+        "Models" => models, "R2_Adj" => r2_vec,
+        "R2_Pred" => r2_pred_vec, "BestPoint" => Best_Point,
+        "Leaders" => Leaders_DF, "OutNames" => OutNames,
+        "BestScore" => isempty(Leaders_DF) ? 0.0 : maximum(Leaders_DF.Score),
+    )
+end
+
+end # module
