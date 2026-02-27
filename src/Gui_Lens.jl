@@ -54,13 +54,13 @@ function LENS_Layout_DDEF()
             dbc_row([
                     # --- LEFT COLUMN: Configuration & Goals ---
                     dbc_col([
-                            dbc_row(dbc_col(BASE_RayPanel("CONFIGURATION", [
+                            dbc_row(dbc_col(BASE_GlassPanel("CONFIGURATION", [
                                         # 1. Data Ingestion
                                         dbc_row(dbc_col(dcc_upload(id="lens-upload-data",
                                                 children=dbc_button([html_i(className="fas fa-file-import me-2"), "Import Dataset"],
                                                     color="secondary", outline=true, size="sm", className="w-100 mb-2"),
                                                 multiple=false), xs=12)),
-                                        dbc_row(dbc_col(dcc_loading(html_div(id="lens-upload-status", className="ray-loading-status mb-2"),
+                                        dbc_row(dbc_col(dcc_loading(html_div(id="lens-upload-status", className="glass-loading-status mb-2"),
                                                 type="default", color="#21918C"), xs=12)),
                                         dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)),
 
@@ -113,7 +113,7 @@ function LENS_Layout_DDEF()
 
                     # --- RIGHT COLUMN: Visualization Deck ---
                     dbc_col([
-                            BASE_RayPanel("OPTIMIZATION TARGETS", [
+                            BASE_GlassPanel("OPTIMIZATION TARGETS", [
                                     dbc_row(dbc_col([
                                             html_div(html_table([
                                                         html_thead(html_tr([
@@ -126,7 +126,7 @@ function LENS_Layout_DDEF()
                                                         html_tbody([LENS_BuildGoalRow_DDEF(i) for i in 1:3])
                                                     ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0")
                                         ], xs=12)),
-                                ]; panel_class="mb-3", content_class="ray-content p-2"), BASE_RayPanel("VISUALIZATION", [
+                                ]; panel_class="mb-3", content_class="glass-content p-2"), BASE_GlassPanel("VISUALIZATION", [
                                     dbc_row(dbc_col(html_div(id="lens-graph-info", className="mb-2 p-1", style=Dict("backgroundColor" => "#FFFFFF", "border" => "1px solid #DCDCDC", "borderRadius" => "4px")), xs=12)),
                                     dbc_row(dbc_col(html_div(id="lens-results-text", className="mb-3 small px-2 table-responsive"), xs=12)),
                                     dcc_loading(html_div([

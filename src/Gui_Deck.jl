@@ -196,7 +196,7 @@ function DECK_Layout_DDEF()
                         # --- LEFT COLUMN ---
                         dbc_col([
                                 # Factor Configuration Panel
-                                dbc_row(dbc_col(BASE_RayPanel("FACTOR CONFIGURATION",
+                                dbc_row(dbc_col(BASE_GlassPanel("FACTOR CONFIGURATION",
                                         dcc_loading(html_div(factor_table, className="table-responsive",
                                                 style=Dict("overflowX" => "auto", "overflowY" => "visible", "paddingBottom" => "4px")), type="default", color="#21918C");
                                         right_node=html_div([
@@ -215,7 +215,7 @@ function DECK_Layout_DDEF()
                                         panel_class="mb-3", content_class="", overflow="visible"), xs=12)),
 
                                 # Response Variables Panel
-                                dbc_row(dbc_col(BASE_RayPanel("RESPONSE VARIABLES",
+                                dbc_row(dbc_col(BASE_GlassPanel("RESPONSE VARIABLES",
                                         html_div(html_table([
                                                     html_tr([
                                                         html_th("RESPONSE NAME", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "paddingLeft" => "5px", "width" => "50%")), className="p-0"),
@@ -228,12 +228,12 @@ function DECK_Layout_DDEF()
                                                         ) for i in 1:3
                                                     ])
                                                 ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0");
-                                        content_class="ray-content p-0", panel_class=""), xs=12)),
+                                        content_class="glass-content p-0", panel_class=""), xs=12)),
                             ], xs=12, lg=9, className="mb-3 mb-lg-0"),
 
                         # --- RIGHT COLUMN ---
                         dbc_col([
-                                dbc_row(dbc_col(BASE_RayPanel("PROTOCOL SETTINGS", [
+                                dbc_row(dbc_col(BASE_GlassPanel("PROTOCOL SETTINGS", [
                                             dbc_row(dbc_col(html_div(id="deck-memo-msg", className="small mb-2 fw-bold"), xs=12)),
                                             dbc_row(dbc_col([
                                                     dbc_label("Project Name", className="small mb-1"),

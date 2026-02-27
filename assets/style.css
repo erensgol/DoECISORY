@@ -92,7 +92,7 @@ a:hover {
 }
 
 /* Top Navigation */
-.ray-navbar {
+.glass-navbar {
     height: 52px;
     border: 1px solid var(--border-subtle);
     border-radius: var(--rad-md);
@@ -148,7 +148,7 @@ a:hover {
 }
 
 /* 3. PANELS (Cards) */
-.ray-panel {
+.glass-panel {
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
     border-radius: var(--rad-md);
@@ -159,12 +159,12 @@ a:hover {
     overflow: visible;
 }
 
-.ray-panel:hover {
+.glass-panel:hover {
     border-color: var(--border-highlight);
 }
 
 /* Subtle top highlight on panels */
-.ray-panel::before {
+.glass-panel::before {
     content: '';
     position: absolute;
     top: 0;
@@ -175,7 +175,7 @@ a:hover {
     opacity: 0.5;
 }
 
-.ray-header {
+.glass-header {
     padding: 0.6rem 1rem;
     border-bottom: 1px solid var(--border-subtle);
     display: flex;
@@ -185,7 +185,7 @@ a:hover {
     border-radius: var(--rad-md) var(--rad-md) 0 0;
 }
 
-.ray-caption {
+.glass-caption {
     font-size: 0.75rem;
     font-weight: 600;
     text-transform: uppercase;
@@ -194,7 +194,7 @@ a:hover {
     margin: 0;
 }
 
-.ray-content {
+.glass-content {
     padding: 0.85rem 1rem;
     overflow: visible;
 }
@@ -228,12 +228,12 @@ a:hover {
 }
 
 /* 4. Home Screen - command list */
-.ray-search-container {
+.glass-search-container {
     margin-bottom: 2rem;
     position: relative;
 }
 
-.ray-search-input {
+.glass-search-input {
     width: 100%;
     background: transparent;
     border: none;
@@ -246,22 +246,22 @@ a:hover {
     transition: border-color 0.2s ease;
 }
 
-.ray-search-input:focus {
+.glass-search-input:focus {
     border-color: var(--accent-primary);
 }
 
-.ray-search-input::placeholder {
+.glass-search-input::placeholder {
     color: var(--text-tertiary);
     opacity: 0.5;
 }
 
-.ray-command-list {
+.glass-command-list {
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
 }
 
-.ray-command-row {
+.glass-command-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -275,7 +275,7 @@ a:hover {
     text-decoration: none !important;
 }
 
-.ray-command-row:hover {
+.glass-command-row:hover {
     background: #FFFFFF14;
     /* Selection highlight */
     border-left: 2px solid var(--accent-primary);
@@ -283,7 +283,7 @@ a:hover {
     /* Adjust padding for border */
 }
 
-.ray-command-icon {
+.glass-command-icon {
     width: 32px;
     height: 32px;
     display: flex;
@@ -296,29 +296,29 @@ a:hover {
     margin-right: 1rem;
 }
 
-.ray-command-row:hover .ray-command-icon {
+.glass-command-row:hover .glass-command-icon {
     background: var(--text-primary);
     color: var(--bg-body);
 }
 
-.ray-command-main {
+.glass-command-main {
     flex: 1;
 }
 
-.ray-command-title {
+.glass-command-title {
     font-weight: 600;
     color: var(--text-primary);
     display: block;
     margin-bottom: 0.1rem;
 }
 
-.ray-command-desc {
+.glass-command-desc {
     font-size: 0.8rem;
     color: var(--text-tertiary);
     display: block;
 }
 
-.ray-shortcut {
+.glass-shortcut {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.75rem;
     background: #0000001A;
@@ -480,14 +480,14 @@ select:focus {
 }
 
 /* 8. GENERAL TABLE OVERRIDES */
-.ray-content {
+.glass-content {
     overflow: visible !important;
 }
 
-.ray-panel td input,
-.ray-panel td select,
-.ray-panel td .form-select,
-.ray-panel td .form-control {
+.glass-panel td input,
+.glass-panel td select,
+.glass-panel td .form-select,
+.glass-panel td .form-control {
     font-size: 12px !important;
     padding: 0.3rem 0.4rem !important;
     height: auto !important;
@@ -666,7 +666,7 @@ select:focus {
 }
 
 /* Skeleton shimmer for analysis status text */
-.ray-loading-status {
+.glass-loading-status {
     background: linear-gradient(90deg,
             var(--bg-surface) 25%,
             #FFFFFF14 50%,

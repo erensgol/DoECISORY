@@ -13,7 +13,7 @@ using DashBootstrapComponents
 export BASE_STYLE_CELL, BASE_STYLE_INPUT, BASE_STYLE_INPUT_CENTER
 export BASE_STYLE_HEADER, BASE_STYLE_DATATABLE_CELL, BASE_STYLE_INLINE_HEADER, BASE_STYLE_HR, BASE_EMPTY_FIGURE
 export BASE_safe_rows, BASE_get_trigger
-export BASE_PageHeader, BASE_RayPanel, BASE_DataTable, BASE_Modal, BASE_ConvertTheme_PlotlyWhite!
+export BASE_PageHeader, BASE_GlassPanel, BASE_DataTable, BASE_Modal, BASE_ConvertTheme_PlotlyWhite!
 
 # --------------------------------------------------------------------------------------
 # SECTION 1: SHARED STYLE CONSTANTS
@@ -99,17 +99,17 @@ function BASE_PageHeader(title::String, subtitle::String)
 end
 
 """
-    BASE_RayPanel(title::String, content; right_node, panel_class, content_class)
-Standardized 'ray-panel' component with header and body.
+    BASE_GlassPanel(title::String, content; right_node, panel_class, content_class)
+Standardized 'glass-panel' component with header and body.
 """
-function BASE_RayPanel(title::String, content; right_node=nothing, panel_class="h-100", content_class="ray-content p-2 p-md-3", overflow="hidden")
-    header_content = Any[html_span(title, className="ray-caption")]
+function BASE_GlassPanel(title::String, content; right_node=nothing, panel_class="h-100", content_class="glass-content p-2 p-md-3", overflow="hidden")
+    header_content = Any[html_span(title, className="glass-caption")]
     !isnothing(right_node) && push!(header_content, right_node)
 
     return html_div([
-            html_div(header_content, className="ray-header d-flex justify-content-between align-items-center mb-2"),
+            html_div(header_content, className="glass-header d-flex justify-content-between align-items-center mb-2"),
             html_div(content, className=content_class)
-        ], className="ray-panel $panel_class", style=Dict("overflow" => overflow))
+        ], className="glass-panel $panel_class", style=Dict("overflow" => overflow))
 end
 
 """
