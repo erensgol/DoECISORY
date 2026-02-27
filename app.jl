@@ -91,7 +91,7 @@ navbar = html_div([
         html_div([
                 html_span("v1.0 In Dev.", className="badge bg-secondary text-white small opacity-50"),
             ], className="nav-actions", style=Dict("flex" => "1", "textAlign" => "right")),
-    ], className="ray-navbar d-flex align-items-center justify-content-between")
+    ], className="glass-navbar d-flex align-items-center justify-content-between")
 
 # 2. Page Content Render Area
 content = html_div(id="page-content", className="app-container")
@@ -191,7 +191,7 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
                                                 html_h3("Experimental Design", className="fw-bold mb-2", style=Dict("color" => "#000000")),
                                                 html_p("Synthesise robust testing matrices using Box-Behnken and Taguchi methodologies. Automatically generate protocol workspaces.",
                                                     className="text-secondary small mb-0", style=Dict("lineHeight" => "1.6")),
-                                            ], className="ray-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")); href="/design", style=Dict("textDecoration" => "none")),
+                                            ], className="glass-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")); href="/design", style=Dict("textDecoration" => "none")),
                                 ], xs=12, md=6, className="mb-4"),
 
                             # Analysis Card
@@ -205,7 +205,7 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
                                                 html_h3("Statistical Analysis", className="fw-bold mb-2", style=Dict("color" => "#000000")),
                                                 html_p("Extract insights via GLM regression, visualise desirability functions, and identify optimal formulation candidates using robust grid search algorithms.",
                                                     className="text-secondary small mb-0", style=Dict("lineHeight" => "1.6")),
-                                            ], className="ray-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")); href="/analysis", style=Dict("textDecoration" => "none")),
+                                            ], className="glass-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")); href="/analysis", style=Dict("textDecoration" => "none")),
                                 ], xs=12, md=6, className="mb-4"),
                         ], className="g-4 mb-5", style=Dict("maxWidth" => "900px", "margin" => "0 auto")),
 
