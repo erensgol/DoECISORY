@@ -458,6 +458,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         Output("deck-input-vol", "value"),
         Output("deck-input-conc", "value"),
         Output("deck-input-project", "value"),
+        Output("deck-dd-method", "value"),
         Output("deck-memo-msg", "children"),
         Output("deck-download-memo", "data"),
         # Triggers
@@ -501,7 +502,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             all_units = collect(args[offset+6MAX_ROWS:offset+7MAX_ROWS-1])
 
             ctx = callback_context()
-            isempty(ctx.triggered) && return ntuple(_ -> Dash.no_update(), 8)
+            isempty(ctx.triggered) && return ntuple(_ -> Dash.no_update(), 9)
             trig = split(ctx.triggered[1].prop_id, ".")[1]
 
             NO = Dash.no_update()
@@ -535,7 +536,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     deleteat!(rows, ri)
                 end
                 nc = max(0, length(rows))
-                return Dict("rows" => rows, "count" => nc), rows, NO, NO, NO, NO, NO, NO
+                return Dict("rows" => rows, "count" => nc), rows, NO, NO, NO, NO, NO, NO, NO
             end
 
             # ── B. Add Row ──────────────────────────────────────────────────────────────
@@ -555,14 +556,14 @@ function DECK_RegisterCallbacks_DDEF(app)
                     push!(rows, new_row)
                 end
 
-                return Dict("rows" => rows, "count" => new_count), rows, NO, NO, NO, NO, NO, NO
+                return Dict("rows" => rows, "count" => new_count), rows, NO, NO, NO, NO, NO, NO, NO
 
                 # ── C0. Clear Memo ───────────────────────────────────────────────────────────
             elseif trig == "deck-btn-clear"
                 rows = [DECK_GetDefaultRow_DDEF(1), DECK_GetDefaultRow_DDEF(2), DECK_GetDefaultRow_DDEF(3)]
                 lbl = html_div([html_i(className="fas fa-trash-alt me-2"), "Canvas Cleared"],
                     className="badge bg-danger text-white p-2 w-100", style=Dict("fontSize" => "0.85rem"))
-                return Dict("rows" => rows, "count" => 3), rows, NO, NO, NO, NO, lbl, NO
+                return Dict("rows" => rows, "count" => 3), rows, NO, NO, NO, NO, "BoxBehnken", lbl, NO
 
                 # ── C1. Load User Memo ───────────────────────────────────────────────────────
             elseif trig == "deck-upload-memo" && !isnothing(up_memo) && up_memo != ""
@@ -584,9 +585,9 @@ function DECK_RegisterCallbacks_DDEF(app)
                     vol_v = get(g, "Volume", NO)
                     conc_v = get(g, "Conc", NO)
 
-                    return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], NO, vol_v, conc_v, NO, lbl, NO
+                    return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], NO, vol_v, conc_v, NO, NO, lbl, NO
                 catch e
-                    return NO, NO, NO, NO, NO, NO, html_div("❌ Load Error: $e", className="badge bg-danger text-white w-100 p-2"), NO
+                    return NO, NO, NO, NO, NO, NO, NO, html_div("❌ Load Error: $e", className="badge bg-danger text-white w-100 p-2"), NO
                 end
 
                 # ── C2. Load Template ────────────────────────────────────────────────────────
@@ -599,9 +600,9 @@ function DECK_RegisterCallbacks_DDEF(app)
                     Dict("Name" => "Temperature", "Role" => "Variable", "L1" => 25.0, "L2" => 45.0, "L3" => 65.0, "MW" => 0.0, "Unit" => "°C"),
                 ]
                 lbl = html_div([html_i(className="fas fa-book-medical me-2"), "Template Applied"],
-                    className="badge bg-primary text-white p-2 w-100", style=Dict("fontSize" => "0.85rem", "boxShadow" => "0 2px 5px rgba(33,145,140,0.3)"))
+                    className="badge bg-primary text-white p-2 w-100", style=Dict("fontSize" => "0.85rem", "boxShadow" => "0 2px 5px #A6A6A6"))
                 nc = min(length(loaded_rows), MAX_ROWS)
-                return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], NO, 5.0, 20.0, NO, lbl, NO
+                return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], NO, 5.0, 20.0, NO, "BoxBehnken", lbl, NO
 
                 # ── D. Save Memo (Download) ──────────────────────────────────────────────────
             elseif trig == "deck-btn-save-memo"
@@ -612,10 +613,10 @@ function DECK_RegisterCallbacks_DDEF(app)
                     b64 = base64encode(json_str)
                     dl_dict = Dict("filename" => "Daisho_Workspace.json", "content" => b64, "base64" => true)
                     lbl = html_div([html_i(className="fas fa-check-circle me-2"), "Workspace Exported"],
-                        className="badge bg-success text-white p-2 w-100", style=Dict("fontSize" => "0.85rem", "boxShadow" => "0 2px 5px rgba(94,201,98,0.3)"))
-                    return NO, NO, NO, NO, NO, NO, lbl, dl_dict
+                        className="badge bg-success text-white p-2 w-100", style=Dict("fontSize" => "0.85rem", "boxShadow" => "0 2px 5px #A6A6A6"))
+                    return NO, NO, NO, NO, NO, NO, NO, lbl, dl_dict
                 catch e
-                    return NO, NO, NO, NO, NO, NO, html_div("❌ Save Error", className="badge bg-danger text-white p-2 w-100"), NO
+                    return NO, NO, NO, NO, NO, NO, NO, html_div("❌ Save Error", className="badge bg-danger text-white p-2 w-100"), NO
                 end
 
                 # ── E. Phase Transition ──────────────────────────────────────────────────────
@@ -642,8 +643,9 @@ function DECK_RegisterCallbacks_DDEF(app)
                                 html_i(className="fas fa-magic me-2 text-success"),
                                 html_span("Adaptive Recipe Loaded", className="text-success fw-bold"),
                             ], className="alert alert-success py-2 mt-2")
+                        # We use Taguchi_L9 after Phase 1 configuration is received via session data Handshake
                         return Dict("rows" => mapped[1:nc], "count" => nc), mapped[1:nc], msg,
-                        get(g, "Volume", NO), get(g, "Conc", NO), saved_project, NO, NO
+                        get(g, "Volume", NO), get(g, "Conc", NO), saved_project, "Taguchi_L9", NO, NO
                     end
                 catch e
                     Sys_Fast.FAST_Log_DDEF("DECK", "HANDSHAKE_ERROR", "$e", "FAIL")
@@ -669,7 +671,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                                 html_span("Imported: $fname", className="text-info fw-bold"),
                             ], className="alert alert-info py-2 mt-2")
                         return Dict("rows" => mapped[1:nc], "count" => nc), mapped[1:nc], msg,
-                        get(g, "Volume", NO), get(g, "Conc", NO), NO, NO, NO
+                        get(g, "Volume", NO), get(g, "Conc", NO), NO, NO, NO, NO
                     end
                 catch e
                     @error "Import failed" exception = (e, catch_backtrace())

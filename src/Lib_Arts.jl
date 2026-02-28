@@ -3,7 +3,7 @@ module Lib_Arts
 # ======================================================================================
 # DAISHODOE - LIB ARTS (VISUALIZATION & GRAPHICS MOTOR)
 # ======================================================================================
-# Purpose: High-fidelity PlotlyJS rendering, dark-theme configuration,
+# Purpose: High-fidelity PlotlyJS rendering, light-theme configuration,
 #          response surface mapping (RSM), and desirability calculations.
 # Module Tag: ARTS
 # ======================================================================================
@@ -12,6 +12,7 @@ using PlotlyJS
 using Printf
 using Statistics
 using Combinatorics
+using Distributions
 using Main.Sys_Fast
 
 export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
@@ -48,7 +49,7 @@ ARTS_GetTheme_DDEF() = THEME
 
 """
     _base_layout(title; width, height) -> Layout
-Internal helper to generate a standardized PlotlyJS layout with dark theme support.
+Internal helper to generate a standardized PlotlyJS layout with light theme support.
 """
 function _base_layout(title::String; height=500)
     TH = THEME
@@ -164,32 +165,74 @@ function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R
     TH = THEME
     Coefs = Model["Coefs"]
     Names = get(Model, "TermNames", ["T$i" for i in eachindex(Coefs)])
+    t_Stats = get(Model, "t_Stats", Coefs) # Fallback to coefs if t-stats missing for any reason
+    N_Samples = get(Model, "N_Samples", length(Coefs) + 5)
 
     # Exclude Intercept (Index 1)
-    clean_eff = @view Coefs[2:end]
+    clean_eff = @view t_Stats[2:end]
     clean_nms = @view Names[2:end]
+    # Check if we should fallback to Coefs signs if t_Stats is NaN 
+    clean_signs = any(isnan, clean_eff) ? sign.(@view Coefs[2:end]) : sign.(clean_eff)
 
-    perm = sortperm(abs.(clean_eff))
-    sorted_eff = clean_eff[perm]
+    # Use standard effect magnitudes 
+    magnitudes = any(isnan, clean_eff) ? abs.(@view Coefs[2:end]) : abs.(clean_eff)
+
+    perm = sortperm(magnitudes)
+    sorted_mag = magnitudes[perm]
     sorted_nms = clean_nms[perm]
+    sorted_sgn = clean_signs[perm]
 
-    colors = [e >= 0 ? TH.Yellow : TH.Magenta for e in sorted_eff]
+    # Separate traces for Positive / Negative 
+    pos_idx = findall(x -> x >= 0, sorted_sgn)
+    neg_idx = findall(x -> x < 0, sorted_sgn)
 
-    trace = bar(;
-        x=abs.(sorted_eff),
-        y=sorted_nms,
-        orientation="h",
-        marker=attr(color=colors, line=attr(width=0)),
-        text=[@sprintf("%.2f", e) for e in sorted_eff],
-        textposition="auto",
-    )
+    traces = GenericTrace[]
+
+    if !isempty(neg_idx)
+        push!(traces, bar(;
+            x=sorted_mag[neg_idx],
+            y=sorted_nms[neg_idx],
+            orientation="h",
+            name="Negative Effect",
+            marker=attr(color=TH.Purple, line=attr(width=0)),
+            text=[@sprintf("%.2f", m) for m in sorted_mag[neg_idx]],
+            textposition="auto",
+        ))
+    end
+
+    if !isempty(pos_idx)
+        push!(traces, bar(;
+            x=sorted_mag[pos_idx],
+            y=sorted_nms[pos_idx],
+            orientation="h",
+            name="Positive Effect",
+            marker=attr(color=TH.Yellow, line=attr(width=0)),
+            text=[@sprintf("%.2f", m) for m in sorted_mag[pos_idx]],
+            textposition="auto",
+        ))
+    end
 
     r2_str = isnan(R2_Adj) ? "N/A" : @sprintf("%.3f", R2_Adj)
     q2_str = isnan(R2_Pred) ? "N/A" : @sprintf("%.3f", R2_Pred)
 
     layout = _base_layout("Factor Importance: $OutName (R²Adj: $r2_str | Q²: $q2_str)")
-    layout[:xaxis][:title] = "Magnitude of Standardized Effect"
-    return plot(trace, layout)
+    layout[:xaxis][:title] = "Magnitude of Standardized Effect (t-value)"
+    layout[:barmode] = "stack"
+    layout[:showlegend] = true
+    layout[:legend] = attr(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+
+    # Bonferroni Limit (t-critical for alpha = 0.05 / n_terms)
+    df = max(1, N_Samples - length(Coefs))
+    alpha_corrected = 0.05 / length(clean_eff)
+    t_crit = quantile(TDist(df), 1.0 - alpha_corrected / 2)
+
+    limit_shape = attr(
+        type="line", x0=t_crit, x1=t_crit, y0=0, y1=1,
+        yref="paper", line=attr(color=TH.Red, width=2, dash="dash")
+    )
+    layout[:shapes] = [limit_shape]
+
+    return plot(traces, layout)
 end
 
 """

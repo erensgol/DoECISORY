@@ -80,8 +80,8 @@ app.title = "DaishoDoE"
 navbar = html_div([
         html_div([
                 dcc_link(html_div([
-                            html_i(className="fas fa-layer-group text-dark me-2"),
-                            html_span("DaishoDoE", className="text-dark fw-bold tracking-tight"),
+                            html_i(className="fas fa-layer-group text-primary me-2"),
+                            html_span("DaishoDoE", className="text-primary fw-bold tracking-tight"),
                         ], className="nav-brand"), href="/", style=Dict("textDecoration" => "none")),
             ], style=Dict("flex" => "1")),
         html_div([
@@ -122,7 +122,7 @@ app.layout = html_div([
     dcc_interval(id="sys-ready-poll", interval=800, max_intervals=-1),
     html_div(id="sys-loading-overlay", children=[
             html_div([
-                    html_div(className="spinner-border text-dark mb-3", style=Dict("width" => "3rem", "height" => "3rem")),
+                    html_div(className="spinner-border text-primary mb-3", style=Dict("width" => "3rem", "height" => "3rem")),
                     html_h4("DaishoDoE Engine", className="fw-bold mb-2", style=Dict("color" => "#000000")),
                     html_p("Compiling scientific modules...", className="text-secondary", id="sys-loading-msg"),
                 ], style=Dict(
@@ -187,7 +187,7 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
                                                     style=Dict("width" => "50px", "height" => "50px", "borderRadius" => "12px",
                                                         "background" => "linear-gradient(135deg, #FF0000 0%, #FDE725 100%)",
                                                         "display" => "flex", "alignItems" => "center", "justifyContent" => "center",
-                                                        "fontSize" => "1.5rem", "marginBottom" => "1.5rem", "boxShadow" => "0 10px 20px -5px rgba(255, 0, 0, 0.4)")),
+                                                        "fontSize" => "1.5rem", "marginBottom" => "1.5rem", "boxShadow" => "0 10px 20px -5px #DCDCDC")),
                                                 html_h3("Experimental Design", className="fw-bold mb-2", style=Dict("color" => "#000000")),
                                                 html_p("Synthesise robust testing matrices using Box-Behnken and Taguchi methodologies. Automatically generate protocol workspaces.",
                                                     className="text-secondary small mb-0", style=Dict("lineHeight" => "1.6")),
@@ -201,7 +201,7 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
                                                     style=Dict("width" => "50px", "height" => "50px", "borderRadius" => "12px",
                                                         "background" => "linear-gradient(135deg, #3B528B 0%, #21918C 100%)",
                                                         "display" => "flex", "alignItems" => "center", "justifyContent" => "center",
-                                                        "fontSize" => "1.5rem", "marginBottom" => "1.5rem", "boxShadow" => "0 10px 20px -5px rgba(33, 145, 140, 0.4)")),
+                                                        "fontSize" => "1.5rem", "marginBottom" => "1.5rem", "boxShadow" => "0 10px 20px -5px #DCDCDC")),
                                                 html_h3("Statistical Analysis", className="fw-bold mb-2", style=Dict("color" => "#000000")),
                                                 html_p("Extract insights via GLM regression, visualise desirability functions, and identify optimal formulation candidates using robust grid search algorithms.",
                                                     className="text-secondary small mb-0", style=Dict("lineHeight" => "1.6")),
@@ -215,7 +215,7 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
                                         html_div([html_i(className="fas fa-server text-success me-2"), html_span("System Online", className="text-secondary fw-bold")], className="d-flex align-items-center me-4"),
                                         html_div([html_i(className="fas fa-microchip text-$tstyle me-2"), html_span(tmsg, className="text-secondary fw-bold")], className="d-flex align-items-center"),
                                     ], className="d-flex justify-content-center align-items-center p-3 rounded-pill",
-                                    style=Dict("background" => "#FFFFFF", "border" => "1px solid #DCDCDC", "boxShadow" => "0 4px 6px -1px rgba(0,0,0,0.05)", "display" => "inline-flex", "margin" => "0 auto"))
+                                    style=Dict("background" => "#FFFFFF", "border" => "1px solid #DCDCDC", "boxShadow" => "0 4px 6px -1px #E6E6E6", "display" => "inline-flex", "margin" => "0 auto"))
                             ], className="text-center"), xs=12)),], fluid=true, className="pb-5 mt-2")
         ])
     end

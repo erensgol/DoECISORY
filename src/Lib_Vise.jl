@@ -137,9 +137,12 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
         P_Coefs = fill(NaN, p)
         SE_Coefs = fill(NaN, p)
 
+        t_Stats = fill(NaN, p)
+
         try
             if n > p && SST > 1e-9 && SSE > 1e-9
                 MSR = (SST - SSE) / max(1, p - 1)
+
                 MSE = SSE / (n - p)
                 if MSE > 0.0
                     F_Stat = MSR / MSE
@@ -169,7 +172,8 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
             "R2" => R2, "R2_Adj" => R2_Adj,
             "RMSE" => RMSE, "F_Stat" => F_Stat,
             "P_Value" => P_Value, "P_Coefs" => P_Coefs,
-            "SE_Coefs" => SE_Coefs, "ModelType" => ModelType,
+            "SE_Coefs" => SE_Coefs, "t_Stats" => t_Stats,
+            "ModelType" => ModelType, "N_Samples" => n,
             "Status" => "OK",
         )
     catch e
