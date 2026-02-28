@@ -80,8 +80,8 @@ app.title = "DaishoDoE"
 navbar = html_div([
         html_div([
                 dcc_link(html_div([
-                            html_i(className="fas fa-layer-group text-primary me-2"),
-                            html_span("DaishoDoE", className="text-primary fw-bold tracking-tight"),
+                            html_i(className="fas fa-layer-group text-dark me-2"),
+                            html_span("DaishoDoE", className="text-dark fw-bold tracking-tight"),
                         ], className="nav-brand"), href="/", style=Dict("textDecoration" => "none")),
             ], style=Dict("flex" => "1")),
         html_div([

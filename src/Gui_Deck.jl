@@ -43,9 +43,11 @@ const ROLE_COLORS = Dict(
 
 function DECK_GetDefaultRow_DDEF(i::Int)
     if i <= 3
-        return Dict("Name" => "", "Role" => "Variable", "L1" => 0.0, "L2" => 0.0, "L3" => 0.0, "MW" => 0.0, "Unit" => "-")
+        return Dict("Name" => "", "Role" => "Variable", "L1" => 0.0, "L2" => 0.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 0.0, "Unit" => "-")
+    elseif i == 4
+        return Dict("Name" => "", "Role" => "Filler", "L1" => 0.0, "L2" => 0.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 0.0, "Unit" => "-")
     else
-        return Dict("Name" => "", "Role" => "Fixed", "L1" => 0.0, "L2" => 0.0, "L3" => 0.0, "MW" => 0.0, "Unit" => "-")
+        return Dict("Name" => "", "Role" => "Fixed", "L1" => 0.0, "L2" => 0.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 0.0, "Unit" => "-")
     end
 end
 
@@ -54,77 +56,61 @@ end
 # --------------------------------------------------------------------------------------
 
 
-"""
-    DECK_BuildRowUI_DDEF(i, row, visible) -> html_tr
-Renders a single factor row with fixed IDs. Visibility controlled via style.
-"""
-function DECK_BuildRowUI_DDEF(i, row, visible)
+function DECK_BuildIdRowUI_DDEF(i, row, visible, show_del=false)
     row_style = Dict("display" => visible ? "table-row" : "none")
-
-    role_val = string(get(row, "Role", "Variable"))
     name_val = string(get(row, "Name", ""))
+    unit_val = string(get(row, "Unit", ""))
+
+    del_content = show_del ? html_button("×", id="deck-del-$i", n_clicks=0,
+        style=Dict("cursor" => "pointer", "color" => "#666666",
+            "fontSize" => "1.1rem", "fontWeight" => "700",
+            "lineHeight" => "1", "userSelect" => "none",
+            "background" => "none", "border" => "none", "padding" => "0")) : html_button("", id="deck-del-$i", n_clicks=0, style=Dict("display" => "none"))
+
+    html_tr([
+            html_td(del_content, style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => show_del ? "15%" : "0%", "display" => show_del ? "table-cell" : "none", "overflow" => "hidden")), className="p-0"),
+            html_td(dcc_input(id="deck-name-$i", type="text", value=name_val, debounce=true, style=merge(BASE_STYLE_INPUT, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => show_del ? "45%" : "60%")), className="p-0"),
+            html_td(dcc_input(id="deck-unit-$i", type="text", value=unit_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "40%")), className="p-0"),
+            html_td(dbc_select(id="deck-role-$i", options=ROLE_OPTIONS, value=string(get(row, "Role", "Variable")), style=Dict("display" => "none")), style=Dict("display" => "none"))
+        ]; style=row_style, id="deck-row-id-$i")
+end
+
+function DECK_BuildLevelRowUI_DDEF(i, row, visible)
+    row_style = Dict("display" => visible ? "table-row" : "none")
     l1_val = get(row, "L1", 0.0)
     l2_val = get(row, "L2", 0.0)
     l3_val = get(row, "L3", 0.0)
-    mw_val = get(row, "MW", 0.0)
-    unit_val = string(get(row, "Unit", ""))
 
-    del_content = html_span("×", id="deck-del-$i",
-        style=Dict("cursor" => "pointer", "color" => "#666666",
-            "fontSize" => "1.1rem", "fontWeight" => "700",
-            "lineHeight" => "1", "userSelect" => "none"))
+    # Determine visibility of L1, L2, L3 based on row index
+    show_l1 = (i <= 3) # Visibile only for Variables
+    show_l2 = (i <= 3 || i >= 5) # Visible for Variables and Constants
+    show_l3 = (i <= 3) # Visible only for Variables
+
     html_tr([
-            # Delete button
-            html_td(
-                del_content,
-                style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "3%")),
-                className="p-1"
-            ),
-            # Factor Name
-            html_td(
-                dcc_input(id="deck-name-$i", type="text",
-                    value=name_val, debounce=true, style=merge(BASE_STYLE_INPUT, Dict("fontSize" => "10px")), className="px-1 py-0"),
-                style=merge(BASE_STYLE_CELL, Dict("width" => "22%")), className="p-0"
-            ),
-            # Role dropdown
-            html_td(
-                dbc_select(id="deck-role-$i",
-                    options=ROLE_OPTIONS, value=role_val,
-                    className="form-select form-select-sm border-0 py-0", style=Dict("fontSize" => "10px", "boxShadow" => "none")),
-                style=merge(BASE_STYLE_CELL, Dict("width" => "12%")),
-                className="p-1"
-            ),
-            # L1
-            html_td(
-                dcc_input(id="deck-l1-$i", type="number", value=l1_val, debounce=true,
-                    style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-0 py-0"),
-                style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "13%")), className="p-0"
-            ),
-            # L2
-            html_td(
-                dcc_input(id="deck-l2-$i", type="number", value=l2_val, debounce=true,
-                    style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-0 py-0"),
-                style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "13%")), className="p-0"
-            ),
-            # L3
-            html_td(
-                dcc_input(id="deck-l3-$i", type="number", value=l3_val, debounce=true,
-                    style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-0 py-0"),
-                style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "13%")), className="p-0"
-            ),
-            # MW
-            html_td(
-                dcc_input(id="deck-mw-$i", type="number", value=mw_val, debounce=true,
-                    style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-0 py-0"),
-                style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "11%")), className="p-0"
-            ),
-            # Unit
-            html_td(
-                dcc_input(id="deck-unit-$i", type="text", value=unit_val, debounce=true,
-                    style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"),
-                style=merge(BASE_STYLE_CELL, Dict("width" => "13%")), className="p-0"
-            ),
-        ]; style=row_style, id="deck-row-$i")
+            html_td(dcc_input(id="deck-l1-$i", type="number", value=l1_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px", "display" => show_l1 ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0"),
+            html_td(dcc_input(id="deck-l2-$i", type="number", value=l2_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px", "display" => show_l2 ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0"),
+            html_td(dcc_input(id="deck-l3-$i", type="number", value=l3_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px", "display" => show_l3 ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "34%")), className="p-0")
+        ]; style=row_style, id="deck-row-level-$i")
+end
+
+"""
+    DECK_BuildStochRowUI_DDEF(i, row, visible) -> html_tr
+Renders the 3-column stoichiometry portion of the row.
+"""
+function DECK_BuildStochRowUI_DDEF(i, row, visible)
+    row_style = Dict("display" => visible ? "table-row" : "none")
+    min_val = get(row, "Min", 0.0)
+    max_val = get(row, "Max", 0.0)
+    mw_val = get(row, "MW", 0.0)
+
+    show_minmax = (i <= 3)
+    show_mw = true
+
+    html_tr([
+            html_td(dcc_input(id="deck-min-$i", type="number", value=min_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px", "display" => show_minmax ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0"),
+            html_td(dcc_input(id="deck-max-$i", type="number", value=max_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px", "display" => show_minmax ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0"),
+            html_td(dcc_input(id="deck-mw-$i", type="number", value=mw_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "34%")), className="p-0")
+        ]; style=row_style, id="deck-row-stoch-$i")
 end
 
 function DECK_BuildOutRow_DDEF(i, def_name, def_unit)
@@ -142,33 +128,57 @@ function DECK_Layout_DDEF()
     try
         Defaults = Sys_Fast.FAST_GetLabDefaults_DDEF()
 
-        # Start with 3 empty rows by default
+        # Start with 4 empty rows by default (3 var, 1 fill)
         initial_rows = [DECK_GetDefaultRow_DDEF(i) for i in 1:MAX_ROWS]
-        active_count = 3
+        active_count = 5 # Show 5 initially (3 var, 1 fill, 1 const)
 
-        factor_table = html_table([
-                html_thead(html_tr([
-                    html_th("", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => "3%")), className="p-0"),
-                    html_th("NAME", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => "25%")), className="p-0"),
-                    html_th("ROLE", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => "12%")), className="p-0"),
-                    html_th("LOW", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "12%")), className="p-0"),
-                    html_th("CENTER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "12%")), className="p-0"),
-                    html_th("HIGH", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "12%")), className="p-0"),
-                    html_th("MW", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "12%")), className="p-0"),
-                    html_th("UNIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "12%")), className="p-0"),
-                ])),
-                html_tbody([
-                    DECK_BuildRowUI_DDEF(i, initial_rows[i], i <= active_count)
-                    for i in 1:MAX_ROWS
-                ]),
-            ]; style=Dict("width" => "100%", "borderCollapse" => "collapse",
-                "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed"))
+        function build_id_table(rows_range, show_del)
+            html_table([
+                    html_thead(html_tr([
+                        html_th(show_del ? "" : "", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => show_del ? "15%" : "0%", "display" => show_del ? "table-cell" : "none")), className="p-0"),
+                        html_th("NAME", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => show_del ? "45%" : "60%")), className="p-0"),
+                        html_th("UNIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "40%")), className="p-0"),
+                    ])),
+                    html_tbody([
+                        DECK_BuildIdRowUI_DDEF(i, initial_rows[i], i <= active_count, show_del)
+                        for i in rows_range
+                    ]),
+                ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
+        end
+
+        function build_level_table(rows_range)
+            html_table([
+                    html_thead(html_tr([
+                        html_th("LOW", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
+                        html_th("CENTER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
+                        html_th("HIGH", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "34%")), className="p-0"),
+                    ])),
+                    html_tbody([
+                        DECK_BuildLevelRowUI_DDEF(i, initial_rows[i], i <= active_count)
+                        for i in rows_range
+                    ]),
+                ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
+        end
+
+        function build_stoch_table(rows_range)
+            html_table([
+                    html_thead(html_tr([
+                        html_th("MIN", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
+                        html_th("MAX", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
+                        html_th("MW", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "34%")), className="p-0"),
+                    ])),
+                    html_tbody([
+                        DECK_BuildStochRowUI_DDEF(i, initial_rows[i], i <= active_count)
+                        for i in rows_range
+                    ]),
+                ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
+        end
 
         return dbc_container([
                 # State Bus & Hidden DataTable
                 dbc_row(dbc_col([
                         dcc_store(id="deck-store-factors",
-                            data=Dict("rows" => [DECK_GetDefaultRow_DDEF(1), DECK_GetDefaultRow_DDEF(2), DECK_GetDefaultRow_DDEF(3)], "count" => 3),
+                            data=Dict("rows" => [DECK_GetDefaultRow_DDEF(i) for i in 1:5], "count" => 5),
                             storage_type="memory"),
                         html_div([
                                 dash_datatable(
@@ -179,10 +189,12 @@ function DECK_Layout_DDEF()
                                         Dict("name" => "L1", "id" => "L1", "type" => "numeric"),
                                         Dict("name" => "L2", "id" => "L2", "type" => "numeric"),
                                         Dict("name" => "L3", "id" => "L3", "type" => "numeric"),
+                                        Dict("name" => "Min", "id" => "Min", "type" => "numeric"),
+                                        Dict("name" => "Max", "id" => "Max", "type" => "numeric"),
                                         Dict("name" => "MW", "id" => "MW", "type" => "numeric"),
                                         Dict("name" => "Unit", "id" => "Unit", "type" => "text"),
                                     ],
-                                    data=[DECK_GetDefaultRow_DDEF(1), DECK_GetDefaultRow_DDEF(2), DECK_GetDefaultRow_DDEF(3)],
+                                    data=[DECK_GetDefaultRow_DDEF(i) for i in 1:5],
                                     editable=false,
                                 ),
                             ]; style=Dict("display" => "none"))
@@ -195,40 +207,66 @@ function DECK_Layout_DDEF()
                 dbc_row([
                         # --- LEFT COLUMN ---
                         dbc_col([
-                                # Factor Configuration Panel
-                                dbc_row(dbc_col(BASE_GlassPanel("FACTOR CONFIGURATION",
-                                        dcc_loading(html_div(factor_table, className="table-responsive",
-                                                style=Dict("overflowX" => "auto", "overflowY" => "visible", "paddingBottom" => "4px")), type="default", color="#21918C");
-                                        right_node=html_div([
-                                                dbc_button("+ Add Fixed/Filler", id="deck-btn-add-row", n_clicks=0,
-                                                    color="secondary", size="sm", className="px-2 py-1 border-0"),
-                                                dbc_button("📋 Base", id="deck-btn-template", n_clicks=0,
-                                                    color="info", outline=true, size="sm", className="ms-1 px-2 py-1"),
-                                                dbc_button("🗑️ Clear", id="deck-btn-clear", n_clicks=0,
-                                                    color="danger", outline=true, size="sm", className="ms-1 px-2 py-1"),
-                                                dcc_upload(id="deck-upload-memo", children=dbc_button("📂 Load", n_clicks=0,
-                                                        color="secondary", outline=true, size="sm", className="px-2 py-1 border-0"),
-                                                    multiple=false, className="ms-1", style=Dict("display" => "inline-block")),
-                                                dbc_button("💾 Save", id="deck-btn-save-memo", n_clicks=0,
-                                                    color="primary", outline=true, size="sm", className="ms-1 px-2 py-1 border-0"),
-                                            ], className="ms-auto d-flex align-items-center"),
-                                        panel_class="mb-3", content_class="", overflow="visible"), xs=12)),
+                                # Variable Windows
+                                dbc_row(dbc_col(BASE_GlassPanel([html_i(className="fas fa-cubes me-2 text-info"), "VARIABLE FACTORS"], dbc_row([
+                                                    dbc_col(build_id_table(1:3, false), lg=4, className="pe-lg-1"),
+                                                    dbc_col(build_stoch_table(1:3), lg=4, className="px-lg-1"),
+                                                    dbc_col(build_level_table(1:3), lg=4, className="ps-lg-1")
+                                                ], className="g-0"); panel_class="mb-4 h-100", content_class="p-2"), xs=12), className="mb-3"),
 
-                                # Response Variables Panel
-                                dbc_row(dbc_col(BASE_GlassPanel("RESPONSE VARIABLES",
-                                        html_div(html_table([
-                                                    html_tr([
-                                                        html_th("RESPONSE NAME", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "paddingLeft" => "5px", "width" => "50%")), className="p-0"),
-                                                        html_th("UNIT/METRIC", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "paddingLeft" => "5px", "width" => "50%")), className="p-0")
-                                                    ]),
-                                                    html_tbody([
-                                                        DECK_BuildOutRow_DDEF(i,
-                                                            i <= length(Defaults["Outputs"]) ? Defaults["Outputs"][i]["Name"] : "",
-                                                            i <= length(Defaults["Outputs"]) ? Defaults["Outputs"][i]["Unit"] : ""
-                                                        ) for i in 1:3
-                                                    ])
-                                                ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0");
-                                        content_class="glass-content p-0", panel_class=""), xs=12)),
+                                # Constant Windows
+                                dbc_row(dbc_col(BASE_GlassPanel([html_i(className="fas fa-lock me-2 text-primary"), "CONSTANT FACTORS"], dbc_row([
+                                                    dbc_col(build_id_table(5:MAX_ROWS, true), lg=4, className="pe-lg-1"),
+                                                    dbc_col(build_stoch_table(5:MAX_ROWS), lg=4, className="px-lg-1"),
+                                                    dbc_col(build_level_table(5:MAX_ROWS), lg=4, className="ps-lg-1")
+                                                ], className="g-0"); right_node=dbc_button([html_i(className="fas fa-plus me-1"), "Add Row"], id="deck-btn-add-row", n_clicks=0, color="secondary", outline=true, size="sm", className="px-2 py-1 fw-bold"), panel_class="mb-4 h-100", content_class="p-2"), xs=12), className="mb-3"),
+
+                                # --- SYMMETRIC 2x2 GRID (EQUAL HEIGHTS) ---
+                                # Row 1: Filler (lg=8) & Global Specs (lg=4)
+                                dbc_row([
+                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-tint me-2 text-warning"), "FILLER COMPONENT"], dbc_row([
+                                                        dbc_col(build_id_table(4:4, false), lg=6, className="pe-lg-1"),
+                                                        dbc_col(build_stoch_table(4:4), lg=6, className="ps-lg-1")
+                                                    ], className="g-0"); panel_class="h-100 mb-0", content_class="p-2"), lg=8), dbc_col(BASE_GlassPanel([html_i(className="fas fa-vial me-2 text-secondary"), "GLOBAL SPECS"],
+                                                html_div([
+                                                        dbc_row(dbc_col([
+                                                                    dbc_label("Volume (mL)", className="small mb-1"),
+                                                                    dbc_input(id="deck-input-vol", type="number", value=0.0,
+                                                                        min=0.0, className="form-control-sm", debounce=false),
+                                                                ], xs=12), className="mb-2"),
+                                                        dbc_row(dbc_col([
+                                                                    dbc_label("Conc. (mM)", className="small mb-1"),
+                                                                    dbc_input(id="deck-input-conc", type="number", value=0.0,
+                                                                        min=0.0, className="form-control-sm", debounce=false),
+                                                                ], xs=12), className="mb-0"),
+                                                    ], className="p-2"),
+                                                panel_class="h-100 mb-0", content_class="p-0"), lg=4),
+                                    ], className="g-3 mb-3 d-flex align-items-stretch"),
+
+                                # Row 2: Response Metrics (lg=8) & Profile Config (lg=4)
+                                dbc_row([
+                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-chart-line me-2 text-success"), "RESPONSE METRICS"],
+                                                html_div(html_table([
+                                                            html_tr([
+                                                                html_th("RESPONSE NAME", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "paddingLeft" => "5px", "width" => "50%")), className="p-0"),
+                                                                html_th("UNIT/METRIC", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "paddingLeft" => "5px", "width" => "50%")), className="p-0")
+                                                            ]),
+                                                            html_tbody([
+                                                                DECK_BuildOutRow_DDEF(i,
+                                                                    i <= length(Defaults["Outputs"]) ? Defaults["Outputs"][i]["Name"] : "",
+                                                                    i <= length(Defaults["Outputs"]) ? Defaults["Outputs"][i]["Unit"] : ""
+                                                                ) for i in 1:3
+                                                            ])
+                                                        ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0 p-2");
+                                                content_class="glass-content p-0", panel_class="h-100 mb-0"), lg=8), dbc_col(BASE_GlassPanel([html_i(className="fas fa-address-card me-2 text-secondary"), "PROFILE CONFIG"], [
+                                                    dbc_row([
+                                                            dbc_col(dbc_button([html_i(className="fas fa-file-alt me-1"), " Base"], id="deck-btn-template", n_clicks=0, color="dark", outline=true, size="sm", className="w-100 fw-bold border-0 bg-transparent text-secondary"), xs=6, className="pe-1 mb-2"),
+                                                            dbc_col(dcc_upload(id="deck-upload-memo", children=dbc_button([html_i(className="fas fa-upload me-1"), " Load"], n_clicks=0, color="dark", outline=true, size="sm", className="w-100 fw-bold border-0 bg-transparent text-secondary"), multiple=false, className="w-100"), xs=6, className="ps-1 mb-2"),
+                                                            dbc_col(dbc_button([html_i(className="fas fa-download me-1"), " Save"], id="deck-btn-save-memo", n_clicks=0, color="dark", outline=true, size="sm", className="w-100 fw-bold border-0 bg-transparent text-secondary"), xs=6, className="pe-1"),
+                                                            dbc_col(dbc_button([html_i(className="fas fa-eraser me-1"), " Clear"], id="deck-btn-clear", n_clicks=0, color="danger", outline=true, size="sm", className="w-100 fw-bold border-0 bg-transparent"), xs=6, className="ps-1"),
+                                                        ], className="g-0")
+                                                ]; panel_class="h-100 mb-0", content_class="p-2"), lg=4),
+                                    ], className="g-3 mb-3 d-flex align-items-stretch"),
                             ], xs=12, lg=9, className="mb-3 mb-lg-0"),
 
                         # --- RIGHT COLUMN ---
@@ -240,16 +278,6 @@ function DECK_Layout_DDEF()
                                                     dbc_input(id="deck-input-project", type="text", value="",
                                                         placeholder="Enter project name...", className="mb-3 form-control-sm", debounce=false),
                                                 ], xs=12)),
-                                            dbc_row(dbc_col([
-                                                        dbc_label("Volume (mL)", className="small mb-1"),
-                                                        dbc_input(id="deck-input-vol", type="number", value=0.0,
-                                                            min=0.0, className="form-control-sm", debounce=false),
-                                                    ], xs=12), className="mb-3"),
-                                            dbc_row(dbc_col([
-                                                        dbc_label("Conc. (mM)", className="small mb-1"),
-                                                        dbc_input(id="deck-input-conc", type="number", value=0.0,
-                                                            min=0.0, className="form-control-sm", debounce=false),
-                                                    ], xs=12), className="mb-3"),
                                             dbc_row(dbc_col([
                                                     dbc_label("Design Method", className="small mb-1"),
                                                     dcc_dropdown(id="deck-dd-method",
@@ -276,7 +304,7 @@ function DECK_Layout_DDEF()
                                             dbc_row(dbc_col(dcc_loading(html_div(id="deck-run-output", className="mt-2 small"),
                                                     type="default", color="#21918C"), xs=12)),
                                             dbc_row(dbc_col(html_div(id="deck-phase-notification", className="mt-1"), xs=12)),
-                                        ]; right_node=html_i(className="fas fa-sliders-h text-secondary"), panel_class="h-100"), xs=12)),
+                                        ]; right_node=html_i(className="fas fa-cogs text-secondary"), panel_class="mb-3 h-auto"), xs=12)),
                             ], xs=12, lg=3),
                     ], className="g-3"),
 
@@ -424,30 +452,36 @@ function DECK_RegisterCallbacks_DDEF(app)
 
     # ── 1. UI Hydration (Refreshes text boxes from State Bus) ───────────────────────
     callback!(app,
-        [Output("deck-row-$i", "style") for i in 1:MAX_ROWS]...,
+        [Output("deck-row-id-$i", "style") for i in 1:MAX_ROWS]...,
+        [Output("deck-row-level-$i", "style") for i in 1:MAX_ROWS]...,
+        [Output("deck-row-stoch-$i", "style") for i in 1:MAX_ROWS]...,
         [Output("deck-name-$i", "value") for i in 1:MAX_ROWS]...,
         [Output("deck-role-$i", "value") for i in 1:MAX_ROWS]...,
         [Output("deck-l1-$i", "value") for i in 1:MAX_ROWS]...,
         [Output("deck-l2-$i", "value") for i in 1:MAX_ROWS]...,
         [Output("deck-l3-$i", "value") for i in 1:MAX_ROWS]...,
+        [Output("deck-min-$i", "value") for i in 1:MAX_ROWS]...,
+        [Output("deck-max-$i", "value") for i in 1:MAX_ROWS]...,
         [Output("deck-mw-$i", "value") for i in 1:MAX_ROWS]...,
         [Output("deck-unit-$i", "value") for i in 1:MAX_ROWS]...,
         Input("deck-store-factors", "data")
     ) do stored
-        isnothing(stored) && return ntuple(_ -> Dash.no_update(), 8 * MAX_ROWS)
+        isnothing(stored) && return ntuple(_ -> Dash.no_update(), 12 * MAX_ROWS)
         rows = get(stored, "rows", [])
         count = get(stored, "count", 0)
 
-        out_styles = [Dict("display" => i <= count ? "table-row" : "none") for i in 1:MAX_ROWS]
+        out_styles = [Dict("display" => (i <= 4 || i <= count) ? "table-row" : "none") for i in 1:MAX_ROWS]
         out_names = [i <= length(rows) ? string(get(rows[i], "Name", "")) : "" for i in 1:MAX_ROWS]
-        out_roles = [i <= length(rows) ? string(get(rows[i], "Role", "Variable")) : "Variable" for i in 1:MAX_ROWS]
+        out_roles = [i <= length(rows) ? string(get(rows[i], "Role", (i <= 3 ? "Variable" : (i == 4 ? "Filler" : "Fixed")))) : (i <= 3 ? "Variable" : (i == 4 ? "Filler" : "Fixed")) for i in 1:MAX_ROWS]
         out_l1s = [i <= length(rows) ? get(rows[i], "L1", 0.0) : 0.0 for i in 1:MAX_ROWS]
         out_l2s = [i <= length(rows) ? get(rows[i], "L2", 0.0) : 0.0 for i in 1:MAX_ROWS]
         out_l3s = [i <= length(rows) ? get(rows[i], "L3", 0.0) : 0.0 for i in 1:MAX_ROWS]
+        out_mins = [i <= length(rows) ? get(rows[i], "Min", 0.0) : 0.0 for i in 1:MAX_ROWS]
+        out_maxs = [i <= length(rows) ? get(rows[i], "Max", 0.0) : 0.0 for i in 1:MAX_ROWS]
         out_mws = [i <= length(rows) ? get(rows[i], "MW", 0.0) : 0.0 for i in 1:MAX_ROWS]
         out_units = [i <= length(rows) ? string(get(rows[i], "Unit", "")) : "" for i in 1:MAX_ROWS]
 
-        return (out_styles..., out_names..., out_roles..., out_l1s..., out_l2s..., out_l3s..., out_mws..., out_units...)
+        return (out_styles..., out_styles..., out_styles..., out_names..., out_roles..., out_l1s..., out_l2s..., out_l3s..., out_mins..., out_maxs..., out_mws..., out_units...)
     end
 
     # ── 2. Main Store Orchestrator ─────────────────────────────────────────────────────
@@ -479,6 +513,8 @@ function DECK_RegisterCallbacks_DDEF(app)
         [State("deck-l1-$i", "value") for i in 1:MAX_ROWS]...,
         [State("deck-l2-$i", "value") for i in 1:MAX_ROWS]...,
         [State("deck-l3-$i", "value") for i in 1:MAX_ROWS]...,
+        [State("deck-min-$i", "value") for i in 1:MAX_ROWS]...,
+        [State("deck-max-$i", "value") for i in 1:MAX_ROWS]...,
         [State("deck-mw-$i", "value") for i in 1:MAX_ROWS]...,
         [State("deck-unit-$i", "value") for i in 1:MAX_ROWS]...,
         State("deck-input-vol", "value"),
@@ -498,8 +534,10 @@ function DECK_RegisterCallbacks_DDEF(app)
             all_l1s = collect(args[offset+2MAX_ROWS:offset+3MAX_ROWS-1])
             all_l2s = collect(args[offset+3MAX_ROWS:offset+4MAX_ROWS-1])
             all_l3s = collect(args[offset+4MAX_ROWS:offset+5MAX_ROWS-1])
-            all_mws = collect(args[offset+5MAX_ROWS:offset+6MAX_ROWS-1])
-            all_units = collect(args[offset+6MAX_ROWS:offset+7MAX_ROWS-1])
+            all_mins = collect(args[offset+5MAX_ROWS:offset+6MAX_ROWS-1])
+            all_maxs = collect(args[offset+6MAX_ROWS:offset+7MAX_ROWS-1])
+            all_mws = collect(args[offset+7MAX_ROWS:offset+8MAX_ROWS-1])
+            all_units = collect(args[offset+8MAX_ROWS:offset+9MAX_ROWS-1])
 
             ctx = callback_context()
             isempty(ctx.triggered) && return ntuple(_ -> Dash.no_update(), 9)
@@ -508,14 +546,18 @@ function DECK_RegisterCallbacks_DDEF(app)
             NO = Dash.no_update()
             count = isnothing(store_data) ? 1 : get(store_data, "count", 1)
 
-            max_idx = min(count, length(all_names), length(all_roles), length(all_l1s), length(all_l2s), length(all_l3s), length(all_mws), length(all_units))
+            _sn = Sys_Fast.FAST_SafeNum_DDEF
+            _sn0(x) = (v = _sn(x); isnan(v) ? 0.0 : v)
+            max_idx = min(count, length(all_names), length(all_roles), length(all_l1s), length(all_l2s), length(all_l3s), length(all_mins), length(all_maxs), length(all_mws), length(all_units))
             snap_rows() = [Dict(
                 "Name" => !isnothing(all_names[i]) ? string(all_names[i]) : "",
                 "Role" => !isnothing(all_roles[i]) ? string(all_roles[i]) : "Variable",
-                "L1" => !isnothing(all_l1s[i]) ? Float64(all_l1s[i]) : 0.0,
-                "L2" => !isnothing(all_l2s[i]) ? Float64(all_l2s[i]) : 0.0,
-                "L3" => !isnothing(all_l3s[i]) ? Float64(all_l3s[i]) : 0.0,
-                "MW" => !isnothing(all_mws[i]) ? Float64(all_mws[i]) : 0.0,
+                "L1" => _sn0(all_l1s[i]),
+                "L2" => _sn0(all_l2s[i]),
+                "L3" => _sn0(all_l3s[i]),
+                "Min" => _sn0(all_mins[i]),
+                "Max" => _sn0(all_maxs[i]),
+                "MW" => _sn0(all_mws[i]),
                 "Unit" => !isnothing(all_units[i]) ? string(all_units[i]) : "",
             ) for i in 1:max_idx]
 
@@ -524,46 +566,32 @@ function DECK_RegisterCallbacks_DDEF(app)
             if trig in del_ids
                 rows = snap_rows()
                 ri = findfirst(==(trig), del_ids)
-                if ri !== nothing && ri <= length(rows)
-                    if get(rows[ri], "Role", "Variable") == "Variable"
-                        num_vars = sum(get(r, "Role", "Variable") == "Variable" ? 1 : 0 for r in rows)
-                        if num_vars <= 3
-                            lbl = html_div([html_i(className="fas fa-exclamation-triangle me-2"), "Minimum 3 variables required!"],
-                                className="badge bg-danger text-white p-2 w-100", style=Dict("fontSize" => "0.85rem"))
-                            return Dict("rows" => rows, "count" => length(rows)), rows, NO, NO, NO, NO, lbl, NO
-                        end
-                    end
+                if ri !== nothing && ri <= length(rows) && ri > 4
                     deleteat!(rows, ri)
                 end
-                nc = max(0, length(rows))
+                nc = max(4, length(rows))
                 return Dict("rows" => rows, "count" => nc), rows, NO, NO, NO, NO, NO, NO, NO
             end
 
             # ── B. Add Row ──────────────────────────────────────────────────────────────
             if trig == "deck-btn-add-row"
                 rows = snap_rows()
-
-                # Check for filler constraint: Only 1 filler allowed across canvas
-                fillers = sum(get(r, "Role", "") == "Filler" ? 1 : 0 for r in rows)
-
-                # Assign default role for new row: If filler exists, force "Fixed"
-                new_role = fillers >= 1 ? "Fixed" : "Filler"
-
-                new_count = min(count + 1, MAX_ROWS)
-                if new_count > count
+                # Use length(rows) as the source of truth for current valid rows
+                current_count = length(rows)
+                new_count = min(current_count + 1, MAX_ROWS)
+                if new_count > current_count
                     new_row = DECK_GetDefaultRow_DDEF(new_count)
-                    new_row["Role"] = new_role
+                    new_row["Role"] = "Fixed"
                     push!(rows, new_row)
                 end
-
                 return Dict("rows" => rows, "count" => new_count), rows, NO, NO, NO, NO, NO, NO, NO
 
                 # ── C0. Clear Memo ───────────────────────────────────────────────────────────
             elseif trig == "deck-btn-clear"
-                rows = [DECK_GetDefaultRow_DDEF(1), DECK_GetDefaultRow_DDEF(2), DECK_GetDefaultRow_DDEF(3)]
+                rows = [DECK_GetDefaultRow_DDEF(i) for i in 1:5]
                 lbl = html_div([html_i(className="fas fa-trash-alt me-2"), "Canvas Cleared"],
                     className="badge bg-danger text-white p-2 w-100", style=Dict("fontSize" => "0.85rem"))
-                return Dict("rows" => rows, "count" => 3), rows, NO, NO, NO, NO, "BoxBehnken", lbl, NO
+                return Dict("rows" => rows, "count" => 5), rows, NO, NO, NO, NO, "BoxBehnken", lbl, NO
 
                 # ── C1. Load User Memo ───────────────────────────────────────────────────────
             elseif trig == "deck-upload-memo" && !isnothing(up_memo) && up_memo != ""
@@ -574,7 +602,8 @@ function DECK_RegisterCallbacks_DDEF(app)
                     loaded_rows = map(get(memo, "Inputs", [])) do m
                         Dict("Name" => get(m, "Name", ""), "Role" => get(m, "Role", "Variable"),
                             "L1" => get(m, "L1", 0.0), "L2" => get(m, "L2", 0.0),
-                            "L3" => get(m, "L3", 0.0), "MW" => get(m, "MW", 0.0),
+                            "L3" => get(m, "L3", 0.0), "Min" => get(m, "Min", 0.0),
+                            "Max" => get(m, "Max", 0.0), "MW" => get(m, "MW", 0.0),
                             "Unit" => get(m, "Unit", "-"))
                     end
                     lbl = html_div([html_i(className="fas fa-folder-open me-2"), "Memory Loaded"],
@@ -593,16 +622,16 @@ function DECK_RegisterCallbacks_DDEF(app)
                 # ── C2. Load Template ────────────────────────────────────────────────────────
             elseif trig == "deck-btn-template"
                 loaded_rows = [
-                    Dict("Name" => "DPPC", "Role" => "Filler", "L1" => 0.0, "L2" => 0.0, "L3" => 0.0, "MW" => 734.0, "Unit" => "MR"),
-                    Dict("Name" => "Chol", "Role" => "Variable", "L1" => 10.0, "L2" => 20.0, "L3" => 30.0, "MW" => 386.6, "Unit" => "%M"),
-                    Dict("Name" => "PEG", "Role" => "Variable", "L1" => 1.0, "L2" => 3.0, "L3" => 5.0, "MW" => 2800.0, "Unit" => "%M"),
-                    Dict("Name" => "DOTA", "Role" => "Fixed", "L1" => 5.0, "L2" => 5.0, "L3" => 5.0, "MW" => 500.0, "Unit" => "%M"),
-                    Dict("Name" => "Temperature", "Role" => "Variable", "L1" => 25.0, "L2" => 45.0, "L3" => 65.0, "MW" => 0.0, "Unit" => "°C"),
+                    Dict("Name" => "Chol", "Role" => "Variable", "L1" => 10.0, "L2" => 20.0, "L3" => 30.0, "Min" => 5.0, "Max" => 40.0, "MW" => 386.6, "Unit" => "%M"),
+                    Dict("Name" => "PEG", "Role" => "Variable", "L1" => 1.0, "L2" => 3.0, "L3" => 5.0, "Min" => 0.0, "Max" => 10.0, "MW" => 2800.0, "Unit" => "%M"),
+                    Dict("Name" => "Temperature", "Role" => "Variable", "L1" => 25.0, "L2" => 45.0, "L3" => 65.0, "Min" => 20.0, "Max" => 80.0, "MW" => 0.0, "Unit" => "°C"),
+                    Dict("Name" => "DPPC", "Role" => "Filler", "L1" => 0.0, "L2" => 0.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 734.0, "Unit" => "MR"),
+                    Dict("Name" => "DOTA", "Role" => "Fixed", "L1" => 0.0, "L2" => 5.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 500.0, "Unit" => "%M"),
                 ]
                 lbl = html_div([html_i(className="fas fa-book-medical me-2"), "Template Applied"],
                     className="badge bg-primary text-white p-2 w-100", style=Dict("fontSize" => "0.85rem", "boxShadow" => "0 2px 5px #A6A6A6"))
                 nc = min(length(loaded_rows), MAX_ROWS)
-                return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], NO, 5.0, 20.0, NO, "BoxBehnken", lbl, NO
+                return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], NO, 5.0, 20.0, "Sample", "BoxBehnken", lbl, NO
 
                 # ── D. Save Memo (Download) ──────────────────────────────────────────────────
             elseif trig == "deck-btn-save-memo"
@@ -629,6 +658,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                             levs = get(itm, "Levels", [NaN, NaN, NaN])
                             Dict("Name" => get(itm, "Name", ""), "Role" => get(itm, "Role", "Variable"),
                                 "L1" => levs[1], "L2" => levs[2], "L3" => levs[3],
+                                "Min" => get(itm, "Min", 0.0), "Max" => get(itm, "Max", 0.0),
                                 "MW" => get(itm, "MW", 0.0), "Unit" => get(itm, "Unit", ""))
                         end
                         nc = min(length(mapped), MAX_ROWS)
@@ -661,7 +691,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                         mapped = map(cfg["Ingredients"]) do itm
                             Dict("Name" => get(itm, "Name", ""), "Role" => get(itm, "Role", "Variable"),
                                 "L1" => get(itm, "L1", 0.0), "L2" => get(itm, "L2", 0.0),
-                                "L3" => get(itm, "L3", 0.0), "MW" => get(itm, "MW", 0.0),
+                                "L3" => get(itm, "L3", 0.0), "Min" => get(itm, "Min", 0.0), "Max" => get(itm, "Max", 0.0), "MW" => get(itm, "MW", 0.0),
                                 "Unit" => get(itm, "Unit", "-"))
                         end
                         nc = min(length(mapped), MAX_ROWS)
@@ -678,13 +708,13 @@ function DECK_RegisterCallbacks_DDEF(app)
                 end
             end
 
-            return ntuple(_ -> Dash.no_update(), 8)
+            return ntuple(_ -> Dash.no_update(), 9)
 
         catch e  # Catch-all: surface error to UI instead of silent death
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("DECK", "CALLBACK_CRASH", bt, "FAIL")
             NO = Dash.no_update()
-            return NO, NO, NO, NO, NO, NO,
+            return NO, NO, NO, NO, NO, NO, NO,
             html_span("⚠ System Error: $(first(string(e), 120))", className="text-danger fw-bold"), NO
         end
     end
@@ -704,6 +734,8 @@ function DECK_RegisterCallbacks_DDEF(app)
         [State("deck-l1-$i", "value") for i in 1:MAX_ROWS]...,
         [State("deck-l2-$i", "value") for i in 1:MAX_ROWS]...,
         [State("deck-l3-$i", "value") for i in 1:MAX_ROWS]...,
+        [State("deck-min-$i", "value") for i in 1:MAX_ROWS]...,
+        [State("deck-max-$i", "value") for i in 1:MAX_ROWS]...,
         [State("deck-mw-$i", "value") for i in 1:MAX_ROWS]...,
         [State("deck-unit-$i", "value") for i in 1:MAX_ROWS]...,
         prevent_initial_call=true
@@ -716,24 +748,59 @@ function DECK_RegisterCallbacks_DDEF(app)
             all_l1s = collect(args[offset+2MAX_ROWS:offset+3MAX_ROWS-1])
             all_l2s = collect(args[offset+3MAX_ROWS:offset+4MAX_ROWS-1])
             all_l3s = collect(args[offset+4MAX_ROWS:offset+5MAX_ROWS-1])
-            all_mws = collect(args[offset+5MAX_ROWS:offset+6MAX_ROWS-1])
-            all_units = collect(args[offset+6MAX_ROWS:offset+7MAX_ROWS-1])
+            all_mins = collect(args[offset+5MAX_ROWS:offset+6MAX_ROWS-1])
+            all_maxs = collect(args[offset+6MAX_ROWS:offset+7MAX_ROWS-1])
+            all_mws = collect(args[offset+7MAX_ROWS:offset+8MAX_ROWS-1])
+            all_units = collect(args[offset+8MAX_ROWS:offset+9MAX_ROWS-1])
 
             ctx = callback_context()
             trig = isempty(ctx.triggered) ? "" : split(ctx.triggered[1].prop_id, ".")[1]
             trig == "deck-btn-audit-close" && return Dash.no_update(), false
             trig != "deck-btn-audit" && return Dash.no_update(), is_op
 
+            _sn = Sys_Fast.FAST_SafeNum_DDEF
+            _sn0(x) = (v = _sn(x); isnan(v) ? 0.0 : v)
             count = isnothing(store_data) ? 1 : get(store_data, "count", 1)
-            rows = [Dict(
-                "Name" => isnothing(all_names[i]) ? "" : string(all_names[i]),
-                "Role" => isnothing(all_roles[i]) ? "Variable" : string(all_roles[i]),
-                "L1" => isnothing(all_l1s[i]) ? 0.0 : Float64(all_l1s[i]),
-                "L2" => isnothing(all_l2s[i]) ? 0.0 : Float64(all_l2s[i]),
-                "L3" => isnothing(all_l3s[i]) ? 0.0 : Float64(all_l3s[i]),
-                "MW" => isnothing(all_mws[i]) ? 0.0 : Float64(all_mws[i]),
-                "Unit" => isnothing(all_units[i]) ? "" : string(all_units[i]),
-            ) for i in 1:count]
+            rows = Dict{String,Any}[]
+            for i in 1:count
+                name = isnothing(all_names[i]) ? "" : strip(string(all_names[i]))
+                minval = _sn0(all_mins[i])
+                maxval = _sn0(all_maxs[i])
+                l1val = _sn0(all_l1s[i])
+                l2val = _sn0(all_l2s[i])
+                l3val = _sn0(all_l3s[i])
+
+                if i <= 3
+                    if isempty(name) || minval == 0.0 || maxval == 0.0
+                        return html_div([
+                                html_i(className="fas fa-exclamation-triangle me-2"),
+                                html_span("Audit Failed: Variables 1-3 must have Name, Min, and Max fields fully filled.", className="fw-bold"),
+                            ], className="text-danger h5 mb-3"), true
+                    end
+                    if l1val < minval || l3val > maxval || l1val > l2val || l2val > l3val
+                        return html_div([
+                                html_i(className="fas fa-exclamation-triangle me-2"),
+                                html_span("Audit Failed: Variable '$name' must strictly obey Min <= Low <= Center <= High <= Max boundary logic.", className="fw-bold"),
+                            ], className="text-danger h5 mb-3"), true
+                    end
+                end
+
+                if i > 3 && isempty(name)
+                    continue
+                end
+
+                push!(rows, Dict(
+                    "Name" => name,
+                    "Role" => isnothing(all_roles[i]) ? (i <= 3 ? "Variable" : (i == 4 ? "Filler" : "Fixed")) : string(all_roles[i]),
+                    "L1" => l1val,
+                    "L2" => l2val,
+                    "L3" => l3val,
+                    "Min" => minval,
+                    "Max" => maxval,
+                    "MW" => _sn0(all_mws[i]),
+                    "Unit" => isnothing(all_units[i]) ? "" : string(all_units[i]),
+                ))
+            end
 
             res_status, res_text, _, mass, msg = Lib_Mole.MOLE_QuickAudit_DDEF(
                 rows, Sys_Fast.FAST_SafeNum_DDEF(vol), Sys_Fast.FAST_SafeNum_DDEF(conc))
@@ -791,6 +858,8 @@ function DECK_RegisterCallbacks_DDEF(app)
         [State("deck-l1-$i", "value") for i in 1:MAX_ROWS]...,
         [State("deck-l2-$i", "value") for i in 1:MAX_ROWS]...,
         [State("deck-l3-$i", "value") for i in 1:MAX_ROWS]...,
+        [State("deck-min-$i", "value") for i in 1:MAX_ROWS]...,
+        [State("deck-max-$i", "value") for i in 1:MAX_ROWS]...,
         [State("deck-mw-$i", "value") for i in 1:MAX_ROWS]...,
         [State("deck-unit-$i", "value") for i in 1:MAX_ROWS]...,
         prevent_initial_call=true
@@ -813,19 +882,48 @@ function DECK_RegisterCallbacks_DDEF(app)
             all_l1s = collect(args[offset+2MAX_ROWS:offset+3MAX_ROWS-1])
             all_l2s = collect(args[offset+3MAX_ROWS:offset+4MAX_ROWS-1])
             all_l3s = collect(args[offset+4MAX_ROWS:offset+5MAX_ROWS-1])
-            all_mws = collect(args[offset+5MAX_ROWS:offset+6MAX_ROWS-1])
-            all_units = collect(args[offset+6MAX_ROWS:offset+7MAX_ROWS-1])
+            all_mins = collect(args[offset+5MAX_ROWS:offset+6MAX_ROWS-1])
+            all_maxs = collect(args[offset+6MAX_ROWS:offset+7MAX_ROWS-1])
+            all_mws = collect(args[offset+7MAX_ROWS:offset+8MAX_ROWS-1])
+            all_units = collect(args[offset+8MAX_ROWS:offset+9MAX_ROWS-1])
 
+            _sn = Sys_Fast.FAST_SafeNum_DDEF
+            _sn0(x) = (v = _sn(x); isnan(v) ? 0.0 : v)
             count = isnothing(store_data) ? 1 : get(store_data, "count", 1)
-            in_d = [Dict(
-                "Name" => isnothing(all_names[i]) ? "" : string(all_names[i]),
-                "Role" => isnothing(all_roles[i]) ? "Variable" : string(all_roles[i]),
-                "L1" => isnothing(all_l1s[i]) ? 0.0 : Float64(all_l1s[i]),
-                "L2" => isnothing(all_l2s[i]) ? 0.0 : Float64(all_l2s[i]),
-                "L3" => isnothing(all_l3s[i]) ? 0.0 : Float64(all_l3s[i]),
-                "MW" => isnothing(all_mws[i]) ? 0.0 : Float64(all_mws[i]),
-                "Unit" => isnothing(all_units[i]) ? "" : string(all_units[i]),
-            ) for i in 1:count]
+            in_d = Dict{String,Any}[]
+            for i in 1:count
+                name = isnothing(all_names[i]) ? "" : strip(string(all_names[i]))
+                minval = _sn0(all_mins[i])
+                maxval = _sn0(all_maxs[i])
+                l1val = _sn0(all_l1s[i])
+                l2val = _sn0(all_l2s[i])
+                l3val = _sn0(all_l3s[i])
+
+                if i <= 3
+                    if isempty(name) || minval == 0.0 || maxval == 0.0
+                        return Dash.no_update(), html_div([html_i(className="fas fa-exclamation-triangle me-1"), "Error: Variables 1-3 must have Name, Min, and Max properties filled!"], className="text-danger fw-bold"), Dash.no_update()
+                    end
+                    if l1val < minval || l3val > maxval || l1val > l2val || l2val > l3val
+                        return Dash.no_update(), html_div([html_i(className="fas fa-exclamation-triangle me-1"), "Error: Variable '$name' breaks boundary rules (Min <= Low <= Center <= High <= Max)!"], className="text-danger fw-bold"), Dash.no_update()
+                    end
+                end
+
+                if i > 3 && isempty(name)
+                    continue
+                end
+
+                push!(in_d, Dict(
+                    "Name" => name,
+                    "Role" => isnothing(all_roles[i]) ? (i <= 3 ? "Variable" : (i == 4 ? "Filler" : "Fixed")) : string(all_roles[i]),
+                    "L1" => l1val,
+                    "L2" => l2val,
+                    "L3" => l3val,
+                    "Min" => minval,
+                    "Max" => maxval,
+                    "MW" => _sn0(all_mws[i]),
+                    "Unit" => isnothing(all_units[i]) ? "" : string(all_units[i]),
+                ))
+            end
 
             path = Sys_Fast.FAST_GetTransientPath_DDEF()
             ok, msg = DECK_GenerateProtocol_DDEF(path, in_d, out_d, vol, conc, method)

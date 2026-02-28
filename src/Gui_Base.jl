@@ -99,10 +99,10 @@ function BASE_PageHeader(title::String, subtitle::String)
 end
 
 """
-    BASE_GlassPanel(title::String, content; right_node, panel_class, content_class)
+    BASE_GlassPanel(title::Union{String, Vector{Any}}, content; right_node, panel_class, content_class)
 Standardized 'glass-panel' component with header and body.
 """
-function BASE_GlassPanel(title::String, content; right_node=nothing, panel_class="h-100", content_class="glass-content p-2 p-md-3", overflow="hidden")
+function BASE_GlassPanel(title::Union{String,Vector{Any}}, content; right_node=nothing, panel_class="h-100", content_class="glass-content p-2 p-md-3", overflow="hidden")
     header_content = Any[html_span(title, className="glass-caption")]
     !isnothing(right_node) && push!(header_content, right_node)
 
