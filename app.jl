@@ -211,12 +211,12 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
 
                     # System Diagnostics Footer
                     dbc_row(dbc_col(html_div([
-                                html_div([
-                                        html_div([html_i(className="fas fa-server text-success me-2"), html_span("System Online", className="text-secondary fw-bold")], className="d-flex align-items-center me-4"),
-                                        html_div([html_i(className="fas fa-microchip text-$tstyle me-2"), html_span(tmsg, className="text-secondary fw-bold")], className="d-flex align-items-center"),
-                                    ], className="d-flex justify-content-center align-items-center p-3 rounded-pill",
-                                    style=Dict("background" => "#FFFFFF", "border" => "1px solid #DCDCDC", "boxShadow" => "0 4px 6px -1px #E6E6E6", "display" => "inline-flex", "margin" => "0 auto"))
-                            ], className="text-center"), xs=12)),], fluid=true, className="pb-5 mt-2")
+                                    html_div([
+                                            html_div([html_i(className="fas fa-server text-success me-2"), html_span("System Online", className="text-secondary fw-bold")], className="d-flex align-items-center me-4"),
+                                            html_div([html_i(className="fas fa-microchip text-$tstyle me-2"), html_span(tmsg, className="text-secondary fw-bold")], className="d-flex align-items-center"),
+                                        ], className="d-flex justify-content-center align-items-center p-3 rounded-pill",
+                                        style=Dict("background" => "#FFFFFF", "border" => "1px solid #DCDCDC", "boxShadow" => "0 4px 6px -1px #E6E6E6", "display" => "inline-flex", "margin" => "0 auto"))
+                                ], className="text-center"), xs=12), style=Dict("maxWidth" => "900px", "margin" => "0 auto")),], fluid=true, className="pb-5 mt-2")
         ])
     end
 end

@@ -672,7 +672,7 @@ select:focus {
             #E6E6E6 50%,
             var(--bg-surface) 75%);
     background-size: 200% 100%;
-    animation: daisho-shimmer 1.5s ease-in-out infinite;
+    animation: daisho-shimmer 1.5s ease-in-out 2 forwards;
     border-radius: var(--rad-sm);
     padding: 0.6rem 1.2rem;
     color: var(--text-secondary);

@@ -173,6 +173,31 @@ function DECK_Layout_DDEF()
                     ]),
                 ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
         end
+        function build_vol_table()
+            html_table([
+                    html_thead(html_tr([
+                        html_th("VOLUME (mL)", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => "100%")), className="p-0"),
+                    ])),
+                    html_tbody([
+                        html_tr([
+                            html_td(dcc_input(id="deck-input-vol", type="number", value=0.0, min=0.0, debounce=false, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "100%")), className="p-0"),
+                        ])
+                    ])
+                ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
+        end
+
+        function build_conc_table()
+            html_table([
+                    html_thead(html_tr([
+                        html_th("CONC. (mM)", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => "100%")), className="p-0"),
+                    ])),
+                    html_tbody([
+                        html_tr([
+                            html_td(dcc_input(id="deck-input-conc", type="number", value=0.0, min=0.0, debounce=false, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "100%")), className="p-0"),
+                        ])
+                    ])
+                ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
+        end
 
         return dbc_container([
                 # State Bus & Hidden DataTable
@@ -197,6 +222,7 @@ function DECK_Layout_DDEF()
                                     data=[DECK_GetDefaultRow_DDEF(i) for i in 1:5],
                                     editable=false,
                                 ),
+                                build_level_table(4:4), # Hidden array of inputs to satisfy Dash callback layout requirement
                             ]; style=Dict("display" => "none"))
                     ], xs=12)),
 
@@ -227,23 +253,16 @@ function DECK_Layout_DDEF()
                                         dbc_col(BASE_GlassPanel([html_i(className="fas fa-tint me-2 text-warning"), "FILLER COMPONENT"], dbc_row([
                                                         dbc_col(build_id_table(4:4, false), lg=6, className="pe-lg-1"),
                                                         dbc_col(build_stoch_table(4:4), lg=6, className="ps-lg-1")
-                                                    ], className="g-0"); panel_class="h-100 mb-0", content_class="p-2"), lg=8), dbc_col(BASE_GlassPanel([html_i(className="fas fa-vial me-2 text-secondary"), "GLOBAL SPECS"],
-                                                html_div([
-                                                        dbc_row(dbc_col([
-                                                                    dbc_label("Volume (mL)", className="small mb-1"),
-                                                                    dbc_input(id="deck-input-vol", type="number", value=0.0,
-                                                                        min=0.0, className="form-control-sm", debounce=false),
-                                                                ], xs=12), className="mb-2"),
-                                                        dbc_row(dbc_col([
-                                                                    dbc_label("Conc. (mM)", className="small mb-1"),
-                                                                    dbc_input(id="deck-input-conc", type="number", value=0.0,
-                                                                        min=0.0, className="form-control-sm", debounce=false),
-                                                                ], xs=12), className="mb-0"),
-                                                    ], className="p-2"),
-                                                panel_class="h-100 mb-0", content_class="p-0"), lg=4),
+                                                    ], className="g-0"); panel_class="h-100 mb-0", content_class="p-2"), lg=8),
+                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-vial me-2 text-secondary"), "GLOBAL SPECS"],
+                                                dbc_row([
+                                                        dbc_col(build_vol_table(), lg=6, className="pe-lg-1"),
+                                                        dbc_col(build_conc_table(), lg=6, className="ps-lg-1")
+                                                    ], className="g-0");
+                                                panel_class="h-100 mb-0", content_class="p-2"), lg=4),
                                     ], className="g-3 mb-3 d-flex align-items-stretch"),
 
-                                # Row 2: Response Metrics (lg=8) & Profile Config (lg=4)
+                                # Row 2: Response Metrics (lg=12)
                                 dbc_row([
                                         dbc_col(BASE_GlassPanel([html_i(className="fas fa-chart-line me-2 text-success"), "RESPONSE METRICS"],
                                                 html_div(html_table([
@@ -258,27 +277,35 @@ function DECK_Layout_DDEF()
                                                                 ) for i in 1:3
                                                             ])
                                                         ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0 p-2");
-                                                content_class="glass-content p-0", panel_class="h-100 mb-0"), lg=8), dbc_col(BASE_GlassPanel([html_i(className="fas fa-address-card me-2 text-secondary"), "PROFILE CONFIG"], [
-                                                    dbc_row([
-                                                            dbc_col(dbc_button([html_i(className="fas fa-file-alt me-1"), " Base"], id="deck-btn-template", n_clicks=0, color="dark", outline=true, size="sm", className="w-100 fw-bold border-0 bg-transparent text-secondary"), xs=6, className="pe-1 mb-2"),
-                                                            dbc_col(dcc_upload(id="deck-upload-memo", children=dbc_button([html_i(className="fas fa-upload me-1"), " Load"], n_clicks=0, color="dark", outline=true, size="sm", className="w-100 fw-bold border-0 bg-transparent text-secondary"), multiple=false, className="w-100"), xs=6, className="ps-1 mb-2"),
-                                                            dbc_col(dbc_button([html_i(className="fas fa-download me-1"), " Save"], id="deck-btn-save-memo", n_clicks=0, color="dark", outline=true, size="sm", className="w-100 fw-bold border-0 bg-transparent text-secondary"), xs=6, className="pe-1"),
-                                                            dbc_col(dbc_button([html_i(className="fas fa-eraser me-1"), " Clear"], id="deck-btn-clear", n_clicks=0, color="danger", outline=true, size="sm", className="w-100 fw-bold border-0 bg-transparent"), xs=6, className="ps-1"),
-                                                        ], className="g-0")
-                                                ]; panel_class="h-100 mb-0", content_class="p-2"), lg=4),
+                                                content_class="glass-content p-0", panel_class="h-100 mb-0"), lg=12),
                                     ], className="g-3 mb-3 d-flex align-items-stretch"),
                             ], xs=12, lg=9, className="mb-3 mb-lg-0"),
 
                         # --- RIGHT COLUMN ---
                         dbc_col([
                                 dbc_row(dbc_col(BASE_GlassPanel("PROTOCOL SETTINGS", [
-                                            dbc_row(dbc_col(html_div(id="deck-memo-msg", className="small mb-2 fw-bold"), xs=12)),
-                                            dbc_row(dbc_col([
+                                            dbc_row(dbc_col(dcc_upload(id="deck-upload",
+                                                    children=dbc_button(
+                                                        [html_i(className="fas fa-file-import me-2"), "Import Dataset"],
+                                                        color="secondary", outline=true, size="sm", className="w-100 mb-2"),
+                                                    multiple=false), xs=12)),
+                                            dbc_row(dbc_col(dcc_loading(html_div("No data source", id="deck-upload-status", className="glass-loading-status mb-2"),
+                                                    type="default", color="#21918C"), xs=12)), dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)), dbc_row(dbc_col(html_div("PROFILE CONFIG", className="small mb-1 fw-bold text-center"), xs=12)),
+                                            dbc_row([
+                                                    dbc_col(dbc_button([html_i(className="fas fa-download me-1"), " Save"], id="deck-btn-save-memo", n_clicks=0, color="secondary", outline=true, size="sm", className="w-100 fw-bold"), xs=6, className="pe-1 mb-2"),
+                                                    dbc_col(dcc_upload(id="deck-upload-memo", children=dbc_button([html_i(className="fas fa-upload me-1"), " Load"], n_clicks=0, color="secondary", outline=true, size="sm", className="w-100 fw-bold"), multiple=false, className="w-100"), xs=6, className="ps-1 mb-2"),
+                                                    dbc_col(dbc_button([html_i(className="fas fa-file-alt me-1"), " Sample"], id="deck-btn-template", n_clicks=0, color="secondary", outline=true, size="sm", className="w-100 fw-bold"), xs=6, className="pe-1 mb-3"),
+                                                    dbc_col(dbc_button([html_i(className="fas fa-eraser me-1"), " Clear"], id="deck-btn-clear", n_clicks=0, color="secondary", outline=true, size="sm", className="w-100 fw-bold"), xs=6, className="ps-1 mb-3"),
+                                                ], className="g-0"), dbc_row(dbc_col(html_div(id="deck-memo-msg", className="small mb-2 fw-bold text-center"), xs=12)), dbc_row(dbc_col([
                                                     dbc_label("Project Name", className="small mb-1"),
                                                     dbc_input(id="deck-input-project", type="text", value="",
-                                                        placeholder="Enter project name...", className="mb-3 form-control-sm", debounce=false),
-                                                ], xs=12)),
-                                            dbc_row(dbc_col([
+                                                        placeholder="Enter project name...", className="mb-2 form-control-sm", debounce=false),
+                                                ], xs=12)), dbc_row(dbc_col([
+                                                    dbc_label("Phase", className="small mb-1"),
+                                                    dcc_dropdown(id="deck-dd-phase",
+                                                        options=[Dict("label" => "Loading...", "value" => "NONE")],
+                                                        clearable=false, className="mb-3"),
+                                                ], xs=12)), dbc_row(dbc_col([
                                                     dbc_label("Design Method", className="small mb-1"),
                                                     dcc_dropdown(id="deck-dd-method",
                                                         options=[
@@ -286,24 +313,12 @@ function DECK_Layout_DDEF()
                                                             Dict("label" => "Taguchi L9 (3-Level)", "value" => "Taguchi_L9"),
                                                         ],
                                                         value="BoxBehnken", clearable=false, className="mb-3"),
-                                                ], xs=12)),
-                                            dbc_row(dbc_col(html_hr(className="my-2", style=Dict("borderColor" => "#DCDCDC")), xs=12)),
-                                            dbc_row(dbc_col(dbc_button([html_i(className="fas fa-vial me-2"), "Quick Audit"],
+                                                ], xs=12)), dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)), dbc_row(dbc_col(dbc_button([html_i(className="fas fa-vial me-2"), "Quick Audit"],
                                                     id="deck-btn-audit", n_clicks=0, color="secondary", outline=true, size="sm",
-                                                    className="w-100 mb-2"), xs=12)),
-                                            dbc_row(dbc_col(dcc_upload(id="deck-upload",
-                                                    children=dbc_button(
-                                                        [html_i(className="fas fa-file-import me-2"), "Import Protocol"],
-                                                        color="secondary", outline=true, size="sm", className="w-100"),
-                                                    multiple=false, className="mb-2"), xs=12)),
-                                            dbc_row(dbc_col(dbc_button([html_i(className="fas fa-file-export me-2"), "Generate Protocol"],
+                                                    className="w-100 mb-2"), xs=12)), dbc_row(dbc_col(dcc_loading(html_div(id="deck-run-output", className="mt-2 small"),
+                                                    type="default", color="#21918C"), xs=12)), dbc_row(dbc_col(dbc_button([html_i(className="fas fa-file-export me-2"), "Generate Protocol"],
                                                     id="deck-btn-run", n_clicks=0, color="primary", size="sm",
                                                     className="w-100 fw-bold mb-2"), xs=12)),
-                                            dbc_row(dbc_col(dcc_loading(html_div(id="deck-upload-status",
-                                                        style=Dict("display" => "none")), type="default", color="#21918C"), xs=12)),
-                                            dbc_row(dbc_col(dcc_loading(html_div(id="deck-run-output", className="mt-2 small"),
-                                                    type="default", color="#21918C"), xs=12)),
-                                            dbc_row(dbc_col(html_div(id="deck-phase-notification", className="mt-1"), xs=12)),
                                         ]; right_node=html_i(className="fas fa-cogs text-secondary"), panel_class="mb-3 h-auto"), xs=12)),
                             ], xs=12, lg=3),
                     ], className="g-3"),
@@ -488,13 +503,15 @@ function DECK_RegisterCallbacks_DDEF(app)
     callback!(app,
         Output("deck-store-factors", "data"),
         Output("deck-table-in", "data"),
-        Output("deck-phase-notification", "children"),
+        Output("deck-dd-phase", "options"),
         Output("deck-input-vol", "value"),
         Output("deck-input-conc", "value"),
         Output("deck-input-project", "value"),
         Output("deck-dd-method", "value"),
         Output("deck-memo-msg", "children"),
         Output("deck-download-memo", "data"),
+        Output("deck-upload-status", "children"),
+        Output("deck-dd-phase", "value"),
         # Triggers
         Input("deck-btn-add-row", "n_clicks"),
         Input("deck-btn-clear", "n_clicks"),
@@ -540,7 +557,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             all_units = collect(args[offset+8MAX_ROWS:offset+9MAX_ROWS-1])
 
             ctx = callback_context()
-            isempty(ctx.triggered) && return ntuple(_ -> Dash.no_update(), 9)
+            isempty(ctx.triggered) && return ntuple(_ -> Dash.no_update(), 11)
             trig = split(ctx.triggered[1].prop_id, ".")[1]
 
             NO = Dash.no_update()
@@ -570,7 +587,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     deleteat!(rows, ri)
                 end
                 nc = max(4, length(rows))
-                return Dict("rows" => rows, "count" => nc), rows, NO, NO, NO, NO, NO, NO, NO
+                return Dict("rows" => rows, "count" => nc), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO
             end
 
             # ── B. Add Row ──────────────────────────────────────────────────────────────
@@ -584,14 +601,14 @@ function DECK_RegisterCallbacks_DDEF(app)
                     new_row["Role"] = "Fixed"
                     push!(rows, new_row)
                 end
-                return Dict("rows" => rows, "count" => new_count), rows, NO, NO, NO, NO, NO, NO, NO
+                return Dict("rows" => rows, "count" => new_count), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO
 
                 # ── C0. Clear Memo ───────────────────────────────────────────────────────────
             elseif trig == "deck-btn-clear"
                 rows = [DECK_GetDefaultRow_DDEF(i) for i in 1:5]
                 lbl = html_div([html_i(className="fas fa-trash-alt me-2"), "Canvas Cleared"],
                     className="badge bg-danger text-white p-2 w-100", style=Dict("fontSize" => "0.85rem"))
-                return Dict("rows" => rows, "count" => 5), rows, NO, NO, NO, NO, "BoxBehnken", lbl, NO
+                return Dict("rows" => rows, "count" => 5), rows, [Dict("label" => "Loading...", "value" => "NONE")], NO, NO, NO, "BoxBehnken", lbl, NO, "No data source", "NONE"
 
                 # ── C1. Load User Memo ───────────────────────────────────────────────────────
             elseif trig == "deck-upload-memo" && !isnothing(up_memo) && up_memo != ""
@@ -614,9 +631,9 @@ function DECK_RegisterCallbacks_DDEF(app)
                     vol_v = get(g, "Volume", NO)
                     conc_v = get(g, "Conc", NO)
 
-                    return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], NO, vol_v, conc_v, NO, NO, lbl, NO
+                    return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], NO, vol_v, conc_v, NO, NO, lbl, NO, NO, NO
                 catch e
-                    return NO, NO, NO, NO, NO, NO, NO, html_div("❌ Load Error: $e", className="badge bg-danger text-white w-100 p-2"), NO
+                    return NO, NO, NO, NO, NO, NO, NO, html_div("❌ Load Error: $e", className="badge bg-danger text-white w-100 p-2"), NO, NO, NO
                 end
 
                 # ── C2. Load Template ────────────────────────────────────────────────────────
@@ -631,7 +648,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 lbl = html_div([html_i(className="fas fa-book-medical me-2"), "Template Applied"],
                     className="badge bg-primary text-white p-2 w-100", style=Dict("fontSize" => "0.85rem", "boxShadow" => "0 2px 5px #A6A6A6"))
                 nc = min(length(loaded_rows), MAX_ROWS)
-                return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], NO, 5.0, 20.0, "Sample", "BoxBehnken", lbl, NO
+                return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], [Dict("label" => "Loading...", "value" => "NONE")], 5.0, 20.0, "Sample", "BoxBehnken", lbl, NO, "No data source", "NONE"
 
                 # ── D. Save Memo (Download) ──────────────────────────────────────────────────
             elseif trig == "deck-btn-save-memo"
@@ -643,9 +660,9 @@ function DECK_RegisterCallbacks_DDEF(app)
                     dl_dict = Dict("filename" => "Daisho_Workspace.json", "content" => b64, "base64" => true)
                     lbl = html_div([html_i(className="fas fa-check-circle me-2"), "Workspace Exported"],
                         className="badge bg-success text-white p-2 w-100", style=Dict("fontSize" => "0.85rem", "boxShadow" => "0 2px 5px #A6A6A6"))
-                    return NO, NO, NO, NO, NO, NO, NO, lbl, dl_dict
+                    return NO, NO, NO, NO, NO, NO, NO, lbl, dl_dict, NO, NO
                 catch e
-                    return NO, NO, NO, NO, NO, NO, NO, html_div("❌ Save Error", className="badge bg-danger text-white p-2 w-100"), NO
+                    return NO, NO, NO, NO, NO, NO, NO, html_div("❌ Save Error", className="badge bg-danger text-white p-2 w-100"), NO, NO, NO
                 end
 
                 # ── E. Phase Transition ──────────────────────────────────────────────────────
@@ -673,9 +690,10 @@ function DECK_RegisterCallbacks_DDEF(app)
                                 html_i(className="fas fa-magic me-2 text-success"),
                                 html_span("Adaptive Recipe Loaded", className="text-success fw-bold"),
                             ], className="alert alert-success py-2 mt-2")
-                        # We use Taguchi_L9 after Phase 1 configuration is received via session data Handshake
-                        return Dict("rows" => mapped[1:nc], "count" => nc), mapped[1:nc], msg,
-                        get(g, "Volume", NO), get(g, "Conc", NO), saved_project, "Taguchi_L9", NO, NO
+
+                        ph_opts = [Dict("label" => "Phase 1 Initiated", "value" => "Phase1")]
+                        return Dict("rows" => mapped[1:nc], "count" => nc), mapped[1:nc], ph_opts,
+                        get(g, "Volume", NO), get(g, "Conc", NO), saved_project, "Taguchi_L9", msg, NO, "Sync: Session", "Phase1"
                     end
                 catch e
                     Sys_Fast.FAST_Log_DDEF("DECK", "HANDSHAKE_ERROR", "$e", "FAIL")
@@ -684,6 +702,9 @@ function DECK_RegisterCallbacks_DDEF(app)
                 # ── F. Import Protocol ───────────────────────────────────────────────────────
             elseif trig == "deck-upload" && !isnothing(up_cont)
                 try
+                    if up_cont == ""
+                        return Dict("rows" => [DECK_GetDefaultRow_DDEF(i) for i in 1:5], "count" => 5), NO, [Dict("label" => "Loading...", "value" => "NONE")], NO, NO, NO, NO, NO, NO, "No data source", "NONE"
+                    end
                     tmp = Sys_Fast.FAST_GetTransientPath_DDEF(up_cont)
                     cfg = Sys_Fast.FAST_ReadConfig_DDEF(tmp)
                     rm(tmp; force=true)
@@ -696,26 +717,31 @@ function DECK_RegisterCallbacks_DDEF(app)
                         end
                         nc = min(length(mapped), MAX_ROWS)
                         g = get(cfg, "Global", Dict())
-                        msg = html_div([
-                                html_i(className="fas fa-file-import me-2 text-info"),
-                                html_span("Imported: $fname", className="text-info fw-bold"),
-                            ], className="alert alert-info py-2 mt-2")
-                        return Dict("rows" => mapped[1:nc], "count" => nc), mapped[1:nc], msg,
-                        get(g, "Volume", NO), get(g, "Conc", NO), NO, NO, NO, NO
+
+                        stat_msg = html_span("✅ Sync: $(length(fname) > 15 ? fname[1:15]*"..." : fname)", className="text-success small fw-bold")
+                        ph_opts = [Dict("label" => "Phase 1 Initiated", "value" => "Phase1")]
+
+                        return Dict("rows" => mapped[1:nc], "count" => nc), mapped[1:nc], ph_opts,
+                        get(g, "Volume", NO), get(g, "Conc", NO), NO, NO, NO, NO, stat_msg, "Phase1"
                     end
                 catch e
                     @error "Import failed" exception = (e, catch_backtrace())
                 end
             end
 
-            return ntuple(_ -> Dash.no_update(), 9)
+            # Default status for no content
+            if trig == "deck-upload" && (isnothing(up_cont) || up_cont == "")
+                return NO, NO, [Dict("label" => "Loading...", "value" => "NONE")], NO, NO, NO, NO, NO, NO, "No data source", "NONE"
+            end
+
+            return ntuple(_ -> Dash.no_update(), 11)
 
         catch e  # Catch-all: surface error to UI instead of silent death
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("DECK", "CALLBACK_CRASH", bt, "FAIL")
             NO = Dash.no_update()
             return NO, NO, NO, NO, NO, NO, NO,
-            html_span("⚠ System Error: $(first(string(e), 120))", className="text-danger fw-bold"), NO
+            html_span("⚠ System Error: $(first(string(e), 120))", className="text-danger fw-bold"), NO, NO, NO
         end
     end
 
@@ -771,12 +797,15 @@ function DECK_RegisterCallbacks_DDEF(app)
                 l3val = _sn0(all_l3s[i])
 
                 if i <= 3
-                    if isempty(name) || minval == 0.0 || maxval == 0.0
+                    mv_raw = _sn(all_mins[i])
+                    xv_raw = _sn(all_maxs[i])
+                    if isempty(name) || isnan(mv_raw) || isnan(xv_raw)
                         return html_div([
                                 html_i(className="fas fa-exclamation-triangle me-2"),
                                 html_span("Audit Failed: Variables 1-3 must have Name, Min, and Max fields fully filled.", className="fw-bold"),
                             ], className="text-danger h5 mb-3"), true
                     end
+
                     if l1val < minval || l3val > maxval || l1val > l2val || l2val > l3val
                         return html_div([
                                 html_i(className="fas fa-exclamation-triangle me-2"),
@@ -900,7 +929,9 @@ function DECK_RegisterCallbacks_DDEF(app)
                 l3val = _sn0(all_l3s[i])
 
                 if i <= 3
-                    if isempty(name) || minval == 0.0 || maxval == 0.0
+                    mv_raw = _sn(all_mins[i])
+                    xv_raw = _sn(all_maxs[i])
+                    if isempty(name) || isnan(mv_raw) || isnan(xv_raw)
                         return Dash.no_update(), html_div([html_i(className="fas fa-exclamation-triangle me-1"), "Error: Variables 1-3 must have Name, Min, and Max properties filled!"], className="text-danger fw-bold"), Dash.no_update()
                     end
                     if l1val < minval || l3val > maxval || l1val > l2val || l2val > l3val

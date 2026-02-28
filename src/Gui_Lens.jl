@@ -64,7 +64,17 @@ function LENS_Layout_DDEF()
                                                 type="default", color="#21918C"), xs=12)),
                                         dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)),
 
-                                        # 2. Control Settings
+                                        # 2. Downloads Section
+                                        dbc_row(dbc_col(html_div("DOWNLOADS", className="small mb-1 fw-bold text-center"), xs=12)),
+                                        dbc_row(dbc_col(dbc_button([html_i(className="fas fa-camera-retro me-1"), " Plots"],
+                                                id="lens-btn-export-plots", color="secondary", outline=true, size="sm",
+                                                className="w-100 fw-bold mb-2"), xs=12)),
+                                        dbc_row(dbc_col(dbc_button([html_i(className="fas fa-file-export me-1"), " Report"],
+                                                id="lens-btn-download-report", color="secondary", outline=true, size="sm",
+                                                className="w-100 fw-bold mb-3"), xs=12)),
+                                        dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)),
+
+                                        # 3. Control Settings
                                         dbc_row(dbc_col([
                                                 dbc_label("Project Name", className="small mb-1"),
                                                 dbc_input(id="lens-input-project", type="text", value="",
@@ -86,22 +96,14 @@ function LENS_Layout_DDEF()
                                             ], xs=12)),
                                         dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)),
 
-
-
                                         # 4. Main Operations
+                                        dbc_row(dbc_col(dbc_button([html_i(className="fas fa-rocket me-2"), "Next Phase"],
+                                                id="lens-btn-next-phase", color="secondary", outline=true, size="sm",
+                                                className="w-100 fw-bold mb-2", disabled=true), xs=12)),
                                         dbc_row(dbc_col(dbc_button([html_i(className="fas fa-play me-2"), "Run Analysis"],
                                                 id="lens-btn-run", color="primary", size="sm", className="w-100 fw-bold mb-2"), xs=12)),
-                                        dbc_row(dbc_col(dbc_button([html_i(className="fas fa-file-export me-2"), "Download Report"],
-                                                id="lens-btn-download-report", color="secondary", outline=true, size="sm",
-                                                className="w-100 fw-bold mb-2"), xs=12)),
 
-                                        # Application & Export Group
-                                        dbc_row(dbc_col(dbc_button([html_i(className="fas fa-rocket me-1"), "Next Phase"],
-                                                id="lens-btn-next-phase", color="success", outline=true, size="sm",
-                                                className="w-100 mb-2", disabled=true), xs=12)),
-                                        dbc_row(dbc_col(dbc_button([html_i(className="fas fa-camera-retro me-1"), "Plots"],
-                                                id="lens-btn-export-plots", color="info", outline=true,
-                                                size="sm", className="w-100 mb-2"), xs=12)),
+                                        # Application & Export Group hidden state loaders
                                         dcc_download(id="lens-download-result"),
                                         dcc_download(id="lens-download-plots"),
                                         dbc_row(dbc_col(dcc_loading(html_div(id="lens-run-output", className="mt-2 small"),
