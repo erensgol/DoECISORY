@@ -149,9 +149,9 @@ function DECK_Layout_DDEF()
         function build_level_table(rows_range)
             html_table([
                     html_thead(html_tr([
-                        html_th("LOW", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
+                        html_th("LOWER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
                         html_th("CENTER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
-                        html_th("HIGH", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "34%")), className="p-0"),
+                        html_th("UPPER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "34%")), className="p-0"),
                     ])),
                     html_tbody([
                         DECK_BuildLevelRowUI_DDEF(i, initial_rows[i], i <= active_count)
@@ -163,9 +163,9 @@ function DECK_Layout_DDEF()
         function build_stoch_table(rows_range)
             html_table([
                     html_thead(html_tr([
-                        html_th("MIN", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
-                        html_th("MAX", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
-                        html_th("MW", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "34%")), className="p-0"),
+                        html_th("MIN LIMIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
+                        html_th("MAX LIMIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
+                        html_th("MW (g/mol)", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "34%")), className="p-0"),
                     ])),
                     html_tbody([
                         DECK_BuildStochRowUI_DDEF(i, initial_rows[i], i <= active_count)
@@ -234,27 +234,27 @@ function DECK_Layout_DDEF()
                         # --- LEFT COLUMN ---
                         dbc_col([
                                 # Variable Windows
-                                dbc_row(dbc_col(BASE_GlassPanel([html_i(className="fas fa-cubes me-2 text-info"), "VARIABLE FACTORS"], dbc_row([
+                                dbc_row(dbc_col(BASE_GlassPanel([html_i(className="fas fa-cubes me-2 text-info"), "VARIABLE FACTORS", html_span(" — Define the independent variables and boundary limits.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
                                                     dbc_col(build_id_table(1:3, false), lg=4, className="pe-lg-1"),
                                                     dbc_col(build_stoch_table(1:3), lg=4, className="px-lg-1"),
                                                     dbc_col(build_level_table(1:3), lg=4, className="ps-lg-1")
                                                 ], className="g-0"); panel_class="mb-4 h-100", content_class="p-2"), xs=12), className="mb-3"),
 
                                 # Constant Windows
-                                dbc_row(dbc_col(BASE_GlassPanel([html_i(className="fas fa-lock me-2 text-primary"), "CONSTANT FACTORS"], dbc_row([
+                                dbc_row(dbc_col(BASE_GlassPanel([html_i(className="fas fa-lock me-2 text-primary"), "CONSTANT FACTORS", html_span(" — Background parameters kept strictly fixed.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
                                                     dbc_col(build_id_table(5:MAX_ROWS, true), lg=4, className="pe-lg-1"),
                                                     dbc_col(build_stoch_table(5:MAX_ROWS), lg=4, className="px-lg-1"),
                                                     dbc_col(build_level_table(5:MAX_ROWS), lg=4, className="ps-lg-1")
                                                 ], className="g-0"); right_node=dbc_button([html_i(className="fas fa-plus me-1"), "Add Row"], id="deck-btn-add-row", n_clicks=0, color="secondary", outline=true, size="sm", className="px-2 py-1 fw-bold"), panel_class="mb-4 h-100", content_class="p-2"), xs=12), className="mb-3"),
 
                                 # --- SYMMETRIC 2x2 GRID (EQUAL HEIGHTS) ---
-                                # Row 1: Filler (lg=8) & Global Specs (lg=4)
+                                # Row 1: Filler (lg=8) & Formulation Specs (lg=4)
                                 dbc_row([
-                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-tint me-2 text-warning"), "FILLER COMPONENT"], dbc_row([
+                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-tint me-2 text-warning"), "BALANCE COMPONENT", html_span(" — Auto-balances to match total formulation.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
                                                         dbc_col(build_id_table(4:4, false), lg=6, className="pe-lg-1"),
                                                         dbc_col(build_stoch_table(4:4), lg=6, className="ps-lg-1")
                                                     ], className="g-0"); panel_class="h-100 mb-0", content_class="p-2"), lg=8),
-                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-vial me-2 text-secondary"), "GLOBAL SPECS"],
+                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-vial me-2 text-secondary"), "FORMULATION METRICS"],
                                                 dbc_row([
                                                         dbc_col(build_vol_table(), lg=6, className="pe-lg-1"),
                                                         dbc_col(build_conc_table(), lg=6, className="ps-lg-1")
@@ -264,18 +264,13 @@ function DECK_Layout_DDEF()
 
                                 # Row 2: Response Metrics (lg=12)
                                 dbc_row([
-                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-chart-line me-2 text-success"), "RESPONSE METRICS"],
+                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-chart-line me-2 text-success"), "RESPONSE METRICS", html_span(" — Declare the dependent analysis variables.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))],
                                                 html_div(html_table([
                                                             html_tr([
                                                                 html_th("RESPONSE NAME", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "paddingLeft" => "5px", "width" => "50%")), className="p-0"),
                                                                 html_th("UNIT/METRIC", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "paddingLeft" => "5px", "width" => "50%")), className="p-0")
                                                             ]),
-                                                            html_tbody([
-                                                                DECK_BuildOutRow_DDEF(i,
-                                                                    i <= length(Defaults["Outputs"]) ? Defaults["Outputs"][i]["Name"] : "",
-                                                                    i <= length(Defaults["Outputs"]) ? Defaults["Outputs"][i]["Unit"] : ""
-                                                                ) for i in 1:3
-                                                            ])
+                                                            html_tbody([DECK_BuildOutRow_DDEF(i, "", "-") for i in 1:3])
                                                         ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0 p-2");
                                                 content_class="glass-content p-0", panel_class="h-100 mb-0"), lg=12),
                                     ], className="g-3 mb-3 d-flex align-items-stretch"),
@@ -283,14 +278,14 @@ function DECK_Layout_DDEF()
 
                         # --- RIGHT COLUMN ---
                         dbc_col([
-                                dbc_row(dbc_col(BASE_GlassPanel("PROTOCOL SETTINGS", [
+                                dbc_row(dbc_col(BASE_GlassPanel("PROTOCOL CONFIGURATION", [
                                             dbc_row(dbc_col(dcc_upload(id="deck-upload",
                                                     children=dbc_button(
                                                         [html_i(className="fas fa-file-import me-2"), "Import Dataset"],
                                                         color="secondary", outline=true, size="sm", className="w-100 mb-2"),
                                                     multiple=false), xs=12)),
                                             dbc_row(dbc_col(dcc_loading(html_div("No data source", id="deck-upload-status", className="glass-loading-status mb-2"),
-                                                    type="default", color="#21918C"), xs=12)), dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)), dbc_row(dbc_col(html_div("PROFILE CONFIG", className="small mb-1 fw-bold text-center"), xs=12)),
+                                                    type="default", color="#21918C"), xs=12)), dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)), dbc_row(dbc_col(html_div("PROFILES", className="small mb-1 fw-bold text-center"), xs=12)),
                                             dbc_row([
                                                     dbc_col(dbc_button([html_i(className="fas fa-download me-1"), " Save"], id="deck-btn-save-memo", n_clicks=0, color="secondary", outline=true, size="sm", className="w-100 fw-bold"), xs=6, className="pe-1 mb-2"),
                                                     dbc_col(dcc_upload(id="deck-upload-memo", children=dbc_button([html_i(className="fas fa-upload me-1"), " Load"], n_clicks=0, color="secondary", outline=true, size="sm", className="w-100 fw-bold"), multiple=false, className="w-100"), xs=6, className="ps-1 mb-2"),
@@ -512,6 +507,9 @@ function DECK_RegisterCallbacks_DDEF(app)
         Output("deck-download-memo", "data"),
         Output("deck-upload-status", "children"),
         Output("deck-dd-phase", "value"),
+        # Response Metrics Outputs
+        [Output("deck-out-name-$i", "value") for i in 1:3]...,
+        [Output("deck-out-unit-$i", "value") for i in 1:3]...,
         # Triggers
         Input("deck-btn-add-row", "n_clicks"),
         Input("deck-btn-clear", "n_clicks"),
@@ -557,7 +555,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             all_units = collect(args[offset+8MAX_ROWS:offset+9MAX_ROWS-1])
 
             ctx = callback_context()
-            isempty(ctx.triggered) && return ntuple(_ -> Dash.no_update(), 11)
+            isempty(ctx.triggered) && return ntuple(_ -> Dash.no_update(), 17)
             trig = split(ctx.triggered[1].prop_id, ".")[1]
 
             NO = Dash.no_update()
@@ -587,7 +585,8 @@ function DECK_RegisterCallbacks_DDEF(app)
                     deleteat!(rows, ri)
                 end
                 nc = max(4, length(rows))
-                return Dict("rows" => rows, "count" => nc), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO
+                return Dict("rows" => rows, "count" => nc), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO,
+                NO, NO, NO, NO, NO, NO
             end
 
             # ── B. Add Row ──────────────────────────────────────────────────────────────
@@ -601,14 +600,16 @@ function DECK_RegisterCallbacks_DDEF(app)
                     new_row["Role"] = "Fixed"
                     push!(rows, new_row)
                 end
-                return Dict("rows" => rows, "count" => new_count), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO
+                return Dict("rows" => rows, "count" => new_count), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO,
+                NO, NO, NO, NO, NO, NO
 
                 # ── C0. Clear Memo ───────────────────────────────────────────────────────────
             elseif trig == "deck-btn-clear"
                 rows = [DECK_GetDefaultRow_DDEF(i) for i in 1:5]
                 lbl = html_div([html_i(className="fas fa-trash-alt me-2"), "Canvas Cleared"],
                     className="badge bg-danger text-white p-2 w-100", style=Dict("fontSize" => "0.85rem"))
-                return Dict("rows" => rows, "count" => 5), rows, [Dict("label" => "Loading...", "value" => "NONE")], NO, NO, NO, "BoxBehnken", lbl, NO, "No data source", "NONE"
+                return Dict("rows" => rows, "count" => 5), rows, [Dict("label" => "Loading...", "value" => "NONE")], NO, NO, NO, "BoxBehnken", lbl, NO, "No data source", "NONE",
+                "", "", "", "-", "-", "-"
 
                 # ── C1. Load User Memo ───────────────────────────────────────────────────────
             elseif trig == "deck-upload-memo" && !isnothing(up_memo) && up_memo != ""
@@ -631,24 +632,41 @@ function DECK_RegisterCallbacks_DDEF(app)
                     vol_v = get(g, "Volume", NO)
                     conc_v = get(g, "Conc", NO)
 
-                    return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], NO, vol_v, conc_v, NO, NO, lbl, NO, NO, NO
+                    # Populate Response Metrics from Memo if available
+                    memo_outs = get(memo, "Outputs", [])
+                    out_vals = vcat(
+                        [i <= length(memo_outs) ? get(memo_outs[i], "Name", "") : "" for i in 1:3],
+                        [i <= length(memo_outs) ? get(memo_outs[i], "Unit", "-") : "-" for i in 1:3]
+                    )
+
+                    return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], NO, vol_v, conc_v, NO, NO, lbl, NO, NO, NO,
+                    out_vals...
                 catch e
-                    return NO, NO, NO, NO, NO, NO, NO, html_div("❌ Load Error: $e", className="badge bg-danger text-white w-100 p-2"), NO, NO, NO
+                    return NO, NO, NO, NO, NO, NO, NO, html_div("❌ Load Error: $e", className="badge bg-danger text-white w-100 p-2"), NO, NO, NO,
+                    NO, NO, NO, NO, NO, NO
                 end
 
                 # ── C2. Load Template ────────────────────────────────────────────────────────
             elseif trig == "deck-btn-template"
                 loaded_rows = [
-                    Dict("Name" => "Chol", "Role" => "Variable", "L1" => 10.0, "L2" => 20.0, "L3" => 30.0, "Min" => 5.0, "Max" => 40.0, "MW" => 386.6, "Unit" => "%M"),
-                    Dict("Name" => "PEG", "Role" => "Variable", "L1" => 1.0, "L2" => 3.0, "L3" => 5.0, "Min" => 0.0, "Max" => 10.0, "MW" => 2800.0, "Unit" => "%M"),
-                    Dict("Name" => "Temperature", "Role" => "Variable", "L1" => 25.0, "L2" => 45.0, "L3" => 65.0, "Min" => 20.0, "Max" => 80.0, "MW" => 0.0, "Unit" => "°C"),
-                    Dict("Name" => "DPPC", "Role" => "Filler", "L1" => 0.0, "L2" => 0.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 734.0, "Unit" => "MR"),
-                    Dict("Name" => "DOTA", "Role" => "Fixed", "L1" => 0.0, "L2" => 5.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 500.0, "Unit" => "%M"),
+                    Dict("Name" => "Chol", "Role" => "Variable", "L1" => 10.0, "L2" => 20.0, "L3" => 30.0, "Min" => 0.0, "Max" => 40.0, "MW" => 386.65, "Unit" => "%M"),
+                    Dict("Name" => "PEG", "Role" => "Variable", "L1" => 1.0, "L2" => 3.0, "L3" => 5.0, "Min" => 0.0, "Max" => 10.0, "MW" => 2808.74, "Unit" => "%M"),
+                    Dict("Name" => "Temperature", "Role" => "Variable", "L1" => 25.0, "L2" => 45.0, "L3" => 65.0, "Min" => 25.0, "Max" => 100.0, "MW" => 0.0, "Unit" => "°C"),
+                    Dict("Name" => "DPPC", "Role" => "Filler", "L1" => 0.0, "L2" => 0.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 734.05, "Unit" => "%M"),
+                    Dict("Name" => "DOTA", "Role" => "Fixed", "L1" => 0.0, "L2" => 1.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 3184.84, "Unit" => "%M"),
                 ]
                 lbl = html_div([html_i(className="fas fa-book-medical me-2"), "Template Applied"],
                     className="badge bg-primary text-white p-2 w-100", style=Dict("fontSize" => "0.85rem", "boxShadow" => "0 2px 5px #A6A6A6"))
                 nc = min(length(loaded_rows), MAX_ROWS)
-                return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], [Dict("label" => "Loading...", "value" => "NONE")], 5.0, 20.0, "Sample", "BoxBehnken", lbl, NO, "No data source", "NONE"
+                # Get standard outputs from Sys_Fast
+                def_outs = Sys_Fast.FAST_GetLabDefaults_DDEF()["Outputs"]
+                out_vals = vcat(
+                    [i <= length(def_outs) ? def_outs[i]["Name"] : "" for i in 1:3],
+                    [i <= length(def_outs) ? def_outs[i]["Unit"] : "-" for i in 1:3]
+                )
+
+                return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], [Dict("label" => "Loading...", "value" => "NONE")], 5.0, 20.0, "Sample", "BoxBehnken", lbl, NO, "No data source", "NONE",
+                out_vals...
 
                 # ── D. Save Memo (Download) ──────────────────────────────────────────────────
             elseif trig == "deck-btn-save-memo"
@@ -660,9 +678,11 @@ function DECK_RegisterCallbacks_DDEF(app)
                     dl_dict = Dict("filename" => "Daisho_Workspace.json", "content" => b64, "base64" => true)
                     lbl = html_div([html_i(className="fas fa-check-circle me-2"), "Workspace Exported"],
                         className="badge bg-success text-white p-2 w-100", style=Dict("fontSize" => "0.85rem", "boxShadow" => "0 2px 5px #A6A6A6"))
-                    return NO, NO, NO, NO, NO, NO, NO, lbl, dl_dict, NO, NO
+                    return NO, NO, NO, NO, NO, NO, NO, lbl, dl_dict, NO, NO,
+                    NO, NO, NO, NO, NO, NO
                 catch e
-                    return NO, NO, NO, NO, NO, NO, NO, html_div("❌ Save Error", className="badge bg-danger text-white p-2 w-100"), NO, NO, NO
+                    return NO, NO, NO, NO, NO, NO, NO, html_div("❌ Save Error", className="badge bg-danger text-white p-2 w-100"), NO, NO, NO,
+                    NO, NO, NO, NO, NO, NO
                 end
 
                 # ── E. Phase Transition ──────────────────────────────────────────────────────
@@ -693,7 +713,8 @@ function DECK_RegisterCallbacks_DDEF(app)
 
                         ph_opts = [Dict("label" => "Phase 1 Initiated", "value" => "Phase1")]
                         return Dict("rows" => mapped[1:nc], "count" => nc), mapped[1:nc], ph_opts,
-                        get(g, "Volume", NO), get(g, "Conc", NO), saved_project, "Taguchi_L9", msg, NO, "Sync: Session", "Phase1"
+                        get(g, "Volume", NO), get(g, "Conc", NO), saved_project, "Taguchi_L9", msg, NO, "Sync: Session", "Phase1",
+                        NO, NO, NO, NO, NO, NO
                     end
                 catch e
                     Sys_Fast.FAST_Log_DDEF("DECK", "HANDSHAKE_ERROR", "$e", "FAIL")
@@ -703,7 +724,8 @@ function DECK_RegisterCallbacks_DDEF(app)
             elseif trig == "deck-upload" && !isnothing(up_cont)
                 try
                     if up_cont == ""
-                        return Dict("rows" => [DECK_GetDefaultRow_DDEF(i) for i in 1:5], "count" => 5), NO, [Dict("label" => "Loading...", "value" => "NONE")], NO, NO, NO, NO, NO, NO, "No data source", "NONE"
+                        return Dict("rows" => [DECK_GetDefaultRow_DDEF(i) for i in 1:5], "count" => 5), NO, [Dict("label" => "Loading...", "value" => "NONE")], NO, NO, NO, NO, NO, NO, "No data source", "NONE",
+                        NO, NO, NO, NO, NO, NO
                     end
                     tmp = Sys_Fast.FAST_GetTransientPath_DDEF(up_cont)
                     cfg = Sys_Fast.FAST_ReadConfig_DDEF(tmp)
@@ -722,7 +744,8 @@ function DECK_RegisterCallbacks_DDEF(app)
                         ph_opts = [Dict("label" => "Phase 1 Initiated", "value" => "Phase1")]
 
                         return Dict("rows" => mapped[1:nc], "count" => nc), mapped[1:nc], ph_opts,
-                        get(g, "Volume", NO), get(g, "Conc", NO), NO, NO, NO, NO, stat_msg, "Phase1"
+                        get(g, "Volume", NO), get(g, "Conc", NO), NO, NO, NO, NO, stat_msg, "Phase1",
+                        NO, NO, NO, NO, NO, NO
                     end
                 catch e
                     @error "Import failed" exception = (e, catch_backtrace())
@@ -731,17 +754,19 @@ function DECK_RegisterCallbacks_DDEF(app)
 
             # Default status for no content
             if trig == "deck-upload" && (isnothing(up_cont) || up_cont == "")
-                return NO, NO, [Dict("label" => "Loading...", "value" => "NONE")], NO, NO, NO, NO, NO, NO, "No data source", "NONE"
+                return NO, NO, [Dict("label" => "Loading...", "value" => "NONE")], NO, NO, NO, NO, NO, NO, "No data source", "NONE",
+                NO, NO, NO, NO, NO, NO
             end
 
-            return ntuple(_ -> Dash.no_update(), 11)
+            return ntuple(_ -> Dash.no_update(), 17)
 
         catch e  # Catch-all: surface error to UI instead of silent death
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("DECK", "CALLBACK_CRASH", bt, "FAIL")
             NO = Dash.no_update()
             return NO, NO, NO, NO, NO, NO, NO,
-            html_span("⚠ System Error: $(first(string(e), 120))", className="text-danger fw-bold"), NO, NO, NO
+            html_span("⚠ System Error: $(first(string(e), 120))", className="text-danger fw-bold"), NO, NO, NO,
+            NO, NO, NO, NO, NO, NO
         end
     end
 

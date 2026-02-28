@@ -54,7 +54,7 @@ function LENS_Layout_DDEF()
             dbc_row([
                     # --- LEFT COLUMN: Configuration & Goals ---
                     dbc_col([
-                            dbc_row(dbc_col(BASE_GlassPanel("CONFIGURATION", [
+                            dbc_row(dbc_col(BASE_GlassPanel("ANALYSIS CONFIGURATION", [
                                         # 1. Data Ingestion
                                         dbc_row(dbc_col(dcc_upload(id="lens-upload-data",
                                                 children=dbc_button([html_i(className="fas fa-file-import me-2"), "Import Dataset"],
@@ -115,20 +115,20 @@ function LENS_Layout_DDEF()
 
                     # --- RIGHT COLUMN: Visualization Deck ---
                     dbc_col([
-                            BASE_GlassPanel("OPTIMIZATION TARGETS", [
+                            BASE_GlassPanel(["OPTIMIZATION TARGETS", html_span(" — Configure desirability objectives to guide the algorithmic search.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], [
                                     dbc_row(dbc_col([
                                             html_div(html_table([
                                                         html_thead(html_tr([
-                                                            html_th("OUTPUT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "24%")), className="p-0"),
-                                                            html_th("MIN", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "19%")), className="p-0"),
+                                                            html_th("RESPONSE", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "24%")), className="p-0"),
+                                                            html_th("LOWER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "19%")), className="p-0"),
                                                             html_th("TARGET", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "19%")), className="p-0"),
-                                                            html_th("MAX", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "19%")), className="p-0"),
-                                                            html_th("TYPE", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "19%")), className="p-0"),
+                                                            html_th("UPPER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "19%")), className="p-0"),
+                                                            html_th("OBJECTIVE", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "19%")), className="p-0"),
                                                         ])),
                                                         html_tbody([LENS_BuildGoalRow_DDEF(i) for i in 1:3])
                                                     ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0")
                                         ], xs=12)),
-                                ]; panel_class="mb-3", content_class="glass-content p-2"), BASE_GlassPanel("VISUALIZATION", [
+                                ]; panel_class="mb-3", content_class="glass-content p-2"), BASE_GlassPanel(["VISUALIZATION PANEL", html_span(" — Interactive evaluation of the mathematical models and surface geometry.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], [
                                     dbc_row(dbc_col(html_div(id="lens-graph-info", className="mb-2 p-1", style=Dict("backgroundColor" => "#FFFFFF", "border" => "1px solid #DCDCDC", "borderRadius" => "4px")), xs=12)),
                                     dbc_row(dbc_col(html_div(id="lens-results-text", className="mb-3 small px-2 table-responsive"), xs=12)),
                                     dcc_loading(html_div([
