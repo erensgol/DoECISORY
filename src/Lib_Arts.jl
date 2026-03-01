@@ -141,8 +141,6 @@ function ARTS_CalcDesirability_DDEF(Val::Float64, Goal::AbstractDict)
     G_Tgt = Float64(get(Goal, "Target", (G_Min + G_Max) / 2))
     Type = string(get(Goal, "Type", "Nominal"))
 
-    occursin("Monitor", Type) && return 1.0
-
     if occursin("Maximize", Type)
         return Val >= G_Tgt ? 1.0 : Val <= G_Min ? 0.0 : (Val - G_Min) / (G_Tgt - G_Min)
     elseif occursin("Minimize", Type)
@@ -465,11 +463,9 @@ function _render_space_impl(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int},
         Scores = ones(N * N)
         Count = 0
         for (m, mod) in enumerate(Models)
-            if !occursin("Monitor", get(Goals[m], "Type", "Nominal"))
-                preds = _predict_internal(mod, Grid)
-                Scores .*= ARTS_CalcDesirability_DDEF.(preds, Ref(Goals[m]))
-                Count += 1
-            end
+            preds = _predict_internal(mod, Grid)
+            Scores .*= ARTS_CalcDesirability_DDEF.(preds, Ref(Goals[m]))
+            Count += 1
         end
         Count = max(Count, 1)
         ScoreMat = reshape(Scores .^ (1 / Count), N, N)'

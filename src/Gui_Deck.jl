@@ -346,6 +346,47 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
         num_vars != 3 && return (false, "Requires exactly 3 Variable ingredients (Found: $num_vars).")
         num_fills > 1 && return (false, "Maximum 1 Filler allowed (Found: $num_fills).")
 
+        # 1. Poka-Yoke: İsim Geçerliliği ve Benzersizliği
+        all_names = String[]
+        for (i, r) in enumerate(D["Rows"])
+            n = strip(string(get(r, "Name", "")))
+            if isempty(n)
+                return (false, "Sistematik Hata: Satır $i için geçerli bir isim tanımlanmalıdır.")
+            end
+            if n in all_names
+                return (false, "Sistematik Hata: '$n' ismi birden fazla kez kullanılmış. Tüm isimler benzersiz olmalıdır.")
+            end
+            push!(all_names, n)
+
+            # 2. Poka-Yoke: L1 < L2 < L3 Kuralı
+            role = get(r, "Role", "")
+            if role == "Variable"
+                l1 = Sys_Fast.FAST_SafeNum_DDEF(get(r, "L1", 0.0))
+                l2 = Sys_Fast.FAST_SafeNum_DDEF(get(r, "L2", 0.0))
+                l3 = Sys_Fast.FAST_SafeNum_DDEF(get(r, "L3", 0.0))
+                if !(l1 < l2 && l2 < l3)
+                    return (false, "Sistematik Hata: '$n' (Variable) için seviyeler kesin bir artış göstermelidir (LOWER $l1 < CENTER $l2 < UPPER $l3).")
+                end
+            end
+        end
+
+        # 3. Poka-Yoke: Zorunlu Response ve İsimlendirme
+        output_data = _safe_rows(out_data)
+        if length(output_data) != 3
+            return (false, "Sistematik Hata: Tam olarak 3 adet Response (Çıktı) tanımlanmalıdır.")
+        end
+        all_out_names = String[]
+        for (i, r) in enumerate(output_data)
+            n = strip(string(get(r, "Name", "")))
+            if isempty(n)
+                return (false, "Sistematik Hata: Response Metrics tablosundaki $i. satırın ismi boş bırakılamaz. 3 çıktı da isimlendirilmek zorundadır.")
+            end
+            if n in all_out_names
+                return (false, "Sistematik Hata: Çıktı (Response) isimleri benzersiz olmalıdır. '$n' tekrarlanmış.")
+            end
+            push!(all_out_names, n)
+        end
+
         design_coded = Lib_Core.CORE_GenDesign_DDEF(method, num_vars)
         N_Runs = size(design_coded, 1)
         configs = [Dict("Levels" => [D["Rows"][i]["L1"], D["Rows"][i]["L2"], D["Rows"][i]["L3"]])
@@ -401,6 +442,9 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
 
             if !isempty(D["Idx_Fill"])
                 used = sum(get(RowMap, D["Names"][r], 0.0) for r in D["Idx_Chem"] if r ∉ D["Idx_Fill"])
+                if used > 100.0 + 1e-4
+                    return (false, "Filler validation failed: Components exceed 100% in generated run $i (Sum: $(round(used; digits=2))%). Please adjust boundaries.")
+                end
                 f_val = max(0.0, 100.0 - used)
                 for f in D["Idx_Fill"]
                     RowMap[D["Names"][f]] = f_val
@@ -424,7 +468,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
             haskey(mass_cols, k) && (df[!, k] = mass_cols[k])
         end
 
-        output_data = _safe_rows(out_data)
+        # output_data was defined globally at the top for validation
         for r in output_data
             n = string(get(r, "Name", "Unknown"))
             df[!, "RESULT_$n"] = fill(missing, N_Runs)
@@ -564,17 +608,40 @@ function DECK_RegisterCallbacks_DDEF(app)
             _sn = Sys_Fast.FAST_SafeNum_DDEF
             _sn0(x) = (v = _sn(x); isnan(v) ? 0.0 : v)
             max_idx = min(count, length(all_names), length(all_roles), length(all_l1s), length(all_l2s), length(all_l3s), length(all_mins), length(all_maxs), length(all_mws), length(all_units))
-            snap_rows() = [Dict(
-                "Name" => !isnothing(all_names[i]) ? string(all_names[i]) : "",
-                "Role" => !isnothing(all_roles[i]) ? string(all_roles[i]) : "Variable",
-                "L1" => _sn0(all_l1s[i]),
-                "L2" => _sn0(all_l2s[i]),
-                "L3" => _sn0(all_l3s[i]),
-                "Min" => _sn0(all_mins[i]),
-                "Max" => _sn0(all_maxs[i]),
-                "MW" => _sn0(all_mws[i]),
-                "Unit" => !isnothing(all_units[i]) ? string(all_units[i]) : "",
-            ) for i in 1:max_idx]
+            snap_rows() = [
+                let
+                    mw_val = _sn0(all_mws[i])
+                    unit_val = !isnothing(all_units[i]) ? string(all_units[i]) : ""
+
+                    # Check previous store state for MW change
+                    prev_mw = 0.0
+                    if !isnothing(store_data) && haskey(store_data, "rows")
+                        if i <= length(store_data["rows"])
+                            pmw = get(store_data["rows"][i], "MW", 0.0)
+                            prev_mw = pmw isa String ? parse(Float64, pmw) : Float64(pmw)
+                        end
+                    end
+
+                    # Poka-Yoke: Otomatik Birim Düzenlemesi (0 -> >0 geçişinde)
+                    if mw_val > 0.0 && prev_mw <= 0.0
+                        if isempty(strip(unit_val)) || unit_val == "-"
+                            unit_val = "%M"
+                        end
+                    end
+
+                    Dict(
+                        "Name" => !isnothing(all_names[i]) ? string(all_names[i]) : "",
+                        "Role" => !isnothing(all_roles[i]) ? string(all_roles[i]) : "Variable",
+                        "L1" => _sn0(all_l1s[i]),
+                        "L2" => _sn0(all_l2s[i]),
+                        "L3" => _sn0(all_l3s[i]),
+                        "Min" => _sn0(all_mins[i]),
+                        "Max" => _sn0(all_maxs[i]),
+                        "MW" => mw_val,
+                        "Unit" => unit_val,
+                    )
+                end for i in 1:max_idx
+            ]
 
             # ── A. Delete Row ─────────────────────────────────────────────────────────────
             del_ids = ["deck-del-$i" for i in 1:MAX_ROWS]

@@ -40,7 +40,6 @@ function LENS_BuildGoalRow_DDEF(i)
                     Dict("label" => "Nominal", "value" => "Nominal"),
                     Dict("label" => "Maximise", "value" => "Maximize"),
                     Dict("label" => "Minimise", "value" => "Minimize"),
-                    Dict("label" => "Monitor", "value" => "Monitor"),
                 ], value="Nominal", className="form-select form-select-sm border-0 py-0", style=Dict("width" => "100%", "fontSize" => "10px", "backgroundColor" => "transparent", "color" => "#000000", "boxShadow" => "none")), style=merge(BASE_STYLE_CELL, Dict("width" => "19%")), className="p-1")
     ])
 end

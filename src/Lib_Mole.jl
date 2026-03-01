@@ -120,13 +120,19 @@ function MOLE_QuickAudit_DDEF(TableData::AbstractVector, Vol::Float64, Conc::Flo
     if !isempty(idx_fill) && is_valid
         other_chems = setdiff(idx_chem, idx_fill)
         other_sum = sum(view(ratios, other_chems))
-        filler_val = 100.0 - other_sum
-        # Clamp near-zero negatives from FP drift
-        ratios[idx_fill[1]] = max(0.0, filler_val)
-        # Tolerant balance check
-        if !MOLE_ApproxEq_DDEF(ratios[idx_fill[1]] + other_sum, 100.0; atol=1e-4)
-            @printf(io, "![WARN] Balance drift: sum=%.8f (expected 100.0)\n",
-                ratios[idx_fill[1]] + other_sum)
+        if other_sum > 100.0 + 1e-4
+            write(io, "![ERROR] Filler balance failed: Pre-filler components exceed 100% (Sum: $(round(other_sum; digits=2))%)\n")
+            is_valid = false
+            ratios[idx_fill[1]] = 0.0
+        else
+            filler_val = 100.0 - other_sum
+            # Clamp near-zero negatives from FP drift
+            ratios[idx_fill[1]] = max(0.0, filler_val)
+            # Tolerant balance check
+            if !MOLE_ApproxEq_DDEF(ratios[idx_fill[1]] + other_sum, 100.0; atol=1e-4)
+                @printf(io, "![WARN] Balance drift: sum=%.8f (expected 100.0)\n",
+                    ratios[idx_fill[1]] + other_sum)
+            end
         end
     end
 

@@ -86,10 +86,8 @@ VISE_ClampIndex_DDEF(idx::AbstractFloat, len::Integer) = clamp(round(Int, idx), 
 
 """
     VISE_Regress_DDEF(X, Y, ModelType; InNames) -> Dict
-OLS regression with 3-tier singularity protection:
-  1. QR decomposition (normal path)
-  2. Ridge regularisation (λ=1e-6 on diagonal) if QR fails
-  3. Pseudo-inverse (pinv) as absolute last resort
+Strict OLS regression without data manipulation techniques. 
+Fails explicitly and mathematically correctly if data is rank-deficient or collinear.
 Returns a model dictionary containing Coefs, R², Adjusted R², and RMSE.
 """
 function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Float64},
@@ -97,29 +95,19 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
     X_Design = VISE_ExpandDesign_DDEF(X_Raw, ModelType)
 
     try
-        # ── Tier 1: Standard QR-based OLS ──────────────────────────────────────
-        Beta = try
-            X_Design \ Y
-        catch e_qr
-            Sys_Fast.FAST_Log_DDEF("VISE", "SINGULAR_WARN",
-                "QR failed ($(typeof(e_qr))). Activating adaptive Ridge fallback.", "WARN")
-            # ── Tier 2: Ridge regularisation with dynamic λ ─────────────────
-            # λ scales with tr(X'X)/p so it adapts to micro vs macro data ranges
-            try
-                XtX = X_Design' * X_Design
-                p = size(XtX, 1)
-                λ = 1e-6 * (tr(XtX) / max(p, 1))   # Trace-scaled penalty
-                Sys_Fast.FAST_Log_DDEF("VISE", "RIDGE_LAMBDA",
-                    "Dynamic λ = $(@sprintf("%.2e", λ)) (trace=$(round(tr(XtX); digits=2)), p=$p)", "INFO")
-                XtX_reg = XtX + λ * I
-                XtX_reg \ (X_Design' * Y)
-            catch e_ridge
-                Sys_Fast.FAST_Log_DDEF("VISE", "SINGULAR_WARN",
-                    "Ridge also failed. Using pseudo-inverse (pinv).", "WARN")
-                # ── Tier 3: Pseudo-inverse (absolute fallback) ─────────────────
-                pinv(X_Design) * Y
-            end
+        # ── Strict Scientific OLS Regression ───────────────────────────────────
+        n, p = size(X_Design)
+
+        if n < p
+            throw(ArgumentError("Deneysel veri yetersiz: Gözlem sayısı (\$n), model parametre sayısından (\$p) az."))
         end
+
+        # Explicit rank check to prevent data manipulation via pseudo-inverse
+        if rank(X_Design) < p
+            throw(ArgumentError("Deney tasarım matrisi lineer bağımlı (Singular/Collinear). Model kurulamıyor."))
+        end
+
+        Beta = X_Design \ Y
 
         Y_Pred = X_Design * Beta
         Resid = Y .- Y_Pred
@@ -130,7 +118,7 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
         isnan(R2) && (R2 = 0.0)
 
         n, p = size(X_Design)
-        R2_Adj = n > p ? max(0.0, 1.0 - (1.0 - R2) * ((n - 1) / (n - p))) : 0.0
+        R2_Adj = n > p ? 1.0 - (1.0 - R2) * ((n - 1) / (n - p)) : 0.0
         RMSE = n > p ? sqrt(SSE / (n - p)) : 0.0
 
         F_Stat, P_Value = NaN, NaN
@@ -148,12 +136,8 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
                     F_Stat = MSR / MSE
                     P_Value = 1.0 - cdf(FDist(max(1, p - 1), n - p), F_Stat)
 
-                    # Use pinv for covariance when X'X is near-singular
-                    Var_Beta = try
-                        MSE * inv(X_Design' * X_Design)
-                    catch
-                        MSE * pinv(X_Design' * X_Design)
-                    end
+                    # Strict Matrix Inversion for Standard Errors
+                    Var_Beta = MSE * inv(X_Design' * X_Design)
                     SE_Coefs = sqrt.(max.(0.0, diag(Var_Beta)))
                     t_Stats = Beta ./ max.(SE_Coefs, 1e-15)   # Guard /0
                     P_Coefs = 2.0 .* (1.0 .- cdf.(TDist(n - p), abs.(t_Stats)))
@@ -217,7 +201,7 @@ function VISE_CrossValidate_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVect
         PRESS = sum(abs2, Resid ./ denom)
 
         SST = var(Y) * (N - 1)
-        return SST < 1e-9 ? 0.0 : max(0.0, 1.0 - PRESS / SST)
+        return SST < 1e-9 ? 0.0 : 1.0 - PRESS / SST
     catch
         return NaN
     end
@@ -287,9 +271,7 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
         end
         Predictions[:, m] = local_pred
 
-        if !occursin("Monitor", get(Goal, "Type", "Nominal"))
-            Active_Flags[m] = true
-        end
+        Active_Flags[m] = true
     end
 
     # 4. Multi-threaded Composite Scoring (Point-level Parallelism)
