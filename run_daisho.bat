@@ -21,6 +21,9 @@ ECHO  [STATUS] Environment Validated.
 ECHO  [SYSTEM] Initializing Core Architecture...
 ECHO.
 
+REM Sunucu portu hazir olana kadar bekleyip tarayiciyi tetikleyen dinamik powershell komutu
+start /B powershell -WindowStyle Hidden -Command "$r=0; while($r -lt 120) { try { $t=New-Object System.Net.Sockets.TcpClient; $t.Connect('127.0.0.1', 8060); $t.Close(); Start-Process 'http://127.0.0.1:8060'; break; } catch { Start-Sleep -Seconds 1; $r++ } }"
+
 REM Run the application
 julia --threads auto -O1 --project=. app.jl
 

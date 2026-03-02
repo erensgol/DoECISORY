@@ -21,16 +21,16 @@ export CORE_GenDesign_DDEF, CORE_CalcNextRange_DDEF, CORE_MapLevels_DDEF, CORE_E
 
 # Pre-allocated immutable design matrices
 const _BB_DESIGN = Int8[
-    -1 -1  0;  -1  1  0;  1 -1  0;  1  1  0;
-    -1  0 -1;  -1  0  1;  1  0 -1;  1  0  1;
-     0 -1 -1;   0 -1  1;  0  1 -1;  0  1  1;
-     0  0  0;   0  0  0;  0  0  0
+    -1 -1 0; -1 1 0; 1 -1 0; 1 1 0;
+    -1 0 -1; -1 0 1; 1 0 -1; 1 0 1;
+    0 -1 -1; 0 -1 1; 0 1 -1; 0 1 1;
+    0 0 0; 0 0 0; 0 0 0
 ]
 
 const _TL9_DESIGN = Int8[
-    -1 -1 -1;  -1  0  0;  -1  1  1;
-     0 -1  0;   0  0  1;   0  1 -1;
-     1 -1  1;   1  0 -1;   1  1  0
+    -1 -1 -1; -1 0 0; -1 1 1;
+    0 -1 0; 0 0 1; 0 1 -1;
+    1 -1 1; 1 0 -1; 1 1 0
 ]
 
 """
@@ -91,7 +91,7 @@ end
 """
     CORE_CalcNextRange_DDEF(LeaderInfo) -> Vector{Dict}
 Calculates the search space for the next phase based on the leader run's position.
-Applies 'Zoom' (window reduction) or 'Shift' (center translation) logic.
+Applies 'Zoom' (window reduction) or 'Shift' (centre translation) logic.
 """
 function CORE_CalcNextRange_DDEF(LeaderInfo::Dict)
     CONST = Sys_Fast.FAST_Constants_DDEF()
@@ -116,7 +116,7 @@ function CORE_CalcNextRange_DDEF(LeaderInfo::Dict)
         New_Range = at_limit ? Range : Range * 0.5
         action = at_limit ? "SHIFT" : "ZOOM"
         Sys_Fast.FAST_Log_DDEF("CORE", action,
-            "Var $i -> $(action == "SHIFT" ? "Center shifted" : "Range reduced")", "LIST")
+            "Var $i -> $(action == "SHIFT" ? "Centre shifted" : "Range reduced")", "LIST")
 
         New_Min = max(0.0, New_Mid - New_Range / 2)
         New_Min == 0.0 && Sys_Fast.FAST_Log_DDEF("CORE", "CLAMP", "Var $i hit negative boundary.", "WARN")
@@ -148,7 +148,7 @@ function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID
 
     cols = names(df)
     col_score = findfirst(c -> occursin("SCORE", uppercase(c)), cols)
-    col_id    = findfirst(c -> occursin("ID", uppercase(c)), cols)
+    col_id = findfirst(c -> occursin("ID", uppercase(c)), cols)
 
     isnothing(col_score) && return Dict{String,Any}()
 
@@ -176,11 +176,11 @@ function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID
         "ID: $id_str | Score: $(round(row[col_score]; digits=4))", "OK")
 
     return Dict{String,Any}(
-        "ID"         => id_str,
-        "Score"      => row[col_score],
-        "Vals"       => collect(vals),
+        "ID" => id_str,
+        "Score" => row[col_score],
+        "Vals" => collect(vals),
         "InputNames" => input_cols,
-        "OldConfig"  => Any[],
+        "OldConfig" => Any[],
     )
 end
 

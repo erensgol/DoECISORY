@@ -1,17 +1,33 @@
 # ======================================================================================
 # DAISHODOE - MAIN APPLICATION ENTRY
 # ======================================================================================
-# Version: 1.0.0
+# ======================================================================================
+# Version: 1.1.0 (Dev-Optimized)
 # Author: Ecz. Eren Selim GÖL
 # ======================================================================================
 
+# --- Core Dependencies ---
 using Dash
 using DashBootstrapComponents
 using Pkg
 using DataFrames
 
-include("src/Sys_Fast.jl")
-using .Sys_Fast
+# --- Hot Reload Support (Revise.jl) ---
+const _HAS_REVISE = try
+    using Revise
+    true
+catch
+    false
+end
+
+# --- Module Scope Fix ---
+# We force inclusion into Main to avoid scope issues in Dash subprocesses
+if _HAS_REVISE && !haskey(ENV, "DASH_DEBUG")
+    Revise.includet("src/Sys_Fast.jl")
+else
+    Base.include(Main, "src/Sys_Fast.jl")
+end
+using Main.Sys_Fast
 
 # --- Terminal Identity (Official Julia REPL) ---
 println("\e[1m               \e[32m_\e[0m")
@@ -45,14 +61,23 @@ for (label, file) in [
     ("GUI Analysis Lens: Gui_Lens", "src/Gui_Lens.jl"),
 ]
     FAST_Log_DDEF("BOOT", "Loading", label, "INFO")
-    include(file)
+    if _HAS_REVISE && !haskey(ENV, "DASH_DEBUG")
+        Revise.includet(file)
+    else
+        Base.include(Main, file)
+    end
 end
 
-using .Sys_Fast
-using .Sys_Flow
-using .Gui_Base
-using .Gui_Deck
-using .Gui_Lens
+# Explicitly bring all modules into the current namespace (even for sub-processes)
+using Main.Lib_Arts
+using Main.Lib_Core
+using Main.Lib_Mole
+using Main.Lib_Vise
+using Main.Sys_Fast
+using Main.Sys_Flow
+using Main.Gui_Base
+using Main.Gui_Deck
+using Main.Gui_Lens
 
 FAST_Log_DDEF("BOOT", "Complete", "Core Libraries Integrated", "OK")
 
@@ -71,6 +96,33 @@ app = dash(;
 )
 
 app.title = "DaishoDoE"
+
+app.index_string = """
+<!DOCTYPE html>
+<html>
+    <head>
+        {%metas%}
+        <title>{%title%}</title>
+        {%favicon%}
+        {%css%}
+    </head>
+    <body class="dash-template">
+        {%app_entry%}
+        <footer>
+            {%config%}
+            {%scripts%}
+            {%renderer%}
+        </footer>
+        <script>
+            window.addEventListener('beforeunload', function(e) {
+                e.preventDefault();
+                e.returnValue = "Stateless architecture: refreshing the page will irreversibly clear all inputted data and unsaved active parameters. Are you certain you wish to proceed?";
+                return e.returnValue;
+            });
+        </script>
+    </body>
+</html>
+"""
 
 # --------------------------------------------------------------------------------------
 # UI COMPONENTS
@@ -106,7 +158,7 @@ app.layout = html_div([
 
     # Global State Architecture
     dcc_store(id="store-session-config", storage_type="session"),
-    dcc_store(id="store-master-file-content", storage_type="session"),
+    dcc_store(id="store-master-vault", storage_type="session"),
 
     # Master Sync Bus
     dcc_store(id="sync-deck-content", storage_type="memory"),
@@ -142,7 +194,7 @@ app.layout = html_div([
 
 # 1. Global State Sync Bus
 callback!(app,
-    Output("store-master-file-content", "data"),
+    Output("store-master-vault", "data"),
     Input("sync-deck-content", "data"),
     Input("sync-lens-content", "data"),
     Input("sync-lens-analysis", "data")
@@ -174,8 +226,8 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
             dbc_container([
                     dbc_row(dbc_col([
                             html_h1("DaishoDoE Engine", className="fw-bold display-4 mb-3", style=Dict("letterSpacing" => "-0.04em", "color" => "#000000")),
-                            html_p("A Decision-Adaptive Interactive Sequential Hybrid Optimization Environment for Design of Experiments",
-                                className="lead text-secondary mb-5", style=Dict("maxWidth" => "600px", "margin" => "0 auto")),
+                            html_p("A Decision-Adaptive, Interactive, and Sequential Hybrid Optimisation Environment for Design of Experiments (DoE) Processes",
+                                className="lead text-secondary mb-5", style=Dict("maxWidth" => "800px", "margin" => "0 auto")),
                         ], xs=12, className="text-center mt-5 pt-4")),
 
                     # Action Cards
@@ -189,7 +241,7 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
                                                         "display" => "flex", "alignItems" => "center", "justifyContent" => "center",
                                                         "fontSize" => "1.5rem", "marginBottom" => "1.5rem", "boxShadow" => "0 10px 20px -5px #DCDCDC")),
                                                 html_h3("Experimental Design", className="fw-bold mb-2", style=Dict("color" => "#000000")),
-                                                html_p("Synthesise robust testing matrices using Box-Behnken and Taguchi methodologies. Automatically generate protocol workspaces.",
+                                                html_p("Synthesise robust test matrices utilising Box-Behnken and Taguchi methodologies. Automatically generate protocol workspaces for 3-factor experimental architectures.",
                                                     className="text-secondary small mb-0", style=Dict("lineHeight" => "1.6")),
                                             ], className="glass-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")); href="/design", style=Dict("textDecoration" => "none")),
                                 ], xs=12, md=6, className="mb-4"),
@@ -203,7 +255,7 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
                                                         "display" => "flex", "alignItems" => "center", "justifyContent" => "center",
                                                         "fontSize" => "1.5rem", "marginBottom" => "1.5rem", "boxShadow" => "0 10px 20px -5px #DCDCDC")),
                                                 html_h3("Statistical Analysis", className="fw-bold mb-2", style=Dict("color" => "#000000")),
-                                                html_p("Extract insights via GLM regression, visualise desirability functions, and identify optimal formulation candidates using robust grid search algorithms.",
+                                                html_p("Execute rigorous data analysis via GLM regression, dynamically visualise desirability functions, and determine optimal formulations through mathematical modelling.",
                                                     className="text-secondary small mb-0", style=Dict("lineHeight" => "1.6")),
                                             ], className="glass-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")); href="/analysis", style=Dict("textDecoration" => "none")),
                                 ], xs=12, md=6, className="mb-4"),
@@ -244,6 +296,13 @@ LENS_RegisterCallbacks_DDEF(app)
 function _daisho_warmup!()
     t0 = time()
     FAST_Log_DDEF("BOOT", "Warmup", "JIT pre-compilation starting (background)...", "WAIT")
+
+    # Development mode check: skip heavy warmup if DAISHO_DEV is set
+    if haskey(ENV, "DAISHO_DEV") && ENV["DAISHO_DEV"] == "true"
+        FAST_Log_DDEF("BOOT", "Warmup", "Development Mode: Skipping JIT warmup for speed.", "INFO")
+        _SYSTEM_READY[] = true
+        return
+    end
 
     try
         # 1. Sys_Fast: Type coercion pipeline
@@ -319,29 +378,10 @@ const PORT = _IS_HF_SPACES ? 7860 : 8060
 Threads.@spawn _daisho_warmup!()
 
 try
-    # Browser Auto-Launch (skip on HuggingFace Spaces)
-    if !_IS_HF_SPACES
-        @async begin
-            sleep(0.5)  # Just enough for server socket to bind
-            url = "http://127.0.0.1:$PORT"
-            Sys_Fast.FAST_Log_DDEF("SYSTEM", "Launch", "Opening browser: $url", "OK")
-            try
-                if Sys.iswindows()
-                    run(`cmd /c start $url`)
-                elseif Sys.isapple()
-                    run(`open $url`)
-                elseif Sys.islinux()
-                    run(`xdg-open $url`)
-                end
-            catch e
-                Sys_Fast.FAST_Log_DDEF("SYSTEM", "Error", "Browser launch error: $e", "FAIL")
-            end
-        end
-    end
-
     env_label = _IS_HF_SPACES ? "HuggingFace Spaces" : "Local $(Threads.nthreads())T"
     Sys_Fast.FAST_Log_DDEF("SERVER", "Ready",
         "DaishoDoE Engine listening on :$PORT ($env_label)", "OK")
+
     run_server(app, "0.0.0.0", PORT)
 catch e
     if isa(e, Base.IOError) && e.code == -4091

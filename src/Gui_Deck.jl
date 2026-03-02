@@ -32,23 +32,22 @@ const MAX_ROWS = 24
 const ROLE_OPTIONS = [
     Dict("label" => "Variable", "value" => "Variable"),
     Dict("label" => "Fixed", "value" => "Fixed"),
-    Dict("label" => "Filler", "value" => "Filler"),
 ]
 
 const ROLE_COLORS = Dict(
-    "Variable" => "#21918C",
+    "Variable" => "#440154",
     "Fixed" => "#FDE725",
-    "Filler" => "#3B528B",
 )
 
 function DECK_GetDefaultRow_DDEF(i::Int)
-    if i <= 3
-        return Dict("Name" => "", "Role" => "Variable", "L1" => 0.0, "L2" => 0.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 0.0, "Unit" => "-")
-    elseif i == 4
-        return Dict("Name" => "", "Role" => "Filler", "L1" => 0.0, "L2" => 0.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 0.0, "Unit" => "-")
-    else
-        return Dict("Name" => "", "Role" => "Fixed", "L1" => 0.0, "L2" => 0.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 0.0, "Unit" => "-")
-    end
+    role_val = i <= 3 ? "Variable" : "Fixed"
+    return Dict(
+        "Name" => "", "Role" => role_val,
+        "L1" => 0.0, "L2" => 0.0, "L3" => 0.0,
+        "Min" => 0.0, "Max" => 0.0, "MW" => 0.0, "Unit" => "-",
+        "IsRadioactive" => false, "HalfLife" => 0.0, "HalfLifeUnit" => "Hours",
+        "IsFiller" => false
+    )
 end
 
 # --------------------------------------------------------------------------------------
@@ -56,23 +55,53 @@ end
 # --------------------------------------------------------------------------------------
 
 
+"""
+    DECK_BuildIdRowUI_DDEF(i, row, visible, show_del) -> html_tr
+Table-based ID row: [Del?] [Name] [Dots+Cog]
+Uses same html_table + border-collapse as adjacent Limits/Levels tables for pixel-perfect alignment.
+"""
 function DECK_BuildIdRowUI_DDEF(i, row, visible, show_del=false)
     row_style = Dict("display" => visible ? "table-row" : "none")
     name_val = string(get(row, "Name", ""))
-    unit_val = string(get(row, "Unit", ""))
+    is_filler = get(row, "IsFiller", false)
+
+    name_input_style = Dict{String,Any}()
+    is_filler && (name_input_style["borderLeft"] = "3px solid #F39C12")
 
     del_content = show_del ? html_button("×", id="deck-del-$i", n_clicks=0,
-        style=Dict("cursor" => "pointer", "color" => "#666666",
-            "fontSize" => "1.1rem", "fontWeight" => "700",
-            "lineHeight" => "1", "userSelect" => "none",
-            "background" => "none", "border" => "none", "padding" => "0")) : html_button("", id="deck-del-$i", n_clicks=0, style=Dict("display" => "none"))
+        style=Dict("cursor" => "pointer", "color" => "#666666", "fontSize" => "1.1rem", "fontWeight" => "700",
+            "lineHeight" => "1", "background" => "none", "border" => "none", "padding" => "0")) : nothing
 
-    html_tr([
-            html_td(del_content, style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => show_del ? "15%" : "0%", "display" => show_del ? "table-cell" : "none", "overflow" => "hidden")), className="p-0"),
-            html_td(dcc_input(id="deck-name-$i", type="text", value=name_val, debounce=true, style=merge(BASE_STYLE_INPUT, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => show_del ? "45%" : "60%")), className="p-0"),
-            html_td(dcc_input(id="deck-unit-$i", type="text", value=unit_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "40%")), className="p-0"),
-            html_td(dbc_select(id="deck-role-$i", options=ROLE_OPTIONS, value=string(get(row, "Role", "Variable")), style=Dict("display" => "none")), style=Dict("display" => "none"))
-        ]; style=row_style, id="deck-row-id-$i")
+    mw_v = Float64(get(row, "MW", 0.0))
+    hl_v = Float64(get(row, "HalfLife", 0.0))
+    dot1_color = mw_v > 0.0 ? "#5EC962" : "#2C2C2C"
+    dot2_color = hl_v > 0.0 ? "#5EC962" : "#2C2C2C"
+    dots = html_span([
+            html_span("●", id="deck-dot1-$i", style=Dict("color" => dot1_color, "fontSize" => "0.45rem", "marginRight" => "1px")),
+            html_span("●", id="deck-dot2-$i", style=Dict("color" => dot2_color, "fontSize" => "0.45rem", "marginRight" => "2px")),
+        ], style=Dict("display" => "inline-flex", "alignItems" => "center"))
+
+    prop_btn = html_button(html_i(className="fas fa-cog", style=Dict("fontSize" => "0.80rem", "color" => is_filler ? "#F39C12" : "#A6A6A6")),
+        id="btn-prop-$i", n_clicks=0,
+        style=Dict("cursor" => "pointer", "background" => "none", "border" => "none", "padding" => "2px"))
+
+    row_children = Any[]
+    if show_del
+        push!(row_children, html_td(del_content, style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "30px")), className="p-0"))
+    end
+
+    # Name cell: CSS class 'deck-name-cell' forces dcc_input wrapper div to 100% width
+    push!(row_children, html_td(
+        dcc_input(id="deck-name-$i", type="text", value=name_val, debounce=true, style=name_input_style),
+        className="deck-name-cell p-0", style=BASE_STYLE_CELL)
+    )
+
+    push!(row_children, html_td(
+        html_span([dots, prop_btn], style=Dict("display" => "inline-flex", "alignItems" => "center", "justifyContent" => "center")),
+        style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "55px")), className="p-0")
+    )
+
+    return html_tr(row_children; style=row_style, id="deck-row-id-$i")
 end
 
 function DECK_BuildLevelRowUI_DDEF(i, row, visible)
@@ -94,29 +123,37 @@ function DECK_BuildLevelRowUI_DDEF(i, row, visible)
 end
 
 """
-    DECK_BuildStochRowUI_DDEF(i, row, visible) -> html_tr
-Renders the 3-column stoichiometry portion of the row.
+    DECK_BuildLimitsRowUI_DDEF(i, row, visible) -> html_tr
+Renders the 3-column limits portion of the row: MIN LIMIT | UNIT | MAX LIMIT.
 """
-function DECK_BuildStochRowUI_DDEF(i, row, visible)
+function DECK_BuildLimitsRowUI_DDEF(i, row, visible)
     row_style = Dict("display" => visible ? "table-row" : "none")
     min_val = get(row, "Min", 0.0)
     max_val = get(row, "Max", 0.0)
-    mw_val = get(row, "MW", 0.0)
+    unit_val = string(get(row, "Unit", "-"))
 
     show_minmax = (i <= 3)
-    show_mw = true
 
     html_tr([
             html_td(dcc_input(id="deck-min-$i", type="number", value=min_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px", "display" => show_minmax ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0"),
-            html_td(dcc_input(id="deck-max-$i", type="number", value=max_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px", "display" => show_minmax ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0"),
-            html_td(dcc_input(id="deck-mw-$i", type="number", value=mw_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "34%")), className="p-0")
-        ]; style=row_style, id="deck-row-stoch-$i")
+            html_td(dcc_input(id="deck-unit-$i", type="text", value=unit_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "34%")), className="p-0"),
+            html_td(dcc_input(id="deck-max-$i", type="number", value=max_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px", "display" => show_minmax ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0")
+        ]; style=row_style, id="deck-row-limits-$i")
 end
 
 function DECK_BuildOutRow_DDEF(i, def_name, def_unit)
+    # Indicator dot for decay correction status (updated via callback)
+    out_dot = html_span("●", id="deck-out-dot-$i",
+        style=Dict("color" => "#2C2C2C", "fontSize" => "0.45rem", "marginRight" => "2px", "verticalAlign" => "middle"))
+
+    prop_btn = html_button(html_i(className="fas fa-cog", style=Dict("fontSize" => "0.80rem", "color" => "#A6A6A6")),
+        id="btn-out-prop-$i", n_clicks=0,
+        style=Dict("cursor" => "pointer", "background" => "none", "border" => "none", "padding" => "2px"))
+
     return html_tr([
-        html_td(dcc_input(id="deck-out-name-$i", type="text", value=def_name, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "50%")), className="p-0"),
-        html_td(dcc_input(id="deck-out-unit-$i", type="text", value=def_unit, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "50%")), className="p-0")
+        html_td(dcc_input(id="deck-out-name-$i", type="text", value=def_name, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "40%")), className="p-0"),
+        html_td(dcc_input(id="deck-out-unit-$i", type="text", value=def_unit, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "40%")), className="p-0"),
+        html_td(html_span([out_dot, prop_btn], style=Dict("display" => "inline-flex", "alignItems" => "center", "justifyContent" => "center")), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "20%")), className="p-0")
     ])
 end
 
@@ -130,15 +167,19 @@ function DECK_Layout_DDEF()
 
         # Start with 4 empty rows by default (3 var, 1 fill)
         initial_rows = [DECK_GetDefaultRow_DDEF(i) for i in 1:MAX_ROWS]
-        active_count = 5 # Show 5 initially (3 var, 1 fill, 1 const)
+        active_count = 7 # Show 7 initially (3 var, 1 fill, 3 const)
 
         function build_id_table(rows_range, show_del)
+            th_children = Any[]
+            if show_del
+                push!(th_children, html_th("", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => "30px")), className="p-0"))
+            end
+            # No width on NAME th → table-layout: fixed assigns all remaining space
+            push!(th_children, html_th("NAME", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center")), className="p-0"))
+            push!(th_children, html_th("", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => "55px")), className="p-0"))
+
             html_table([
-                    html_thead(html_tr([
-                        html_th(show_del ? "" : "", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => show_del ? "15%" : "0%", "display" => show_del ? "table-cell" : "none")), className="p-0"),
-                        html_th("NAME", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => show_del ? "45%" : "60%")), className="p-0"),
-                        html_th("UNIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "40%")), className="p-0"),
-                    ])),
+                    html_thead(html_tr(th_children)),
                     html_tbody([
                         DECK_BuildIdRowUI_DDEF(i, initial_rows[i], i <= active_count, show_del)
                         for i in rows_range
@@ -150,7 +191,7 @@ function DECK_Layout_DDEF()
             html_table([
                     html_thead(html_tr([
                         html_th("LOWER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
-                        html_th("CENTER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
+                        html_th("CENTRE", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
                         html_th("UPPER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "34%")), className="p-0"),
                     ])),
                     html_tbody([
@@ -160,15 +201,15 @@ function DECK_Layout_DDEF()
                 ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
         end
 
-        function build_stoch_table(rows_range)
+        function build_limits_table(rows_range)
             html_table([
                     html_thead(html_tr([
                         html_th("MIN LIMIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
+                        html_th("UNIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "34%")), className="p-0"),
                         html_th("MAX LIMIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
-                        html_th("MW (g/mol)", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "34%")), className="p-0"),
                     ])),
                     html_tbody([
-                        DECK_BuildStochRowUI_DDEF(i, initial_rows[i], i <= active_count)
+                        DECK_BuildLimitsRowUI_DDEF(i, initial_rows[i], i <= active_count)
                         for i in rows_range
                     ]),
                 ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
@@ -199,12 +240,14 @@ function DECK_Layout_DDEF()
                 ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
         end
 
-        return dbc_container([
+        return dbc_container(
+            [
                 # State Bus & Hidden DataTable
                 dbc_row(dbc_col([
                         dcc_store(id="deck-store-factors",
-                            data=Dict("rows" => [DECK_GetDefaultRow_DDEF(i) for i in 1:5], "count" => 5),
+                            data=Dict("rows" => [DECK_GetDefaultRow_DDEF(i) for i in 1:7], "count" => 7),
                             storage_type="memory"),
+                        dcc_store(id="deck-store-outputs", data=Dict("rows" => [Dict("IsCorr" => false) for i in 1:3]), storage_type="memory"),
                         html_div([
                                 dash_datatable(
                                     id="deck-table-in",
@@ -222,54 +265,48 @@ function DECK_Layout_DDEF()
                                     data=[DECK_GetDefaultRow_DDEF(i) for i in 1:5],
                                     editable=false,
                                 ),
+                                build_id_table(4:4, false),
+                                build_limits_table(4:4),
                                 build_level_table(4:4), # Hidden array of inputs to satisfy Dash callback layout requirement
+                                # Hidden MW, Role & Delete inputs (callbacks reference these IDs)
+                                html_div([
+                                        html_div([dcc_input(id="deck-mw-$i", type="number", value=0.0) for i in 1:MAX_ROWS]),
+                                        html_div([dbc_select(id="deck-role-$i", options=ROLE_OPTIONS, value="Variable") for i in 1:MAX_ROWS]),
+                                        html_div([html_button("", id="deck-del-$i", n_clicks=0) for i in 1:4])
+                                    ], style=Dict("display" => "none")),
                             ]; style=Dict("display" => "none"))
                     ], xs=12)),
 
                 # Page Header
-                BASE_PageHeader("Experimental Design Protocol", "Define factors and generate the experimental matrix."),
+                BASE_PageHeader("Experimental Design and Protocol Management", "The system is architected to operate with 3 independent (x) and 3 dependent (y) variables, functioning with 5 degrees of freedom (df)."),
 
                 # Main Workspace
                 dbc_row([
                         # --- LEFT COLUMN ---
                         dbc_col([
                                 # Variable Windows
-                                dbc_row(dbc_col(BASE_GlassPanel([html_i(className="fas fa-cubes me-2 text-info"), "VARIABLE FACTORS", html_span(" — Define the independent variables and boundary limits.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
+                                dbc_row(dbc_col(BASE_GlassPanel([html_i(className="fas fa-cubes me-2 text-info"), "INDEPENDENT VARIABLES (FACTORS)", html_span(" — Define analysis boundaries and corresponding levels for a 3-factor system.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
                                                     dbc_col(build_id_table(1:3, false), lg=4, className="pe-lg-1"),
-                                                    dbc_col(build_stoch_table(1:3), lg=4, className="px-lg-1"),
+                                                    dbc_col(build_limits_table(1:3), lg=4, className="px-lg-1"),
                                                     dbc_col(build_level_table(1:3), lg=4, className="ps-lg-1")
                                                 ], className="g-0"); panel_class="mb-4 h-100", content_class="p-2"), xs=12), className="mb-3"),
 
                                 # Constant Windows
-                                dbc_row(dbc_col(BASE_GlassPanel([html_i(className="fas fa-lock me-2 text-primary"), "CONSTANT FACTORS", html_span(" — Background parameters kept strictly fixed.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
+                                dbc_row(dbc_col(BASE_GlassPanel([html_i(className="fas fa-lock me-2 text-primary"), "CONSTANT PARAMETERS", html_span(" — Static background components strictly maintained throughout the entire analysis.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
                                                     dbc_col(build_id_table(5:MAX_ROWS, true), lg=4, className="pe-lg-1"),
-                                                    dbc_col(build_stoch_table(5:MAX_ROWS), lg=4, className="px-lg-1"),
+                                                    dbc_col(build_limits_table(5:MAX_ROWS), lg=4, className="px-lg-1"),
                                                     dbc_col(build_level_table(5:MAX_ROWS), lg=4, className="ps-lg-1")
                                                 ], className="g-0"); right_node=dbc_button([html_i(className="fas fa-plus me-1"), "Add Row"], id="deck-btn-add-row", n_clicks=0, color="secondary", outline=true, size="sm", className="px-2 py-1 fw-bold"), panel_class="mb-4 h-100", content_class="p-2"), xs=12), className="mb-3"),
 
-                                # --- SYMMETRIC 2x2 GRID (EQUAL HEIGHTS) ---
-                                # Row 1: Filler (lg=8) & Formulation Specs (lg=4)
-                                dbc_row([
-                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-tint me-2 text-warning"), "BALANCE COMPONENT", html_span(" — Auto-balances to match total formulation.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
-                                                        dbc_col(build_id_table(4:4, false), lg=6, className="pe-lg-1"),
-                                                        dbc_col(build_stoch_table(4:4), lg=6, className="ps-lg-1")
-                                                    ], className="g-0"); panel_class="h-100 mb-0", content_class="p-2"), lg=8),
-                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-vial me-2 text-secondary"), "FORMULATION METRICS"],
-                                                dbc_row([
-                                                        dbc_col(build_vol_table(), lg=6, className="pe-lg-1"),
-                                                        dbc_col(build_conc_table(), lg=6, className="ps-lg-1")
-                                                    ], className="g-0");
-                                                panel_class="h-100 mb-0", content_class="p-2"), lg=4),
-                                    ], className="g-3 mb-3 d-flex align-items-stretch"),
-
                                 # Row 2: Response Metrics (lg=12)
                                 dbc_row([
-                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-chart-line me-2 text-success"), "RESPONSE METRICS", html_span(" — Declare the dependent analysis variables.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))],
+                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-chart-line me-2 text-success"), "DEPENDENT VARIABLES (RESPONSES)", html_span(" — Declare the 3 fundamental analysis parameters to be thoroughly investigated.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))],
                                                 html_div(html_table([
-                                                            html_tr([
-                                                                html_th("RESPONSE NAME", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "paddingLeft" => "5px", "width" => "50%")), className="p-0"),
-                                                                html_th("UNIT/METRIC", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "paddingLeft" => "5px", "width" => "50%")), className="p-0")
-                                                            ]),
+                                                            html_thead(html_tr([
+                                                                html_th("RESPONSE NAME", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "paddingLeft" => "5px", "width" => "40%")), className="p-0"),
+                                                                html_th("UNIT/METRIC", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "paddingLeft" => "5px", "width" => "40%")), className="p-0"),
+                                                                html_th("", style=merge(BASE_STYLE_INLINE_HEADER, Dict("width" => "20%")), className="p-0")
+                                                            ])),
                                                             html_tbody([DECK_BuildOutRow_DDEF(i, "", "-") for i in 1:3])
                                                         ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0 p-2");
                                                 content_class="glass-content p-0", panel_class="h-100 mb-0"), lg=12),
@@ -304,23 +341,147 @@ function DECK_Layout_DDEF()
                                                     dbc_label("Design Method", className="small mb-1"),
                                                     dcc_dropdown(id="deck-dd-method",
                                                         options=[
-                                                            Dict("label" => "Box-Behnken (3-Level)", "value" => "BoxBehnken"),
-                                                            Dict("label" => "Taguchi L9 (3-Level)", "value" => "Taguchi_L9"),
+                                                            Dict("label" => "Box-Behnken (15 Runs, Quadratic)", "value" => "BoxBehnken"),
+                                                            Dict("label" => "Taguchi L9 (9 Runs, Linear)", "value" => "Taguchi_L9"),
                                                         ],
                                                         value="BoxBehnken", clearable=false, className="mb-3"),
-                                                ], xs=12)), dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)), dbc_row(dbc_col(dbc_button([html_i(className="fas fa-vial me-2"), "Quick Audit"],
+                                                ], xs=12)), dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)),
+                                            # Stoichiometry Settings Button (above Quick Audit)
+                                            dbc_row(dbc_col(dbc_button([html_i(className="fas fa-flask me-2"), "Stoichiometry Settings"],
+                                                    id="deck-btn-stoch-settings", n_clicks=0, color="secondary", outline=true, size="sm",
+                                                    className="w-100 mb-2"), xs=12)),
+                                            dbc_row(dbc_col(dbc_button([html_i(className="fas fa-vial me-2"), "Quick Audit"],
                                                     id="deck-btn-audit", n_clicks=0, color="secondary", outline=true, size="sm",
                                                     className="w-100 mb-2"), xs=12)), dbc_row(dbc_col(dcc_loading(html_div(id="deck-run-output", className="mt-2 small"),
                                                     type="default", color="#21918C"), xs=12)), dbc_row(dbc_col(dbc_button([html_i(className="fas fa-file-export me-2"), "Generate Protocol"],
                                                     id="deck-btn-run", n_clicks=0, color="primary", size="sm",
                                                     className="w-100 fw-bold mb-2"), xs=12)),
-                                        ]; right_node=html_i(className="fas fa-cogs text-secondary"), panel_class="mb-3 h-auto"), xs=12)),
+                                        ]; right_node=html_i(className="fas fa-sliders-h text-secondary"), panel_class="mb-3 h-auto"), xs=12)),
                             ], xs=12, lg=3),
                     ], className="g-3"),
 
                 # Safe placement for download components to prevent DOM unmounting on loading rerenders
                 dcc_download(id="deck-download-xlsx"),
                 dcc_download(id="deck-download-memo"),
+
+                # Stoichiometry Settings Store (Volume, Concentration, Filler Name, Filler MW)
+                dcc_store(id="deck-store-stoch-settings",
+                    data=Dict("FillerName" => "", "FillerMW" => 0.0, "Volume" => 0.0, "Conc" => 0.0),
+                    storage_type="memory"),
+                dcc_store(id="deck-stoch-trigger-unit", data=0, storage_type="memory"),
+
+                # Chemical Properties Modal
+                dbc_modal([
+                        dbc_modalheader(dbc_modaltitle([html_i(className="fas fa-flask me-2 text-primary"), html_span("Component Properties", id="deck-prop-title")])),
+                        dbc_modalbody([
+                            # Hidden store for tracking which row we are editing
+                            dcc_store(id="deck-prop-target-id", data=Dict("type" => "", "index" => 0)),
+                            dcc_store(id="deck-prop-trigger-save", data=0),
+                            html_div("Chemical Definition", className="small fw-bold text-muted mb-2"),
+                            dbc_row([
+                                    dbc_col(dbc_label("Molecular Weight (g/mol)", className="small mb-1"), xs=12),
+                                    dbc_col(dbc_input(id="deck-prop-mw", type="number", min=0, step="any", placeholder="e.g. 386.65", size="sm", className="mb-3"), xs=12),
+                                ], className="mb-2 border-bottom pb-2"),
+                            html_div("Radioactivity & Decay", className="small fw-bold text-muted mb-2"),
+                            dbc_row([
+                                dbc_col(dbc_label("Half-Life (T½)", className="small mb-1"), xs=6),
+                                dbc_col(dbc_label("Unit", className="small mb-1"), xs=6),
+                                dbc_col(dbc_input(id="deck-prop-hl", type="number", min=0, step="any", placeholder="e.g. 6.0", size="sm", className="mb-3"), xs=6),
+                                dbc_col(dbc_select(id="deck-prop-hl-unit", options=[
+                                            Dict("label" => "Seconds", "value" => "Seconds"),
+                                            Dict("label" => "Minutes", "value" => "Minutes"),
+                                            Dict("label" => "Hours", "value" => "Hours"),
+                                            Dict("label" => "Days", "value" => "Days"),
+                                            Dict("label" => "Years", "value" => "Years")
+                                        ], value="Hours", size="sm", className="mb-3"), xs=6)
+                            ]),
+                            # Hidden dummy elements to satisfy Dash callback layout for removed IDs
+                            html_div([
+                                    dbc_switch(id="deck-prop-is-radio", value=false, style=Dict("display" => "none")),
+                                    dbc_switch(id="deck-prop-is-filler", value=false, style=Dict("display" => "none")),
+                                ], style=Dict("display" => "none")),
+                        ]),
+                        dbc_modalfooter([
+                            dbc_button("Cancel", id="btn-prop-cancel", className="ms-auto", color="secondary", outline=true, size="sm"),
+                            dbc_button("Save Properties", id="btn-prop-save", color="primary", size="sm")
+                        ])
+                    ],
+                    id="deck-modal-prop", is_open=false, centered=true, backdrop="static"
+                ),
+
+                # Output/Response Properties Modal
+                dbc_modal([
+                        dbc_modalheader(dbc_modaltitle([html_i(className="fas fa-chart-line me-2 text-success"), html_span("Response Properties", id="deck-out-prop-title")])),
+                        dbc_modalbody([
+                            dcc_store(id="deck-out-prop-target-id", data=Dict("index" => 0)),
+                            dcc_store(id="deck-out-prop-trigger-save", data=0),
+                            html_div("Decay Analysis Correction", className="small fw-bold text-muted mb-2"),
+                            html_p("Type YES below to apply radioactive decay correction to this response.", className="small text-secondary mb-2"),
+                            dbc_row([
+                                dbc_col(dbc_input(id="deck-out-prop-confirm", type="text", placeholder="Type YES...", size="sm", className="mb-2"), xs=12)
+                            ]),
+                            # Hidden dummy for removed switch ID (Dash layout satisfaction)
+                            html_div(dbc_switch(id="deck-out-prop-is-corr", value=false, style=Dict("display" => "none")), style=Dict("display" => "none")),
+                        ]),
+                        dbc_modalfooter([
+                            dbc_button("Cancel", id="btn-out-prop-cancel", className="ms-auto", color="secondary", outline=true, size="sm"),
+                            dbc_button("Save Properties", id="btn-out-prop-save", color="primary", size="sm")
+                        ])
+                    ],
+                    id="deck-modal-out-prop", is_open=false, centered=true, backdrop="static"
+                ),
+
+                # Stoichiometry Settings Modal
+                dbc_modal([
+                        dbc_modalheader(dbc_modaltitle([html_i(className="fas fa-flask me-2 text-warning"), "Stoichiometry Settings"])),
+                        dbc_modalbody([
+                            dbc_alert([
+                                    html_i(className="fas fa-exclamation-triangle me-2"),
+                                    html_strong("Maximum Area Limit: "), "Total area of chemical components (including 'L3' levels and constants) for stoichiometric calculations must not exceed 100%.", html_br(), html_br(),
+                                    html_i(className="fas fa-info-circle me-2"),
+                                    html_strong("Automatic Unit Override"), html_br(),
+                                    "Saving these settings will overwrite the UNIT column for all chemical components:", html_br(),
+                                    html_span([
+                                            html_strong("All 4 fields filled"), " (Filler + Vol + Conc) → units set to ", html_code("%M"), html_br(),
+                                            html_strong("Only Vol + Conc filled"), " → units set to ", html_code("MR"), " (Molar Ratio)", html_br(),
+                                            html_strong("None filled"), " → units remain as manually entered",
+                                        ], className="d-block mt-1"),
+                                ], color="warning", className="py-2 small mb-3"),
+                            html_div("Filler Definition", className="small fw-bold text-muted mb-2"),
+                            dbc_row([
+                                    dbc_col([
+                                            dbc_label("Filler Name", className="small mb-1"),
+                                            dbc_input(id="deck-stoch-filler-name", type="text", placeholder="e.g. DPPC", size="sm", className="mb-2"),
+                                        ], xs=6),
+                                    dbc_col([
+                                            dbc_label("Filler MW (g/mol)", className="small mb-1"),
+                                            dbc_input(id="deck-stoch-filler-mw", type="number", min=0, step="any", placeholder="e.g. 734.05", size="sm", className="mb-2"),
+                                        ], xs=6),
+                                ], className="mb-2 border-bottom pb-2"),
+                            html_div("Environment Parameters", className="small fw-bold text-muted mb-2"),
+                            dbc_row([
+                                dbc_col([
+                                        dbc_label("Volume (mL)", className="small mb-1"),
+                                        dbc_input(id="deck-stoch-vol", type="number", min=0, step="any", placeholder="e.g. 5.0", size="sm", className="mb-2"),
+                                    ], xs=6),
+                                dbc_col([
+                                        dbc_label("Concentration (mM)", className="small mb-1"),
+                                        dbc_input(id="deck-stoch-conc", type="number", min=0, step="any", placeholder="e.g. 20.0", size="sm", className="mb-2"),
+                                    ], xs=6),
+                            ]),
+                            # Hidden inputs to keep Dash happy for old vol/conc IDs
+                            html_div([
+                                    dcc_input(id="deck-input-vol", type="number", value=0.0, style=Dict("display" => "none")),
+                                    dcc_input(id="deck-input-conc", type="number", value=0.0, style=Dict("display" => "none")),
+                                ], style=Dict("display" => "none")),
+                        ]),
+                        dbc_modalfooter([
+                            dbc_button("Cancel", id="deck-btn-stoch-cancel", className="ms-auto", color="secondary", outline=true, size="sm"),
+                            dbc_button("Save Settings", id="deck-btn-stoch-save", color="warning", size="sm")
+                        ])
+                    ],
+                    id="deck-modal-stoch-settings", is_open=false, centered=true, backdrop="static"
+                ),
 
                 # Audit Modal
                 BASE_Modal("deck-modal-audit", "Quick Audit Report",
@@ -346,43 +507,61 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
         num_vars != 3 && return (false, "Requires exactly 3 Variable ingredients (Found: $num_vars).")
         num_fills > 1 && return (false, "Maximum 1 Filler allowed (Found: $num_fills).")
 
-        # 1. Poka-Yoke: İsim Geçerliliği ve Benzersizliği
+        # 1. Poka-Yoke: Name Validity and Uniqueness
         all_names = String[]
         for (i, r) in enumerate(D["Rows"])
             n = strip(string(get(r, "Name", "")))
             if isempty(n)
-                return (false, "Sistematik Hata: Satır $i için geçerli bir isim tanımlanmalıdır.")
+                return (false, "Systematic Error: A valid name must be defined for row $i.")
             end
             if n in all_names
-                return (false, "Sistematik Hata: '$n' ismi birden fazla kez kullanılmış. Tüm isimler benzersiz olmalıdır.")
+                return (false, "Systematic Error: Name '$n' is used more than once. All names must be unique.")
             end
             push!(all_names, n)
 
-            # 2. Poka-Yoke: L1 < L2 < L3 Kuralı
+            # 2. Poka-Yoke: L1 < L2 < L3 Rule
             role = get(r, "Role", "")
             if role == "Variable"
                 l1 = Sys_Fast.FAST_SafeNum_DDEF(get(r, "L1", 0.0))
                 l2 = Sys_Fast.FAST_SafeNum_DDEF(get(r, "L2", 0.0))
                 l3 = Sys_Fast.FAST_SafeNum_DDEF(get(r, "L3", 0.0))
                 if !(l1 < l2 && l2 < l3)
-                    return (false, "Sistematik Hata: '$n' (Variable) için seviyeler kesin bir artış göstermelidir (LOWER $l1 < CENTER $l2 < UPPER $l3).")
+                    return (false, "Systematic Error: Levels for '$n' (Variable) must show a strict increase (LOWER $l1 < CENTRE $l2 < UPPER $l3).")
                 end
             end
         end
 
-        # 3. Poka-Yoke: Zorunlu Response ve İsimlendirme
+        # 3. Poka-Yoke: Stoichiometry Area Maximum Limit
+        if !isempty(D["Idx_Chem"]) || !isempty(D["Idx_Fill"])
+            sum_max = 0.0
+            for r in D["Rows"]
+                if Sys_Fast.FAST_SafeNum_DDEF(get(r, "MW", 0.0)) > 0.0 || get(r, "IsFiller", false)
+                    role = get(r, "Role", "")
+                    if role == "Variable"
+                        sum_max += Sys_Fast.FAST_SafeNum_DDEF(get(r, "L3", 0.0))
+                    else
+                        sum_max += Sys_Fast.FAST_SafeNum_DDEF(get(r, "L2", 0.0))
+                    end
+                end
+            end
+            if sum_max > 100.0 + 1e-4
+                return (false, "Stoichiometry Error: Total maximum area of chemical components ('L3' levels or constant values) cannot exceed 100% (Sum of Limits Entered: $(round(sum_max; digits=2))%). Please adjust the upper limits.")
+            end
+        end
+
+        # 4. Poka-Yoke: Mandatory Response and Naming
         output_data = _safe_rows(out_data)
         if length(output_data) != 3
-            return (false, "Sistematik Hata: Tam olarak 3 adet Response (Çıktı) tanımlanmalıdır.")
+            return (false, "Systematic Error: Exactly 3 Responses (Outputs) must be defined.")
         end
         all_out_names = String[]
         for (i, r) in enumerate(output_data)
             n = strip(string(get(r, "Name", "")))
             if isempty(n)
-                return (false, "Sistematik Hata: Response Metrics tablosundaki $i. satırın ismi boş bırakılamaz. 3 çıktı da isimlendirilmek zorundadır.")
+                return (false, "Systematic Error: Name for row $i in the Response Metrics table cannot be empty. All 3 outputs must be named.")
             end
             if n in all_out_names
-                return (false, "Sistematik Hata: Çıktı (Response) isimleri benzersiz olmalıdır. '$n' tekrarlanmış.")
+                return (false, "Systematic Error: Response names must be unique. '$n' is repeated.")
             end
             push!(all_out_names, n)
         end
@@ -479,7 +658,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
 
         ConfigDict = Dict(
             "Ingredients" => D["Rows"],
-            "Global" => Dict("Volume" => sv, "Conc" => sc),
+            "Global" => Dict("Volume" => sv, "Conc" => sc, "Method" => method),
             "Outputs" => output_data,
         )
         success = Sys_Fast.FAST_InitMaster_DDEF(path,
@@ -508,7 +687,7 @@ function DECK_RegisterCallbacks_DDEF(app)
     callback!(app,
         [Output("deck-row-id-$i", "style") for i in 1:MAX_ROWS]...,
         [Output("deck-row-level-$i", "style") for i in 1:MAX_ROWS]...,
-        [Output("deck-row-stoch-$i", "style") for i in 1:MAX_ROWS]...,
+        [Output("deck-row-limits-$i", "style") for i in 1:MAX_ROWS]...,
         [Output("deck-name-$i", "value") for i in 1:MAX_ROWS]...,
         [Output("deck-role-$i", "value") for i in 1:MAX_ROWS]...,
         [Output("deck-l1-$i", "value") for i in 1:MAX_ROWS]...,
@@ -518,12 +697,16 @@ function DECK_RegisterCallbacks_DDEF(app)
         [Output("deck-max-$i", "value") for i in 1:MAX_ROWS]...,
         [Output("deck-mw-$i", "value") for i in 1:MAX_ROWS]...,
         [Output("deck-unit-$i", "value") for i in 1:MAX_ROWS]...,
+        # Indicator dot styles (chemical + radioactive)
+        [Output("deck-dot1-$i", "style") for i in 1:MAX_ROWS]...,
+        [Output("deck-dot2-$i", "style") for i in 1:MAX_ROWS]...,
         Input("deck-store-factors", "data")
     ) do stored
-        isnothing(stored) && return ntuple(_ -> Dash.no_update(), 12 * MAX_ROWS)
+        isnothing(stored) && return ntuple(_ -> Dash.no_update(), 14 * MAX_ROWS)
         rows = get(stored, "rows", [])
         count = get(stored, "count", 0)
 
+        # All rows are now table-rows (ID, Level, Limits all use html_table)
         out_styles = [Dict("display" => (i <= 4 || i <= count) ? "table-row" : "none") for i in 1:MAX_ROWS]
         out_names = [i <= length(rows) ? string(get(rows[i], "Name", "")) : "" for i in 1:MAX_ROWS]
         out_roles = [i <= length(rows) ? string(get(rows[i], "Role", (i <= 3 ? "Variable" : (i == 4 ? "Filler" : "Fixed")))) : (i <= 3 ? "Variable" : (i == 4 ? "Filler" : "Fixed")) for i in 1:MAX_ROWS]
@@ -535,7 +718,13 @@ function DECK_RegisterCallbacks_DDEF(app)
         out_mws = [i <= length(rows) ? get(rows[i], "MW", 0.0) : 0.0 for i in 1:MAX_ROWS]
         out_units = [i <= length(rows) ? string(get(rows[i], "Unit", "")) : "" for i in 1:MAX_ROWS]
 
-        return (out_styles..., out_styles..., out_styles..., out_names..., out_roles..., out_l1s..., out_l2s..., out_l3s..., out_mins..., out_maxs..., out_mws..., out_units...)
+        # Indicator dot colours: green when MW/HL > 0, dark otherwise
+        dot1_styles = [Dict("color" => (i <= length(rows) && Float64(get(rows[i], "MW", 0.0)) > 0.0 ? "#5EC962" : "#2C2C2C"),
+            "fontSize" => "0.45rem", "marginRight" => "1px") for i in 1:MAX_ROWS]
+        dot2_styles = [Dict("color" => (i <= length(rows) && Float64(get(rows[i], "HalfLife", 0.0)) > 0.0 ? "#5EC962" : "#2C2C2C"),
+            "fontSize" => "0.45rem", "marginRight" => "2px") for i in 1:MAX_ROWS]
+
+        return (out_styles..., out_styles..., out_styles..., out_names..., out_roles..., out_l1s..., out_l2s..., out_l3s..., out_mins..., out_maxs..., out_mws..., out_units..., dot1_styles..., dot2_styles...)
     end
 
     # ── 2. Main Store Orchestrator ─────────────────────────────────────────────────────
@@ -562,6 +751,8 @@ function DECK_RegisterCallbacks_DDEF(app)
         Input("deck-btn-save-memo", "n_clicks"),
         Input("store-session-config", "data"),
         Input("deck-upload", "contents"),
+        Input("deck-prop-trigger-save", "data"),
+        Input("deck-stoch-trigger-unit", "data"),
         # Delete buttons as Inputs
         [Input("deck-del-$i", "n_clicks") for i in 1:MAX_ROWS]...,
         # States
@@ -578,16 +769,33 @@ function DECK_RegisterCallbacks_DDEF(app)
         [State("deck-unit-$i", "value") for i in 1:MAX_ROWS]...,
         State("deck-input-vol", "value"),
         State("deck-input-conc", "value"),
+        State("deck-prop-target-id", "data"),
+        State("deck-prop-is-radio", "value"),
+        State("deck-prop-hl", "value"),
+        State("deck-prop-hl-unit", "value"),
+        State("deck-prop-is-filler", "value"),
+        State("deck-prop-mw", "value"),
+        State("deck-store-stoch-settings", "data"),
         prevent_initial_call=true
     ) do args...
         try  # Global error guard for main orchestrator callback
-            # Unpack arguments
-            n_add, n_clear, up_memo, n_temp, n_save, session, up_cont = args[1:7]
-            ndels = args[8:7+MAX_ROWS]
-            store_data = args[8+MAX_ROWS]
-            fname = args[9+MAX_ROWS]
+            # UNPACKING ARCHITECTURE (Args Array Mapping)
+            # 1..33: Inputs (9 single + 24 del buttons)
+            # 34: deck-store-factors (STATE)
+            # 35: deck-upload (STATE)
+            # 36..251: Factor Table Row States (9 blocks of 24)
+            # 252..253: Vol/Conc States (hidden, kept for compatibility)
+            # 254..259: Property Modal States (TargetID, IsRadio, HL, HLUnit, IsFiller, MW)
+            # 260: deck-store-stoch-settings (STATE)
 
-            offset = 10 + MAX_ROWS
+            n_add, n_clear, up_memo, n_temp, n_save, session, up_cont = args[1:7]
+            save_prop_trig = args[8]
+            stoch_trig = args[9]
+            ndels = args[10:33]
+            store_data = args[34]
+            fname = args[35]
+
+            offset = 12 + MAX_ROWS
             all_names = collect(args[offset:offset+MAX_ROWS-1])
             all_roles = collect(args[offset+MAX_ROWS:offset+2MAX_ROWS-1])
             all_l1s = collect(args[offset+2MAX_ROWS:offset+3MAX_ROWS-1])
@@ -599,8 +807,94 @@ function DECK_RegisterCallbacks_DDEF(app)
             all_units = collect(args[offset+8MAX_ROWS:offset+9MAX_ROWS-1])
 
             ctx = callback_context()
-            isempty(ctx.triggered) && return ntuple(_ -> Dash.no_update(), 17)
+            isempty(ctx.triggered) && return (ntuple(_ -> Dash.no_update(), 17)...,)
             trig = split(ctx.triggered[1].prop_id, ".")[1]
+
+            # ── 6. Prop Save Logic (Integrated) ───────────────────────────
+            if trig == "deck-prop-trigger-save"
+                isnothing(save_prop_trig) && return ntuple(_ -> Dash.no_update(), 17)
+                isnothing(store_data) && return ntuple(_ -> Dash.no_update(), 17)
+
+                # Modal States extraction (explicit indices 254-259)
+                target = args[254]
+                is_rad = args[255]
+                hl_val = args[256]
+                hl_unit = args[257]
+                is_fill = args[258]
+                mw_modal = args[259]
+
+                t_type = string(get(target, "type", get(target, :type, "")))
+                t_idx = Int(get(target, "index", get(target, :index, 0)))
+
+                if t_type == "in" && t_idx > 0 && t_idx <= length(store_data["rows"])
+                    new_rows = []
+                    for (i, r) in enumerate(store_data["rows"])
+                        new_r = Dict{String,Any}(string(k) => v for (k, v) in r)
+                        if i == t_idx
+                            safe_mw = isnothing(mw_modal) ? 0.0 : Sys_Fast.FAST_SafeNum_DDEF(mw_modal)
+                            safe_mw = isnan(safe_mw) ? 0.0 : safe_mw
+                            new_r["MW"] = safe_mw
+
+                            safe_hl = isnothing(hl_val) ? 0.0 : Sys_Fast.FAST_SafeNum_DDEF(hl_val)
+                            safe_hl = isnan(safe_hl) ? 0.0 : safe_hl
+                            new_r["IsRadioactive"] = safe_hl > 0.0
+                            new_r["HalfLife"] = safe_hl
+                            new_r["HalfLifeUnit"] = isnothing(hl_unit) ? "Hours" : string(hl_unit)
+                            new_r["IsFiller"] = is_fill
+                        end
+                        push!(new_rows, new_r)
+                    end
+                    new_store = Dict{String,Any}()
+                    for (k, v) in store_data
+                        new_store[string(k)] = v
+                    end
+                    new_store["rows"] = new_rows
+
+                    # Return new store data, updating ONLY the store part of the tuple
+                    return (new_store, ntuple(_ -> Dash.no_update(), 16)...)
+                end
+                return ntuple(_ -> Dash.no_update(), 17)
+            end
+
+            # ── 6b. Unit Auto-Logic (Triggered by Stoch Modal Save) ────────
+            if trig == "deck-stoch-trigger-unit"
+                isnothing(store_data) && return ntuple(_ -> Dash.no_update(), 17)
+                stoch_data = args[260]  # deck-store-stoch-settings
+                isnothing(stoch_data) && return ntuple(_ -> Dash.no_update(), 17)
+
+                has_filler = get(stoch_data, "FillerName", "") != "" && Float64(get(stoch_data, "FillerMW", 0.0)) > 0.0
+                has_env = Float64(get(stoch_data, "Volume", 0.0)) > 0.0 && Float64(get(stoch_data, "Conc", 0.0)) > 0.0
+
+                if has_filler || has_env
+                    target_unit = has_filler ? "%M" : "MR"
+                    new_rows = []
+                    filler_name = string(get(stoch_data, "FillerName", ""))
+                    filler_mw = Float64(get(stoch_data, "FillerMW", 0.0))
+
+                    for r in store_data["rows"]
+                        new_r = Dict{String,Any}(string(k) => v for (k, v) in r)
+                        mw = Float64(get(new_r, "MW", 0.0))
+                        if mw > 0.0
+                            new_r["Unit"] = target_unit
+                        end
+                        if has_filler && string(get(new_r, "Name", "")) == filler_name
+                            new_r["IsFiller"] = true
+                            new_r["MW"] = filler_mw
+                            new_r["Unit"] = "%M"
+                        end
+                        push!(new_rows, new_r)
+                    end
+
+                    new_store = Dict{String,Any}()
+                    for (k, v) in store_data
+                        new_store[string(k)] = v
+                    end
+                    new_store["rows"] = new_rows
+
+                    return (new_store, ntuple(_ -> Dash.no_update(), 16)...)
+                end
+                return ntuple(_ -> Dash.no_update(), 17)
+            end
 
             NO = Dash.no_update()
             count = isnothing(store_data) ? 1 : get(store_data, "count", 1)
@@ -614,15 +908,26 @@ function DECK_RegisterCallbacks_DDEF(app)
                     unit_val = !isnothing(all_units[i]) ? string(all_units[i]) : ""
 
                     # Check previous store state for MW change
-                    prev_mw = 0.0
-                    if !isnothing(store_data) && haskey(store_data, "rows")
-                        if i <= length(store_data["rows"])
-                            pmw = get(store_data["rows"][i], "MW", 0.0)
+                    is_rad = false
+                    hl_val = 0.0
+                    hl_unit = "Hours"
+                    is_fill = false
+
+                    if !isnothing(store_data) && (haskey(store_data, "rows") || haskey(store_data, :rows))
+                        r_list = get(store_data, "rows", get(store_data, :rows, []))
+                        if i <= length(r_list)
+                            prow = r_list[i]
+                            pmw = get(prow, "MW", get(prow, :MW, 0.0))
                             prev_mw = pmw isa String ? parse(Float64, pmw) : Float64(pmw)
+                            mw_val = prev_mw > 0.0 ? prev_mw : mw_val # Trust store over hidden DOM input for MW
+                            is_rad = get(prow, "IsRadioactive", get(prow, :IsRadioactive, false))
+                            hl_val = Float64(get(prow, "HalfLife", get(prow, :HalfLife, 0.0)))
+                            hl_unit = string(get(prow, "HalfLifeUnit", get(prow, :HalfLifeUnit, "Hours")))
+                            is_fill = get(prow, "IsFiller", get(prow, :IsFiller, false))
                         end
                     end
 
-                    # Poka-Yoke: Otomatik Birim Düzenlemesi (0 -> >0 geçişinde)
+                    # Poka-Yoke: Automatic Unit Adjustment (transition from 0 -> >0)
                     if mw_val > 0.0 && prev_mw <= 0.0
                         if isempty(strip(unit_val)) || unit_val == "-"
                             unit_val = "%M"
@@ -639,6 +944,10 @@ function DECK_RegisterCallbacks_DDEF(app)
                         "Max" => _sn0(all_maxs[i]),
                         "MW" => mw_val,
                         "Unit" => unit_val,
+                        "IsRadioactive" => is_rad,
+                        "HalfLife" => hl_val,
+                        "HalfLifeUnit" => hl_unit,
+                        "IsFiller" => is_fill
                     )
                 end for i in 1:max_idx
             ]
@@ -732,15 +1041,21 @@ function DECK_RegisterCallbacks_DDEF(app)
                     [i <= length(def_outs) ? def_outs[i]["Unit"] : "-" for i in 1:3]
                 )
 
-                return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], [Dict("label" => "Loading...", "value" => "NONE")], 5.0, 20.0, "Sample", "BoxBehnken", lbl, NO, "No data source", "NONE",
+                return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], [Dict("label" => "Phase 1", "value" => "Phase1")], 5.0, 20.0, "Sample", "BoxBehnken", lbl, NO, "Ready", "Phase1",
                 out_vals...
 
                 # ── D. Save Memo (Download) ──────────────────────────────────────────────────
             elseif trig == "deck-btn-save-memo"
                 try
-                    vol_v = isnothing(args[end-1]) ? 0.0 : Sys_Fast.FAST_SafeNum_DDEF(args[end-1])
-                    conc_v = isnothing(args[end]) ? 0.0 : Sys_Fast.FAST_SafeNum_DDEF(args[end])
-                    json_str = JSON3.write(Dict("Inputs" => snap_rows(), "Global" => Dict("Volume" => vol_v, "Conc" => conc_v)))
+                    stoch_store = args[260]
+                    vol_v = isnothing(stoch_store) ? 0.0 : Sys_Fast.FAST_SafeNum_DDEF(get(stoch_store, "Volume", get(stoch_store, :Volume, 0.0)))
+                    conc_v = isnothing(stoch_store) ? 0.0 : Sys_Fast.FAST_SafeNum_DDEF(get(stoch_store, "Conc", get(stoch_store, :Conc, 0.0)))
+                    g_dict = Dict{String,Any}("Volume" => vol_v, "Conc" => conc_v)
+                    if !isnothing(stoch_store) && (haskey(stoch_store, "FillerName") || haskey(stoch_store, :FillerName))
+                        g_dict["FillerName"] = string(get(stoch_store, "FillerName", get(stoch_store, :FillerName, "")))
+                        g_dict["FillerMW"] = Sys_Fast.FAST_SafeNum_DDEF(get(stoch_store, "FillerMW", get(stoch_store, :FillerMW, 0.0)))
+                    end
+                    json_str = JSON3.write(Dict("Inputs" => snap_rows(), "Global" => g_dict))
                     b64 = base64encode(json_str)
                     dl_dict = Dict("filename" => "Daisho_Workspace.json", "content" => b64, "base64" => true)
                     lbl = html_div([html_i(className="fas fa-check-circle me-2"), "Workspace Exported"],
@@ -748,7 +1063,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     return NO, NO, NO, NO, NO, NO, NO, lbl, dl_dict, NO, NO,
                     NO, NO, NO, NO, NO, NO
                 catch e
-                    return NO, NO, NO, NO, NO, NO, NO, html_div("❌ Save Error", className="badge bg-danger text-white p-2 w-100"), NO, NO, NO,
+                    return NO, NO, NO, NO, NO, NO, NO, html_div("❌ Save Error: " * string(e), className="badge bg-danger text-white p-2 w-100", style=Dict("fontSize" => "0.6rem")), NO, NO, NO,
                     NO, NO, NO, NO, NO, NO
                 end
 
@@ -829,11 +1144,11 @@ function DECK_RegisterCallbacks_DDEF(app)
 
         catch e  # Catch-all: surface error to UI instead of silent death
             bt = sprint(showerror, e, catch_backtrace())
+            println("\e[31m[CRITICAL] DECK CALLBACK ERROR: $e\e[0m")
+            println(bt)
             Sys_Fast.FAST_Log_DDEF("DECK", "CALLBACK_CRASH", bt, "FAIL")
             NO = Dash.no_update()
-            return NO, NO, NO, NO, NO, NO, NO,
-            html_span("⚠ System Error: $(first(string(e), 120))", className="text-danger fw-bold"), NO, NO, NO,
-            NO, NO, NO, NO, NO, NO
+            return (ntuple(_ -> Dash.no_update(), 17)...,)
         end
     end
 
@@ -901,7 +1216,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     if l1val < minval || l3val > maxval || l1val > l2val || l2val > l3val
                         return html_div([
                                 html_i(className="fas fa-exclamation-triangle me-2"),
-                                html_span("Audit Failed: Variable '$name' must strictly obey Min <= Low <= Center <= High <= Max boundary logic.", className="fw-bold"),
+                                html_span("Audit Failed: Variable '$name' must strictly obey Min <= Low <= Centre <= High <= Max boundary logic. (Got: $minval <= $l1val <= $l2val <= $l3val <= $maxval)", className="fw-bold"),
                             ], className="text-danger h5 mb-3"), true
                     end
                 end
@@ -1027,7 +1342,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                         return Dash.no_update(), html_div([html_i(className="fas fa-exclamation-triangle me-1"), "Error: Variables 1-3 must have Name, Min, and Max properties filled!"], className="text-danger fw-bold"), Dash.no_update()
                     end
                     if l1val < minval || l3val > maxval || l1val > l2val || l2val > l3val
-                        return Dash.no_update(), html_div([html_i(className="fas fa-exclamation-triangle me-1"), "Error: Variable '$name' breaks boundary rules (Min <= Low <= Center <= High <= Max)!"], className="text-danger fw-bold"), Dash.no_update()
+                        return Dash.no_update(), html_div([html_i(className="fas fa-exclamation-triangle me-1"), "Error: Variable '$name' breaks boundary rules (Got: $minval <= $l1val <= $l2val <= $l3val <= $maxval)!"], className="text-danger fw-bold"), Dash.no_update()
                     end
                 end
 
@@ -1080,6 +1395,266 @@ function DECK_RegisterCallbacks_DDEF(app)
             Dash.no_update()
         end
     end
-end
 
+    # ── 5. Chem Properties Modal ───────────────────────────────────────────────────────
+    callback!(app,
+        Output("deck-modal-prop", "is_open"),
+        Output("deck-prop-title", "children"),
+        Output("deck-prop-target-id", "data"),
+        Output("deck-prop-is-radio", "value"),
+        Output("deck-prop-hl", "value"),
+        Output("deck-prop-hl-unit", "value"),
+        Output("deck-prop-is-filler", "value"),
+        Output("deck-prop-trigger-save", "data"),
+        Output("deck-prop-mw", "value"),
+        Input("btn-prop-cancel", "n_clicks"),
+        Input("btn-prop-save", "n_clicks"),
+        [Input("btn-prop-$i", "n_clicks") for i in 1:MAX_ROWS]...,
+        State("deck-prop-is-radio", "value"),
+        State("deck-prop-is-filler", "value"),
+        State("deck-store-factors", "data"),
+        prevent_initial_call=true
+    ) do args...
+
+        ctx = callback_context()
+        isempty(ctx.triggered) && return (ntuple(_ -> Dash.no_update(), 9)...,)
+        trig = split(ctx.triggered[1].prop_id, ".")[1]
+
+        if trig == "btn-prop-cancel"
+            return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update()
+        end
+
+        if trig == "btn-prop-save"
+            return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), (randn()), Dash.no_update()
+        end
+
+        m = match(r"btn-prop-(\d+)", trig)
+        if m !== nothing
+            idx = parse(Int, m.captures[1])
+            store_data = args[end]
+
+            title = "Input Component #$idx Properties"
+            mw_state = 0.0
+            hl_state, hlu_state = 0.0, "Hours"
+            rad_state, fill_state = false, false
+
+            if !isnothing(store_data) && (haskey(store_data, "rows") || haskey(store_data, :rows))
+                r_list = get(store_data, "rows", get(store_data, :rows, []))
+                if idx <= length(r_list)
+                    prow = r_list[idx]
+                    mw_state = Sys_Fast.FAST_SafeNum_DDEF(get(prow, "MW", get(prow, :MW, 0.0)))
+                    rad_state = get(prow, "IsRadioactive", get(prow, :IsRadioactive, false))
+                    hl_state = Sys_Fast.FAST_SafeNum_DDEF(get(prow, "HalfLife", get(prow, :HalfLife, 0.0)))
+                    hlu_state = string(get(prow, "HalfLifeUnit", get(prow, :HalfLifeUnit, "Hours")))
+                    fill_state = get(prow, "IsFiller", get(prow, :IsFiller, false))
+                    cur_name = get(prow, "Name", get(prow, :Name, ""))
+                    if cur_name != ""
+                        title = "Properties: $cur_name"
+                    end
+                end
+            end
+
+            return true, title, Dict("type" => "in", "index" => idx), rad_state, hl_state, hlu_state, fill_state, Dash.no_update(), mw_state
+        end
+
+        return (ntuple(_ -> Dash.no_update(), 9)...,)
+    end
+
+    # ── 6. Responses (Output) Properties Modal ──────────────────────────────────────────
+    callback!(app,
+        Output("deck-modal-out-prop", "is_open"),
+        Output("deck-out-prop-title", "children"),
+        Output("deck-out-prop-target-id", "data"),
+        Output("deck-out-prop-is-corr", "value"),
+        Output("deck-store-outputs", "data"),
+        Output("deck-out-prop-confirm", "value"),
+        Input("btn-out-prop-cancel", "n_clicks"),
+        Input("btn-out-prop-save", "n_clicks"),
+        [Input("btn-out-prop-$i", "n_clicks") for i in 1:3]...,
+        State("deck-out-prop-is-corr", "value"),
+        State("deck-store-outputs", "data"),
+        State("deck-out-prop-target-id", "data"),
+        State("deck-out-prop-confirm", "value"),
+        prevent_initial_call=true
+    ) do n_cancel, n_save, args...
+
+        ctx = callback_context()
+        isempty(ctx.triggered) && return (ntuple(_ -> Dash.no_update(), 6)...,)
+        trig = split(ctx.triggered[1].prop_id, ".")[1]
+
+        s_corr = args[4]
+        store_out = args[5]
+        target_data = args[6]
+        s_confirm = args[7]
+
+        if trig == "btn-out-prop-cancel"
+            return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), ""
+        end
+
+        if trig == "btn-out-prop-save"
+            t_v = isnothing(target_data) ? 0 : get(target_data, "index", get(target_data, :index, 0))
+            t_idx = t_v isa Number ? Int(t_v) : parse(Int, string(t_v))
+            if !isnothing(target_data) && t_idx > 0
+                idx = t_idx
+                if isnothing(store_out) || !(haskey(store_out, "rows") || haskey(store_out, :rows))
+                    store_out = Dict{String,Any}("rows" => [Dict("IsCorr" => false) for _ in 1:3])
+                end
+
+                rows_val = get(store_out, "rows", get(store_out, :rows, []))
+
+                # Create fresh normalized row structure to avoid immutability issues
+                new_rows = []
+                for (i, rv) in enumerate(rows_val)
+                    new_r = Dict{String,Any}()
+                    if rv isa Dict
+                        for (k, v) in rv
+                            new_r[string(k)] = v
+                        end
+                    end
+                    if i == idx
+                        new_r["IsCorr"] = !isnothing(s_confirm) && strip(uppercase(string(s_confirm))) == "YES"
+                    end
+                    push!(new_rows, new_r)
+                end
+
+                new_store_out = Dict{String,Any}()
+                if store_out isa Dict
+                    for (k, v) in store_out
+                        new_store_out[string(k)] = v
+                    end
+                end
+                new_store_out["rows"] = new_rows
+
+                return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), new_store_out, ""
+            end
+            return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), ""
+        end
+
+        m_out = match(r"btn-out-prop-(\d+)", trig)
+        if m_out !== nothing
+            idx = parse(Int, m_out.captures[1])
+            title = "Response Component #$idx Properties"
+
+            corr_state = false
+            confirm_val = ""
+            if !isnothing(store_out)
+                r_list = get(store_out, "rows", get(store_out, :rows, []))
+                if idx <= length(r_list)
+                    corr_state = get(r_list[idx], "IsCorr", get(r_list[idx], :IsCorr, false))
+                    confirm_val = corr_state ? "YES" : ""
+                end
+            end
+
+            return true, title, Dict("index" => idx), corr_state, Dash.no_update(), confirm_val
+        end
+
+        return (ntuple(_ -> Dash.no_update(), 6)...,)
+    end
+
+    # ── 7. Stoichiometry Settings Modal ────────────────────────────────────────────────
+    callback!(app,
+        Output("deck-modal-stoch-settings", "is_open"),
+        Output("deck-store-stoch-settings", "data"),
+        Output("deck-stoch-filler-name", "value"),
+        Output("deck-stoch-filler-mw", "value"),
+        Output("deck-stoch-vol", "value"),
+        Output("deck-stoch-conc", "value"),
+        Output("deck-stoch-trigger-unit", "data"),
+        Input("deck-btn-stoch-settings", "n_clicks"),
+        Input("deck-btn-stoch-cancel", "n_clicks"),
+        Input("deck-btn-stoch-save", "n_clicks"),
+        Input("deck-btn-template", "n_clicks"),
+        Input("deck-btn-clear", "n_clicks"),
+        Input("deck-upload-memo", "contents"),
+        State("deck-modal-stoch-settings", "is_open"),
+        State("deck-store-stoch-settings", "data"),
+        State("deck-stoch-filler-name", "value"),
+        State("deck-stoch-filler-mw", "value"),
+        State("deck-stoch-vol", "value"),
+        State("deck-stoch-conc", "value"),
+        prevent_initial_call=true
+    ) do n_open, n_cancel, n_save, n_template, n_clear, up_memo, is_open, store_data, f_name, f_mw, s_vol, s_conc
+        NO = Dash.no_update()
+        ctx = callback_context()
+        isempty(ctx.triggered) && return (ntuple(_ -> NO, 7)...,)
+        trig = split(ctx.triggered[1].prop_id, ".")[1]
+
+        if trig == "deck-btn-stoch-settings"
+            # Open modal and populate from store
+            if !isnothing(store_data)
+                return true, NO,
+                string(get(store_data, "FillerName", get(store_data, :FillerName, ""))),
+                Sys_Fast.FAST_SafeNum_DDEF(get(store_data, "FillerMW", get(store_data, :FillerMW, 0.0))),
+                Sys_Fast.FAST_SafeNum_DDEF(get(store_data, "Volume", get(store_data, :Volume, 0.0))),
+                Sys_Fast.FAST_SafeNum_DDEF(get(store_data, "Conc", get(store_data, :Conc, 0.0))), NO
+            end
+            return true, NO, "", 0.0, 0.0, 0.0, NO
+        end
+
+        if trig == "deck-btn-stoch-cancel"
+            return false, NO, NO, NO, NO, NO, NO
+        end
+
+        # Template auto-fills the stoichiometry modal with sample data
+        if trig == "deck-btn-template"
+            sample_stoch = Dict(
+                "FillerName" => "DPPC", "FillerMW" => 734.05,
+                "Volume" => 5.0, "Conc" => 20.0)
+            return false, sample_stoch, "DPPC", 734.05, 5.0, 20.0, NO
+        end
+        # Clear button resets stoichiometry store
+        if trig == "deck-btn-clear"
+            return false, Dict{String,Any}(), "", 0.0, 0.0, 0.0, randn()
+        end
+
+        # Load from Memo
+        if trig == "deck-upload-memo" && !isnothing(up_memo) && up_memo != ""
+            try
+                base64_data = split(up_memo, ",")[end]
+                json_str = String(base64decode(base64_data))
+                memo = JSON3.read(json_str)
+                g = get(memo, "Global", Dict())
+                loaded_stoch = Dict(
+                    "FillerName" => string(get(g, "FillerName", "")),
+                    "FillerMW" => Float64(get(g, "FillerMW", 0.0)),
+                    "Volume" => Float64(get(g, "Volume", 0.0)),
+                    "Conc" => Float64(get(g, "Conc", 0.0))
+                )
+                return false, loaded_stoch, NO, NO, NO, NO, randn()
+            catch e
+                return false, NO, NO, NO, NO, NO, NO
+            end
+        end
+
+        if trig == "deck-btn-stoch-save"
+            _sn = Sys_Fast.FAST_SafeNum_DDEF
+            _sn0(x) = (v = _sn(x); isnan(v) ? 0.0 : v)
+            new_data = Dict(
+                "FillerName" => isnothing(f_name) ? "" : strip(string(f_name)),
+                "FillerMW" => isnothing(f_mw) ? 0.0 : _sn0(f_mw),
+                "Volume" => isnothing(s_vol) ? 0.0 : _sn0(s_vol),
+                "Conc" => isnothing(s_conc) ? 0.0 : _sn0(s_conc),
+            )
+            # Trigger fires → orchestrator applies unit auto-logic
+            return false, new_data, NO, NO, NO, NO, randn()
+        end
+
+        return (ntuple(_ -> NO, 7)...,)
+    end
+
+    # ── 8. Response Dot Indicator Update ────────────────────────────────────────────
+    callback!(app,
+        [Output("deck-out-dot-$i", "style") for i in 1:3]...,
+        Input("deck-store-outputs", "data"),
+        prevent_initial_call=true
+    ) do store_out
+        isnothing(store_out) && return (ntuple(_ -> Dash.no_update(), 3)...,)
+        rows = get(store_out, "rows", get(store_out, :rows, []))
+        return Tuple(
+            Dict("color" => (i <= length(rows) && get(rows[i], "IsCorr", get(rows[i], :IsCorr, false)) ? "#5EC962" : "#2C2C2C"),
+                "fontSize" => "0.45rem", "marginRight" => "2px", "verticalAlign" => "middle")
+            for i in 1:3
+        )
+    end
+end
 end # module

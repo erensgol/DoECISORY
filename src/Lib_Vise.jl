@@ -16,12 +16,48 @@ using LinearAlgebra
 using Statistics
 using Distributions
 using Printf
+using Dates
 using Main.Sys_Fast
 using Main.Lib_Arts
 
 export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
     VISE_Predict_DDEF, VISE_Execute_DDEF, VISE_CrossValidate_DDEF,
-    VISE_GetTermNames_DDEF, VISE_ClampIndex_DDEF
+    VISE_GetTermNames_DDEF, VISE_ClampIndex_DDEF, VISE_ApplyRadioDecay_DDEF
+
+# --------------------------------------------------------------------------------------
+# SECTION 1: PHYSICAL CORRECTIONS & MATH MODELS
+# --------------------------------------------------------------------------------------
+
+"""
+    VISE_ApplyRadioDecay_DDEF(RawValue, HalfLife, HalfLifeUnit, DeltaTHours) -> Float64
+Applies mathematical decay correction for radioactive elements.
+Formula: N = N0 * exp(-lambda * t) where lambda = ln(2) / T_1/2.
+We reverse-calculate the zero-time activity (N0 = N / exp(-lambda * t)).
+"""
+function VISE_ApplyRadioDecay_DDEF(RawValue::Float64, HalfLife::Float64, HalfLifeUnit::String, DeltaTHours::Float64)
+    HalfLife <= 0.0 && return RawValue
+
+    # Normalise Half-Life to Hours
+    unit_upper = uppercase(strip(HalfLifeUnit))
+    hl_hours = HalfLife
+    if occursin("MIN", unit_upper)
+        hl_hours = HalfLife / 60.0
+    elseif occursin("DAY", unit_upper)
+        hl_hours = HalfLife * 24.0
+    elseif occursin("YEAR", unit_upper) || occursin("YR", unit_upper)
+        hl_hours = HalfLife * 24.0 * 365.25
+    end
+
+    hl_hours <= 0.0 && return RawValue
+
+    lambda = log(2) / hl_hours
+    decay_factor = exp(-lambda * DeltaTHours)
+
+    # Avoid extreme inflation
+    decay_factor < 1e-6 && return RawValue
+
+    return RawValue / decay_factor
+end
 
 # --------------------------------------------------------------------------------------
 # SECTION 1: DESIGN MATRIX EXPANSION & NAMING
@@ -64,10 +100,19 @@ function VISE_ExpandDesign_DDEF(X::AbstractMatrix{Float64}, ModelType::String)
     Xd = Matrix{Float64}(undef, N, 1 + K + n_inter + K)
     fill!(view(Xd, :, 1), 1.0)
     copyto!(view(Xd, :, 2:K+1), X)
-    @inbounds for (i, (c1, c2)) in enumerate(combos)
-        Xd[:, K+1+i] .= view(X, :, c1) .* view(X, :, c2)
+
+    if N > 1000
+        Threads.@threads for i in 1:n_inter
+            c1, c2 = combos[i]
+            @views @. Xd[:, K+1+i] = X[:, c1] * X[:, c2]
+        end
+    else
+        @inbounds for (i, (c1, c2)) in enumerate(combos)
+            Xd[:, K+1+i] .= view(X, :, c1) .* view(X, :, c2)
+        end
     end
-    @. Xd[:, K+n_inter+2:end] = abs2(X)
+
+    @views @. Xd[:, K+n_inter+2:end] = abs2(X)
 
     return Xd
 end
@@ -98,13 +143,18 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
         # ── Strict Scientific OLS Regression ───────────────────────────────────
         n, p = size(X_Design)
 
+        # Condition Number Check (Matrix Health)
+        if cond(X_Design) > 1e10
+            return Dict("Status" => "FAIL", "Error" => "Pre-Flight Matrix Health Check Failed: Design matrix condition number > 1e10. There may be perfect correlation between inputs or a flawed experimental design.")
+        end
+
         if n < p
-            throw(ArgumentError("Deneysel veri yetersiz: Gözlem sayısı (\$n), model parametre sayısından (\$p) az."))
+            throw(ArgumentError("Insufficient experimental data: Number of observations (\$n) is less than the number of model parameters (\$p)."))
         end
 
         # Explicit rank check to prevent data manipulation via pseudo-inverse
         if rank(X_Design) < p
-            throw(ArgumentError("Deney tasarım matrisi lineer bağımlı (Singular/Collinear). Model kurulamıyor."))
+            throw(ArgumentError("Experimental design matrix is linearly dependent (Singular/Collinear). Model cannot be established."))
         end
 
         Beta = X_Design \ Y
@@ -208,7 +258,7 @@ function VISE_CrossValidate_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVect
 end
 
 # --------------------------------------------------------------------------------------
-# SECTION 4: MULTITHREADED GRID SEARCH OPTIMIZATION
+# SECTION 4: MULTITHREADED GRID SEARCH OPTIMISATION
 # --------------------------------------------------------------------------------------
 
 """
@@ -280,14 +330,22 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
         Scores = ones(NumPoints)
     else
         Scores = Vector{Float64}(undef, NumPoints)
-        pow = 1.0 / length(active_idx)
+
+        weight_sum = 0.0
+        for m_idx in active_idx
+            weight_sum += Float64(get(Models[m_idx]["Goal"], "Weight", 1.0))
+        end
+        pow = weight_sum > 0.0 ? (1.0 / weight_sum) : 1.0
+
+        parsed_goals = [Lib_Arts.ARTS_ExtractGoal_DDEF(Models[m]["Goal"]) for m in 1:NumModels]
 
         Threads.@threads for i in 1:NumPoints
             s = 1.0
             @inbounds for m_idx in active_idx
                 val = Predictions[i, m_idx]
-                d = Lib_Arts.ARTS_CalcDesirability_DDEF(val, Models[m_idx]["Goal"])
-                s *= d
+                gtup = parsed_goals[m_idx]
+                d = Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
+                s *= d^gtup[6]
             end
             Scores[i] = s^pow
         end
@@ -343,6 +401,72 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     Y_Clean = Y_Raw[valid_mask, :]
     N, K = size(X_Clean)
 
+    InNames = replace.(in_cols, C.PRE_INPUT => "")
+    OutNames = replace.(out_cols, C.PRE_RESULT => "")
+
+    # --- RADIOACTIVITY DECAY CORRECTION ---
+    radio_opts = get(Opts, "RadioOpts", Dict("Apply" => false, "t_cal" => "", "t_exp" => ""))
+    if get(radio_opts, "Apply", false)
+        t_cal_str = get(radio_opts, "t_cal", "")
+        t_exp_str = get(radio_opts, "t_exp", "")
+
+        if !isempty(t_cal_str) && !isempty(t_exp_str)
+            try
+                # Parse HTML5 datetime-local (yyyy-mm-ddThh:mm)
+                dt_cal = Dates.DateTime(t_cal_str, "yyyy-mm-dd\\THH:MM")
+                dt_exp = Dates.DateTime(t_exp_str, "yyyy-mm-dd\\THH:MM")
+
+                # Delta t in Hours
+                delta_t_ms = Dates.value(dt_exp - dt_cal) # Milliseconds
+                delta_t_hours = delta_t_ms / (1000.0 * 60.0 * 60.0)
+
+                if delta_t_hours > 0
+                    config = Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
+                    if haskey(config, "Global")
+                        glb = config["Global"]
+
+                        # Correct Inputs (X) if radioactive
+                        in_meta = get(glb, "Inputs", [])
+                        for (ci, name) in enumerate(InNames)
+                            idx = findfirst(x -> get(x, "Name", "") == name, in_meta)
+                            if !isnothing(idx) && get(in_meta[idx], "IsRadioactive", false)
+                                hl = Float64(get(in_meta[idx], "HalfLife", 0.0))
+                                hlu = string(get(in_meta[idx], "HalfLifeUnit", "Hours"))
+                                for r in 1:N
+                                    X_Clean[r, ci] = VISE_ApplyRadioDecay_DDEF(X_Clean[r, ci], hl, hlu, delta_t_hours)
+                                end
+                                Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_CORRECT", "Input \$(name) corrected (Δt = \$(round(delta_t_hours; digits=2))h)", "WARN")
+                            end
+                        end
+
+                        # Correct Outputs (Y) if radioactive
+                        out_meta = get(glb, "Outputs", [])
+                        for (ci, name) in enumerate(OutNames)
+                            idx = findfirst(x -> get(x, "Name", "") == name, out_meta)
+                            if !isnothing(idx) && get(out_meta[idx], "IsRadioactive", false)
+                                hl = Float64(get(out_meta[idx], "HalfLife", 0.0))
+                                hlu = string(get(out_meta[idx], "HalfLifeUnit", "Hours"))
+                                for r in 1:N
+                                    Y_Clean[r, ci] = VISE_ApplyRadioDecay_DDEF(Y_Clean[r, ci], hl, hlu, delta_t_hours)
+                                end
+                                Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_CORRECT", "Output \$(name) corrected (Δt = \$(round(delta_t_hours; digits=2))h)", "WARN")
+                            end
+                        end
+                    end
+                end
+            catch e
+                Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_ERROR", "Failed to parse dates or apply correction: \$e", "FAIL")
+            end
+        end
+    end
+
+    # Zero Variance Check (Flat Line Detector)
+    for m in eachindex(out_cols)
+        if std(Y_Clean[:, m]) < 1e-6
+            return Dict("Status" => "FAIL", "Message" => "Zero Variance Trap Detected: All experimental results for the output ($(out_cols[m])) appear to be identical. Optimisation and regression modelling cannot be performed on data with zero variance.")
+        end
+    end
+
     P_quad = 1 + 2K + K * (K - 1) ÷ 2
     eff_model = ModelType == "Auto" ? (N > P_quad + 2 ? "quadratic" : "linear") : lowercase(ModelType)
 
@@ -351,7 +475,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     InNames = replace.(in_cols, C.PRE_INPUT => "")
     OutNames = replace.(out_cols, C.PRE_RESULT => "")
 
-    models = map(1:length(out_cols)) do m
+    models = map(eachindex(out_cols)) do m
         mod = VISE_Regress_DDEF(X_Clean, view(Y_Clean, :, m), eff_model; InNames)
         mod["Goal"] = Goals[m]
         mod
@@ -359,7 +483,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
 
     r2_vec = [get(m, "R2_Adj", NaN) for m in models]
     r2_pred_vec = [VISE_CrossValidate_DDEF(X_Clean, view(Y_Clean, :, m), eff_model)
-                   for m in 1:length(out_cols)]
+                   for m in eachindex(out_cols)]
 
     valid_r2 = filter(!isnan, r2_vec)
     !isempty(valid_r2) && Log("VISE", "TRAINING_SUMMARY",
@@ -476,7 +600,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
 
         # Write candidate sets to the transient file for FLOW leader extraction
         Sys_Fast.FAST_WriteLeaders_DDEF(DataFile, Phase, Leaders_DF)
-        Log("VISE", "OPTIMIZATION", "Candidate pool (N=14 Diversity-Focused) generated and saved.", "OK")
+        Log("VISE", "OPTIMISATION", "Candidate pool (N=14 Diversity-Focussed) generated and saved.", "OK")
     end
 
     graphs = Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, InNames, OutNames,

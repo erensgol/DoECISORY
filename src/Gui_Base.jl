@@ -94,7 +94,12 @@ Standardized page header layout.
 function BASE_PageHeader(title::String, subtitle::String)
     return dbc_row(dbc_col([
                 html_h3(title, className="mb-1"),
-                html_p(subtitle, className="text-secondary small"),
+                html_p([
+                        subtitle,
+                        html_br(),
+                        html_span([html_i(className="fas fa-exclamation-triangle me-1"), " Stateless architecture: Refreshing the browser will clear all inputted parameters and unsaved analyses."],
+                            className="text-secondary small fst-italic", style=Dict("fontSize" => "0.75rem"))
+                    ], className="text-secondary small"),
             ], xs=12), className="mb-3")
 end
 

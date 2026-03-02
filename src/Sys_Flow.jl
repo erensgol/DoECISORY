@@ -21,10 +21,10 @@ export FLOW_RouteUrl_DDEF, FLOW_PackState_DDEF, FLOW_UnpackState_DDEF,
 
 # Pre-built immutable route table
 const _ROUTES = Dict{String,String}(
-    "/"        => "PAGE_HOME",
-    "/home"    => "PAGE_HOME",
-    "/design"  => "PAGE_DESIGN",
-    "/analysis"=> "PAGE_ANALYSIS",
+    "/" => "PAGE_HOME",
+    "/home" => "PAGE_HOME",
+    "/design" => "PAGE_DESIGN",
+    "/analysis" => "PAGE_ANALYSIS",
 )
 
 """
@@ -86,7 +86,7 @@ function FLOW_AskLeader_DDEF(LeaderVal::Float64, CurrentRange::Vector{Float64})
     elseif abs(LeaderVal - max_val) < tol
         return (false, "Leader point too close to UPPER bound! Shift search space right?")
     else
-        return (true, "Leader point near center. Suggest zooming in for finer scan.")
+        return (true, "Leader point near centre. Suggest zooming in for finer scan.")
     end
 end
 
@@ -132,10 +132,10 @@ function FLOW_NextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedL
     p_num = tryparse(Int, replace(CurrentPhase, "Phase" => ""))
 
     return Dict(
-        "Status"      => "OK",
+        "Status" => "OK",
         "SourcePhase" => CurrentPhase,
         "TargetPhase" => "Phase$(isnothing(p_num) ? 2 : p_num + 1)",
-        "NewConfig"   => NewConfig,
+        "NewConfig" => NewConfig,
         "LeaderScore" => Leader["Score"],
     )
 end
@@ -151,15 +151,15 @@ function FLOW_GetCandidates_DDEF(MasterFile::String, CurrentPhase::String)
 
     cols = names(df)
     col_score = findfirst(c -> occursin("SCORE", uppercase(c)), cols)
-    col_id    = findfirst(c -> occursin("ID", uppercase(c)), cols)
+    col_id = findfirst(c -> occursin("ID", uppercase(c)), cols)
 
     isnothing(col_score) && return Dict{String,Any}[]
 
     candidates = map(eachrow(df)) do row
         Dict(
-            "ID"    => isnothing(col_id) ? "Unknown" : row[col_id],
+            "ID" => isnothing(col_id) ? "Unknown" : row[col_id],
             "Score" => row[col_score],
-            "Data"  => Dict{String,Any}(string(k) => v for (k, v) in pairs(row)),
+            "Data" => Dict{String,Any}(string(k) => v for (k, v) in pairs(row)),
         )
     end
 

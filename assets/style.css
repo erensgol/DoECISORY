@@ -487,7 +487,8 @@ select:focus {
 .glass-panel td input,
 .glass-panel td select,
 .glass-panel td .form-select,
-.glass-panel td .form-control {
+.glass-panel td .form-control,
+.deck-name-cell input {
     font-size: 12px !important;
     padding: 0.3rem 0.4rem !important;
     height: auto !important;
@@ -707,4 +708,15 @@ select:focus {
     50% {
         box-shadow: 0 0 0 6px #FF00001A;
     }
+}
+
+/* 12. DECK NAME CELL (forces dcc_input to fill table cell in table-layout: fixed) */
+.deck-name-cell>div {
+    width: 100% !important;
+}
+
+.deck-name-cell input {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    display: block !important;
 }

@@ -8,6 +8,7 @@ module Lib_Arts
 # Module Tag: ARTS
 # ======================================================================================
 
+using Base.Threads
 using PlotlyJS
 using Printf
 using Statistics
@@ -18,7 +19,7 @@ using Main.Sys_Fast
 export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
     ARTS_RenderContour_DDEF, ARTS_RenderSlice_DDEF, ARTS_RenderTrend_DDEF,
     ARTS_RenderSpace_DDEF, ARTS_RenderCandidates_DDEF, ARTS_Render_DDEF,
-    ARTS_GetTheme_DDEF, ARTS_CalcDesirability_DDEF,
+    ARTS_GetTheme_DDEF, ARTS_CalcDesirability_DDEF, ARTS_ExtractGoal_DDEF,
     ARTS_Downsample_DDEF
 
 # --------------------------------------------------------------------------------------
@@ -121,7 +122,7 @@ function ARTS_Downsample_DDEF(Z::Matrix{T}, target_rows::Int, target_cols::Int) 
     row_idx = 1:row_stride:nr
     col_idx = 1:col_stride:nc
 
-    # Always include the last row/col to preserve boundary behavior
+    # Always include the last row/col to preserve boundary behaviour
     row_idx = unique([collect(row_idx); nr])
     col_idx = unique([collect(col_idx); nc])
 
@@ -132,23 +133,34 @@ end
 
 """
     ARTS_CalcDesirability_DDEF(Val, Goal) -> Float64 (0.0 to 1.0)
-Implements Harrington's Desirability Function for multi-objective optimization.
+Implements Harrington's Desirability Function for multi-objective optimisation.
 Maps physical response values to a dimensionless quality score.
 """
-function ARTS_CalcDesirability_DDEF(Val::Float64, Goal::AbstractDict)
+function ARTS_ExtractGoal_DDEF(Goal::AbstractDict)
     G_Min = Float64(get(Goal, "Min", -Inf))
     G_Max = Float64(get(Goal, "Max", Inf))
     G_Tgt = Float64(get(Goal, "Target", (G_Min + G_Max) / 2))
     Type = string(get(Goal, "Type", "Nominal"))
+    Weight = Float64(get(Goal, "Weight", 1.0))
+    is_max = occursin("Maximise", Type)
+    is_min = occursin("Minimise", Type)
+    return (G_Min, G_Max, G_Tgt, is_max, is_min, Weight)
+end
 
-    if occursin("Maximize", Type)
+function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
+    G_Min, G_Max, G_Tgt, is_max, is_min, _ = GoalTup
+    if is_max
         return Val >= G_Tgt ? 1.0 : Val <= G_Min ? 0.0 : (Val - G_Min) / (G_Tgt - G_Min)
-    elseif occursin("Minimize", Type)
+    elseif is_min
         return Val <= G_Tgt ? 1.0 : Val >= G_Max ? 0.0 : (G_Max - Val) / (G_Max - G_Tgt)
-    else  # Nominal (Target seeking)
+    else  # Nominal
         (Val < G_Min || Val > G_Max) && return 0.0
         return Val < G_Tgt ? (Val - G_Min) / (G_Tgt - G_Min) : (G_Max - Val) / (G_Max - G_Tgt)
     end
+end
+
+function ARTS_CalcDesirability_DDEF(Val::Float64, Goal::AbstractDict)
+    return ARTS_CalcDesirability_DDEF(Val, ARTS_ExtractGoal_DDEF(Goal))
 end
 
 # --------------------------------------------------------------------------------------
@@ -271,18 +283,29 @@ function _predict_internal(Model, X)
     N, K = size(X)
     if occursin("linear", Type)
         Xd = hcat(ones(N), X)
+        return Xd * Beta
     else
         combos = collect(combinations(1:K, 2))
         n_inter = length(combos)
         Xd = Matrix{Float64}(undef, N, 1 + K + n_inter + K)
         fill!(view(Xd, :, 1), 1.0)
         copyto!(view(Xd, :, 2:K+1), X)
-        @inbounds for (i, (c1, c2)) in enumerate(combos)
-            Xd[:, K+1+i] .= view(X, :, c1) .* view(X, :, c2)
+
+        # Parallelise expansion if large enough
+        if N > 1000
+            Threads.@threads for i in 1:n_inter
+                c1, c2 = combos[i]
+                @views @. Xd[:, K+1+i] = X[:, c1] * X[:, c2]
+            end
+        else
+            @inbounds for (i, (c1, c2)) in enumerate(combos)
+                Xd[:, K+1+i] .= view(X, :, c1) .* view(X, :, c2)
+            end
         end
-        @. Xd[:, K+n_inter+2:end] = abs2(X)
+
+        @views @. Xd[:, K+n_inter+2:end] = abs2(X)
+        return Xd * Beta
     end
-    return Xd * Beta
 end
 
 """
@@ -416,14 +439,15 @@ end
 
 """
     ARTS_RenderSpace_DDEF(...) and ARTS_RenderCandidates_DDEF(...)
-Visualizes the optimization space with and without thresholding.
+Visualises the optimisation space with and without thresholding.
 """
 function ARTS_RenderSpace_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int}, Lbls::Vector{String}, Best_Point::Vector{Float64}=Float64[])
-    return _render_space_impl(Models, Goals, X, Idx, Lbls, Best_Point, false)
+    return _render_space_impl(Models, Goals, X, Idx, Lbls, Best_Point, false)[1]
 end
 
 function ARTS_RenderCandidates_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int}, Lbls::Vector{String}, Best_Point::Vector{Float64}=Float64[])
-    return _render_space_impl(Models, Goals, X, Idx, Lbls, Best_Point, true)
+    p, pct_str = _render_space_impl(Models, Goals, X, Idx, Lbls, Best_Point, true)
+    return p, pct_str
 end
 
 function _render_space_impl(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int}, Lbls::Vector{String}, Best_Point::Vector{Float64}, is_candidate::Bool)
@@ -452,6 +476,8 @@ function _render_space_impl(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int},
 
     col_means = vec(mean(X; dims=1))
 
+    parsed_goals = [ARTS_ExtractGoal_DDEF(Goals[m]) for m in eachindex(Models)]
+
     for (s, zv) in enumerate(z_vals)
         Grid = repeat(col_means', N * N)
         @inbounds for (k, pt) in enumerate(Iterators.product(x1, x2))
@@ -461,25 +487,45 @@ function _render_space_impl(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int},
         end
 
         Scores = ones(N * N)
-        Count = 0
-        for (m, mod) in enumerate(Models)
-            preds = _predict_internal(mod, Grid)
-            Scores .*= ARTS_CalcDesirability_DDEF.(preds, Ref(Goals[m]))
-            Count += 1
+        weight_sum = sum([g[6] for g in parsed_goals])
+        pow_factor = weight_sum > 0.0 ? (1.0 / weight_sum) : 1.0
+
+        for m in eachindex(Models)
+            preds = _predict_internal(Models[m], Grid)
+            goal_tup = parsed_goals[m]
+
+            # Use multi-threading for grid pixel evaluation
+            Threads.@threads for i in eachindex(preds)
+                d_val = ARTS_CalcDesirability_DDEF(preds[i], goal_tup)
+                Scores[i] *= (d_val^goal_tup[6])
+            end
         end
-        Count = max(Count, 1)
-        ScoreMat = reshape(Scores .^ (1 / Count), N, N)'
+        ScoreMat = reshape(Scores .^ pow_factor, N, N)'
         all_scores[s] = ScoreMat
 
         global_max = max(global_max, maximum(ScoreMat))
         global_min = min(global_min, minimum(ScoreMat))
     end
 
-    if global_max == 0.0
-        global_max = 1.0
-        global_min = 0.0
+    all_non_zero = Float64[]
+    for s in eachindex(z_vals)
+        for val in all_scores[s]
+            if val > 1e-6
+                push!(all_non_zero, val)
+            end
+        end
     end
-    thresh = global_min + (global_max - global_min) * 0.75
+
+    if isempty(all_non_zero)
+        thresh = 1.0
+        pct = 0.0
+    else
+        # Top quartile of scores (Top 25% of non-zero values)
+        thresh = quantile(all_non_zero, 0.75)
+        total_pts = length(z_vals) * N * N
+        pct = (0.25 * length(all_non_zero) / total_pts) * 100.0
+    end
+    pct_str = @sprintf("%.2f", pct)
 
     for (s, zv) in enumerate(z_vals)
         Masked = copy(all_scores[s])
@@ -523,7 +569,7 @@ function _render_space_impl(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int},
         ))
     end
 
-    plotTitle = is_candidate ? "Optimized Candidate Map: $(Lbls[1]) vs $(Lbls[2])" : "Design Space: $(Lbls[1]) vs $(Lbls[2])"
+    plotTitle = is_candidate ? "Optimal Solution Space ($pct_str% of Total Space)" : "Design Space: $(Lbls[1]) vs $(Lbls[2])"
     layout = _base_layout(plotTitle)
     layout[:height] = 500
     layout[:scene] = attr(
@@ -533,7 +579,7 @@ function _render_space_impl(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int},
         camera=attr(eye=attr(x=1.5, y=1.5, z=0.5)),
         aspectmode="cube"
     )
-    return plot(traces, layout)
+    return plot(traces, layout), pct_str
 end
 
 # --------------------------------------------------------------------------------------
@@ -546,10 +592,13 @@ The primary output generator. Orchestrates the creation of all selected plot typ
 """
 function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, Best_Point=Float64[])
     graphs = Dict{String,Any}[]
+    graphs_lock = ReentrantLock()
     NumVars = size(X, 2)
     NumOut = length(OutNames)
 
     Combos = NumVars >= 2 ? collect(combinations(1:NumVars, 2)) : Vector{Int}[]
+
+    tasks = []
 
     for m in 1:NumOut
         Models[m]["Status"] != "OK" && continue
@@ -557,10 +606,14 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
 
         # 1. Statistical Diagnostics
         if get(Opts, "Pareto", true)
-            push!(graphs, Dict("Type" => "Pareto", "Title" => "Pareto: $name",
-                "Plot" => ARTS_RenderPareto_DDEF(Models[m], name, R2s[m], Q2s[m])))
-            push!(graphs, Dict("Type" => "Fit", "Title" => "Fit: $name",
-                "Plot" => ARTS_RenderFit_DDEF(Y[:, m], _predict_internal(Models[m], X), name)))
+            push!(tasks, Threads.@spawn begin
+                p1 = ARTS_RenderPareto_DDEF(Models[m], name, R2s[m], Q2s[m])
+                p2 = ARTS_RenderFit_DDEF(Y[:, m], _predict_internal(Models[m], X), name)
+                lock(graphs_lock) do
+                    push!(graphs, Dict("Type" => "Pareto", "Title" => "Pareto: $name", "Plot" => p1))
+                    push!(graphs, Dict("Type" => "Fit", "Title" => "Fit: $name", "Plot" => p2))
+                end
+            end)
         end
 
         # 2. Variable Interactions & Surface Mapping
@@ -569,17 +622,25 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
             tag = "$(lbls[1])-$(lbls[2])"
 
             if get(Opts, "Surface", true)
-                push!(graphs, Dict("Type" => "Surface", "Title" => "RSM: $name ($tag)",
-                    "Plot" => ARTS_RenderSurface_DDEF(Models[m], X, c, lbls, name)))
-                push!(graphs, Dict("Type" => "Contour", "Title" => "Contour: $name ($tag)",
-                    "Plot" => ARTS_RenderContour_DDEF(Models[m], X, c, lbls, name)))
+                push!(tasks, Threads.@spawn begin
+                    p1 = ARTS_RenderSurface_DDEF(Models[m], X, c, lbls, name)
+                    p2 = ARTS_RenderContour_DDEF(Models[m], X, c, lbls, name)
+                    lock(graphs_lock) do
+                        push!(graphs, Dict("Type" => "Surface", "Title" => "RSM: $name ($tag)", "Plot" => p1))
+                        push!(graphs, Dict("Type" => "Contour", "Title" => "Contour: $name ($tag)", "Plot" => p2))
+                    end
+                end)
             end
 
             if get(Opts, "Interaction", true)
-                push!(graphs, Dict("Type" => "Slice", "Title" => "Interact: $name ($tag)",
-                    "Plot" => ARTS_RenderSlice_DDEF(Models[m], X, c, lbls, name)))
-                push!(graphs, Dict("Type" => "Trend", "Title" => "Trend: $name ($tag)",
-                    "Plot" => ARTS_RenderTrend_DDEF(Models[m], X, Y[:, m], c, lbls, name)))
+                push!(tasks, Threads.@spawn begin
+                    p1 = ARTS_RenderSlice_DDEF(Models[m], X, c, lbls, name)
+                    p2 = ARTS_RenderTrend_DDEF(Models[m], X, Y[:, m], c, lbls, name)
+                    lock(graphs_lock) do
+                        push!(graphs, Dict("Type" => "Slice", "Title" => "Interact: $name ($tag)", "Plot" => p1))
+                        push!(graphs, Dict("Type" => "Trend", "Title" => "Trend: $name ($tag)", "Plot" => p2))
+                    end
+                end)
             end
         end
     end
@@ -593,13 +654,20 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                 push!(lbls, InNames[iz])
             end
 
-            push!(graphs, Dict("Type" => "DesignSpace",
-                "Title" => "Design Space: $(lbls[1])-$(lbls[2])",
-                "Plot" => ARTS_RenderSpace_DDEF(Models, Goals, X, c, lbls, Best_Point)))
-            push!(graphs, Dict("Type" => "Candidates",
-                "Title" => "Sweet Spot: $(lbls[1])-$(lbls[2])",
-                "Plot" => ARTS_RenderCandidates_DDEF(Models, Goals, X, c, lbls, Best_Point)))
+            push!(tasks, Threads.@spawn begin
+                p1 = ARTS_RenderSpace_DDEF(Models, Goals, X, c, lbls, Best_Point)
+                cand_plot, cand_pct = ARTS_RenderCandidates_DDEF(Models, Goals, X, c, lbls, Best_Point)
+                lock(graphs_lock) do
+                    push!(graphs, Dict("Type" => "DesignSpace", "Title" => "Design Space: $(lbls[1])-$(lbls[2])", "Plot" => p1))
+                    push!(graphs, Dict("Type" => "Candidates", "Title" => "Optimal Solution Space ($(cand_pct)% of Total): $(lbls[1])-$(lbls[2])", "Plot" => cand_plot))
+                end
+            end)
         end
+    end
+
+    # Wait for all plotting threads to compute
+    for t in tasks
+        wait(t)
     end
 
     TypePriority = Dict(

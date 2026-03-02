@@ -100,7 +100,7 @@ FAST_Constants_DDEF() = CONST_DATA
 # SECTION 2: LOGGING SYSTEM
 # --------------------------------------------------------------------------------------
 
-# Pre-computed ANSI color lookup (avoid Dict allocation per log call)
+# Pre-computed ANSI colour lookup (avoid Dict allocation per log call)
 const _LOG_COLORS = (;
     INFO="\e[34m",
     OK="\e[32m",
@@ -114,7 +114,7 @@ const _LOG_RESET = "\e[0m"
 
 """
     FAST_Log_DDEF(Source, Event, Detail, Type)
-Standardized console logging with ANSI color support.
+Standardised console logging with ANSI colour support.
 """
 function FAST_Log_DDEF(Source::String, Event::String, Detail::String="", Type::String="INFO")
     c = get(_LOG_COLORS, Symbol(Type), _LOG_COLOR_DEFAULT)
@@ -214,9 +214,15 @@ function FAST_SanitizeInput_DDEF(rows::AbstractVector)
         r["Name"] = string(get(r, "Name", "Unknown"))
         r["Role"] = string(get(r, "Role", "Variable"))
         r["Unit"] = string(get(r, "Unit", ""))
+        r["HalfLifeUnit"] = string(get(r, "HalfLifeUnit", "Hours"))
+
+        # Boolean Fields
+        r["IsRadioactive"] = get(r, "IsRadioactive", false) == true
+        r["IsFiller"] = get(r, "IsFiller", false) == true
+
         row_label = r["Name"]
         # Numeric fields — guarantee Float64 via safe gate
-        for key in ("L1", "L2", "L3", "MW", "Min", "Max", "Target")
+        for key in ("L1", "L2", "L3", "MW", "Min", "Max", "Target", "HalfLife")
             v = get(r, key, nothing)
             fv = FAST_SafeNum_DDEF(v)
             if isnan(fv) && !isnothing(v) && v !== missing && string(v) != ""
@@ -282,7 +288,7 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
         # 1. Base Meta Columns (Strict Order)
         headers = [C.COL_EXP_ID, C.COL_PHASE, C.COL_STATUS, C.COL_NOTES]
 
-        # 2. Extract and Categorize provided data columns
+        # 2. Extract and Categorise provided data columns
         if !isnothing(DesignData)
             data_cols = names(DesignData)
             for col in data_cols
@@ -457,7 +463,7 @@ end
 
 """
     FAST_GetThreadInfo_DDEF() -> (Count, StatusColor, Msg)
-Detects the current Julia thread count and provides optimization feedback.
+Detects the current Julia thread count and provides optimisation feedback.
 """
 function FAST_GetThreadInfo_DDEF()
     n = Threads.nthreads()
