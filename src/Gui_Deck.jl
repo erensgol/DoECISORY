@@ -285,7 +285,7 @@ function DECK_Layout_DDEF()
                         # --- LEFT COLUMN ---
                         dbc_col([
                                 # Variable Windows
-                                dbc_row(dbc_col(BASE_GlassPanel([html_i(className="fas fa-cubes me-2 text-info"), "INDEPENDENT VARIABLES (FACTORS)", html_span(" — Define analysis boundaries and corresponding levels for a 3-factor system.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
+                                dbc_row(dbc_col(BASE_GlassPanel([html_i(className="fas fa-cubes me-2 text-info"), "INDEPENDENT VARIABLES", html_span(" — Define analysis boundaries and corresponding levels for a 3-factor system.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
                                                     dbc_col(build_id_table(1:3, false), lg=4, className="pe-lg-1"),
                                                     dbc_col(build_limits_table(1:3), lg=4, className="px-lg-1"),
                                                     dbc_col(build_level_table(1:3), lg=4, className="ps-lg-1")
@@ -727,6 +727,8 @@ function DECK_RegisterCallbacks_DDEF(app)
         return (out_styles..., out_styles..., out_styles..., out_names..., out_roles..., out_l1s..., out_l2s..., out_l3s..., out_mins..., out_maxs..., out_mws..., out_units..., dot1_styles..., dot2_styles...)
     end
 
+
+
     # ── 2. Main Store Orchestrator ─────────────────────────────────────────────────────
     callback!(app,
         Output("deck-store-factors", "data"),
@@ -776,7 +778,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         State("deck-prop-is-filler", "value"),
         State("deck-prop-mw", "value"),
         State("deck-store-stoch-settings", "data"),
-        prevent_initial_call=true
+        prevent_initial_call=false
     ) do args...
         try  # Global error guard for main orchestrator callback
             # UNPACKING ARCHITECTURE (Args Array Mapping)
@@ -807,8 +809,25 @@ function DECK_RegisterCallbacks_DDEF(app)
             all_units = collect(args[offset+8MAX_ROWS:offset+9MAX_ROWS-1])
 
             ctx = callback_context()
-            isempty(ctx.triggered) && return (ntuple(_ -> Dash.no_update(), 17)...,)
-            trig = split(ctx.triggered[1].prop_id, ".")[1]
+            trig = ""
+            if isempty(ctx.triggered)
+                # Initialization check: Permit cross-page hydration if session has transition directives
+                if !isnothing(session) && session != ""
+                    try
+                        res = JSON3.read(session)
+                        if get(res, "Status", "") == "OK" && haskey(res, "TargetPhase") && haskey(res, "NewConfig")
+                            trig = "store-session-config"
+                        end
+                    catch
+                    end
+                end
+
+                if trig == ""
+                    return (ntuple(_ -> Dash.no_update(), 17)...,)
+                end
+            else
+                trig = split(ctx.triggered[1].prop_id, ".")[1]
+            end
 
             # ── 6. Prop Save Logic (Integrated) ───────────────────────────
             if trig == "deck-prop-trigger-save"
@@ -1093,9 +1112,10 @@ function DECK_RegisterCallbacks_DDEF(app)
                                 html_span("Adaptive Recipe Loaded", className="text-success fw-bold"),
                             ], className="alert alert-success py-2 mt-2")
 
-                        ph_opts = [Dict("label" => "Phase 1 Initiated", "value" => "Phase1")]
+                        t_phase = get(res, "TargetPhase", "Phase2")
+                        ph_opts = [Dict("label" => "$(t_phase) Initiated", "value" => t_phase)]
                         return Dict("rows" => mapped[1:nc], "count" => nc), mapped[1:nc], ph_opts,
-                        get(g, "Volume", NO), get(g, "Conc", NO), saved_project, "Taguchi_L9", msg, NO, "Sync: Session", "Phase1",
+                        get(g, "Volume", NO), get(g, "Conc", NO), saved_project, "Taguchi_L9", msg, NO, "Sync: Session", t_phase,
                         NO, NO, NO, NO, NO, NO
                     end
                 catch e
@@ -1120,14 +1140,18 @@ function DECK_RegisterCallbacks_DDEF(app)
                                 "Unit" => get(itm, "Unit", "-"))
                         end
                         nc = min(length(mapped), MAX_ROWS)
-                        g = get(cfg, "Global", Dict())
-
+                        method_val = get(g, "Method", "BoxBehnken")
+                        outs = get(cfg, "Outputs", [])
+                        out_vals = vcat(
+                            [i <= length(outs) ? get(outs[i], "Name", "") : "" for i in 1:3],
+                            [i <= length(outs) ? get(outs[i], "Unit", "-") : "-" for i in 1:3]
+                        )
                         stat_msg = html_span("✅ Sync: $(length(fname) > 15 ? fname[1:15]*"..." : fname)", className="text-success small fw-bold")
                         ph_opts = [Dict("label" => "Phase 1 Initiated", "value" => "Phase1")]
 
                         return Dict("rows" => mapped[1:nc], "count" => nc), mapped[1:nc], ph_opts,
-                        get(g, "Volume", NO), get(g, "Conc", NO), NO, NO, NO, NO, stat_msg, "Phase1",
-                        NO, NO, NO, NO, NO, NO
+                        get(g, "Volume", NO), get(g, "Conc", NO), NO, method_val, NO, NO, stat_msg, "Phase1",
+                        out_vals...
                     end
                 catch e
                     @error "Import failed" exception = (e, catch_backtrace())
@@ -1289,6 +1313,8 @@ function DECK_RegisterCallbacks_DDEF(app)
         State("deck-dd-method", "value"),
         State("store-session-config", "data"),
         State("deck-store-factors", "data"),
+        State("store-master-vault", "data"),
+        State("deck-store-outputs", "data"),
         [State("deck-name-$i", "value") for i in 1:MAX_ROWS]...,
         [State("deck-role-$i", "value") for i in 1:MAX_ROWS]...,
         [State("deck-l1-$i", "value") for i in 1:MAX_ROWS]...,
@@ -1304,16 +1330,23 @@ function DECK_RegisterCallbacks_DDEF(app)
             n, project = args[1:2]
             out_names = collect(args[3:5])
             out_units = collect(args[6:8])
-            vol, conc, method, session_data, store_data = args[9:13]
+            vol, conc, method, session_data, store_data, master_vault, store_out = args[9:15]
             (n === nothing || n == 0) && return Dash.no_update(), "", Dash.no_update()
 
-            offset = 14
+            offset = 16
             all_names = collect(args[offset:offset+MAX_ROWS-1])
             all_roles = collect(args[offset+MAX_ROWS:offset+2MAX_ROWS-1])
 
             out_d = Dict{String,Any}[]
+            out_rows_mem = isnothing(store_out) ? [] : get(store_out, "rows", get(store_out, :rows, []))
             for i in 1:3
-                !isnothing(out_names[i]) && strip(string(out_names[i])) != "" && push!(out_d, Dict("Name" => string(out_names[i]), "Unit" => isnothing(out_units[i]) ? "" : string(out_units[i])))
+                if !isnothing(out_names[i]) && strip(string(out_names[i])) != ""
+                    is_rad = false
+                    if i <= length(out_rows_mem)
+                        is_rad = get(out_rows_mem[i], "IsCorr", get(out_rows_mem[i], :IsCorr, false))
+                    end
+                    push!(out_d, Dict("Name" => string(out_names[i]), "Unit" => isnothing(out_units[i]) ? "" : string(out_units[i]), "IsRadioactive" => is_rad))
+                end
             end
             all_l1s = collect(args[offset+2MAX_ROWS:offset+3MAX_ROWS-1])
             all_l2s = collect(args[offset+3MAX_ROWS:offset+4MAX_ROWS-1])
@@ -1363,7 +1396,11 @@ function DECK_RegisterCallbacks_DDEF(app)
                 ))
             end
 
-            path = Sys_Fast.FAST_GetTransientPath_DDEF()
+            if !isnothing(session_data) && session_data != "" && !isnothing(master_vault) && master_vault != ""
+                path = Sys_Fast.FAST_GetTransientPath_DDEF(master_vault)
+            else
+                path = Sys_Fast.FAST_GetTransientPath_DDEF()
+            end
             ok, msg = DECK_GenerateProtocol_DDEF(path, in_d, out_d, vol, conc, method)
             !ok && return Dash.no_update(), html_div(msg, className="text-danger"), Dash.no_update()
 
@@ -1468,6 +1505,8 @@ function DECK_RegisterCallbacks_DDEF(app)
         Output("deck-out-prop-is-corr", "value"),
         Output("deck-store-outputs", "data"),
         Output("deck-out-prop-confirm", "value"),
+        Input("deck-upload", "contents"),
+        Input("store-session-config", "data"),
         Input("btn-out-prop-cancel", "n_clicks"),
         Input("btn-out-prop-save", "n_clicks"),
         [Input("btn-out-prop-$i", "n_clicks") for i in 1:3]...,
@@ -1475,17 +1514,74 @@ function DECK_RegisterCallbacks_DDEF(app)
         State("deck-store-outputs", "data"),
         State("deck-out-prop-target-id", "data"),
         State("deck-out-prop-confirm", "value"),
-        prevent_initial_call=true
-    ) do n_cancel, n_save, args...
+        prevent_initial_call=false
+    ) do up_cont, session, n_cancel, n_save, args...
 
         ctx = callback_context()
-        isempty(ctx.triggered) && return (ntuple(_ -> Dash.no_update(), 6)...,)
-        trig = split(ctx.triggered[1].prop_id, ".")[1]
+        trig = ""
+        if isempty(ctx.triggered)
+            if !isnothing(session) && session != ""
+                try
+                    res = JSON3.read(session)
+                    if get(res, "Status", "") == "OK" && haskey(res, "TargetPhase") && haskey(res, "NewConfig")
+                        trig = "store-session-config"
+                    end
+                catch
+                end
+            end
+            if trig == ""
+                return (ntuple(_ -> Dash.no_update(), 6)...,)
+            end
+        else
+            trig = split(ctx.triggered[1].prop_id, ".")[1]
+        end
 
         s_corr = args[4]
         store_out = args[5]
         target_data = args[6]
         s_confirm = args[7]
+
+        if trig == "deck-upload" && !isnothing(up_cont) && up_cont != ""
+            try
+                tmp = Sys_Fast.FAST_GetTransientPath_DDEF(up_cont)
+                cfg = Sys_Fast.FAST_ReadConfig_DDEF(tmp)
+                rm(tmp; force=true)
+                if !isempty(cfg) && haskey(cfg, "Outputs")
+                    o_rows = []
+                    for (i, o) in enumerate(cfg["Outputs"])
+                        i > 3 && break
+                        push!(o_rows, Dict("IsCorr" => get(o, "IsRadioactive", false)))
+                    end
+                    while length(o_rows) < 3
+                        push!(o_rows, Dict("IsCorr" => false))
+                    end
+                    new_store_out = Dict{String,Any}("rows" => o_rows)
+                    return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), new_store_out, ""
+                end
+            catch
+            end
+            return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), ""
+        end
+
+        if trig == "store-session-config" && !isnothing(session) && session != ""
+            try
+                res = JSON3.read(session)
+                if get(res, "Status", "") == "OK" && haskey(res, "Outputs")
+                    o_rows = []
+                    for (i, o) in enumerate(res["Outputs"])
+                        i > 3 && break
+                        push!(o_rows, Dict("IsCorr" => get(o, "IsRadioactive", false)))
+                    end
+                    while length(o_rows) < 3
+                        push!(o_rows, Dict("IsCorr" => false))
+                    end
+                    new_store_out = Dict{String,Any}("rows" => o_rows)
+                    return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), new_store_out, ""
+                end
+            catch
+            end
+            return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), ""
+        end
 
         if trig == "btn-out-prop-cancel"
             return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), ""
@@ -1566,6 +1662,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         Input("deck-btn-template", "n_clicks"),
         Input("deck-btn-clear", "n_clicks"),
         Input("deck-upload-memo", "contents"),
+        Input("deck-upload", "contents"),
         State("deck-modal-stoch-settings", "is_open"),
         State("deck-store-stoch-settings", "data"),
         State("deck-stoch-filler-name", "value"),
@@ -1573,7 +1670,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         State("deck-stoch-vol", "value"),
         State("deck-stoch-conc", "value"),
         prevent_initial_call=true
-    ) do n_open, n_cancel, n_save, n_template, n_clear, up_memo, is_open, store_data, f_name, f_mw, s_vol, s_conc
+    ) do n_open, n_cancel, n_save, n_template, n_clear, up_memo, up_cont, is_open, store_data, f_name, f_mw, s_vol, s_conc
         NO = Dash.no_update()
         ctx = callback_context()
         isempty(ctx.triggered) && return (ntuple(_ -> NO, 7)...,)
@@ -1614,6 +1711,25 @@ function DECK_RegisterCallbacks_DDEF(app)
                 json_str = String(base64decode(base64_data))
                 memo = JSON3.read(json_str)
                 g = get(memo, "Global", Dict())
+                loaded_stoch = Dict(
+                    "FillerName" => string(get(g, "FillerName", "")),
+                    "FillerMW" => Float64(get(g, "FillerMW", 0.0)),
+                    "Volume" => Float64(get(g, "Volume", 0.0)),
+                    "Conc" => Float64(get(g, "Conc", 0.0))
+                )
+                return false, loaded_stoch, NO, NO, NO, NO, randn()
+            catch e
+                return false, NO, NO, NO, NO, NO, NO
+            end
+        end
+
+        # Load from Uploaded Data File
+        if trig == "deck-upload" && !isnothing(up_cont) && up_cont != ""
+            try
+                tmp = Sys_Fast.FAST_GetTransientPath_DDEF(up_cont)
+                cfg = Sys_Fast.FAST_ReadConfig_DDEF(tmp)
+                rm(tmp; force=true)
+                g = get(cfg, "Global", Dict())
                 loaded_stoch = Dict(
                     "FillerName" => string(get(g, "FillerName", "")),
                     "FillerMW" => Float64(get(g, "FillerMW", 0.0)),

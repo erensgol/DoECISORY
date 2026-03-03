@@ -242,7 +242,7 @@ function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R
     )
     layout[:shapes] = [limit_shape]
 
-    return plot(traces, layout)
+    return Plot(traces, layout)
 end
 
 """
@@ -265,7 +265,7 @@ function ARTS_RenderFit_DDEF(Y_Real::Vector{Float64}, Y_Pred::Vector{Float64}, O
     layout[:xaxis][:title] = "Experimental (Recorded)"
     layout[:yaxis][:title] = "Predicted (Model)"
     layout[:showlegend] = false
-    return plot([t_data, t_ideal], layout)
+    return Plot([t_data, t_ideal], layout)
 end
 
 # --------------------------------------------------------------------------------------
@@ -344,7 +344,7 @@ function ARTS_RenderSurface_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
     layout = _base_layout("Response Surface: $OutName")
     layout[:scene] = attr(xaxis=attr(title=Lbls[1]), yaxis=attr(title=Lbls[2]), zaxis=attr(title=OutName))
     layout[:margin] = attr(l=0, r=0, b=0, t=40)
-    return plot(trace, layout)
+    return Plot(trace, layout)
 end
 
 """
@@ -365,7 +365,7 @@ function ARTS_RenderContour_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
     layout = _base_layout("Contour Projection: $OutName")
     layout[:xaxis][:title] = Lbls[1]
     layout[:yaxis][:title] = Lbls[2]
-    return plot(trace, layout)
+    return Plot(trace, layout)
 end
 
 # --------------------------------------------------------------------------------------
@@ -406,7 +406,7 @@ function ARTS_RenderSlice_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int}
     layout = _base_layout("Interaction Slice: $OutName")
     layout[:xaxis][:title] = Lbls[1]
     layout[:yaxis][:title] = OutName
-    return plot(traces, layout)
+    return Plot(traces, layout)
 end
 
 """
@@ -434,7 +434,7 @@ function ARTS_RenderTrend_DDEF(Model::Dict, X::Matrix{Float64}, Y_Real::Vector{F
     layout = _base_layout("Main Effect: $(Lbls[1]) -> $OutName")
     layout[:xaxis][:title] = Lbls[1]
     layout[:yaxis][:title] = OutName
-    return plot([t_line, t_data], layout)
+    return Plot([t_line, t_data], layout)
 end
 
 """
@@ -579,7 +579,7 @@ function _render_space_impl(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int},
         camera=attr(eye=attr(x=1.5, y=1.5, z=0.5)),
         aspectmode="cube"
     )
-    return plot(traces, layout), pct_str
+    return Plot(traces, layout), pct_str
 end
 
 # --------------------------------------------------------------------------------------
@@ -659,7 +659,7 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                 cand_plot, cand_pct = ARTS_RenderCandidates_DDEF(Models, Goals, X, c, lbls, Best_Point)
                 lock(graphs_lock) do
                     push!(graphs, Dict("Type" => "DesignSpace", "Title" => "Design Space: $(lbls[1])-$(lbls[2])", "Plot" => p1))
-                    push!(graphs, Dict("Type" => "Candidates", "Title" => "Optimal Solution Space ($(cand_pct)% of Total): $(lbls[1])-$(lbls[2])", "Plot" => cand_plot))
+                    push!(graphs, Dict("Type" => "Candidates", "Title" => "Optimal Solution Space: $(cand_pct)% of Total, $(lbls[1])-$(lbls[2])", "Plot" => cand_plot))
                 end
             end)
         end

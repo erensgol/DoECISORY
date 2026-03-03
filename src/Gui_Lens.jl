@@ -162,7 +162,7 @@ function LENS_Layout_DDEF()
                                                         html_tbody([LENS_BuildGoalRow_DDEF(i) for i in 1:3])
                                                     ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0")
                                         ], xs=12)),
-                                ]; panel_class="mb-3", content_class="glass-content p-2"), BASE_GlassPanel(["DATA VISUALISATION PANEL", html_span(" — Interactive evaluation of mathematical models and surface geometries.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], [
+                                ]; panel_class="mb-3", content_class="glass-content p-2"), BASE_GlassPanel(["VISUALISATIONS", html_span(" — Model and design limits evaluation.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], [
                                     dbc_row(dbc_col(html_div(id="lens-graph-info", className="mb-2 p-1", style=Dict("backgroundColor" => "#FFFFFF", "border" => "1px solid #DCDCDC", "borderRadius" => "4px")), xs=12)),
                                     dbc_row(dbc_col(html_div(id="lens-results-text", className="mb-3 small px-2 table-responsive"), xs=12)),
                                     dcc_loading(html_div([
@@ -175,7 +175,7 @@ function LENS_Layout_DDEF()
                                                 figure=BASE_EMPTY_FIGURE,
                                             ),
                                         ]); type="default", color="#21918C"),]; right_node=html_div([
-                                        dcc_input(id="lens-graph-input", type="number", min=1, step=1, value=1, className="form-control form-control-sm me-1 text-center bg-transparent border-secondary", style=Dict("width" => "110px", "height" => "28px", "fontSize" => "12px", "color" => "#000000")),
+                                        dcc_input(id="lens-graph-input", type="number", min=1, step=1, value=1, className="form-control form-control-sm me-1 text-center bg-transparent border-secondary", style=Dict("width" => "60px", "height" => "28px", "fontSize" => "12px", "color" => "#000000")),
                                         html_span(id="lens-graph-counter", className="text-secondary small me-3"),
                                         dbc_button(html_i(className="fas fa-chevron-left"),
                                             id="lens-btn-prev", color="secondary", outline=true, size="sm", className="me-1 px-2 py-1"),
@@ -207,22 +207,24 @@ function LENS_Layout_DDEF()
                 ]); close_button=false),
 
             # Leader Selection Modal
-            BASE_Modal("lens-modal-leader", "Select Leader Experiment",
+            BASE_Modal("lens-modal-leader", [html_i(className="fas fa-magic me-2 text-primary"), "Select Leader Experiment"],
                 dbc_row(dbc_col([
-                        html_p("Identify the optimal run to serve as the reference centre for the next phase:",
-                            className="text-muted small"),
+                        dbc_alert([
+                                html_i(className="fas fa-info-circle me-2"),
+                                "The system has algorithmically identified potential leaders based on your optimisation objectives. ",
+                                "Please select the most promising run to serve as the reference centre for the next phase."
+                            ], color="info", className="small py-2 mb-3"),
                         html_div(BASE_DataTable("lens-table-candidates", [
                                     Dict("name" => "ID", "id" => "ID"),
-                                    Dict("name" => "Score", "id" => "Score", "type" => "numeric",
-                                        "format" => Dict("specifier" => ".4f")),
-                                    Dict("name" => "Data Context", "id" => "Data_Str"),
-                                ], []; row_selectable="single", selected_rows=[]), className="table-responsive"),
+                                    Dict("name" => "Score", "id" => "Score")
+                                ], []; row_selectable="single", selected_rows=[]), id="lens-container-candidates", className="table-responsive"),
                     ], xs=12)),
                 dbc_row([
-                        dbc_col(dbc_button("Back", id="lens-lead-btn-back", color="secondary", outline=true, className="w-100 mb-2 mb-md-0"), xs=12, md=3),
-                        dbc_col(dbc_button("Cancel", id="lens-lead-btn-cancel", color="secondary", outline=true, className="w-100 mb-2 mb-md-0"), xs=12, md=3, className="ms-md-auto"),
-                        dbc_col(dbc_button("SAVE & GENERATE NEXT PHASE", id="lens-lead-btn-confirm", color="success", disabled=true, className="w-100"), xs=12, md=5),
+                        dbc_col(dbc_button([html_i(className="fas fa-chevron-left me-1"), "Back"], id="lens-lead-btn-back", color="secondary", outline=true, size="sm", className="w-100 mb-2 mb-md-0"), xs=12, md=2),
+                        dbc_col(dbc_button([html_i(className="fas fa-times me-1"), "Cancel"], id="lens-lead-btn-cancel", color="secondary", outline=true, size="sm", className="w-100 mb-2 mb-md-0"), xs=12, md=2, className="ms-md-auto"),
+                        dbc_col(dbc_button([html_i(className="fas fa-save me-1"), "SAVE & GENERATE NEXT PHASE"], id="lens-lead-btn-confirm", color="primary", disabled=true, size="sm", className="w-100"), xs=12, md=5),
                     ], className="w-100 g-2"); size="xl", close_button=false),
+
         ], fluid=true, className="px-4 py-3")
 end
 
@@ -268,6 +270,9 @@ function LENS_RegisterCallbacks_DDEF(app)
         Output("lens-dd-model", "options"),
         Output("lens-dd-model", "value"),
         Output("lens-panel-radio", "className"),
+        Output("lens-check-radio-correct", "value"),
+        Output("lens-date-cal", "value"),
+        Output("lens-date-exp", "value"),
         Input("store-master-vault", "data"),
         prevent_initial_call=true
     ) do active_cont
@@ -275,7 +280,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         path = ""
         try  # Error guard for sync callback
             (isnothing(active_cont) || active_cont == "") &&
-                return [], "No Data Source", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.0", 3)..., Dash.no_update(), Dash.no_update(), "d-none"
+                return [], "No Data Source", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.0", 3)..., Dash.no_update(), Dash.no_update(), "d-none", [true], "", ""
 
             Sys_Fast.FAST_Log_DDEF("LENS", "Sync", "Synchronizing from Master Vault...", "INFO")
             path = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
@@ -329,14 +334,35 @@ function LENS_RegisterCallbacks_DDEF(app)
                 model_val = "Auto"
             end
 
+            # --- GOAL OVERRIDES ---
+            saved_goals = get(config, "LensGoals", [])
+            for (i, name) in enumerate(goals_name)
+                g_idx = findfirst(g -> get(g, "Name", "") == name, saved_goals)
+                if !isnothing(g_idx)
+                    saved_g = saved_goals[g_idx]
+                    goals_type[i] = string(get(saved_g, "Type", "Nominal"))
+                    goals_weight[i] = string(get(saved_g, "Weight", 1.0))
+                    goals_target[i] = Float64(get(saved_g, "Target", goals_target[i]))
+                    goals_min[i] = Float64(get(saved_g, "Min", goals_min[i]))
+                    goals_max[i] = Float64(get(saved_g, "Max", goals_max[i]))
+                end
+            end
+
             has_radio = false
-            if haskey(config, "Global")
-                glb = config["Global"]
-                factors = get(glb, "Inputs", [])
-                has_radio = any(get(f, "IsRadioactive", false) == true for f in factors)
+            if haskey(config, "Ingredients")
+                has_radio = has_radio || any(get(f, "IsRadioactive", false) == true for f in config["Ingredients"])
+            end
+            if haskey(config, "Outputs")
+                has_radio = has_radio || any(get(o, "IsRadioactive", false) == true for o in config["Outputs"])
             end
 
             panel_class = has_radio ? "d-block mt-3" : "d-none"
+
+            # --- RADIO OPTS OVERRIDES ---
+            saved_radio = get(config, "RadioOpts", Dict())
+            rad_apply = get(saved_radio, "Apply", true) ? [true] : []
+            rad_t_cal = string(get(saved_radio, "t_cal", ""))
+            rad_t_exp = string(get(saved_radio, "t_exp", ""))
 
             return (
                 phases,
@@ -350,14 +376,17 @@ function LENS_RegisterCallbacks_DDEF(app)
                 goals_weight...,
                 model_opts,
                 model_val,
-                panel_class
+                panel_class,
+                rad_apply,
+                rad_t_cal,
+                rad_t_exp
             )
 
         catch e  # Surface sync errors to status area
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "SYNC_FAIL", bt, "FAIL")
             return [], html_span("❌ Sync Error: $(first(string(e), 120))", className="text-danger small"),
-            nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.0", 3)..., Dash.no_update(), Dash.no_update(), "d-none"
+            nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.0", 3)..., Dash.no_update(), Dash.no_update(), "d-none", [true], "", ""
         finally
             # Guaranteed temp file cleanup
             !isempty(path) && try
@@ -456,7 +485,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 
             # Serialise PlotlyJS objects to JSON for Dash
             graphs = [
-                Dict("figure" => JSON.parse(JSON.json(g["Plot"].plot)), "title" => g["Title"])
+                Dict("figure" => JSON.parse(JSON.json(g["Plot"])), "title" => g["Title"])
                 for g in res["Graphs"]
             ]
 
@@ -482,6 +511,9 @@ function LENS_RegisterCallbacks_DDEF(app)
                     ])),
                     html_tbody(summary_rows, style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC")),
                 ], className="table table-sm table-borderless caption-top mb-0 mx-auto", style=Dict("width" => "90%", "marginTop" => "10px"))
+
+            # --- Persist Analysis Configuration (Goals & RadioOpts) ---
+            Sys_Fast.FAST_UpdateConfig_DDEF(path, Dict("LensGoals" => goals, "RadioOpts" => opts["RadioOpts"]))
 
             updated_base64 = Sys_Fast.FAST_ReadToStore_DDEF(path)
             return graphs, summary, "", false, updated_base64
@@ -611,20 +643,59 @@ function LENS_RegisterCallbacks_DDEF(app)
         return true, [Dict("label" => src_phase, "value" => src_phase)], src_phase, "Phase$next_val"
     end
 
-    # 6. Data: Load Candidates
+    # 6. UI: Candidate Data Loader
     callback!(app,
         Output("lens-table-candidates", "data"),
-        Input("lens-wiz-btn-next", "n_clicks"),
+        Output("lens-table-candidates", "columns"),
+        Input("lens-modal-wizard", "is_open"),
         State("lens-wiz-dd-source", "value"),
         State("store-master-vault", "data"),
         prevent_initial_call=true
-    ) do n, src, base64_file
-        isnothing(base64_file) && return []
+    ) do is_open, src, base64_file
+        isnothing(base64_file) && return [], []
+        
         path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
         data = Sys_Flow.FLOW_GetCandidates_DDEF(path, src)
         rm(path; force=true)
-        return data
+        
+        if isempty(data)
+            return [], []
+        end
+        
+        # ── DYNAMIC COLUMN GENERATION ──
+        # Identify all keys in the first candidate
+        all_keys = keys(data[1])
+        
+        # Filter and prioritize columns
+        # Priority: ID, Score, then VARIA_, then PRED_
+        cols_to_show = String[]
+        h_id = findfirst(k -> uppercase(string(k)) == "ID", all_keys)
+        !isnothing(h_id) && push!(cols_to_show, string(h_id))
+        
+        h_score = findfirst(k -> uppercase(string(k)) == "SCORE", all_keys)
+        !isnothing(h_score) && push!(cols_to_show, string(h_score))
+        
+        # Add Input Variables
+        v_cols = sort(filter(k -> startswith(uppercase(string(k)), "VARIA_"), collect(all_keys)))
+        append!(cols_to_show, v_cols)
+        
+        # Add Predictions
+        p_cols = sort(filter(k -> startswith(uppercase(string(k)), "PRED_"), collect(all_keys)))
+        append!(cols_to_show, p_cols)
+        
+        columns = [Dict("name" => replace(c, r"^(VARIA_|PRED_)" => ""), "id" => c) for c in cols_to_show]
+        
+        # Add formatting for Score
+        for col in columns
+            if col["id"] == "Score" || col["id"] == "SCORE"
+                col["type"] = "numeric"
+                col["format"] = Dict("specifier" => ".4f")
+            end
+        end
+        
+        return data, columns
     end
+
 
     # 7. UI: Modal Sequential Switching
     callback!(app,
@@ -677,7 +748,11 @@ function LENS_RegisterCallbacks_DDEF(app)
             # Phase Transition Logic
             next_phase_config = Dash.no_update()
             if trig == "lens-lead-btn-confirm"
-                id = (!isnothing(row) && !isempty(row)) ? data[row[1]+1]["ID"] : ""
+                # Locate selected ID (support varied casing if needed, but ID is standard)
+                sel_row = data[row[1]+1]
+                id_key = findfirst(k -> uppercase(string(k)) == "ID", keys(sel_row))
+                id = !isnothing(id_key) ? string(sel_row[id_key]) : ""
+
 
                 res_next = Sys_Flow.FLOW_NextPhase_DDEF(path, isnothing(src) ? "Phase1" : src, id)
                 if res_next["Status"] == "OK"

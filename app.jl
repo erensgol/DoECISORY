@@ -132,7 +132,7 @@ app.index_string = """
 navbar = html_div([
         html_div([
                 dcc_link(html_div([
-                            html_i(className="fas fa-layer-group text-dark me-2"),
+                            html_img(src="/assets/logo.png", style=Dict("height" => "28px", "marginRight" => "10px")),
                             html_span("DaishoDoE", className="text-dark fw-bold tracking-tight"),
                         ], className="nav-brand"), href="/", style=Dict("textDecoration" => "none")),
             ], style=Dict("flex" => "1")),

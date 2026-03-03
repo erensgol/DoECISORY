@@ -17,6 +17,7 @@ using Statistics
 using Distributions
 using Printf
 using Dates
+using XLSX
 using Main.Sys_Fast
 using Main.Lib_Arts
 
@@ -376,10 +377,14 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     isempty(df_raw) && (df_raw = Sys_Fast.FAST_ReadExcel_DDEF(DataFile, "VERI_KAYITLARI"))
     isempty(df_raw) && return Dict("Status" => "FAIL", "Message" => "Source data is unreadable or empty.")
 
+    # Apply standardization to the raw data
+    Sys_Fast.FAST_NormalizeCols_DDEF(df_raw)
+
     col_phase = Symbol(C.COL_PHASE)
     df_train = hasproperty(df_raw, col_phase) ?
                filter(r -> string(r[col_phase]) == Phase, df_raw) :
                copy(df_raw)
+
     nrow(df_train) < 3 && return Dict("Status" => "FAIL", "Message" => "Insufficient data points (N < 3).")
 
     in_cols = filter(n -> startswith(n, C.PRE_INPUT), names(df_train))
@@ -422,35 +427,32 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
 
                 if delta_t_hours > 0
                     config = Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
-                    if haskey(config, "Global")
-                        glb = config["Global"]
 
-                        # Correct Inputs (X) if radioactive
-                        in_meta = get(glb, "Inputs", [])
-                        for (ci, name) in enumerate(InNames)
-                            idx = findfirst(x -> get(x, "Name", "") == name, in_meta)
-                            if !isnothing(idx) && get(in_meta[idx], "IsRadioactive", false)
-                                hl = Float64(get(in_meta[idx], "HalfLife", 0.0))
-                                hlu = string(get(in_meta[idx], "HalfLifeUnit", "Hours"))
-                                for r in 1:N
-                                    X_Clean[r, ci] = VISE_ApplyRadioDecay_DDEF(X_Clean[r, ci], hl, hlu, delta_t_hours)
-                                end
-                                Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_CORRECT", "Input \$(name) corrected (Δt = \$(round(delta_t_hours; digits=2))h)", "WARN")
+                    # Correct Inputs (X) if radioactive
+                    in_meta = get(config, "Ingredients", [])
+                    for (ci, name) in enumerate(InNames)
+                        idx = findfirst(x -> get(x, "Name", "") == name, in_meta)
+                        if !isnothing(idx) && get(in_meta[idx], "IsRadioactive", false)
+                            hl = Float64(get(in_meta[idx], "HalfLife", 0.0))
+                            hlu = string(get(in_meta[idx], "HalfLifeUnit", "Hours"))
+                            for r in 1:N
+                                X_Clean[r, ci] = VISE_ApplyRadioDecay_DDEF(X_Clean[r, ci], hl, hlu, delta_t_hours)
                             end
+                            Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_CORRECT", "Input \$(name) corrected (Δt = \$(round(delta_t_hours; digits=2))h)", "WARN")
                         end
+                    end
 
-                        # Correct Outputs (Y) if radioactive
-                        out_meta = get(glb, "Outputs", [])
-                        for (ci, name) in enumerate(OutNames)
-                            idx = findfirst(x -> get(x, "Name", "") == name, out_meta)
-                            if !isnothing(idx) && get(out_meta[idx], "IsRadioactive", false)
-                                hl = Float64(get(out_meta[idx], "HalfLife", 0.0))
-                                hlu = string(get(out_meta[idx], "HalfLifeUnit", "Hours"))
-                                for r in 1:N
-                                    Y_Clean[r, ci] = VISE_ApplyRadioDecay_DDEF(Y_Clean[r, ci], hl, hlu, delta_t_hours)
-                                end
-                                Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_CORRECT", "Output \$(name) corrected (Δt = \$(round(delta_t_hours; digits=2))h)", "WARN")
+                    # Correct Outputs (Y) if radioactive
+                    out_meta = get(config, "Outputs", [])
+                    for (ci, name) in enumerate(OutNames)
+                        idx = findfirst(x -> get(x, "Name", "") == name, out_meta)
+                        if !isnothing(idx) && get(out_meta[idx], "IsRadioactive", false)
+                            hl = Float64(get(out_meta[idx], "HalfLife", 0.0))
+                            hlu = string(get(out_meta[idx], "HalfLifeUnit", "Hours"))
+                            for r in 1:N
+                                Y_Clean[r, ci] = VISE_ApplyRadioDecay_DDEF(Y_Clean[r, ci], hl, hlu, delta_t_hours)
                             end
+                            Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_CORRECT", "Output \$(name) corrected (Δt = \$(round(delta_t_hours; digits=2))h)", "WARN")
                         end
                     end
                 end
@@ -518,18 +520,15 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
             push!(used_indices, p_idx)
         end
 
-        # 2. Input-Based Diversity (best score in the lowest 10% quantile)
+        # 2. Input-Based Diversity
         for i in 1:min(3, size(XT, 2))
             tag_pre = i <= length(InNames) ? uppercase(first(InNames[i] * "   ", 3)) : "IN$i"
-
             s_i = sortperm(XT[:, i])
             slice_len = max(1, round(Int, length(s_i) * 0.1))
             slice_indices = s_i[1:slice_len]
-
             slice_scores = SC[slice_indices]
             best_in_slice_local = sortperm(slice_scores; rev=true)
             sorted_slice_global = slice_indices[best_in_slice_local]
-
             selected_idx = -1
             for m in eachindex(sorted_slice_global)
                 idx_val = VISE_ClampIndex_DDEF(sorted_slice_global[m], num_candidates)
@@ -538,7 +537,6 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
                     break
                 end
             end
-
             if selected_idx == -1
                 selected_idx = VISE_ClampIndex_DDEF(sorted_slice_global[1], num_candidates)
                 tag_str = "$(tag_pre)-01(D)"
@@ -546,24 +544,18 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
                 tag_str = "$(tag_pre)-01"
                 push!(used_indices, selected_idx)
             end
-
             cand_count += 1
             push!(cand_indices, selected_idx)
             push!(cand_tags, tag_str)
         end
 
-        # 3. Output-Based Diversity (respecting sensor limits, highest values)
-        valid_mask = SC .> 1e-4
-
+        # 3. Output-Based Diversity
+        valid_mask_sc = SC .> 1e-4
         for i in 1:min(3, size(YP, 2))
             tag_pre = i <= length(OutNames) ? uppercase(first(OutNames[i] * "   ", 3)) : "OUT$i"
-
             sorted_desc = sortperm(YP[:, i]; rev=true)
-            valid_sorted = filter(idx -> valid_mask[idx], sorted_desc)
-            if isempty(valid_sorted)
-                valid_sorted = sorted_desc
-            end
-
+            valid_sorted = filter(idx -> valid_mask_sc[idx], sorted_desc)
+            isempty(valid_sorted) && (valid_sorted = sorted_desc)
             selected_idx = -1
             for m in eachindex(valid_sorted)
                 idx_val = VISE_ClampIndex_DDEF(valid_sorted[m], num_candidates)
@@ -572,7 +564,6 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
                     break
                 end
             end
-
             if selected_idx == -1
                 selected_idx = VISE_ClampIndex_DDEF(valid_sorted[1], num_candidates)
                 tag_str = "$(tag_pre)-01(D)"
@@ -580,27 +571,142 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
                 tag_str = "$(tag_pre)-01"
                 push!(used_indices, selected_idx)
             end
-
             cand_count += 1
             push!(cand_indices, selected_idx)
             push!(cand_tags, tag_str)
         end
 
-        Leaders_DF = DataFrame(
-            Symbol(C.COL_ID) => cand_tags,
-            :Score => round.(SC[cand_indices]; digits=4),
-        )
+        # --- CONSTRUCT CONSISTENT LEADERS_DF ---
+        # Requirement: MATCH THE COLUMN STRUCTURE OF THE ORIGINAL DATA SHEET
+        Leaders_DF = DataFrame()
 
-        for (k, n) in enumerate(InNames)
-            Leaders_DF[!, Symbol(C.PRE_INPUT * n)] = round.(XT[cand_indices, k]; digits=3)
-        end
-        for (k, n) in enumerate(OutNames)
-            Leaders_DF[!, Symbol(C.PRE_PRED * n)] = round.(YP[cand_indices, k]; digits=3)
+        # Use primary headers from df_raw to maintain order
+        main_headers = names(df_raw)
+
+        for h in main_headers
+            h_sym = Symbol(h)
+            if h == C.COL_ID || h == C.COL_EXP_ID
+                Leaders_DF[!, h_sym] = cand_tags
+            elseif h == C.COL_PHASE
+                Leaders_DF[!, h_sym] = fill(Phase, length(cand_indices))
+            elseif h == C.COL_STATUS
+                Leaders_DF[!, h_sym] = fill("Candidate", length(cand_indices))
+            elseif h == C.COL_SCORE
+                Leaders_DF[!, h_sym] = round.(SC[cand_indices]; digits=4)
+            elseif startswith(h, C.PRE_INPUT)
+                # Find index of this input in InNames
+                clean_n = replace(h, C.PRE_INPUT => "")
+                ki = findfirst(==(clean_n), InNames)
+                if !isnothing(ki)
+                    Leaders_DF[!, h_sym] = round.(XT[cand_indices, ki]; digits=3)
+                else
+                    Leaders_DF[!, h_sym] = fill(missing, length(cand_indices))
+                end
+            elseif startswith(h, C.PRE_PRED)
+                clean_n = replace(h, C.PRE_PRED => "")
+                ki = findfirst(==(clean_n), OutNames)
+                if !isnothing(ki)
+                    Leaders_DF[!, h_sym] = round.(YP[cand_indices, ki]; digits=3)
+                else
+                    Leaders_DF[!, h_sym] = fill(missing, length(cand_indices))
+                end
+            elseif startswith(h, C.PRE_RESULT)
+                # Candidates don't have results yet
+                Leaders_DF[!, h_sym] = fill(missing, length(cand_indices))
+            else
+                # Other columns (ID, Notes, etc.) fill with defaults or missing
+                Leaders_DF[!, h_sym] = fill(missing, length(cand_indices))
+            end
         end
 
         # Write candidate sets to the transient file for FLOW leader extraction
         Sys_Fast.FAST_WriteLeaders_DDEF(DataFile, Phase, Leaders_DF)
+
         Log("VISE", "OPTIMISATION", "Candidate pool (N=14 Diversity-Focussed) generated and saved.", "OK")
+    end
+
+    # Calculate predictions for actual experimental points
+    Y_Pred = Matrix{Float64}(undef, N, length(out_cols))
+    for m in eachindex(out_cols)
+        Y_Pred[:, m] = VISE_Predict_DDEF(models[m], X_Clean)
+    end
+
+    # Calculate scores for actual experimental points
+    parsed_goals = [Lib_Arts.ARTS_ExtractGoal_DDEF(models[m]["Goal"]) for m in eachindex(out_cols)]
+    active_idx = findall(m -> get(models[m], "Status", "") == "OK", 1:length(out_cols))
+    
+    Actual_Scores = zeros(Float64, N)
+    if !isempty(active_idx)
+        weight_sum = sum(Float64(get(models[m]["Goal"], "Weight", 1.0)) for m in active_idx)
+        pow = weight_sum > 0.0 ? (1.0 / weight_sum) : 1.0
+        
+        for i in 1:N
+            s = 1.0
+            for m_idx in active_idx
+                val = Y_Pred[i, m_idx]
+                gtup = parsed_goals[m_idx]
+                d = Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
+                s *= d^gtup[6]
+            end
+            Actual_Scores[i] = s^pow
+        end
+    end
+
+    # Standardize phase name for robust comparison
+    target_phase_stripped = strip(uppercase(Phase))
+
+    # Locate row indices that belong to the current phase by searching for normalized match
+    row_idx_in_raw = Int[]
+    if hasproperty(df_raw, col_phase)
+        for (idx, row) in enumerate(eachrow(df_raw))
+            val = get(row, col_phase, "")
+            if !ismissing(val) && strip(uppercase(string(val))) == target_phase_stripped
+                push!(row_idx_in_raw, idx)
+            end
+        end
+    else
+        # Fallback if PHASE column is missing (hazardous but maintains existing behavior)
+        row_idx_in_raw = collect(1:nrow(df_raw))
+    end
+
+
+    pred_idx = 1
+    for (i, raw_idx) in enumerate(row_idx_in_raw)
+        if valid_mask[i]
+            for (m, out_name) in enumerate(OutNames)
+                pred_col = Symbol(C.PRE_PRED * out_name)
+                if !hasproperty(df_raw, pred_col)
+                    df_raw[!, pred_col] = Vector{Union{Missing,Float64}}(missing, nrow(df_raw))
+                end
+                df_raw[raw_idx, pred_col] = round(Y_Pred[pred_idx, m]; digits=3)
+            end
+            
+            score_col = Symbol(C.COL_SCORE)
+            if !hasproperty(df_raw, score_col)
+                df_raw[!, score_col] = Vector{Union{Missing,Float64}}(missing, nrow(df_raw))
+            end
+            df_raw[raw_idx, score_col] = round(Actual_Scores[pred_idx]; digits=4)
+            
+            pred_idx += 1
+        end
+    end
+
+    # --- Persist Predictions Back to Excel ---
+    try
+        target_sheet = C.SHEET_DATA
+        if isfile(DataFile)
+            try
+                sheets = XLSX.sheetnames(XLSX.readxlsx(DataFile))
+                if target_sheet ∉ sheets && "VERI_KAYITLARI" ∈ sheets
+                    target_sheet = "VERI_KAYITLARI"
+                end
+            catch
+            end
+        end
+        Sys_Fast.FAST_SafeExcelWrite_DDEF(DataFile, Dict(target_sheet => df_raw))
+        Log("VISE", "PERSIST_PRED", "Saved predicted outputs to MasterVault.", "OK")
+    catch e
+        Log("VISE", "PERSIST_FAIL", "Failed to save predictions: $e", "WARN")
     end
 
     graphs = Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, InNames, OutNames,
@@ -611,7 +717,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         "Models" => models, "R2_Adj" => r2_vec,
         "R2_Pred" => r2_pred_vec, "BestPoint" => Best_Point,
         "Leaders" => Leaders_DF, "OutNames" => OutNames,
-        "BestScore" => isempty(Leaders_DF) ? 0.0 : maximum(Leaders_DF.Score),
+        "BestScore" => isempty(Leaders_DF) ? 0.0 : maximum(Leaders_DF[!, Symbol(C.COL_SCORE)]),
     )
 end
 

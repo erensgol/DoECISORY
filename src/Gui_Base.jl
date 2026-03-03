@@ -136,10 +136,10 @@ function BASE_DataTable(id::String, columns::Vector, data; kwargs...)
 end
 
 """
-    BASE_Modal(id::String, title::String, body, footer; size="lg", is_open=false, centered=true, close_button=true)
+    BASE_Modal(id::String, title, body, footer; size="lg", is_open=false, centered=true, close_button=true)
 Standardized modal constructor.
 """
-function BASE_Modal(id::String, title::String, body, footer; size="lg", is_open=false, centered=true, close_button=true)
+function BASE_Modal(id::String, title, body, footer; size="lg", is_open=false, centered=true, close_button=true)
     return dbc_modal([
             dbc_modalheader(dbc_modaltitle(title); close_button=close_button),
             dbc_modalbody(body),

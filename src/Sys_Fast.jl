@@ -19,11 +19,12 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
     FAST_InitMaster_DDEF, FAST_NormalizeCols_DDEF,
     FAST_SanitizeJSON_DDEF, FAST_PrepareDownload_DDEF,
     FAST_GenerateSmartName_DDEF, FAST_GetTransientPath_DDEF, FAST_ReadToStore_DDEF,
-    FAST_ReadConfig_DDEF, FAST_GetThreadInfo_DDEF,
+    FAST_ReadConfig_DDEF, FAST_UpdateConfig_DDEF, FAST_GetThreadInfo_DDEF,
     FAST_SanitizeInput_DDEF,
     FAST_AcquireLock_DDEF, FAST_ReleaseLock_DDEF, FAST_IsLocked_DDEF,
     FAST_CacheRead_DDEF, FAST_CacheWrite_DDEF, FAST_CacheEvict_DDEF,
-    FAST_SpawnCompute_DDEF, FAST_GetComputeThreads_DDEF,
+    FAST_SpawnCompute_DDEF, FAST_GetComputeThreads_DDEF, FAST_WriteLeaders_DDEF,
+    FAST_SafeExcelWrite_DDEF,
     CONST_DATA
 
 # --------------------------------------------------------------------------------------
@@ -130,9 +131,18 @@ end
 
 """
     FAST_NormalizeCols_DDEF(df::DataFrame) -> DataFrame
-Standardizes input column names to internal English format.
+Standardizes input column names to internal uppercase English format.
+Ensures consistency across different Excel file versions and user inputs.
 """
-FAST_NormalizeCols_DDEF(df::DataFrame) = df
+function FAST_NormalizeCols_DDEF(df::DataFrame)
+    isempty(df) && return df
+
+    # Standardize Names: Clean, Uppercase, and Strip
+    rename!(df, names(df) .=> uppercase.(strip.(names(df))))
+
+    return df
+end
+
 
 """
     FAST_ReadExcel_DDEF(FilePath, SheetName) -> DataFrame
@@ -141,7 +151,8 @@ Safely reads an Excel sheet and normalizes its columns.
 function FAST_ReadExcel_DDEF(FilePath::String, SheetName::String)
     try
         if !isfile(FilePath)
-            FAST_Log_DDEF("FAST", "Error", "File not found: $FilePath", "FAIL")
+            # Log as WAIT since empty excel file reads on start are expected
+            FAST_Log_DDEF("FAST", "Read Matrix", "File not found (New Project): $FilePath", "WAIT")
             return DataFrame()
         end
 
@@ -149,8 +160,55 @@ function FAST_ReadExcel_DDEF(FilePath::String, SheetName::String)
         FAST_Log_DDEF("FAST", "IO Read", "$(nrow(df)) rows from [$SheetName]", "OK")
         return FAST_NormalizeCols_DDEF(df)
     catch e
-        FAST_Log_DDEF("FAST", "IO Error", "ReadExcel: $(string(e))", "FAIL")
+        FAST_Log_DDEF("FAST", "IO Error", "ReadExcel ('$SheetName'): $(string(e))", "FAIL")
         return DataFrame()
+    end
+end
+
+"""
+    FAST_SafeExcelWrite_DDEF(File::String, Updates::Dict{String, DataFrame})
+Overcomes ZipArchives mutation bug by performing a complete clean-rewrite of the Excel file.
+"""
+function FAST_SafeExcelWrite_DDEF(File::String, Updates::Dict{String,DataFrame})
+    # 1. Read all existing data securely
+    all_data = Dict{String,DataFrame}()
+    order = String[]
+
+    if isfile(File)
+        try
+            xf = XLSX.readxlsx(File)
+            for sn in XLSX.sheetnames(xf)
+                push!(order, sn)
+                try
+                    all_data[sn] = DataFrame(XLSX.readtable(File, sn))
+                catch
+                    all_data[sn] = DataFrame()
+                end
+            end
+            close(xf)
+        catch e
+            FAST_Log_DDEF("FAST", "SAFE_WRITE_READ_FAIL", "Original file corrupt or missing. Creating fresh.", "WARN")
+        end
+    end
+
+    # 2. Merge updates
+    for (k, v) in Updates
+        if !(k in order)
+            push!(order, k)
+        end
+        all_data[k] = v
+    end
+
+    # 3. Write purely fresh
+    valid_pairs = []
+    for k in order
+        df = all_data[k]
+        # Ignore completely empty structural errors to avoid XLSX.jl empty DF bugs
+        push!(valid_pairs, k => df)
+    end
+
+    if !isempty(valid_pairs)
+        XLSX.writetable(File, valid_pairs...; overwrite=true)
     end
 end
 
@@ -330,47 +388,53 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
             try
                 df_old = FAST_ReadExcel_DDEF(File, C.SHEET_DATA)
                 if !isempty(df_old)
+                    # Support legacy files by normalizing columns of old data too
+                    FAST_NormalizeCols_DDEF(df_old)
+
+                    # Core Requirement: Preserve existing column order from the file
+                    headers = names(df_old)
+
+                    # Ensure all required new headers are present
+                    for h in setdiff(names(df_new), headers)
+                        push!(headers, h)
+                    end
+
+                    for col in setdiff(headers, names(df_new))
+                        df_new[!, col] = fill(missing, nrow(df_new))
+                    end
+
+                    # Create alignment for old data if missing new columns
                     for col in setdiff(headers, names(df_old))
                         df_old[!, col] = fill(missing, nrow(df_old))
                     end
-                    df_final_data = vcat(select!(df_old, headers), df_final_data)
+
+                    df_final_data = vcat(select!(df_old, headers), select!(df_new, headers))
                 end
             catch e
-                FAST_Log_DDEF("FAST", "Merge Warning", "Could not read existing data: $e", "WARN")
+                FAST_Log_DDEF("FAST", "Merge Warning", "Could not read existing data or preserve order: $e", "WARN")
             end
         end
+
 
         _round_float_cols!(df_final_data)
 
-        # 5. File Construction
-        XLSX.openxlsx(File; mode=isfile(File) ? "rw" : "w") do xf
-            # DATA SHEET
-            sheet_data = C.SHEET_DATA
-            if isfile(File) && sheet_data ∈ XLSX.sheetnames(xf)
-                XLSX.writetable!(xf[sheet_data], df_final_data; anchor_cell=XLSX.CellRef("A1"))
-            else
-                ws = isfile(File) ? XLSX.addsheet!(xf, sheet_data) : xf[1]
-                isfile(File) || XLSX.rename!(ws, sheet_data)
-                XLSX.writetable!(ws, df_final_data; anchor_cell=XLSX.CellRef("A1"))
-            end
+        # 5. File Construction Via SafeWrite
 
-            # CONFIG SHEET
-            sheet_conf = C.SHEET_CONFIG
-            clean_config = FAST_SanitizeJSON_DDEF(Config)
-            json_str = isempty(Config) ? "{}" : JSON3.write(clean_config)
-            config_df = DataFrame(
-                "PARAMETER" => ["MasterConfig"],
-                "VALUE_JSON" => [json_str],
-                "UPDATED_AT" => [string(now())],
-            )
+        # Build Config
+        clean_config = FAST_SanitizeJSON_DDEF(Config)
+        json_str = isempty(Config) ? "{}" : JSON3.write(clean_config)
+        config_df = DataFrame(
+            "PARAMETER" => ["MasterConfig"],
+            "VALUE_JSON" => [json_str],
+            "UPDATED_AT" => [string(now())],
+        )
 
-            if sheet_conf ∈ XLSX.sheetnames(xf)
-                XLSX.writetable!(xf[sheet_conf], config_df)
-            else
-                XLSX.addsheet!(xf, sheet_conf)
-                XLSX.writetable!(xf[sheet_conf], config_df)
-            end
-        end
+        updates = Dict{String,DataFrame}(
+            C.SHEET_DATA => df_final_data,
+            C.SHEET_CONFIG => config_df
+        )
+
+        FAST_SafeExcelWrite_DDEF(File, updates)
 
         return true
     catch e
@@ -388,14 +452,7 @@ function FAST_WriteLeaders_DDEF(File::String, Phase::String, LeadersDF::DataFram
     try
         isfile(File) || return false
         sheet_name = CONST_DATA.PREFIX_LEADERS * Phase
-        XLSX.openxlsx(File; mode="rw") do xf
-            if sheet_name ∈ XLSX.sheetnames(xf)
-                XLSX.writetable!(xf[sheet_name], LeadersDF)
-            else
-                XLSX.addsheet!(xf, sheet_name)
-                XLSX.writetable!(xf[sheet_name], LeadersDF)
-            end
-        end
+        FAST_SafeExcelWrite_DDEF(File, Dict(sheet_name => LeadersDF))
         return true
     catch e
         FAST_Log_DDEF("FAST", "WRITE_LEADERS_FAIL", sprint(showerror, e, catch_backtrace()), "FAIL")
@@ -458,6 +515,43 @@ function FAST_ReadConfig_DDEF(File::String)
     catch e
         FAST_Log_DDEF("FAST", "READ_CONFIG_FAIL", "Error reading config from $File: $e", "WARN")
         return Dict{String,Any}()
+    end
+end
+
+"""
+    FAST_UpdateConfig_DDEF(File::String, Updates::Dict) -> Bool
+Surgically updates specific keys in the MasterConfig stored in the Excel file's CONFIG sheet.
+Returns true on success.
+"""
+function FAST_UpdateConfig_DDEF(File::String, Updates::Dict)
+    try
+        C = CONST_DATA
+        if !isfile(File)
+            FAST_Log_DDEF("FAST", "UPDATE_CONFIG", "Target file not found: $File", "WARN")
+            return false
+        end
+
+        current_config = FAST_ReadConfig_DDEF(File)
+        for (k, v) in Updates
+            current_config[string(k)] = v
+        end
+
+        clean_config = FAST_SanitizeJSON_DDEF(current_config)
+        json_str = JSON3.write(clean_config)
+
+        config_df = DataFrame(
+            "PARAMETER" => ["MasterConfig"],
+            "VALUE_JSON" => [json_str],
+            "UPDATED_AT" => [string(now())],
+        )
+
+        FAST_SafeExcelWrite_DDEF(File, Dict(C.SHEET_CONFIG => config_df))
+
+        FAST_Log_DDEF("FAST", "CONFIG_UPDATED", "Updated $(length(Updates)) keys in MasterConfig", "OK")
+        return true
+    catch e
+        FAST_Log_DDEF("FAST", "UPDATE_CONFIG_FAIL", sprint(showerror, e, catch_backtrace()), "FAIL")
+        return false
     end
 end
 

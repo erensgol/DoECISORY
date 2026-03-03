@@ -156,15 +156,15 @@ function FLOW_GetCandidates_DDEF(MasterFile::String, CurrentPhase::String)
     isnothing(col_score) && return Dict{String,Any}[]
 
     candidates = map(eachrow(df)) do row
-        Dict(
-            "ID" => isnothing(col_id) ? "Unknown" : row[col_id],
-            "Score" => row[col_score],
-            "Data" => Dict{String,Any}(string(k) => v for (k, v) in pairs(row)),
-        )
+        d = Dict{String,Any}(string(k) => v for (k, v) in pairs(row))
+        # Ensure Score is numeric for sorting if needed
+        d["Score"] = Sys_Fast.FAST_SafeNum_DDEF(get(d, "SCORE", 0.0))
+        d
     end
 
     sort!(candidates; by=x -> x["Score"], rev=true)
     return candidates
 end
+
 
 end # module
