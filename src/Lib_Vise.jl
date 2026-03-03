@@ -26,7 +26,7 @@ export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
     VISE_GetTermNames_DDEF, VISE_ClampIndex_DDEF, VISE_ApplyRadioDecay_DDEF
 
 # --------------------------------------------------------------------------------------
-# SECTION 1: PHYSICAL CORRECTIONS & MATH MODELS
+# SECTION 0: PHYSICAL CORRECTIONS & MATH MODELS
 # --------------------------------------------------------------------------------------
 
 """
@@ -374,7 +374,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     Log("VISE", "EXECUTION_START", "Analyzing Phase: $Phase", "WAIT")
 
     df_raw = Sys_Fast.FAST_ReadExcel_DDEF(DataFile, C.SHEET_DATA)
-    isempty(df_raw) && (df_raw = Sys_Fast.FAST_ReadExcel_DDEF(DataFile, "VERI_KAYITLARI"))
+    isempty(df_raw) && (df_raw = Sys_Fast.FAST_ReadExcel_DDEF(DataFile, "DATA_RECORDS"))
     isempty(df_raw) && return Dict("Status" => "FAIL", "Message" => "Source data is unreadable or empty.")
 
     # Apply standardization to the raw data
@@ -697,8 +697,8 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         if isfile(DataFile)
             try
                 sheets = XLSX.sheetnames(XLSX.readxlsx(DataFile))
-                if target_sheet ∉ sheets && "VERI_KAYITLARI" ∈ sheets
-                    target_sheet = "VERI_KAYITLARI"
+                if target_sheet ∉ sheets && "DATA_RECORDS" ∈ sheets
+                    target_sheet = "DATA_RECORDS"
                 end
             catch
             end

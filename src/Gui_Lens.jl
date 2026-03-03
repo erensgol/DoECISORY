@@ -27,8 +27,8 @@ export LENS_Layout_DDEF, LENS_RegisterCallbacks_DDEF
 # --------------------------------------------------------------------------------------
 
 """
-    LENS_Layout_DDEF()
-Constructs the statistical analysis and visualization interface.
+    LENS_BuildGoalRow_DDEF(i)
+Constructs a single goal-specification row for the optimisation objectives table.
 """
 function LENS_BuildGoalRow_DDEF(i)
     return html_tr([
@@ -51,6 +51,10 @@ function LENS_BuildGoalRow_DDEF(i)
     ])
 end
 
+"""
+    LENS_Layout_DDEF()
+Constructs the statistical analysis and visualisation interface layout.
+"""
 function LENS_Layout_DDEF()
     return dbc_container([
             # A. Page Header
@@ -286,7 +290,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             path = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
 
             df = Sys_Fast.FAST_ReadExcel_DDEF(path, C.SHEET_DATA)
-            isempty(df) && (df = Sys_Fast.FAST_ReadExcel_DDEF(path, "VERI_KAYITLARI"))
+            isempty(df) && (df = Sys_Fast.FAST_ReadExcel_DDEF(path, "DATA_RECORDS"))
 
             phases = map(unique(df[:, Symbol(C.COL_PHASE)])) do p
                 Dict("label" => string(p), "value" => string(p))

@@ -166,5 +166,4 @@ function FLOW_GetCandidates_DDEF(MasterFile::String, CurrentPhase::String)
     return candidates
 end
 
-
 end # module

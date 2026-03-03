@@ -132,9 +132,9 @@ function ARTS_Downsample_DDEF(Z::Matrix{T}, target_rows::Int, target_cols::Int) 
 end
 
 """
-    ARTS_CalcDesirability_DDEF(Val, Goal) -> Float64 (0.0 to 1.0)
-Implements Harrington's Desirability Function for multi-objective optimisation.
-Maps physical response values to a dimensionless quality score.
+    ARTS_ExtractGoal_DDEF(Goal) -> Tuple
+Extracts and normalises goal parameters from an objective dictionary.
+Returns a tuple of (Min, Max, Target, is_max, is_min, Weight).
 """
 function ARTS_ExtractGoal_DDEF(Goal::AbstractDict)
     G_Min = Float64(get(Goal, "Min", -Inf))
@@ -147,6 +147,11 @@ function ARTS_ExtractGoal_DDEF(Goal::AbstractDict)
     return (G_Min, G_Max, G_Tgt, is_max, is_min, Weight)
 end
 
+"""
+    ARTS_CalcDesirability_DDEF(Val, GoalTup) -> Float64
+Implements Harrington's Desirability Function for multi-objective optimisation.
+Maps physical response values to a dimensionless quality score (0.0 to 1.0).
+"""
 function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
     G_Min, G_Max, G_Tgt, is_max, is_min, _ = GoalTup
     if is_max
@@ -537,7 +542,7 @@ function _render_space_impl(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int},
 
         if any(!isnan, Masked)
             alpha_val = (s == 2 || iz == 0) ? (is_candidate ? 0.85 : 0.70) : (is_candidate ? 0.35 : 0.20)
-            trace_name = (s == 2 && K > 2 && !isempty(Best_Point)) ? "Oda: $(round(zv, digits=2))" : "Slice $s"
+            trace_name = (s == 2 && K > 2 && !isempty(Best_Point)) ? "Level: $(round(zv; digits=2))" : "Slice $s"
 
             push!(traces, surface(;
                 x=x1, y=x2, z=Z_layer,

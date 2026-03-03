@@ -111,7 +111,7 @@ function DECK_BuildLevelRowUI_DDEF(i, row, visible)
     l3_val = get(row, "L3", 0.0)
 
     # Determine visibility of L1, L2, L3 based on row index
-    show_l1 = (i <= 3) # Visibile only for Variables
+    show_l1 = (i <= 3) # Visible only for Variables
     show_l2 = (i <= 3 || i >= 5) # Visible for Variables and Constants
     show_l3 = (i <= 3) # Visible only for Variables
 
@@ -214,31 +214,7 @@ function DECK_Layout_DDEF()
                     ]),
                 ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
         end
-        function build_vol_table()
-            html_table([
-                    html_thead(html_tr([
-                        html_th("VOLUME (mL)", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => "100%")), className="p-0"),
-                    ])),
-                    html_tbody([
-                        html_tr([
-                            html_td(dcc_input(id="deck-input-vol", type="number", value=0.0, min=0.0, debounce=false, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "100%")), className="p-0"),
-                        ])
-                    ])
-                ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
-        end
 
-        function build_conc_table()
-            html_table([
-                    html_thead(html_tr([
-                        html_th("CONC. (mM)", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => "100%")), className="p-0"),
-                    ])),
-                    html_tbody([
-                        html_tr([
-                            html_td(dcc_input(id="deck-input-conc", type="number", value=0.0, min=0.0, debounce=false, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "100%")), className="p-0"),
-                        ])
-                    ])
-                ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
-        end
 
         return dbc_container(
             [
@@ -656,9 +632,17 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
         df[!, C.COL_SCORE] = fill(missing, N_Runs)
         df[!, C.COL_NOTES] = fill("", N_Runs)
 
+        f_name = ""
+        f_mw = 0.0
+        if !isempty(D["Idx_Fill"])
+            f_row = D["Rows"][D["Idx_Fill"][1]]
+            f_name = string(get(f_row, "Name", ""))
+            f_mw = Sys_Fast.FAST_SafeNum_DDEF(get(f_row, "MW", 0.0))
+        end
+
         ConfigDict = Dict(
             "Ingredients" => D["Rows"],
-            "Global" => Dict("Volume" => sv, "Conc" => sc, "Method" => method),
+            "Global" => Dict("Volume" => sv, "Conc" => sc, "Method" => method, "FillerName" => f_name, "FillerMW" => f_mw),
             "Outputs" => output_data,
         )
         success = Sys_Fast.FAST_InitMaster_DDEF(path,
@@ -778,6 +762,9 @@ function DECK_RegisterCallbacks_DDEF(app)
         State("deck-prop-is-filler", "value"),
         State("deck-prop-mw", "value"),
         State("deck-store-stoch-settings", "data"),
+        [State("deck-out-name-$i", "value") for i in 1:3]...,
+        [State("deck-out-unit-$i", "value") for i in 1:3]...,
+        State("deck-store-outputs", "data"),
         prevent_initial_call=false
     ) do args...
         try  # Global error guard for main orchestrator callback
@@ -1017,7 +1004,11 @@ function DECK_RegisterCallbacks_DDEF(app)
                             "L1" => get(m, "L1", 0.0), "L2" => get(m, "L2", 0.0),
                             "L3" => get(m, "L3", 0.0), "Min" => get(m, "Min", 0.0),
                             "Max" => get(m, "Max", 0.0), "MW" => get(m, "MW", 0.0),
-                            "Unit" => get(m, "Unit", "-"))
+                            "Unit" => get(m, "Unit", "-"),
+                            "IsRadioactive" => get(m, "IsRadioactive", false),
+                            "HalfLife" => Float64(get(m, "HalfLife", 0.0)),
+                            "HalfLifeUnit" => string(get(m, "HalfLifeUnit", "Hours")),
+                            "IsFiller" => get(m, "IsFiller", false))
                     end
                     lbl = html_div([html_i(className="fas fa-folder-open me-2"), "Memory Loaded"],
                         className="badge bg-info text-white p-2 w-100", style=Dict("fontSize" => "0.85rem"))
@@ -1074,7 +1065,23 @@ function DECK_RegisterCallbacks_DDEF(app)
                         g_dict["FillerName"] = string(get(stoch_store, "FillerName", get(stoch_store, :FillerName, "")))
                         g_dict["FillerMW"] = Sys_Fast.FAST_SafeNum_DDEF(get(stoch_store, "FillerMW", get(stoch_store, :FillerMW, 0.0)))
                     end
-                    json_str = JSON3.write(Dict("Inputs" => snap_rows(), "Global" => g_dict))
+                    
+                    out_names = collect(args[261:263])
+                    out_units = collect(args[264:266])
+                    store_out = args[267]
+                    out_d = Dict{String,Any}[]
+                    out_rows_mem = isnothing(store_out) ? [] : get(store_out, "rows", get(store_out, :rows, []))
+                    for i in 1:3
+                        if !isnothing(out_names[i]) && strip(string(out_names[i])) != ""
+                            is_rad = false
+                            if i <= length(out_rows_mem)
+                                is_rad = get(out_rows_mem[i], "IsCorr", get(out_rows_mem[i], :IsCorr, false))
+                            end
+                            push!(out_d, Dict("Name" => string(out_names[i]), "Unit" => isnothing(out_units[i]) ? "" : string(out_units[i]), "IsRadioactive" => is_rad))
+                        end
+                    end
+                    
+                    json_str = JSON3.write(Dict("Inputs" => snap_rows(), "Outputs" => out_d, "Global" => g_dict))
                     b64 = base64encode(json_str)
                     dl_dict = Dict("filename" => "Daisho_Workspace.json", "content" => b64, "base64" => true)
                     lbl = html_div([html_i(className="fas fa-check-circle me-2"), "Workspace Exported"],
@@ -1097,7 +1104,11 @@ function DECK_RegisterCallbacks_DDEF(app)
                             Dict("Name" => get(itm, "Name", ""), "Role" => get(itm, "Role", "Variable"),
                                 "L1" => levs[1], "L2" => levs[2], "L3" => levs[3],
                                 "Min" => get(itm, "Min", 0.0), "Max" => get(itm, "Max", 0.0),
-                                "MW" => get(itm, "MW", 0.0), "Unit" => get(itm, "Unit", ""))
+                                "MW" => get(itm, "MW", 0.0), "Unit" => get(itm, "Unit", ""),
+                                "IsRadioactive" => get(itm, "IsRadioactive", false),
+                                "HalfLife" => Float64(get(itm, "HalfLife", 0.0)),
+                                "HalfLifeUnit" => string(get(itm, "HalfLifeUnit", "Hours")),
+                                "IsFiller" => get(itm, "IsFiller", false))
                         end
                         nc = min(length(mapped), MAX_ROWS)
                         g = get(res, "Global", Dict())
@@ -1114,9 +1125,16 @@ function DECK_RegisterCallbacks_DDEF(app)
 
                         t_phase = get(res, "TargetPhase", "Phase2")
                         ph_opts = [Dict("label" => "$(t_phase) Initiated", "value" => t_phase)]
+                        
+                        outs = get(res, "Outputs", [])
+                        out_vals = vcat(
+                            [i <= length(outs) ? get(outs[i], "Name", "") : "" for i in 1:3],
+                            [i <= length(outs) ? get(outs[i], "Unit", "-") : "-" for i in 1:3]
+                        )
+                        
                         return Dict("rows" => mapped[1:nc], "count" => nc), mapped[1:nc], ph_opts,
                         get(g, "Volume", NO), get(g, "Conc", NO), saved_project, "Taguchi_L9", msg, NO, "Sync: Session", t_phase,
-                        NO, NO, NO, NO, NO, NO
+                        out_vals...
                     end
                 catch e
                     Sys_Fast.FAST_Log_DDEF("DECK", "HANDSHAKE_ERROR", "$e", "FAIL")
@@ -1137,7 +1155,11 @@ function DECK_RegisterCallbacks_DDEF(app)
                             Dict("Name" => get(itm, "Name", ""), "Role" => get(itm, "Role", "Variable"),
                                 "L1" => get(itm, "L1", 0.0), "L2" => get(itm, "L2", 0.0),
                                 "L3" => get(itm, "L3", 0.0), "Min" => get(itm, "Min", 0.0), "Max" => get(itm, "Max", 0.0), "MW" => get(itm, "MW", 0.0),
-                                "Unit" => get(itm, "Unit", "-"))
+                                "Unit" => get(itm, "Unit", "-"),
+                                "IsRadioactive" => get(itm, "IsRadioactive", false),
+                                "HalfLife" => Float64(get(itm, "HalfLife", 0.0)),
+                                "HalfLifeUnit" => string(get(itm, "HalfLifeUnit", "Hours")),
+                                "IsFiller" => get(itm, "IsFiller", false))
                         end
                         nc = min(length(mapped), MAX_ROWS)
                         method_val = get(g, "Method", "BoxBehnken")
@@ -1383,6 +1405,21 @@ function DECK_RegisterCallbacks_DDEF(app)
                     continue
                 end
 
+                is_rad = false
+                hl_val = 0.0
+                hl_unit = "Hours"
+                is_fill = false
+                if !isnothing(store_data) && (haskey(store_data, "rows") || haskey(store_data, :rows))
+                    r_list = get(store_data, "rows", get(store_data, :rows, []))
+                    if i <= length(r_list)
+                        prow = r_list[i]
+                        is_rad = get(prow, "IsRadioactive", get(prow, :IsRadioactive, false))
+                        hl_val = Float64(get(prow, "HalfLife", get(prow, :HalfLife, 0.0)))
+                        hl_unit = string(get(prow, "HalfLifeUnit", get(prow, :HalfLifeUnit, "Hours")))
+                        is_fill = get(prow, "IsFiller", get(prow, :IsFiller, false))
+                    end
+                end
+
                 push!(in_d, Dict(
                     "Name" => name,
                     "Role" => isnothing(all_roles[i]) ? (i <= 3 ? "Variable" : (i == 4 ? "Filler" : "Fixed")) : string(all_roles[i]),
@@ -1393,6 +1430,10 @@ function DECK_RegisterCallbacks_DDEF(app)
                     "Max" => maxval,
                     "MW" => _sn0(all_mws[i]),
                     "Unit" => isnothing(all_units[i]) ? "" : string(all_units[i]),
+                    "IsRadioactive" => is_rad,
+                    "HalfLife" => hl_val,
+                    "HalfLifeUnit" => hl_unit,
+                    "IsFiller" => is_fill
                 ))
             end
 
@@ -1507,6 +1548,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         Output("deck-out-prop-confirm", "value"),
         Input("deck-upload", "contents"),
         Input("store-session-config", "data"),
+        Input("deck-upload-memo", "contents"),
         Input("btn-out-prop-cancel", "n_clicks"),
         Input("btn-out-prop-save", "n_clicks"),
         [Input("btn-out-prop-$i", "n_clicks") for i in 1:3]...,
@@ -1515,7 +1557,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         State("deck-out-prop-target-id", "data"),
         State("deck-out-prop-confirm", "value"),
         prevent_initial_call=false
-    ) do up_cont, session, n_cancel, n_save, args...
+    ) do up_cont, session, up_memo, n_cancel, n_save, args...
 
         ctx = callback_context()
         trig = ""
@@ -1569,6 +1611,28 @@ function DECK_RegisterCallbacks_DDEF(app)
                 if get(res, "Status", "") == "OK" && haskey(res, "Outputs")
                     o_rows = []
                     for (i, o) in enumerate(res["Outputs"])
+                        i > 3 && break
+                        push!(o_rows, Dict("IsCorr" => get(o, "IsRadioactive", false)))
+                    end
+                    while length(o_rows) < 3
+                        push!(o_rows, Dict("IsCorr" => false))
+                    end
+                    new_store_out = Dict{String,Any}("rows" => o_rows)
+                    return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), new_store_out, ""
+                end
+            catch
+            end
+            return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), ""
+        end
+
+        if trig == "deck-upload-memo" && !isnothing(up_memo) && up_memo != ""
+            try
+                base64_data = split(up_memo, ",")[end]
+                json_str = String(base64decode(base64_data))
+                memo = JSON3.read(json_str)
+                if haskey(memo, "Outputs")
+                    o_rows = []
+                    for (i, o) in enumerate(memo["Outputs"])
                         i > 3 && break
                         push!(o_rows, Dict("IsCorr" => get(o, "IsRadioactive", false)))
                     end
