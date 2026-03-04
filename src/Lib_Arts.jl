@@ -52,7 +52,10 @@ ARTS_GetTheme_DDEF() = THEME
     _base_layout(title; width, height) -> Layout
 Internal helper to generate a standardized PlotlyJS layout with light theme support.
 """
-function _base_layout(title::String; height=500)
+const _STANDARD_HEIGHT = 500
+const _SCENE_HEIGHT = 550
+
+function _base_layout(title::String; height=_STANDARD_HEIGHT)
     TH = THEME
     return Layout(;
         title=attr(
@@ -65,7 +68,6 @@ function _base_layout(title::String; height=500)
         font=attr(family=TH.Font, color=TH.Text, size=10),
         margin=attr(l=70, r=40, t=70, b=80),
         height=height,
-        autosize=true,
         xaxis=attr(
             showline=true, showgrid=true,
             gridcolor=TH.Grid, gridwidth=1, griddash="dash",
@@ -344,11 +346,17 @@ function ARTS_RenderSurface_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
     Z = reshape(_predict_internal(Model, Grid), N_Grid, N_Grid)'
 
     trace = surface(; x=collect(x1), y=collect(x2), z=Z, colorscale=VIRIDIS_SCALE,
-        contours=attr(z=attr(show=true, usecolormap=true, project_z=true)))
+        contours=attr(z=attr(show=true, usecolormap=true, project_z=true)),
+        colorbar=attr(len=0.6, thickness=15, x=1.02))
 
-    layout = _base_layout("Response Surface: $OutName")
-    layout[:scene] = attr(xaxis=attr(title=Lbls[1]), yaxis=attr(title=Lbls[2]), zaxis=attr(title=OutName))
-    layout[:margin] = attr(l=0, r=0, b=0, t=40)
+    layout = _base_layout("Response Surface: $OutName"; height=_SCENE_HEIGHT)
+    layout[:scene] = attr(
+        xaxis=attr(title=Lbls[1]),
+        yaxis=attr(title=Lbls[2]),
+        zaxis=attr(title=OutName),
+        domain=attr(x=[0.0, 0.88], y=[0.0, 1.0]),
+    )
+    layout[:margin] = attr(l=10, r=80, b=10, t=40)
     return Plot(trace, layout)
 end
 
@@ -365,7 +373,8 @@ function ARTS_RenderContour_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
     Z = reshape(_predict_internal(Model, Grid), N, N)'
 
     trace = contour(; x=collect(x1), y=collect(x2), z=Z, colorscale=VIRIDIS_SCALE,
-        contours=attr(coloring="heatmap", showlabels=true))
+        contours=attr(coloring="heatmap", showlabels=true),
+        colorbar=attr(len=0.6, thickness=15, x=1.02))
 
     layout = _base_layout("Contour Projection: $OutName")
     layout[:xaxis][:title] = Lbls[1]
@@ -575,15 +584,16 @@ function _render_space_impl(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int},
     end
 
     plotTitle = is_candidate ? "Optimal Solution Space ($pct_str% of Total Space)" : "Design Space: $(Lbls[1]) vs $(Lbls[2])"
-    layout = _base_layout(plotTitle)
-    layout[:height] = 500
+    layout = _base_layout(plotTitle; height=_SCENE_HEIGHT)
     layout[:scene] = attr(
         xaxis=attr(title=Lbls[1]),
         yaxis=attr(title=Lbls[2]),
         zaxis=attr(title=iz > 0 ? (length(Lbls) > 2 ? Lbls[3] : "Slice Domain") : "Level"),
         camera=attr(eye=attr(x=1.5, y=1.5, z=0.5)),
-        aspectmode="cube"
+        aspectmode="cube",
+        domain=attr(x=[0.0, 0.88], y=[0.0, 1.0]),
     )
+    layout[:margin] = attr(l=10, r=80, b=10, t=40)
     return Plot(traces, layout), pct_str
 end
 

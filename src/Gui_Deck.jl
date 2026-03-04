@@ -276,7 +276,7 @@ function DECK_Layout_DDEF()
 
                                 # Row 2: Response Metrics (lg=12)
                                 dbc_row([
-                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-chart-line me-2 text-success"), "DEPENDENT VARIABLES (RESPONSES)", html_span(" — Declare the 3 fundamental analysis parameters to be thoroughly investigated.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))],
+                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-chart-line me-2 text-success"), "DEPENDENT VARIABLES", html_span(" — Declare the 3 fundamental analysis parameters to be thoroughly investigated.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))],
                                                 html_div(html_table([
                                                             html_thead(html_tr([
                                                                 html_th("RESPONSE NAME", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "paddingLeft" => "5px", "width" => "40%")), className="p-0"),
@@ -311,14 +311,14 @@ function DECK_Layout_DDEF()
                                                 ], xs=12)), dbc_row(dbc_col([
                                                     dbc_label("Phase", className="small mb-1"),
                                                     dcc_dropdown(id="deck-dd-phase",
-                                                        options=[Dict("label" => "Loading...", "value" => "NONE")],
+                                                        options=[Dict("label" => "Phase 1", "value" => "Phase1")],
                                                         clearable=false, className="mb-3"),
                                                 ], xs=12)), dbc_row(dbc_col([
                                                     dbc_label("Design Method", className="small mb-1"),
                                                     dcc_dropdown(id="deck-dd-method",
                                                         options=[
-                                                            Dict("label" => "Box-Behnken (15 Runs, Quadratic)", "value" => "BoxBehnken"),
-                                                            Dict("label" => "Taguchi L9 (9 Runs, Linear)", "value" => "Taguchi_L9"),
+                                                            Dict("label" => html_div(["Box-Behnken", html_span("(15 Runs, Quadratic)", style=Dict("display" => "block", "fontSize" => "0.85em", "color" => "#6c757d"))]), "value" => "BoxBehnken"),
+                                                            Dict("label" => html_div(["Taguchi L9", html_span("(9 Runs, Linear)", style=Dict("display" => "block", "fontSize" => "0.85em", "color" => "#6c757d"))]), "value" => "Taguchi_L9"),
                                                         ],
                                                         value="BoxBehnken", clearable=false, className="mb-3"),
                                                 ], xs=12)), dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)),
@@ -413,7 +413,7 @@ function DECK_Layout_DDEF()
                         dbc_modalbody([
                             dbc_alert([
                                     html_i(className="fas fa-exclamation-triangle me-2"),
-                                    html_strong("Maximum Area Limit: "), "Total area of chemical components (including 'L3' levels and constants) for stoichiometric calculations must not exceed 100%.", html_br(), html_br(),
+                                    html_strong("Stoichiometric Limit: "), "Total percentage of all chemical components must not exceed 100%.", html_br(), html_br(),
                                     html_i(className="fas fa-info-circle me-2"),
                                     html_strong("Automatic Unit Override"), html_br(),
                                     "Saving these settings will overwrite the UNIT column for all chemical components:", html_br(),
@@ -427,7 +427,7 @@ function DECK_Layout_DDEF()
                             dbc_row([
                                     dbc_col([
                                             dbc_label("Filler Name", className="small mb-1"),
-                                            dbc_input(id="deck-stoch-filler-name", type="text", placeholder="e.g. DPPC", size="sm", className="mb-2"),
+                                            dbc_input(id="deck-stoch-filler-name", type="text", placeholder="", size="sm", className="mb-2"),
                                         ], xs=6),
                                     dbc_col([
                                             dbc_label("Filler MW (g/mol)", className="small mb-1"),
@@ -521,7 +521,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
                 end
             end
             if sum_max > 100.0 + 1e-4
-                return (false, "Stoichiometry Error: Total maximum area of chemical components ('L3' levels or constant values) cannot exceed 100% (Sum of Limits Entered: $(round(sum_max; digits=2))%). Please adjust the upper limits.")
+                return (false, "Stoichiometry Error: Total percentage of all chemical components cannot exceed 100% (Sum of Limits Entered: $(round(sum_max; digits=2))%). Please adjust the upper limits.")
             end
         end
 
@@ -1065,7 +1065,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                         g_dict["FillerName"] = string(get(stoch_store, "FillerName", get(stoch_store, :FillerName, "")))
                         g_dict["FillerMW"] = Sys_Fast.FAST_SafeNum_DDEF(get(stoch_store, "FillerMW", get(stoch_store, :FillerMW, 0.0)))
                     end
-                    
+
                     out_names = collect(args[261:263])
                     out_units = collect(args[264:266])
                     store_out = args[267]
@@ -1080,7 +1080,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                             push!(out_d, Dict("Name" => string(out_names[i]), "Unit" => isnothing(out_units[i]) ? "" : string(out_units[i]), "IsRadioactive" => is_rad))
                         end
                     end
-                    
+
                     json_str = JSON3.write(Dict("Inputs" => snap_rows(), "Outputs" => out_d, "Global" => g_dict))
                     b64 = base64encode(json_str)
                     dl_dict = Dict("filename" => "Daisho_Workspace.json", "content" => b64, "base64" => true)
@@ -1095,50 +1095,11 @@ function DECK_RegisterCallbacks_DDEF(app)
 
                 # ── E. Phase Transition ──────────────────────────────────────────────────────
             elseif trig == "store-session-config" && !isnothing(session) && session != ""
-                try
-                    res = JSON3.read(session)
-                    if get(res, "Status", "") == "OK"
-                        items = get(res, "NewConfig", [])
-                        mapped = map(items) do itm
-                            levs = get(itm, "Levels", [NaN, NaN, NaN])
-                            Dict("Name" => get(itm, "Name", ""), "Role" => get(itm, "Role", "Variable"),
-                                "L1" => levs[1], "L2" => levs[2], "L3" => levs[3],
-                                "Min" => get(itm, "Min", 0.0), "Max" => get(itm, "Max", 0.0),
-                                "MW" => get(itm, "MW", 0.0), "Unit" => get(itm, "Unit", ""),
-                                "IsRadioactive" => get(itm, "IsRadioactive", false),
-                                "HalfLife" => Float64(get(itm, "HalfLife", 0.0)),
-                                "HalfLifeUnit" => string(get(itm, "HalfLifeUnit", "Hours")),
-                                "IsFiller" => get(itm, "IsFiller", false))
-                        end
-                        nc = min(length(mapped), MAX_ROWS)
-                        g = get(res, "Global", Dict())
-                        # Apply to project name logic safely
-                        saved_project = get(res, "Project", NO)
-                        if saved_project isa String && isempty(strip(saved_project))
-                            saved_project = "Daisho"
-                        end
-
-                        msg = html_div([
-                                html_i(className="fas fa-magic me-2 text-success"),
-                                html_span("Adaptive Recipe Loaded", className="text-success fw-bold"),
-                            ], className="alert alert-success py-2 mt-2")
-
-                        t_phase = get(res, "TargetPhase", "Phase2")
-                        ph_opts = [Dict("label" => "$(t_phase) Initiated", "value" => t_phase)]
-                        
-                        outs = get(res, "Outputs", [])
-                        out_vals = vcat(
-                            [i <= length(outs) ? get(outs[i], "Name", "") : "" for i in 1:3],
-                            [i <= length(outs) ? get(outs[i], "Unit", "-") : "-" for i in 1:3]
-                        )
-                        
-                        return Dict("rows" => mapped[1:nc], "count" => nc), mapped[1:nc], ph_opts,
-                        get(g, "Volume", NO), get(g, "Conc", NO), saved_project, "Taguchi_L9", msg, NO, "Sync: Session", t_phase,
-                        out_vals...
-                    end
-                catch e
-                    Sys_Fast.FAST_Log_DDEF("DECK", "HANDSHAKE_ERROR", "$e", "FAIL")
-                end
+                # DEPRECATED: Excel-Centric approach now handles phase transition.
+                # Phase2 design is generated in Sys_Flow.FLOW_BuildNextPhase_DDEF and
+                # written directly to Excel. User downloads from Analysis and uploads
+                # to Design page. No cross-page state passing needed.
+                nothing
 
                 # ── F. Import Protocol ───────────────────────────────────────────────────────
             elseif trig == "deck-upload" && !isnothing(up_cont)

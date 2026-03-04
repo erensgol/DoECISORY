@@ -13,7 +13,8 @@ using DataFrames
 using Main.Sys_Fast
 
 export FLOW_RouteUrl_DDEF, FLOW_PackState_DDEF, FLOW_UnpackState_DDEF,
-    FLOW_AskLeader_DDEF, FLOW_NextPhase_DDEF, FLOW_GetCandidates_DDEF
+    FLOW_AskLeader_DDEF, FLOW_NextPhase_DDEF, FLOW_GetCandidates_DDEF,
+    FLOW_BuildNextPhase_DDEF
 
 # --------------------------------------------------------------------------------------
 # SECTION 1: ROUTING & STATE MANAGEMENT
@@ -102,6 +103,8 @@ function FLOW_NextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedL
     C = Sys_Fast.CONST_DATA
     df_config = Sys_Fast.FAST_ReadExcel_DDEF(MasterFile, C.SHEET_CONFIG)
     OldConfig = Dict[]
+    Outputs = []
+    GlobalInfo = Dict{String,Any}()
 
     if !isempty(df_config)
         json_col = findfirst(c -> occursin("JSON", uppercase(c)), names(df_config))
@@ -113,10 +116,17 @@ function FLOW_NextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedL
                         d = Dict{String,Any}(string(k) => v for (k, v) in pairs(item))
                         if haskey(d, "Levels")
                             d["Levels"] = Float64[isnothing(x) ? NaN : Float64(x) for x in d["Levels"]]
+                        elseif haskey(d, "L1") && haskey(d, "L2") && haskey(d, "L3")
+                            d["Levels"] = Float64[Float64(d["L1"]), Float64(d["L2"]), Float64(d["L3"])]
                         end
                         d
                     end
                 end
+                # Carry forward Outputs and Global for design page handshake
+                Outputs = [Dict{String,Any}(string(k) => v for (k, v) in pairs(o))
+                           for o in get(RawConf, "Outputs", [])]
+                g = get(RawConf, "Global", Dict())
+                GlobalInfo = Dict{String,Any}(string(k) => v for (k, v) in pairs(g))
             catch e
                 Sys_Fast.FAST_Log_DDEF("FLOW", "Config Error", "Parse Failed: $e", "FAIL")
             end
@@ -137,6 +147,8 @@ function FLOW_NextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedL
         "TargetPhase" => "Phase$(isnothing(p_num) ? 2 : p_num + 1)",
         "NewConfig" => NewConfig,
         "LeaderScore" => Leader["Score"],
+        "Outputs" => Outputs,
+        "Global" => GlobalInfo,
     )
 end
 
@@ -164,6 +176,113 @@ function FLOW_GetCandidates_DDEF(MasterFile::String, CurrentPhase::String)
 
     sort!(candidates; by=x -> x["Score"], rev=true)
     return candidates
+end
+
+# --------------------------------------------------------------------------------------
+# SECTION 3: EXCEL-CENTRIC PHASE TRANSITION
+# --------------------------------------------------------------------------------------
+
+"""
+    FLOW_BuildNextPhase_DDEF(MasterFile, CurrentPhase, SelectedID) -> Dict
+Complete phase transition: calculates new ranges, generates Phase2 design matrix,
+writes everything to Excel. Returns status dict with TargetPhase info.
+"""
+function FLOW_BuildNextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedLeaderID::String="")
+    C = Sys_Fast.CONST_DATA
+    Log = Sys_Fast.FAST_Log_DDEF
+
+    # 1. Calculate new ranges via existing logic
+    res = FLOW_NextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID)
+    if res["Status"] != "OK"
+        return res
+    end
+
+    NewConfig = res["NewConfig"]
+    TargetPhase = res["TargetPhase"]
+    Log("FLOW", "PHASE_BUILD", "Building $TargetPhase design from $CurrentPhase leader...", "WAIT")
+
+    # 2. Identify variable indices and names
+    var_indices = [i for (i, c) in enumerate(NewConfig) if get(c, "Role", "Variable") == C.ROLE_VAR]
+    num_vars = length(var_indices)
+    if num_vars < 2
+        return Dict("Status" => "FAIL", "Message" => "Insufficient variables ($num_vars) for design generation.")
+    end
+
+    # 3. Generate coded design matrix (Taguchi L9 for adaptive phases)
+    design_coded = Main.Lib_Core.CORE_GenDesign_DDEF(C.METHOD_TL9, num_vars)
+    N_Runs = size(design_coded, 1)
+
+    # 4. Build level configs for mapping
+    configs = [Dict("Levels" => get(NewConfig[i], "Levels", [0.0, 0.0, 0.0])) for i in var_indices]
+    real_matrix = Main.Lib_Core.CORE_MapLevels_DDEF(design_coded, configs)
+
+    # 5. Extract phase number
+    p_num = tryparse(Int, replace(TargetPhase, "Phase" => ""))
+    p_num = isnothing(p_num) ? 2 : p_num
+
+    # 6. Build DataFrame
+    df = DataFrame(
+        C.COL_EXP_ID => ["EXP_P$(p_num)_$(lpad(i, 2, '0'))" for i in 1:N_Runs],
+        C.COL_PHASE => fill(TargetPhase, N_Runs),
+        C.COL_STATUS => fill("Pending", N_Runs),
+        C.COL_NOTES => fill("", N_Runs),
+    )
+
+    # Add variable columns
+    for (k, idx) in enumerate(var_indices)
+        col_name = C.PRE_INPUT * get(NewConfig[idx], "Name", "Var$k")
+        df[!, col_name] = round.(real_matrix[:, k]; digits=3)
+    end
+
+    # Add fixed columns
+    for (i, c) in enumerate(NewConfig)
+        role = get(c, "Role", "Variable")
+        name = get(c, "Name", "")
+        if role == C.ROLE_FIX
+            lvls = get(c, "Levels", [0.0, 0.0, 0.0])
+            df[!, C.PRE_FIXED * name] = fill(length(lvls) >= 2 ? lvls[2] : 0.0, N_Runs)
+        elseif role == C.ROLE_FILL
+            df[!, C.PRE_FILL * name] = fill(0.0, N_Runs)
+        end
+    end
+
+    # Add output columns from existing config
+    out_names = String[]
+    if haskey(res, "Outputs")
+        for o in res["Outputs"]
+            n = string(get(o, "Name", ""))
+            isempty(n) && continue
+            push!(out_names, n)
+            df[!, C.PRE_RESULT * n] = Vector{Union{Missing,Float64}}(missing, N_Runs)
+            df[!, C.PRE_PRED * n] = Vector{Union{Missing,Float64}}(missing, N_Runs)
+        end
+    end
+    df[!, C.COL_SCORE] = Vector{Union{Missing,Float64}}(missing, N_Runs)
+
+    # 7. Update config with new ingredient levels
+    existing_config = Sys_Fast.FAST_ReadConfig_DDEF(MasterFile)
+    updated_ingredients = [Dict{String,Any}(string(k) => v for (k, v) in pairs(c)) for c in NewConfig]
+    existing_config["Ingredients"] = updated_ingredients
+    g = get(existing_config, "Global", Dict{String,Any}())
+    g["Method"] = C.METHOD_TL9
+    existing_config["Global"] = g
+
+    # 8. Write Phase2 to Excel (append to existing data)
+    all_in_names = [get(c, "Name", "") for c in NewConfig]
+    success = Sys_Fast.FAST_InitMaster_DDEF(MasterFile, all_in_names, out_names, df, existing_config)
+
+    if !success
+        return Dict("Status" => "FAIL", "Message" => "Failed to write $TargetPhase to Excel.")
+    end
+
+    Log("FLOW", "PHASE_BUILD", "$TargetPhase design ($N_Runs runs) written to MasterVault.", "OK")
+    return Dict(
+        "Status" => "OK",
+        "TargetPhase" => TargetPhase,
+        "SourcePhase" => CurrentPhase,
+        "N_Runs" => N_Runs,
+        "LeaderScore" => res["LeaderScore"],
+    )
 end
 
 end # module
