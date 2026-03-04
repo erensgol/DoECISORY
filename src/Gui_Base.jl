@@ -12,11 +12,11 @@ using DashBootstrapComponents
 
 export BASE_STYLE_CELL, BASE_STYLE_INPUT, BASE_STYLE_INPUT_CENTER
 export BASE_STYLE_HEADER, BASE_STYLE_DATATABLE_CELL, BASE_STYLE_INLINE_HEADER, BASE_STYLE_HR, BASE_EMPTY_FIGURE
-export BASE_safe_rows, BASE_get_trigger
-export BASE_PageHeader, BASE_GlassPanel, BASE_DataTable, BASE_Modal, BASE_ConvertTheme_PlotlyWhite!
+export BASE_SafeRows_DDEF, BASE_GetTrigger_DDEF
+export BASE_PageHeader_DDEF, BASE_GlassPanel_DDEF, BASE_DataTable_DDEF, BASE_Modal_DDEF, BASE_ConvertThemePlotlyWhite_DDEF!
 
 # --------------------------------------------------------------------------------------
-# SECTION 1: SHARED STYLE CONSTANTS
+# --- SHARED STYLE CONSTANTS ---
 # --------------------------------------------------------------------------------------
 
 const BASE_STYLE_CELL = Dict(
@@ -57,7 +57,6 @@ const BASE_STYLE_INLINE_HEADER = Dict(
     "color" => "#666666",
     "fontWeight" => "600",
     "fontSize" => "0.65rem",
-    "textTransform" => "uppercase",
     "letterSpacing" => "0.05em",
     "border" => "none",
     "borderBottom" => "none",
@@ -74,7 +73,7 @@ const BASE_EMPTY_FIGURE = Dict(
         "yaxis" => Dict("visible" => false, "showgrid" => false, "zeroline" => false),
         "margin" => Dict("l" => 0, "r" => 0, "t" => 0, "b" => 0),
         "annotations" => [Dict(
-            "text" => "<b>No Visualization Data</b><br><span style='font-size:12px'>Run analysis to generate plots</span>",
+            "text" => "<b>No Visualisation Data</b><br><span style='font-size:12px'>Run analysis to generate plots</span>",
             "showarrow" => false,
             "xref" => "paper", "yref" => "paper", "x" => 0.5, "y" => 0.5,
             "font" => Dict("color" => "#666666", "size" => 16, "family" => "Inter"),
@@ -83,14 +82,14 @@ const BASE_EMPTY_FIGURE = Dict(
 )
 
 # --------------------------------------------------------------------------------------
-# SECTION 2: UI WIDGET BUILDERS
+# --- UI WIDGET BUILDERS ---
 # --------------------------------------------------------------------------------------
 
 """
-    BASE_PageHeader(title::String, subtitle::String)
-Standardized page header layout.
+    BASE_PageHeader_DDEF(title, subtitle)
+Standardised page header layout with title and secondary description.
 """
-function BASE_PageHeader(title::String, subtitle::String)
+function BASE_PageHeader_DDEF(title::String, subtitle::String)
     return dbc_row(dbc_col([
                 html_h3(title, className="mb-1"),
                 html_p([
@@ -103,10 +102,10 @@ function BASE_PageHeader(title::String, subtitle::String)
 end
 
 """
-    BASE_GlassPanel(title::Union{String, Vector{Any}}, content; right_node, panel_class, content_class)
-Standardized 'glass-panel' component with header and body.
+    BASE_GlassPanel_DDEF(title, content; [right_node], [panel_class], [content_class], [overflow])
+Standardised 'glass-panel' component wrapper for UI sections.
 """
-function BASE_GlassPanel(title::Union{String,Vector{Any}}, content; right_node=nothing, panel_class="h-100", content_class="glass-content p-2 p-md-3", overflow="hidden")
+function BASE_GlassPanel_DDEF(title::Union{String,Vector{Any}}, content; right_node=nothing, panel_class="h-100", content_class="glass-content p-2 p-md-3", overflow="hidden")
     header_content = Any[html_span(title, className="glass-caption")]
     !isnothing(right_node) && push!(header_content, right_node)
 
@@ -117,17 +116,17 @@ function BASE_GlassPanel(title::Union{String,Vector{Any}}, content; right_node=n
 end
 
 """
-    BASE_DataTable(id::String, columns::Vector, data; kwargs...)
-Dash DataTable wrapper enforcing DaishoDoE CSS consistency and responsive rules.
+    BASE_DataTable_DDEF(id, columns, data; kwargs...)
+Dash DataTable wrapper enforcing DaishoDoE CSS consistency and responsiveness.
 """
-function BASE_DataTable(id::String, columns::Vector, data; kwargs...)
+function BASE_DataTable_DDEF(id::String, columns::Vector, data; kwargs...)
     return dash_datatable(;
         id=id, columns=columns, data=data,
         style_table=Dict("overflowX" => "auto", "overflowY" => "visible", "borderCollapse" => "collapse", "width" => "100%"),
         style_header=BASE_STYLE_HEADER,
         style_cell=BASE_STYLE_DATATABLE_CELL,
         css=[
-            Dict("selector" => ".dash-spreadsheet-container .dash-spreadsheet-inner th", "rule" => "padding: 0.25rem; font-size: 0.70rem; text-transform: uppercase; letter-spacing: 0.05em;"),
+            Dict("selector" => ".dash-spreadsheet-container .dash-spreadsheet-inner th", "rule" => "padding: 0.25rem; font-size: 0.70rem; letter-spacing: 0.05em;"),
             Dict("selector" => ".dash-spreadsheet-container .dash-spreadsheet-inner td", "rule" => "padding: 0.25rem; font-size: 10px;")
         ],
         kwargs...
@@ -135,10 +134,10 @@ function BASE_DataTable(id::String, columns::Vector, data; kwargs...)
 end
 
 """
-    BASE_Modal(id::String, title, body, footer; size="lg", is_open=false, centered=true, close_button=true)
-Standardized modal constructor.
+    BASE_Modal_DDEF(id, title, body, footer; [size], [is_open], [centered], [close_button])
+Standardised modal constructor for popup dialogs.
 """
-function BASE_Modal(id::String, title, body, footer; size="lg", is_open=false, centered=true, close_button=true)
+function BASE_Modal_DDEF(id::String, title, body, footer; size="lg", is_open=false, centered=true, close_button=true)
     return dbc_modal([
             dbc_modalheader(dbc_modaltitle(title); close_button=close_button),
             dbc_modalbody(body),
@@ -147,30 +146,30 @@ function BASE_Modal(id::String, title, body, footer; size="lg", is_open=false, c
 end
 
 # --------------------------------------------------------------------------------------
-# SECTION 3: SHARED HELPER FUNCTIONS
+# --- SHARED HELPER FUNCTIONS ---
 # --------------------------------------------------------------------------------------
 
 """
-    BASE_safe_rows(d) -> Vector{Dict{String,Any}}
-Convert raw callback data to a clean vector of string-keyed dicts.
+    BASE_SafeRows_DDEF(d) -> Vector{Dict{String,Any}}
+Safely converts raw callback table data to string-keyed dictionary vectors.
 """
-BASE_safe_rows(d) = isnothing(d) ? Dict{String,Any}[] :
-                    [Dict{String,Any}(string(k) => v for (k, v) in r) for r in d]
+BASE_SafeRows_DDEF(d) = isnothing(d) ? Dict{String,Any}[] :
+                        [Dict{String,Any}(string(k) => v for (k, v) in r) for r in d]
 
 """
-    BASE_get_trigger(ctx) -> String
-Extracts the ID of the component that triggered the Dash callback.
+    BASE_GetTrigger_DDEF(ctx) -> String
+Identifies the component ID that triggered the current Dash callback.
 """
-function BASE_get_trigger(ctx)
+function BASE_GetTrigger_DDEF(ctx)
     isempty(ctx.triggered) && return ""
     return ctx.triggered[1].prop_id |> x -> split(x, ".")[1]
 end
 
 """
-    BASE_ConvertTheme_PlotlyWhite(fig_dict)
-Mutates a PlotlyJS JSON representation into a flat white theme for high-res reporting.
+    BASE_ConvertThemePlotlyWhite_DDEF!(fig_dict)
+Mutates a PlotlyJS figure object into a standardised white theme for academic reports.
 """
-function BASE_ConvertTheme_PlotlyWhite!(fig_dict)
+function BASE_ConvertThemePlotlyWhite_DDEF!(fig_dict)
     if haskey(fig_dict, "layout")
         lay = fig_dict["layout"]
         lay["template"] = "plotly_white"
@@ -201,4 +200,4 @@ function BASE_ConvertTheme_PlotlyWhite!(fig_dict)
     return fig_dict
 end
 
-end # module
+end # module Gui_Base

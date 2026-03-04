@@ -2,7 +2,7 @@
 # DAISHODOE - MAIN APPLICATION ENTRY
 # ======================================================================================
 # ======================================================================================
-# Version: 1.1.0 (Dev-Optimized)
+# Version: v1.0 In Dev.
 # Author: Ecz. Eren Selim GÖL
 # ======================================================================================
 
@@ -11,6 +11,7 @@ using Dash
 using DashBootstrapComponents
 using Pkg
 using DataFrames
+using PlotlyJS
 
 # --- Hot Reload Support (Revise.jl) ---
 const _HAS_REVISE = try
@@ -31,7 +32,7 @@ using Main.Sys_Fast
 
 # --- Terminal Identity (Official Julia REPL) ---
 println("\e[1m               \e[32m_\e[0m")
-println("\e[1m   \e[34m_\e[0m       _ \e[31m_\e[32m(_)\e[35m_\e[0m     |  \e[1mDaishoDoE Engine\e[0m v1.0 (2026)")
+println("\e[1m   \e[34m_\e[0m       _ \e[31m_\e[32m(_)\e[35m_\e[0m     |  \e[1mDaishoDoE Engine\e[0m v1.0 In Dev.")
 println("\e[1m  \e[34m(_)\e[0m     | \e[31m(_)\e[0m \e[35m(_)\e[0m    |")
 println("\e[1m   _ _   _| |_  __ _   |  Official Research Software")
 println("\e[1m  | | | | | | |/ _` |  |")
@@ -43,17 +44,18 @@ println("\e[1m|__/                   |")
 let (n_threads, _, _) = Sys_Fast.FAST_GetThreadInfo_DDEF()
     status = n_threads > 1 ? "[OPTIMAL]" : "\e[31m[LIMITED]\e[0m"
     println("\n\e[1m  Computing Core: \e[0m\e[32m$n_threads Threads\e[0m $status")
+    println("\e[1m  System Wisdom:  \e[0m\e[36m\"$(Sys_Fast.FAST_GetSystemQuote_DDEF())\"\e[0m")
     println()
 end
 
 # --------------------------------------------------------------------------------------
-# MODULE INTEGRATION
+# --- MODULE INTEGRATION ---
 # --------------------------------------------------------------------------------------
 
 for (label, file) in [
+    ("Molecule Engine: Lib_Mole", "src/Lib_Mole.jl"),
     ("Visual Engine: Lib_Arts", "src/Lib_Arts.jl"),
     ("Algorithm Core: Lib_Core", "src/Lib_Core.jl"),
-    ("Molecule Engine: Lib_Mole", "src/Lib_Mole.jl"),
     ("Analysis Suite: Lib_Vise", "src/Lib_Vise.jl"),
     ("System Flow Bus: Sys_Flow", "src/Sys_Flow.jl"),
     ("GUI Base Component: Gui_Base", "src/Gui_Base.jl"),
@@ -82,7 +84,7 @@ using Main.Gui_Lens
 FAST_Log_DDEF("BOOT", "Complete", "Core Libraries Integrated", "OK")
 
 # --------------------------------------------------------------------------------------
-# APP CONFIGURATION
+# --- APP CONFIGURATION ---
 # --------------------------------------------------------------------------------------
 
 FAST_Log_DDEF("INIT", "Setup", "Configuring Dash Framework...", "WAIT")
@@ -114,22 +116,18 @@ app.index_string = """
             {%renderer%}
         </footer>
         <script>
-            window.addEventListener('beforeunload', function(e) {
-                e.preventDefault();
-                e.returnValue = "Stateless architecture: refreshing the page will irreversibly clear all inputted data and unsaved active parameters. Are you certain you wish to proceed?";
-                return e.returnValue;
-            });
+            /* Navigation guards removed for seamless page transitions */
         </script>
     </body>
 </html>
 """
 
 # --------------------------------------------------------------------------------------
-# UI COMPONENTS
+# --- UI COMPONENTS ---
 # --------------------------------------------------------------------------------------
 
-# 1. Navigation Controller
-navbar = html_div([
+# 1. Navigation Controller (Constant UI)
+const navbar = html_div([
         html_div([
                 dcc_link(html_div([
                             html_img(src="/assets/logo.png", style=Dict("height" => "28px", "marginRight" => "10px")),
@@ -137,22 +135,22 @@ navbar = html_div([
                         ], className="nav-brand"), href="/", style=Dict("textDecoration" => "none")),
             ], style=Dict("flex" => "1")),
         html_div([
-                dcc_link("Design", href="/design", className="nav-item"),
-                dcc_link("Analyse", href="/analysis", className="nav-item"),
+                html_a("Design", href="/design", className="nav-item"),
+                html_a("Analyse", href="/analysis", className="nav-item"),
             ], className="nav-links d-flex justify-content-center"),
         html_div([
-                html_span("v1.0 In Dev.", className="badge bg-secondary text-white small opacity-50"),
+                html_span("v1.0 In Dev.", className="badge bg-secondary text-white small opacity-75"),
             ], className="nav-actions", style=Dict("flex" => "1", "textAlign" => "right")),
     ], className="glass-navbar d-flex align-items-center justify-content-between")
 
-# 2. Page Content Render Area
-content = html_div(id="page-content", className="app-container")
+# 2. Page Content Render Area (Constant UI)
+const content = html_div(id="page-content", className="app-container")
 
 # 3. Main Application Framework
 const _SYSTEM_READY = Ref(false)
 
 app.layout = html_div([
-    dcc_location(id="url"),
+    dcc_location(id="url", refresh=false),
     navbar,
     content,
 
@@ -175,8 +173,8 @@ app.layout = html_div([
     html_div(id="sys-loading-overlay", children=[
             html_div([
                     html_div(className="spinner-border text-primary mb-3", style=Dict("width" => "3rem", "height" => "3rem")),
-                    html_h4("DaishoDoE Engine", className="fw-bold mb-2", style=Dict("color" => "#000000")),
-                    html_p("Compiling scientific modules...", className="text-secondary", id="sys-loading-msg"),
+                    html_h4("DaishoDoE", className="fw-bold mb-2", style=Dict("color" => "#000000")),
+                    html_p("Synchronizing scientific modules...", className="text-secondary", id="sys-loading-msg"),
                 ], style=Dict(
                     "display" => "flex", "flexDirection" => "column", "alignItems" => "center",
                     "justifyContent" => "center", "height" => "100vh",
@@ -189,7 +187,7 @@ app.layout = html_div([
 ])
 
 # --------------------------------------------------------------------------------------
-# ROUTING & CALLBACK ORCHESTRATION
+# --- ROUTING & CALLBACK ORCHESTRATION ---
 # --------------------------------------------------------------------------------------
 
 # 1. Global State Sync Bus
@@ -197,7 +195,8 @@ callback!(app,
     Output("store-master-vault", "data"),
     Input("sync-deck-content", "data"),
     Input("sync-lens-content", "data"),
-    Input("sync-lens-analysis", "data")
+    Input("sync-lens-analysis", "data"),
+    prevent_initial_call=true
 ) do deck, lens, lens_analysis
     ctx = callback_context()
     isempty(ctx.triggered) && return Dash.no_update()
@@ -225,7 +224,7 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
             # Hero Section
             dbc_container([
                     dbc_row(dbc_col([
-                            html_h1("DaishoDoE Engine", className="fw-bold display-4 mb-3", style=Dict("letterSpacing" => "-0.04em", "color" => "#000000")),
+                            html_h1("DaishoDoE", className="fw-bold display-4 mb-3", style=Dict("letterSpacing" => "-0.04em", "color" => "#000000")),
                             html_p("A Decision-Adaptive, Interactive, and Sequential Hybrid Optimisation Environment for Design of Experiments (DoE) Processes",
                                 className="lead text-secondary mb-5", style=Dict("maxWidth" => "800px", "margin" => "0 auto")),
                         ], xs=12, className="text-center mt-5 pt-4")),
@@ -290,10 +289,10 @@ DECK_RegisterCallbacks_DDEF(app)
 LENS_RegisterCallbacks_DDEF(app)
 
 # --------------------------------------------------------------------------------------
-# JIT WARMUP ROUTINE
+# --- JIT WARMUP ROUTINE ---
 # --------------------------------------------------------------------------------------
 
-function _daisho_warmup!()
+function DAISHO_Warmup_DDEF()
     t0 = time()
     FAST_Log_DDEF("BOOT", "Warmup", "JIT pre-compilation starting (background)...", "WAIT")
 
@@ -348,6 +347,17 @@ function _daisho_warmup!()
             Lib_Arts.ARTS_RenderFit_DDEF(Y_dummy, Y_pred, "Dummy")
             Lib_Arts.ARTS_CalcDesirability_DDEF(20.0,
                 Dict("Type" => "Nominal", "Min" => 10.0, "Max" => 30.0, "Target" => 20.0))
+
+            # New: Golden Zone Warmup
+            Lib_Arts.ARTS_RenderGoldenZone_DDEF([mod], goals, X_dummy[1:3, :], ["V1", "V2", "V3"])
+        end
+
+        # New: Model Tournament & Report Warmup
+        if mod["Status"] == "OK"
+            Lib_Vise.VISE_SelectBestModel_DDEF(X_dummy[1:10, :1], Y_dummy[1:10], ["V1"])
+            Lib_Vise.VISE_SensitivityAnalysis_DDEF(mod, X_dummy[1, :])
+            r_dummy = Dict("OutNames" => ["W"], "Models" => [mod], "R2_Adj" => [0.9], "R2_Pred" => [0.8])
+            Lib_Vise.VISE_GenerateScientificReport_DDEF(r_dummy)
         end
 
         # 5. Subsystem warm-up
@@ -367,7 +377,7 @@ function _daisho_warmup!()
 end
 
 # --------------------------------------------------------------------------------------
-# SERVER EXECUTION
+# --- SERVER EXECUTION ---
 # --------------------------------------------------------------------------------------
 
 # HuggingFace Spaces detection
@@ -375,7 +385,7 @@ const _IS_HF_SPACES = haskey(ENV, "SPACE_ID")
 const PORT = _IS_HF_SPACES ? 7860 : 8060
 
 # Spawn warmup in BACKGROUND so server starts instantly
-Threads.@spawn _daisho_warmup!()
+Threads.@spawn DAISHO_Warmup_DDEF()
 
 try
     env_label = _IS_HF_SPACES ? "HuggingFace Spaces" : "Local $(Threads.nthreads())T"

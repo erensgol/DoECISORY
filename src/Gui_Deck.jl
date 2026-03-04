@@ -21,7 +21,7 @@ using Dates
 
 export DECK_Layout_DDEF, DECK_RegisterCallbacks_DDEF
 
-const _safe_rows = BASE_safe_rows
+const _safe_rows = BASE_SafeRows_DDEF
 
 # --------------------------------------------------------------------------------------
 # SECTION 0: CONSTANTS
@@ -39,6 +39,10 @@ const ROLE_COLORS = Dict(
     "Fixed" => "#FDE725",
 )
 
+"""
+    DECK_GetDefaultRow_DDEF(i) -> Dict
+Generates a default factor row configuration based on its index.
+"""
 function DECK_GetDefaultRow_DDEF(i::Int)
     role_val = i <= 3 ? "Variable" : "Fixed"
     return Dict(
@@ -54,11 +58,9 @@ end
 # SECTION 1: LAYOUT HELPERS
 # --------------------------------------------------------------------------------------
 
-
 """
-    DECK_BuildIdRowUI_DDEF(i, row, visible, show_del) -> html_tr
-Table-based ID row: [Del?] [Name] [Dots+Cog]
-Uses same html_table + border-collapse as adjacent Limits/Levels tables for pixel-perfect alignment.
+    DECK_BuildIdRowUI_DDEF(i, row, visible, [show_del]) -> html_tr
+Table-based ID row including delete button (optional), name input, and property icons.
 """
 function DECK_BuildIdRowUI_DDEF(i, row, visible, show_del=false)
     row_style = Dict("display" => visible ? "table-row" : "none")
@@ -90,7 +92,7 @@ function DECK_BuildIdRowUI_DDEF(i, row, visible, show_del=false)
         push!(row_children, html_td(del_content, style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "30px")), className="p-0"))
     end
 
-    # Name cell: CSS class 'deck-name-cell' forces dcc_input wrapper div to 100% width
+    # Name cell
     push!(row_children, html_td(
         dcc_input(id="deck-name-$i", type="text", value=name_val, debounce=true, style=name_input_style),
         className="deck-name-cell p-0", style=BASE_STYLE_CELL)
@@ -104,6 +106,10 @@ function DECK_BuildIdRowUI_DDEF(i, row, visible, show_del=false)
     return html_tr(row_children; style=row_style, id="deck-row-id-$i")
 end
 
+"""
+    DECK_BuildLevelRowUI_DDEF(i, row, visible) -> html_tr
+Renders the 3-column levels portion of the row (Lower, Centre, Upper).
+"""
 function DECK_BuildLevelRowUI_DDEF(i, row, visible)
     row_style = Dict("display" => visible ? "table-row" : "none")
     l1_val = get(row, "L1", 0.0)
@@ -124,7 +130,7 @@ end
 
 """
     DECK_BuildLimitsRowUI_DDEF(i, row, visible) -> html_tr
-Renders the 3-column limits portion of the row: MIN LIMIT | UNIT | MAX LIMIT.
+Renders the 3-column limits portion of the row (Min Limit, Unit, Max Limit).
 """
 function DECK_BuildLimitsRowUI_DDEF(i, row, visible)
     row_style = Dict("display" => visible ? "table-row" : "none")
@@ -141,8 +147,12 @@ function DECK_BuildLimitsRowUI_DDEF(i, row, visible)
         ]; style=row_style, id="deck-row-limits-$i")
 end
 
+"""
+    DECK_BuildOutRow_DDEF(i, def_name, def_unit) -> html_tr
+Renders a row for the response metrics table.
+"""
 function DECK_BuildOutRow_DDEF(i, def_name, def_unit)
-    # Indicator dot for decay correction status (updated via callback)
+    # Indicator dot for decay correction status
     out_dot = html_span("●", id="deck-out-dot-$i",
         style=Dict("color" => "#2C2C2C", "fontSize" => "0.45rem", "marginRight" => "2px", "verticalAlign" => "middle"))
 
@@ -157,6 +167,67 @@ function DECK_BuildOutRow_DDEF(i, def_name, def_unit)
     ])
 end
 
+# --------------------------------------------------------------------------------------
+# SECTION 1.1: LOCAL TABLE BUILDERS
+# --------------------------------------------------------------------------------------
+
+"""
+    DECK_BuildIdTable_DDEF(rows_range, initial_rows, active_count, show_del) -> html_table
+Constructs the identification portion of the factor table.
+"""
+function DECK_BuildIdTable_DDEF(rows_range, initial_rows, active_count, show_del)
+    th_children = Any[]
+    if show_del
+        push!(th_children, html_th("", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => "30px")), className="p-0"))
+    end
+    push!(th_children, html_th("NAME", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center")), className="p-0"))
+    push!(th_children, html_th("", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => "55px")), className="p-0"))
+
+    html_table([
+            html_thead(html_tr(th_children)),
+            html_tbody([
+                DECK_BuildIdRowUI_DDEF(i, initial_rows[i], i <= active_count, show_del)
+                for i in rows_range
+            ]),
+        ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
+end
+
+"""
+    DECK_BuildLevelTable_DDEF(rows_range, initial_rows, active_count) -> html_table
+Constructs the levels portion of the factor table.
+"""
+function DECK_BuildLevelTable_DDEF(rows_range, initial_rows, active_count)
+    html_table([
+            html_thead(html_tr([
+                html_th("LOWER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
+                html_th("CENTRE", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
+                html_th("UPPER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "34%")), className="p-0"),
+            ])),
+            html_tbody([
+                DECK_BuildLevelRowUI_DDEF(i, initial_rows[i], i <= active_count)
+                for i in rows_range
+            ]),
+        ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
+end
+
+"""
+    DECK_BuildLimitsTable_DDEF(rows_range, initial_rows, active_count) -> html_table
+Constructs the limits portion of the factor table.
+"""
+function DECK_BuildLimitsTable_DDEF(rows_range, initial_rows, active_count)
+    html_table([
+            html_thead(html_tr([
+                html_th("MIN LIMIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
+                html_th("UNIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "34%")), className="p-0"),
+                html_th("MAX LIMIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
+            ])),
+            html_tbody([
+                DECK_BuildLimitsRowUI_DDEF(i, initial_rows[i], i <= active_count)
+                for i in rows_range
+            ]),
+        ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
+end
+
 """
     DECK_Layout_DDEF()
 Constructs the experimental design interface layout.
@@ -165,55 +236,9 @@ function DECK_Layout_DDEF()
     try
         Defaults = Sys_Fast.FAST_GetLabDefaults_DDEF()
 
-        # Start with 4 empty rows by default (3 var, 1 fill)
+        # Start with 7 active rows by default
         initial_rows = [DECK_GetDefaultRow_DDEF(i) for i in 1:MAX_ROWS]
-        active_count = 7 # Show 7 initially (3 var, 1 fill, 3 const)
-
-        function build_id_table(rows_range, show_del)
-            th_children = Any[]
-            if show_del
-                push!(th_children, html_th("", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => "30px")), className="p-0"))
-            end
-            # No width on NAME th → table-layout: fixed assigns all remaining space
-            push!(th_children, html_th("NAME", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center")), className="p-0"))
-            push!(th_children, html_th("", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "width" => "55px")), className="p-0"))
-
-            html_table([
-                    html_thead(html_tr(th_children)),
-                    html_tbody([
-                        DECK_BuildIdRowUI_DDEF(i, initial_rows[i], i <= active_count, show_del)
-                        for i in rows_range
-                    ]),
-                ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
-        end
-
-        function build_level_table(rows_range)
-            html_table([
-                    html_thead(html_tr([
-                        html_th("LOWER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
-                        html_th("CENTRE", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
-                        html_th("UPPER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "34%")), className="p-0"),
-                    ])),
-                    html_tbody([
-                        DECK_BuildLevelRowUI_DDEF(i, initial_rows[i], i <= active_count)
-                        for i in rows_range
-                    ]),
-                ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
-        end
-
-        function build_limits_table(rows_range)
-            html_table([
-                    html_thead(html_tr([
-                        html_th("MIN LIMIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
-                        html_th("UNIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "34%")), className="p-0"),
-                        html_th("MAX LIMIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
-                    ])),
-                    html_tbody([
-                        DECK_BuildLimitsRowUI_DDEF(i, initial_rows[i], i <= active_count)
-                        for i in rows_range
-                    ]),
-                ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
-        end
+        active_count = 7
 
 
         return dbc_container(
@@ -241,9 +266,9 @@ function DECK_Layout_DDEF()
                                     data=[DECK_GetDefaultRow_DDEF(i) for i in 1:5],
                                     editable=false,
                                 ),
-                                build_id_table(4:4, false),
-                                build_limits_table(4:4),
-                                build_level_table(4:4), # Hidden array of inputs to satisfy Dash callback layout requirement
+                                html_div(DECK_BuildIdTable_DDEF(4:4, initial_rows, active_count, false), style=Dict("display" => "none")),
+                                html_div(DECK_BuildLimitsTable_DDEF(4:4, initial_rows, active_count), style=Dict("display" => "none")),
+                                html_div(DECK_BuildLevelTable_DDEF(4:4, initial_rows, active_count), style=Dict("display" => "none")),
                                 # Hidden MW, Role & Delete inputs (callbacks reference these IDs)
                                 html_div([
                                         html_div([dcc_input(id="deck-mw-$i", type="number", value=0.0) for i in 1:MAX_ROWS]),
@@ -254,29 +279,29 @@ function DECK_Layout_DDEF()
                     ], xs=12)),
 
                 # Page Header
-                BASE_PageHeader("Experimental Design and Protocol Management", "The system is architected to operate with 3 independent (x) and 3 dependent (y) variables, functioning with 5 degrees of freedom (df)."),
+                BASE_PageHeader_DDEF("Experimental Design and Protocol Management", "The system is architected to operate with 3 independent (x) and 3 dependent (y) variables, functioning with 5 degrees of freedom (df)."),
 
                 # Main Workspace
                 dbc_row([
                         # --- LEFT COLUMN ---
                         dbc_col([
                                 # Variable Windows
-                                dbc_row(dbc_col(BASE_GlassPanel([html_i(className="fas fa-cubes me-2 text-info"), "INDEPENDENT VARIABLES", html_span(" — Define analysis boundaries and corresponding levels for a 3-factor system.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
-                                                    dbc_col(build_id_table(1:3, false), lg=4, className="pe-lg-1"),
-                                                    dbc_col(build_limits_table(1:3), lg=4, className="px-lg-1"),
-                                                    dbc_col(build_level_table(1:3), lg=4, className="ps-lg-1")
+                                dbc_row(dbc_col(BASE_GlassPanel_DDEF([html_i(className="fas fa-layer-group me-2"), "INDEPENDENT VARIABLES", html_span(" — Define analysis boundaries and corresponding levels for a 3-factor system.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
+                                                    dbc_col(DECK_BuildIdTable_DDEF(1:3, initial_rows, active_count, false), lg=4, className="pe-lg-1"),
+                                                    dbc_col(DECK_BuildLimitsTable_DDEF(1:3, initial_rows, active_count), lg=4, className="px-lg-1"),
+                                                    dbc_col(DECK_BuildLevelTable_DDEF(1:3, initial_rows, active_count), lg=4, className="ps-lg-1")
                                                 ], className="g-0"); panel_class="mb-4 h-100", content_class="p-2"), xs=12), className="mb-3"),
 
                                 # Constant Windows
-                                dbc_row(dbc_col(BASE_GlassPanel([html_i(className="fas fa-lock me-2 text-primary"), "CONSTANT PARAMETERS", html_span(" — Static background components strictly maintained throughout the entire analysis.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
-                                                    dbc_col(build_id_table(5:MAX_ROWS, true), lg=4, className="pe-lg-1"),
-                                                    dbc_col(build_limits_table(5:MAX_ROWS), lg=4, className="px-lg-1"),
-                                                    dbc_col(build_level_table(5:MAX_ROWS), lg=4, className="ps-lg-1")
+                                dbc_row(dbc_col(BASE_GlassPanel_DDEF([html_i(className="fas fa-thumbtack me-2"), "CONSTANT PARAMETERS", html_span(" — Static background components strictly maintained throughout the entire analysis.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
+                                                    dbc_col(DECK_BuildIdTable_DDEF(5:MAX_ROWS, initial_rows, active_count, true), lg=4, className="pe-lg-1"),
+                                                    dbc_col(DECK_BuildLimitsTable_DDEF(5:MAX_ROWS, initial_rows, active_count), lg=4, className="px-lg-1"),
+                                                    dbc_col(DECK_BuildLevelTable_DDEF(5:MAX_ROWS, initial_rows, active_count), lg=4, className="ps-lg-1")
                                                 ], className="g-0"); right_node=dbc_button([html_i(className="fas fa-plus me-1"), "Add Row"], id="deck-btn-add-row", n_clicks=0, color="secondary", outline=true, size="sm", className="px-2 py-1 fw-bold"), panel_class="mb-4 h-100", content_class="p-2"), xs=12), className="mb-3"),
 
-                                # Row 2: Response Metrics (lg=12)
+                                # Row 2: Response Metrics
                                 dbc_row([
-                                        dbc_col(BASE_GlassPanel([html_i(className="fas fa-chart-line me-2 text-success"), "DEPENDENT VARIABLES", html_span(" — Declare the 3 fundamental analysis parameters to be thoroughly investigated.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))],
+                                        dbc_col(BASE_GlassPanel_DDEF([html_i(className="fas fa-bullseye me-2"), "DEPENDENT VARIABLES", html_span(" — Declare the 3 fundamental analysis parameters to be thoroughly investigated.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))],
                                                 html_div(html_table([
                                                             html_thead(html_tr([
                                                                 html_th("RESPONSE NAME", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "paddingLeft" => "5px", "width" => "40%")), className="p-0"),
@@ -291,7 +316,7 @@ function DECK_Layout_DDEF()
 
                         # --- RIGHT COLUMN ---
                         dbc_col([
-                                dbc_row(dbc_col(BASE_GlassPanel("PROTOCOL CONFIGURATION", [
+                                dbc_row(dbc_col(BASE_GlassPanel_DDEF("PROTOCOL CONFIGURATION", [
                                             dbc_row(dbc_col(dcc_upload(id="deck-upload",
                                                     children=dbc_button(
                                                         [html_i(className="fas fa-file-import me-2"), "Import Dataset"],
@@ -302,7 +327,7 @@ function DECK_Layout_DDEF()
                                             dbc_row([
                                                     dbc_col(dbc_button([html_i(className="fas fa-download me-1"), " Save"], id="deck-btn-save-memo", n_clicks=0, color="secondary", outline=true, size="sm", className="w-100 fw-bold"), xs=6, className="pe-1 mb-2"),
                                                     dbc_col(dcc_upload(id="deck-upload-memo", children=dbc_button([html_i(className="fas fa-upload me-1"), " Load"], n_clicks=0, color="secondary", outline=true, size="sm", className="w-100 fw-bold"), multiple=false, className="w-100"), xs=6, className="ps-1 mb-2"),
-                                                    dbc_col(dbc_button([html_i(className="fas fa-file-alt me-1"), " Sample"], id="deck-btn-template", n_clicks=0, color="secondary", outline=true, size="sm", className="w-100 fw-bold"), xs=6, className="pe-1 mb-3"),
+                                                    dbc_col(dbc_button([html_i(className="fas fa-eye me-1"), " Sample"], id="deck-btn-template", n_clicks=0, color="secondary", outline=true, size="sm", className="w-100 fw-bold"), xs=6, className="pe-1 mb-3"),
                                                     dbc_col(dbc_button([html_i(className="fas fa-eraser me-1"), " Clear"], id="deck-btn-clear", n_clicks=0, color="secondary", outline=true, size="sm", className="w-100 fw-bold"), xs=6, className="ps-1 mb-3"),
                                                 ], className="g-0"), dbc_row(dbc_col(html_div(id="deck-memo-msg", className="small mb-2 fw-bold text-center"), xs=12)), dbc_row(dbc_col([
                                                     dbc_label("Project Name", className="small mb-1"),
@@ -317,30 +342,30 @@ function DECK_Layout_DDEF()
                                                     dbc_label("Design Method", className="small mb-1"),
                                                     dcc_dropdown(id="deck-dd-method",
                                                         options=[
-                                                            Dict("label" => html_div(["Box-Behnken", html_span("(15 Runs, Quadratic)", style=Dict("display" => "block", "fontSize" => "0.85em", "color" => "#6c757d"))]), "value" => "BoxBehnken"),
-                                                            Dict("label" => html_div(["Taguchi L9", html_span("(9 Runs, Linear)", style=Dict("display" => "block", "fontSize" => "0.85em", "color" => "#6c757d"))]), "value" => "Taguchi_L9"),
+                                                            Dict("label" => "Box-Behnken (15 Runs, Quadratic)", "value" => "BoxBehnken"),
+                                                            Dict("label" => "Taguchi L9 (9 Runs, Linear)", "value" => "Taguchi_L9"),
                                                         ],
                                                         value="BoxBehnken", clearable=false, className="mb-3"),
                                                 ], xs=12)), dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)),
-                                            # Stoichiometry Settings Button (above Quick Audit)
+                                            # Stoichiometry Settings Button
                                             dbc_row(dbc_col(dbc_button([html_i(className="fas fa-flask me-2"), "Stoichiometry Settings"],
                                                     id="deck-btn-stoch-settings", n_clicks=0, color="secondary", outline=true, size="sm",
                                                     className="w-100 mb-2"), xs=12)),
                                             dbc_row(dbc_col(dbc_button([html_i(className="fas fa-vial me-2"), "Quick Audit"],
                                                     id="deck-btn-audit", n_clicks=0, color="secondary", outline=true, size="sm",
                                                     className="w-100 mb-2"), xs=12)), dbc_row(dbc_col(dcc_loading(html_div(id="deck-run-output", className="mt-2 small"),
-                                                    type="default", color="#21918C"), xs=12)), dbc_row(dbc_col(dbc_button([html_i(className="fas fa-file-export me-2"), "Generate Protocol"],
+                                                    type="default", color="#21918C"), xs=12)), dbc_row(dbc_col(dbc_button([html_i(className="fas fa-play me-2"), "Generate Protocol"],
                                                     id="deck-btn-run", n_clicks=0, color="primary", size="sm",
                                                     className="w-100 fw-bold mb-2"), xs=12)),
                                         ]; right_node=html_i(className="fas fa-sliders-h text-secondary"), panel_class="mb-3 h-auto"), xs=12)),
                             ], xs=12, lg=3),
                     ], className="g-3"),
 
-                # Safe placement for download components to prevent DOM unmounting on loading rerenders
+                # Download components
                 dcc_download(id="deck-download-xlsx"),
                 dcc_download(id="deck-download-memo"),
 
-                # Stoichiometry Settings Store (Volume, Concentration, Filler Name, Filler MW)
+                # Stoichiometry Settings Store
                 dcc_store(id="deck-store-stoch-settings",
                     data=Dict("FillerName" => "", "FillerMW" => 0.0, "Volume" => 0.0, "Conc" => 0.0),
                     storage_type="memory"),
@@ -371,7 +396,7 @@ function DECK_Layout_DDEF()
                                             Dict("label" => "Years", "value" => "Years")
                                         ], value="Hours", size="sm", className="mb-3"), xs=6)
                             ]),
-                            # Hidden dummy elements to satisfy Dash callback layout for removed IDs
+                            # Hidden dummy elements
                             html_div([
                                     dbc_switch(id="deck-prop-is-radio", value=false, style=Dict("display" => "none")),
                                     dbc_switch(id="deck-prop-is-filler", value=false, style=Dict("display" => "none")),
@@ -396,7 +421,7 @@ function DECK_Layout_DDEF()
                             dbc_row([
                                 dbc_col(dbc_input(id="deck-out-prop-confirm", type="text", placeholder="Type YES...", size="sm", className="mb-2"), xs=12)
                             ]),
-                            # Hidden dummy for removed switch ID (Dash layout satisfaction)
+                            # Hidden dummy for removed switch ID
                             html_div(dbc_switch(id="deck-out-prop-is-corr", value=false, style=Dict("display" => "none")), style=Dict("display" => "none")),
                         ]),
                         dbc_modalfooter([
@@ -445,7 +470,7 @@ function DECK_Layout_DDEF()
                                         dbc_input(id="deck-stoch-conc", type="number", min=0, step="any", placeholder="e.g. 20.0", size="sm", className="mb-2"),
                                     ], xs=6),
                             ]),
-                            # Hidden inputs to keep Dash happy for old vol/conc IDs
+                            # Hidden inputs
                             html_div([
                                     dcc_input(id="deck-input-vol", type="number", value=0.0, style=Dict("display" => "none")),
                                     dcc_input(id="deck-input-conc", type="number", value=0.0, style=Dict("display" => "none")),
@@ -460,7 +485,7 @@ function DECK_Layout_DDEF()
                 ),
 
                 # Audit Modal
-                BASE_Modal("deck-modal-audit", "Quick Audit Report",
+                BASE_Modal_DDEF("deck-modal-audit", "Quick Audit Report",
                     dbc_row(dbc_col(html_div(id="deck-audit-output"), xs=12)),
                     dbc_button("Close", id="deck-btn-audit-close", className="ms-auto")),
             ], fluid=true, className="px-4 py-3")
@@ -474,6 +499,10 @@ end
 # SECTION 2: CORE PROTOCOL LOGIC
 # --------------------------------------------------------------------------------------
 
+"""
+    DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
+Orchestrates the generation of an experimental protocol Excel file.
+"""
 function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
     C = Sys_Fast.FAST_Constants_DDEF()
     try
@@ -483,7 +512,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
         num_vars != 3 && return (false, "Requires exactly 3 Variable ingredients (Found: $num_vars).")
         num_fills > 1 && return (false, "Maximum 1 Filler allowed (Found: $num_fills).")
 
-        # 1. Poka-Yoke: Name Validity and Uniqueness
+        # 1. Name Validity and Uniqueness Check
         all_names = String[]
         for (i, r) in enumerate(D["Rows"])
             n = strip(string(get(r, "Name", "")))
@@ -495,7 +524,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
             end
             push!(all_names, n)
 
-            # 2. Poka-Yoke: L1 < L2 < L3 Rule
+            # 2. Strict Level Increase Rule (L1 < L2 < L3)
             role = get(r, "Role", "")
             if role == "Variable"
                 l1 = Sys_Fast.FAST_SafeNum_DDEF(get(r, "L1", 0.0))
@@ -507,7 +536,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
             end
         end
 
-        # 3. Poka-Yoke: Stoichiometry Area Maximum Limit
+        # 3. Stoichiometry Sum Check (Max Limit 100%)
         if !isempty(D["Idx_Chem"]) || !isempty(D["Idx_Fill"])
             sum_max = 0.0
             for r in D["Rows"]
@@ -525,7 +554,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
             end
         end
 
-        # 4. Poka-Yoke: Mandatory Response and Naming
+        # 4. Mandatory Response Validation
         output_data = _safe_rows(out_data)
         if length(output_data) != 3
             return (false, "Systematic Error: Exactly 3 Responses (Outputs) must be defined.")
@@ -542,12 +571,14 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
             push!(all_out_names, n)
         end
 
+        # 5. Core Matrix Generation
         design_coded = Lib_Core.CORE_GenDesign_DDEF(method, num_vars)
         N_Runs = size(design_coded, 1)
         configs = [Dict("Levels" => [D["Rows"][i]["L1"], D["Rows"][i]["L2"], D["Rows"][i]["L3"]])
                    for i in D["Idx_Var"]]
         real_matrix = Lib_Core.CORE_MapLevels_DDEF(design_coded, configs)
 
+        # 6. Session & Phase Logic
         phase_num = 1
         current_phase = "Phase1"
         try
@@ -623,7 +654,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
             haskey(mass_cols, k) && (df[!, k] = mass_cols[k])
         end
 
-        # output_data was defined globally at the top for validation
+        # Response validation
         for r in output_data
             n = string(get(r, "Name", "Unknown"))
             df[!, "RESULT_$n"] = fill(missing, N_Runs)
@@ -663,11 +694,11 @@ end
 
 """
     DECK_RegisterCallbacks_DDEF(app)
-Uses fixed-ID row system (no pattern-matching). Guaranteed compatible with Dash.jl.
+Registers all GUI callbacks including state management and file operations.
 """
 function DECK_RegisterCallbacks_DDEF(app)
 
-    # ── 1. UI Hydration (Refreshes text boxes from State Bus) ───────────────────────
+    # --- 1. UI HYDRATION (Refreshes text boxes from State Bus) ---
     callback!(app,
         [Output("deck-row-id-$i", "style") for i in 1:MAX_ROWS]...,
         [Output("deck-row-level-$i", "style") for i in 1:MAX_ROWS]...,
@@ -702,7 +733,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         out_mws = [i <= length(rows) ? get(rows[i], "MW", 0.0) : 0.0 for i in 1:MAX_ROWS]
         out_units = [i <= length(rows) ? string(get(rows[i], "Unit", "")) : "" for i in 1:MAX_ROWS]
 
-        # Indicator dot colours: green when MW/HL > 0, dark otherwise
+        # Indicator dot colours: green when MW/HL > 0
         dot1_styles = [Dict("color" => (i <= length(rows) && Float64(get(rows[i], "MW", 0.0)) > 0.0 ? "#5EC962" : "#2C2C2C"),
             "fontSize" => "0.45rem", "marginRight" => "1px") for i in 1:MAX_ROWS]
         dot2_styles = [Dict("color" => (i <= length(rows) && Float64(get(rows[i], "HalfLife", 0.0)) > 0.0 ? "#5EC962" : "#2C2C2C"),
@@ -713,7 +744,7 @@ function DECK_RegisterCallbacks_DDEF(app)
 
 
 
-    # ── 2. Main Store Orchestrator ─────────────────────────────────────────────────────
+    # --- 2. MAIN STORE ORCHESTRATOR ---
     callback!(app,
         Output("deck-store-factors", "data"),
         Output("deck-table-in", "data"),
@@ -816,7 +847,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 trig = split(ctx.triggered[1].prop_id, ".")[1]
             end
 
-            # ── 6. Prop Save Logic (Integrated) ───────────────────────────
+            # --- 6. PROP SAVE LOGIC ---
             if trig == "deck-prop-trigger-save"
                 isnothing(save_prop_trig) && return ntuple(_ -> Dash.no_update(), 17)
                 isnothing(store_data) && return ntuple(_ -> Dash.no_update(), 17)
@@ -862,7 +893,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 return ntuple(_ -> Dash.no_update(), 17)
             end
 
-            # ── 6b. Unit Auto-Logic (Triggered by Stoch Modal Save) ────────
+            # --- 6b. UNIT AUTO-LOGIC ---
             if trig == "deck-stoch-trigger-unit"
                 isnothing(store_data) && return ntuple(_ -> Dash.no_update(), 17)
                 stoch_data = args[260]  # deck-store-stoch-settings
@@ -933,7 +964,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                         end
                     end
 
-                    # Poka-Yoke: Automatic Unit Adjustment (transition from 0 -> >0)
+                    # Automatic Unit Adjustment (transition from 0 -> >0)
                     if mw_val > 0.0 && prev_mw <= 0.0
                         if isempty(strip(unit_val)) || unit_val == "-"
                             unit_val = "%M"
@@ -958,7 +989,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 end for i in 1:max_idx
             ]
 
-            # ── A. Delete Row ─────────────────────────────────────────────────────────────
+            # --- A. DELETE ROW ---
             del_ids = ["deck-del-$i" for i in 1:MAX_ROWS]
             if trig in del_ids
                 rows = snap_rows()
@@ -971,7 +1002,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 NO, NO, NO, NO, NO, NO
             end
 
-            # ── B. Add Row ──────────────────────────────────────────────────────────────
+            # --- B. ADD ROW ---
             if trig == "deck-btn-add-row"
                 rows = snap_rows()
                 # Use length(rows) as the source of truth for current valid rows
@@ -985,7 +1016,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 return Dict("rows" => rows, "count" => new_count), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO,
                 NO, NO, NO, NO, NO, NO
 
-                # ── C0. Clear Memo ───────────────────────────────────────────────────────────
+                # --- C0. CLEAR CANVAS ---
             elseif trig == "deck-btn-clear"
                 rows = [DECK_GetDefaultRow_DDEF(i) for i in 1:5]
                 lbl = html_div([html_i(className="fas fa-trash-alt me-2"), "Canvas Cleared"],
@@ -993,7 +1024,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 return Dict("rows" => rows, "count" => 5), rows, [Dict("label" => "Loading...", "value" => "NONE")], NO, NO, NO, "BoxBehnken", lbl, NO, "No data source", "NONE",
                 "", "", "", "-", "-", "-"
 
-                # ── C1. Load User Memo ───────────────────────────────────────────────────────
+                # --- C1. LOAD USER PROFILE ---
             elseif trig == "deck-upload-memo" && !isnothing(up_memo) && up_memo != ""
                 try
                     base64_data = split(up_memo, ",")[end]
@@ -1032,7 +1063,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     NO, NO, NO, NO, NO, NO
                 end
 
-                # ── C2. Load Template ────────────────────────────────────────────────────────
+                # --- C2. LOAD TEMPLATE ---
             elseif trig == "deck-btn-template"
                 loaded_rows = [
                     Dict("Name" => "Chol", "Role" => "Variable", "L1" => 10.0, "L2" => 20.0, "L3" => 30.0, "Min" => 0.0, "Max" => 40.0, "MW" => 386.65, "Unit" => "%M"),
@@ -1054,7 +1085,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 return Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], [Dict("label" => "Phase 1", "value" => "Phase1")], 5.0, 20.0, "Sample", "BoxBehnken", lbl, NO, "Ready", "Phase1",
                 out_vals...
 
-                # ── D. Save Memo (Download) ──────────────────────────────────────────────────
+                # --- D. SAVE PROFILE ---
             elseif trig == "deck-btn-save-memo"
                 try
                     stoch_store = args[260]
@@ -1093,7 +1124,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     NO, NO, NO, NO, NO, NO
                 end
 
-                # ── E. Phase Transition ──────────────────────────────────────────────────────
+                # --- E. PHASE TRANSITION ---
             elseif trig == "store-session-config" && !isnothing(session) && session != ""
                 # DEPRECATED: Excel-Centric approach now handles phase transition.
                 # Phase2 design is generated in Sys_Flow.FLOW_BuildNextPhase_DDEF and
@@ -1101,7 +1132,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 # to Design page. No cross-page state passing needed.
                 nothing
 
-                # ── F. Import Protocol ───────────────────────────────────────────────────────
+                # --- F. IMPORT PROTOCOL ---
             elseif trig == "deck-upload" && !isnothing(up_cont)
                 try
                     if up_cont == ""
@@ -1112,6 +1143,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     cfg = Sys_Fast.FAST_ReadConfig_DDEF(tmp)
                     rm(tmp; force=true)
                     if !isempty(cfg) && haskey(cfg, "Ingredients")
+                        g = get(cfg, "Global", Dict())
                         mapped = map(cfg["Ingredients"]) do itm
                             Dict("Name" => get(itm, "Name", ""), "Role" => get(itm, "Role", "Variable"),
                                 "L1" => get(itm, "L1", 0.0), "L2" => get(itm, "L2", 0.0),
@@ -1159,7 +1191,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # ── 3. Audit Modal ─────────────────────────────────────────────────────────────────
+    # --- 3. AUDIT MODAL ---
     callback!(app,
         Output("deck-audit-output", "children"),
         Output("deck-modal-audit", "is_open"),
@@ -1282,7 +1314,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # ── 4. Protocol Generation ─────────────────────────────────────────────────────────
+    # --- 4. PROTOCOL GENERATION ---
     callback!(app,
         Output("deck-download-xlsx", "data"),
         Output("deck-run-output", "children"),
@@ -1435,7 +1467,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # ── 5. Chem Properties Modal ───────────────────────────────────────────────────────
+    # --- 5. CHEM PROPERTIES MODAL ---
     callback!(app,
         Output("deck-modal-prop", "is_open"),
         Output("deck-prop-title", "children"),
@@ -1499,7 +1531,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         return (ntuple(_ -> Dash.no_update(), 9)...,)
     end
 
-    # ── 6. Responses (Output) Properties Modal ──────────────────────────────────────────
+    # --- 6. RESPONSE PROPERTIES MODAL ---
     callback!(app,
         Output("deck-modal-out-prop", "is_open"),
         Output("deck-out-prop-title", "children"),
@@ -1672,7 +1704,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         return (ntuple(_ -> Dash.no_update(), 6)...,)
     end
 
-    # ── 7. Stoichiometry Settings Modal ────────────────────────────────────────────────
+    # --- 7. STOICHIOMETRY SETTINGS MODAL ---
     callback!(app,
         Output("deck-modal-stoch-settings", "is_open"),
         Output("deck-store-stoch-settings", "data"),
@@ -1783,7 +1815,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         return (ntuple(_ -> NO, 7)...,)
     end
 
-    # ── 8. Response Dot Indicator Update ────────────────────────────────────────────
+    # --- 8. RESPONSE DOT INDICATOR UPDATE ---
     callback!(app,
         [Output("deck-out-dot-$i", "style") for i in 1:3]...,
         Input("deck-store-outputs", "data"),

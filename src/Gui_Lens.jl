@@ -16,7 +16,7 @@ using Main.Lib_Arts
 using Main.Gui_Base
 using DataFrames
 using Printf
-using PlotlyJS: JSON, savefig, Plot, GenericTrace, Layout  # Used for graph serialization and export
+using PlotlyJS: JSON, savefig, Plot, GenericTrace, Layout
 using ZipFile
 using Base64
 
@@ -56,16 +56,17 @@ end
 Constructs the statistical analysis and visualisation interface layout.
 """
 function LENS_Layout_DDEF()
-    return dbc_container([
-            # A. Page Header
-            BASE_PageHeader("Statistical Modelling and Data Optimisation", "Analyse experimental outcomes, evaluate complex factor interactions via robust mathematical models, and ascertain optimal solution matrices."),
+    return dbc_container(
+        [
+            # Page Header
+            BASE_PageHeader_DDEF("Statistical Modelling and Data Optimisation", "Analyse experimental outcomes, evaluate complex factor interactions via robust mathematical models, and ascertain optimal solution matrices."),
 
-            # B. Workspace Context
+            # Main Workspace
             dbc_row([
-                    # --- LEFT COLUMN: Configuration & Goals ---
+                    # --- LEFT COLUMN ---
                     dbc_col([
-                            dbc_row(dbc_col(BASE_GlassPanel("ANALYSIS CONFIGURATION", [
-                                        # 1. Data Ingestion
+                            dbc_row(dbc_col(BASE_GlassPanel_DDEF("ANALYSIS CONFIGURATION", [
+                                        # Data Ingestion
                                         dbc_row(dbc_col(dcc_upload(id="lens-upload-data",
                                                 children=dbc_button([html_i(className="fas fa-file-import me-2"), "Import Dataset"],
                                                     color="secondary", outline=true, size="sm", className="w-100 mb-2"),
@@ -74,7 +75,7 @@ function LENS_Layout_DDEF()
                                                 type="default", color="#21918C"), xs=12)),
                                         dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)),
 
-                                        # 2. Downloads Section
+                                        # Exports Section
                                         dbc_row(dbc_col(html_div("EXPORT", className="small mb-1 fw-bold text-center"), xs=12)),
                                         dbc_row(dbc_col(dbc_button([html_i(className="fas fa-camera-retro me-1"), " Plots"],
                                                 id="lens-btn-export-plots", color="secondary", outline=true, size="sm",
@@ -84,7 +85,7 @@ function LENS_Layout_DDEF()
                                                 className="w-100 fw-bold mb-3"), xs=12)),
                                         dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)),
 
-                                        # 3. Control Settings
+                                        # Control Settings
                                         dbc_row(dbc_col([
                                                 dbc_label("Project Name", className="small mb-1"),
                                                 dbc_input(id="lens-input-project", type="text", value="",
@@ -106,25 +107,25 @@ function LENS_Layout_DDEF()
                                             ], xs=12)),
                                         dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)),
 
-                                        # 4. Radioactivity Panel (Hidden by default)
+                                        # Radioactivity Panel
                                         html_div(id="lens-panel-radio", className="d-none", children=[
                                             dbc_row(dbc_col(html_div([html_i(className="fas fa-radiation-alt me-2 text-warning"), "RADIOACTIVITY"], className="small mb-2 fw-bold text-center"), xs=12)),
                                             dbc_row([
                                                 dbc_col([
-                                                        dbc_label("t_cal (Calibration)", className="small mb-0 text-muted", style=Dict("fontSize" => "10px")),
+                                                        dbc_label("t_cal", className="small mb-0 text-muted", style=Dict("fontSize" => "10px")),
                                                         dbc_input(id="lens-date-cal", type="datetime-local", className="mb-2 form-control-sm", style=Dict("fontSize" => "11px")),
                                                     ], xs=12)
                                             ]),
                                             dbc_row([
                                                 dbc_col([
-                                                        dbc_label("t_exp (Experiment)", className="small mb-0 text-muted", style=Dict("fontSize" => "10px")),
+                                                        dbc_label("t_exp", className="small mb-0 text-muted", style=Dict("fontSize" => "10px")),
                                                         dbc_input(id="lens-date-exp", type="datetime-local", className="mb-2 form-control-sm", style=Dict("fontSize" => "11px")),
                                                     ], xs=12)
                                             ]),
                                             dbc_row(dbc_col([
                                                     dbc_checklist(
                                                         id="lens-check-radio-correct",
-                                                        options=[Dict("label" => "Apply mathematical decay correction", "value" => true)],
+                                                        options=[Dict("label" => "Decay Correction", "value" => true)],
                                                         value=[true],
                                                         className="small mb-2 fw-bold text-success",
                                                         switch=true
@@ -133,26 +134,26 @@ function LENS_Layout_DDEF()
                                             dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)),
                                         ]),
 
-                                        # 5. Main Operations
-                                        dbc_row(dbc_col(dbc_button([html_i(className="fas fa-rocket me-2"), "Next Phase"],
+                                        # Main Operations
+                                        dbc_row(dbc_col(dbc_button([html_i(className="fas fa-file-alt me-2"), "Summary"],
+                                                id="lens-btn-view-report", color="secondary", outline=true, size="sm", className="w-100 fw-bold mb-2", disabled=true), xs=12)),
+                                        dbc_row(dbc_col(dbc_button([html_i(className="fas fa-forward me-2"), "Next Phase"],
                                                 id="lens-btn-next-phase", color="secondary", outline=true, size="sm",
                                                 className="w-100 fw-bold mb-2", disabled=true), xs=12)),
                                         dbc_row(dbc_col(dbc_button([html_i(className="fas fa-play me-2"), "Run Analysis"],
-                                                id="lens-btn-run", color="primary", size="sm", className="w-100 fw-bold mb-2"), xs=12)),
-
-                                        # Application & Export Group hidden state loaders
-                                        dcc_download(id="lens-download-result"),
+                                                id="lens-btn-run", color="primary", size="sm", className="w-100 fw-bold mb-2"), xs=12)), dcc_download(id="lens-download-result"),
                                         dcc_download(id="lens-download-plots"),
                                         dbc_row(dbc_col(dcc_loading(html_div(id="lens-run-output", className="mt-2 small"),
                                                 type="default", color="#21918C"), xs=12)),
                                         dbc_row(dbc_col(dcc_loading(html_div(id="lens-export-output", className="mt-1 small"),
                                                 type="default", color="#21918C"), xs=12)),
-                                    ]; right_node=html_i(className="fas fa-cog text-secondary"), overflow="visible"), xs=12)),
+                                    ]; right_node=html_i(className="fas fa-sliders-h text-secondary"), overflow="visible"), xs=12)),
                         ]; xs=12, lg=3, className="mb-3 mb-lg-0"),
 
-                    # --- RIGHT COLUMN: Visualization Deck ---
+                    # --- RIGHT COLUMN ---
                     dbc_col([
-                            BASE_GlassPanel(["OPTIMISATION OBJECTIVES", html_span("  ", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], [
+                            # Optimisation Objectives Panel
+                            BASE_GlassPanel_DDEF(["OPTIMISATION OBJECTIVES", html_span("", className="ms-2 text-muted fw-normal")], [
                                     dbc_row(dbc_col([
                                             html_div(html_table([
                                                         html_thead(html_tr([
@@ -169,17 +170,17 @@ function LENS_Layout_DDEF()
                                 ]; panel_class="mb-3", content_class="glass-content p-2"),
 
                             # Model Performance Panel
-                            BASE_GlassPanel(["MODEL PERFORMANCE", html_span("  ", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], [
+                            BASE_GlassPanel_DDEF(["MODEL PERFORMANCE", html_span("", className="ms-2 text-muted fw-normal")], [
                                     dbc_row(dbc_col(html_div(id="lens-results-text", className="small px-2 table-responsive"), xs=12)),
                                 ]; panel_class="mb-3", content_class="glass-content p-2"),
 
                             # Leader Candidates Panel
-                            BASE_GlassPanel(["LEADER CANDIDATES", html_span("  ", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], [
+                            BASE_GlassPanel_DDEF(["LEADER CANDIDATES", html_span("", className="ms-2 text-muted fw-normal")], [
                                     dbc_row(dbc_col(html_div(id="lens-leaders-text", className="small px-2 table-responsive"), xs=12)),
                                 ]; panel_class="mb-3", content_class="glass-content p-2"),
 
                             # Graph Index Panel
-                            BASE_GlassPanel("GRAPH INDEX", [
+                            BASE_GlassPanel_DDEF("GRAPH INDEX", [
                                     html_div(id="lens-graph-info", className="p-1"),
                                 ]; panel_class="mb-3", content_class="glass-content p-2"),
 
@@ -209,13 +210,17 @@ function LENS_Layout_DDEF()
                             # Persistent Stores
                             dcc_store(id="lens-store-graphs", data=[]),
                             dcc_store(id="lens-store-index", data=0),
+                            dcc_store(id="lens-store-report", data=""),
                             dcc_store(id="lens-signal-process", data=Dict("ts" => 0, "success" => false)),
                         ]; xs=12, lg=9),
                 ], className="g-3"),
 
-            # C. MODAL DIALOGS
+            # Modal Dialogs
+            BASE_Modal_DDEF("lens-modal-report", "DaishoDoE Scientific Intelligence Report",
+                html_pre(id="lens-report-content", className="bg-dark text-success p-3 rounded small", style=Dict("whiteSpace" => "pre-wrap", "fontFamily" => "monospace", "maxHeight" => "500px", "overflowY" => "auto")),
+                dbc_button("Download Report (TXT)", id="lens-btn-download-txt", color="success", className="w-100"); size="lg"),
             # Phase Wizard Modal
-            BASE_Modal("lens-modal-wizard", "Phase Transition Wizard",
+            BASE_Modal_DDEF("lens-modal-wizard", "Phase Transition Wizard",
                 dbc_row(dbc_col([
                         html_p("The system will generate a new experimental phase based on the centre point you select.",
                             className="text-muted small"),
@@ -230,14 +235,14 @@ function LENS_Layout_DDEF()
                 ]); close_button=false),
 
             # Leader Selection Modal
-            BASE_Modal("lens-modal-leader", [html_i(className="fas fa-magic me-2 text-primary"), "Select Leader Experiment"],
+            BASE_Modal_DDEF("lens-modal-leader", [html_i(className="fas fa-magic me-2 text-primary"), "Select Leader Experiment"],
                 dbc_row(dbc_col([
                         dbc_alert([
                                 html_i(className="fas fa-info-circle me-2"),
                                 "The system has algorithmically identified potential leaders based on your optimisation objectives. ",
                                 "Please select the most promising run to serve as the reference centre for the next phase."
                             ], color="info", className="small py-2 mb-3"),
-                        html_div(BASE_DataTable("lens-table-candidates", [
+                        html_div(BASE_DataTable_DDEF("lens-table-candidates", [
                                     Dict("name" => "ID", "id" => "ID"),
                                     Dict("name" => "Score", "id" => "Score")
                                 ], []; row_selectable="single", selected_rows=[]), id="lens-container-candidates", className="table-responsive"),
@@ -254,19 +259,13 @@ end
 # --------------------------------------------------------------------------------------
 
 """
-    _get_trigger(ctx) -> String
-Extract the trigger component ID from callback context.
-"""
-_get_trigger(ctx) = isempty(ctx.triggered) ? "" : split(ctx.triggered[1].prop_id, ".")[1]
-
-"""
     LENS_RegisterCallbacks_DDEF(app)
 Orchestrates all reactive behavior for the LENS module.
 """
 function LENS_RegisterCallbacks_DDEF(app)
     C = Sys_Fast.FAST_Constants_DDEF()
 
-    # 1A. Pipeline: Local File Upload -> Global Sync Bus
+    # --- 1A. PIPELINE: LOCAL UPLOAD -> GLOBAL SYNC BUS ---
     callback!(app,
         Output("sync-lens-content", "data"),
         Input("lens-upload-data", "contents"),
@@ -277,7 +276,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return cont
     end
 
-    # 1B. Pipeline: Global Sync -> Phase Detection -> Goal Initialization
+    # --- 1B. PIPELINE: GLOBAL SYNC -> GOAL INITIALIZATION ---
     callback!(app,
         Output("lens-dd-phase", "options"),
         Output("lens-upload-status", "children"),
@@ -417,12 +416,14 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # 2. Engine: Run GLM Analysis & Optimisation
+    # --- 2. ENGINE: RUN GLM ANALYSIS & OPTIMISATION ---
     callback!(app,
         Output("lens-store-graphs", "data"),
         Output("lens-results-text", "children"),
         Output("lens-run-output", "children"),
         Output("lens-btn-next-phase", "disabled"),
+        Output("lens-btn-view-report", "disabled"),
+        Output("lens-store-report", "data"),
         Output("sync-lens-analysis", "data"),
         Output("lens-leaders-text", "children"),
         Input("lens-btn-run", "n_clicks"),
@@ -469,9 +470,9 @@ function LENS_RegisterCallbacks_DDEF(app)
                 ))
             end
         end
-        (n === nothing || n == 0) && return [], "", "", true, Dash.no_update(), Dash.no_update()
+        (n === nothing || n == 0) && return [], "", "", true, true, "", Dash.no_update(), Dash.no_update()
         isnothing(base64_file) &&
-            return [], "", html_span("Please upload data first.", className="text-warning"), true, Dash.no_update(), Dash.no_update()
+            return [], "", html_span("Please upload data first.", className="text-warning"), true, true, "", Dash.no_update(), Dash.no_update()
 
         # Race condition lock: reject concurrent analysis requests
         if !Sys_Fast.FAST_AcquireLock_DDEF("VISE_ANALYSIS")
@@ -479,7 +480,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 "Analysis already running. New request rejected.", "WARN")
             return Dash.no_update(), Dash.no_update(),
             html_span("⚠ An analysis is already in progress. Please wait.",
-                className="text-warning fw-bold"), true, Dash.no_update(), Dash.no_update()
+                className="text-warning fw-bold"), true, true, Dash.no_update(), Dash.no_update(), Dash.no_update()
         end
 
         # Create temp file BEFORE try so finally can always clean it
@@ -502,8 +503,11 @@ function LENS_RegisterCallbacks_DDEF(app)
             res = Lib_Vise.VISE_Execute_DDEF(path, phase_str, goals, model_str; Opts=opts)
 
             if res["Status"] != "OK"
-                return [], "", html_span("❌ Analysis Failed: $(res["Message"])", className="text-danger"), true, Dash.no_update(), ""
+                return [], "", html_span("❌ Analysis Failed: $(res["Message"])", className="text-danger"), true, true, "", Dash.no_update(), ""
             end
+
+            # Generate and capture Scientific Report
+            sci_report = Lib_Vise.VISE_GenerateScientificReport_DDEF(res)
 
             # Serialise PlotlyJS objects to JSON for Dash
             graphs = [
@@ -524,15 +528,42 @@ function LENS_RegisterCallbacks_DDEF(app)
                     ], style=Dict("borderBottom" => "1px solid #DCDCDC")) for (i, n) in enumerate(res["OutNames"])
             ]
 
-            summary = html_table([
-                    html_thead(html_tr([
-                        html_th("Output", style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC", "padding" => "8px")),
-                        html_th("R² (Adj)", style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC", "padding" => "8px")),
-                        html_th("Q² (Pred)", style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC", "padding" => "8px")),
-                        html_th("P-Value", style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC", "padding" => "8px"))
-                    ])),
-                    html_tbody(summary_rows, style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC")),
-                ], className="table table-sm table-borderless caption-top mb-0 mx-auto", style=Dict("width" => "90%", "marginTop" => "10px"))
+            summary = html_div([
+                html_table([
+                        html_thead(html_tr([
+                            html_th("Output", style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC", "padding" => "8px")),
+                            html_th("R² (Adj)", style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC", "padding" => "8px")),
+                            html_th("Q² (Pred)", style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC", "padding" => "8px")),
+                            html_th("P-Value", style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC", "padding" => "8px"))
+                        ])),
+                        html_tbody(summary_rows, style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC")),
+                    ], className="table table-sm table-borderless caption-top mb-1 mx-auto", style=Dict("width" => "95%", "marginTop" => "5px")),
+
+                # --- NEW: SCIENTIFIC VITALS TABLE ---
+                (haskey(res, "Vitals") ? html_div([
+                    html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px dashed #DCDCDC", "margin" => "10px 0")),
+                    html_div([
+                            html_div([
+                                    html_span("D-Efficiency: ", className="text-secondary"),
+                                    html_span(@sprintf("%.3f", res["Vitals"]["D"]), className="fw-bold text-dark"),
+                                ], className="me-4"),
+                            html_div([
+                                    html_span("Max VIF: ", className="text-secondary"),
+                                    html_span(@sprintf("%.2f", res["Vitals"]["MaxVIF"]),
+                                        className=res["Vitals"]["MaxVIF"] > 10 ? "fw-bold text-danger" : "fw-bold text-success"),
+                                ], className="me-4"),
+                            html_div([
+                                    html_span("Lack-of-Fit P: ", className="text-secondary"),
+                                    html_span(@sprintf("%.3f", res["Vitals"]["LOF"]),
+                                        className=res["Vitals"]["LOF"] < 0.05 ? "fw-bold text-danger" : "fw-bold text-success"),
+                                ], className="me-4"),
+                            html_div([
+                                html_span("Matrix Condition: ", className="text-secondary"),
+                                html_span(@sprintf("%.1e", res["Vitals"]["Condition"]), className="fw-bold text-dark"),
+                            ]),
+                        ], className="d-flex justify-content-center small py-1 bg-light rounded")
+                ]) : html_div())
+            ])
 
             # --- Persist Analysis Configuration (Goals & RadioOpts) ---
             Sys_Fast.FAST_UpdateConfig_DDEF(path, Dict("LensGoals" => goals, "RadioOpts" => opts["RadioOpts"]))
@@ -591,25 +622,28 @@ function LENS_RegisterCallbacks_DDEF(app)
                     ], className="table table-sm table-borderless mb-0 mx-auto", style=Dict("width" => "100%", "marginTop" => "5px"))
             end
 
-            return graphs, summary, "", false, updated_base64, leaders_html
+            # Show elapsed time in analysis success message
+            elapsed_str = get(res, "Elapsed", "")
+            elapsed_badge = isempty(elapsed_str) ? "" :
+                            html_span(" ($elapsed_str)", className="text-muted")
+
+            return graphs, summary, html_span(["✅ Analysis Complete", elapsed_badge],
+                className="text-success fw-bold small"), false, false, sci_report, updated_base64, leaders_html
 
         catch e  # Surface analysis errors to UI
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "ANALYSIS_CRASH", bt, "FAIL")
             return [], "",
-            html_span("❌ Critical Error: $(first(string(e), 150))", className="text-danger fw-bold"), true, Dash.no_update(), ""
+            html_span("❌ Critical Error: $(first(string(e), 150))", className="text-danger fw-bold"), true, true, "", Dash.no_update(), ""
         finally
             # Guaranteed temp file cleanup (prevents disk leak)
-            try
-                rm(path; force=true)
-            catch
-            end
+            Sys_Fast.FAST_CleanTransient_DDEF(path)
             # Always release the lock, even if an error occurred
             Sys_Fast.FAST_ReleaseLock_DDEF("VISE_ANALYSIS")
         end
     end
 
-    # 3. UI: Visualization Slide Navigation
+    # --- 3. UI: VISUALIZATION SLIDE NAVIGATION ---
     callback!(app,
         Output("lens-store-index", "data"),
         Output("lens-graph-input", "value"),
@@ -621,7 +655,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         State("lens-store-index", "data"),
         prevent_initial_call=true
     ) do g, n_nxt, n_prv, val_inp, i
-        trig = _get_trigger(callback_context())
+        trig = BASE_GetTrigger_DDEF(callback_context())
 
         tot = isnothing(g) ? 0 : length(g)
         if trig == "lens-store-graphs" || tot == 0
@@ -643,7 +677,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return idx, idx + 1, max(1, tot)
     end
 
-    # 4. UI: Graph Render Sync
+    # --- 4. UI: GRAPH RENDER SYNC ---
     callback!(app,
         Output("lens-graph-main", "figure"),
         Output("lens-graph-title", "children"),
@@ -692,7 +726,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return g[idx]["figure"], g[idx]["title"], "/ $(length(g))", info_html
     end
 
-    # 5. Pipeline: Wizard Entrance
+    # --- 5. PIPELINE: WIZARD ENTRANCE ---
     callback!(app,
         Output("lens-modal-wizard", "is_open"),
         Output("lens-wiz-dd-source", "options"),
@@ -705,7 +739,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         State("lens-dd-phase", "value"),
         prevent_initial_call=true
     ) do n, b, c, n_nxt, ph
-        trig = _get_trigger(callback_context())
+        trig = BASE_GetTrigger_DDEF(callback_context())
         trig == "lens-wiz-btn-cancel" && return false, [], "", ""
         trig == "lens-wiz-btn-next" && return false, Dash.no_update(), Dash.no_update(), Dash.no_update()
 
@@ -719,7 +753,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return true, [Dict("label" => src_phase, "value" => src_phase)], src_phase, "Phase$next_val"
     end
 
-    # 6. UI: Candidate Data Loader
+    # --- 6. UI: CANDIDATE DATA LOADER ---
     callback!(app,
         Output("lens-table-candidates", "data"),
         Output("lens-table-candidates", "columns"),
@@ -734,13 +768,13 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
         data = Sys_Flow.FLOW_GetCandidates_DDEF(path, src)
-        rm(path; force=true)
+        Sys_Fast.FAST_CleanTransient_DDEF(path)
 
         if isempty(data)
             return [], []
         end
 
-        # ── DYNAMIC COLUMN GENERATION ──
+        # --- DYNAMIC COLUMN GENERATION ---
         # Identify all keys in the first candidate (collect to avoid KeySet iteration bug)
         all_keys = collect(keys(data[1]))
 
@@ -778,7 +812,7 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
 
-    # 7. UI: Modal Sequential Switching
+    # --- 7. UI: MODAL SEQUENTIAL SWITCHING ---
     callback!(app,
         Output("lens-modal-leader", "is_open"),
         Input("lens-wiz-btn-next", "n_clicks"),
@@ -786,14 +820,25 @@ function LENS_RegisterCallbacks_DDEF(app)
         Input("lens-lead-btn-back", "n_clicks"),
         Input("lens-signal-process", "data")
     ) do n_nxt, n_cncl, n_bck, sig
-        trig = _get_trigger(callback_context())
+        trig = BASE_GetTrigger_DDEF(callback_context())
         trig == "lens-wiz-btn-next" && return true
         (trig == "lens-lead-btn-cancel" || trig == "lens-lead-btn-back") && return false
         trig == "lens-signal-process" && return !(get(sig, "success", false))
         return Dash.no_update()
     end
 
-    # 8. UI: Conditional Action Enabling
+    # --- 8. UI: REPORT MODAL CONTROL ---
+    callback!(app,
+        Output("lens-modal-report", "is_open"),
+        Output("lens-report-content", "children"),
+        Input("lens-btn-view-report", "n_clicks"),
+        State("lens-store-report", "data"),
+        prevent_initial_call=true
+    ) do n, report
+        n > 0 && return true, report
+        return false, ""
+    end
+    # --- 9. UI: CONDITIONAL ACTION ENABLING ---
     callback!(app,
         Output("lens-lead-btn-confirm", "disabled"),
         Input("lens-table-candidates", "selected_rows")
@@ -801,7 +846,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return isnothing(s) || isempty(s)
     end
 
-    # 9. Logic: Result Finalization & Download Bridge (Excel-Centric Phase Transition)
+    # --- 10. LOGIC: RESULT FINALIZATION ---
     callback!(app,
         Output("lens-download-result", "data"),
         Output("lens-signal-process", "data"),
@@ -819,7 +864,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         # Create path before try for guaranteed cleanup
         path = ""
         try  # Error guard for finalization callback
-            trig = _get_trigger(callback_context())
+            trig = BASE_GetTrigger_DDEF(callback_context())
 
             isnothing(base64_file) && return nothing, Dash.no_update()
             path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
@@ -868,7 +913,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # 10. High-Res Plot Export
+    # --- 11. HIGH-RES PLOT EXPORT ---
     callback!(app,
         Output("lens-download-plots", "data"),
         Output("lens-export-output", "children"),
@@ -895,7 +940,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 title = get(g, "title", "Plot_$i")
 
                 # Apply Light Theme via BASE function
-                fig_dict = BASE_ConvertTheme_PlotlyWhite!(fig_dict)
+                fig_dict = BASE_ConvertThemePlotlyWhite_DDEF!(fig_dict)
 
                 safe_title = replace(title, r"[^\w\-_\\.]" => "_")
                 filepath = joinpath(export_dir, "$(safe_title).png")

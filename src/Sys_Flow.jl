@@ -17,7 +17,7 @@ export FLOW_RouteUrl_DDEF, FLOW_PackState_DDEF, FLOW_UnpackState_DDEF,
     FLOW_BuildNextPhase_DDEF
 
 # --------------------------------------------------------------------------------------
-# SECTION 1: ROUTING & STATE MANAGEMENT
+# --- ROUTING & STATE MANAGEMENT ---
 # --------------------------------------------------------------------------------------
 
 # Pre-built immutable route table
@@ -29,7 +29,7 @@ const _ROUTES = Dict{String,String}(
 )
 
 """
-    FLOW_RouteUrl_DDEF(PathName)
+    FLOW_RouteUrl_DDEF(PathName) -> String
 Maps URL pathnames to internal page identifiers.
 """
 function FLOW_RouteUrl_DDEF(PathName::String)
@@ -51,15 +51,15 @@ end
 const _EMPTY_STATE = DaishoState("", "Phase1", Dict{String,Any}())
 
 """
-    FLOW_PackState_DDEF(TargetFile, ActivePhase, Config) -> String
-Serializes the application state into a JSON string.
+    FLOW_PackState_DDEF(TargetFile, ActivePhase, [Config]) -> String
+Serialises the application state into a JSON string.
 """
 FLOW_PackState_DDEF(TargetFile::String, ActivePhase::String, Config::Dict=Dict{String,Any}()) =
     JSON3.write(DaishoState(TargetFile, ActivePhase, Config))
 
 """
     FLOW_UnpackState_DDEF(JsonString) -> DaishoState
-Deserializes the application state from a JSON string.
+Deserialises the application state from a JSON string.
 """
 function FLOW_UnpackState_DDEF(JsonString::String)
     (isempty(JsonString) || JsonString == "null") && return _EMPTY_STATE
@@ -71,7 +71,7 @@ function FLOW_UnpackState_DDEF(JsonString::String)
 end
 
 # --------------------------------------------------------------------------------------
-# SECTION 2: PROCESS FLOW LOGIC
+# --- PROCESS FLOW LOGIC ---
 # --------------------------------------------------------------------------------------
 
 """
@@ -92,7 +92,7 @@ function FLOW_AskLeader_DDEF(LeaderVal::Float64, CurrentRange::Vector{Float64})
 end
 
 """
-    FLOW_NextPhase_DDEF(MasterFile, CurrentPhase, SelectedID) -> Dict
+    FLOW_NextPhase_DDEF(MasterFile, CurrentPhase, [SelectedID]) -> Dict
 Calculates the configuration for the subsequent experimental phase.
 """
 function FLOW_NextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedLeaderID::String="")
@@ -154,7 +154,7 @@ end
 
 """
     FLOW_GetCandidates_DDEF(MasterFile, CurrentPhase) -> Vector{Dict}
-Extracts potential leaders from the specified phase.
+Extracts potential leaders from the specified phase from the leaders sheet.
 """
 function FLOW_GetCandidates_DDEF(MasterFile::String, CurrentPhase::String)
     C = Sys_Fast.CONST_DATA
@@ -179,13 +179,12 @@ function FLOW_GetCandidates_DDEF(MasterFile::String, CurrentPhase::String)
 end
 
 # --------------------------------------------------------------------------------------
-# SECTION 3: EXCEL-CENTRIC PHASE TRANSITION
+# --- EXCEL-CENTRIC PHASE TRANSITION ---
 # --------------------------------------------------------------------------------------
 
 """
-    FLOW_BuildNextPhase_DDEF(MasterFile, CurrentPhase, SelectedID) -> Dict
-Complete phase transition: calculates new ranges, generates Phase2 design matrix,
-writes everything to Excel. Returns status dict with TargetPhase info.
+    FLOW_BuildNextPhase_DDEF(MasterFile, CurrentPhase, [SelectedID]) -> Dict
+Calculates new ranges, generates design matrix for the next phase, and writes to Excel.
 """
 function FLOW_BuildNextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedLeaderID::String="")
     C = Sys_Fast.CONST_DATA
@@ -200,6 +199,28 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::String, CurrentPhase::String, Sele
     NewConfig = res["NewConfig"]
     TargetPhase = res["TargetPhase"]
     Log("FLOW", "PHASE_BUILD", "Building $TargetPhase design from $CurrentPhase leader...", "WAIT")
+
+    # 1.5 CHEMICAL PRE-FLIGHT AUDIT (Bridge Lib_Mole -> Sys_Flow)
+    vol = get(res["Global"], "Volume", 5.0)
+    conc = get(res["Global"], "Concentration", 10.0)
+
+    # Lib_Mole expects a specific format: names, roles, l1, l2, l3, mw
+    dummy_chem_rows = map(NewConfig) do c
+        lvls = get(c, "Levels", [0.0, 0.0, 0.0])
+        Dict(
+            "Name" => get(c, "Name", "Unknown"),
+            "Role" => get(c, "Role", "Variable"),
+            "L1" => lvls[1], "L2" => lvls[2], "L3" => lvls[3],
+            "MW" => get(c, "MW", 0.0)
+        )
+    end
+
+    audit_ok, audit_report, _, _, _ = Main.Lib_Mole.MOLE_QuickAudit_DDEF(dummy_chem_rows, vol, conc)
+    if !audit_ok
+        Log("FLOW", "CHEM_FAIL", "Proposed search space is stoichiometrically invalid!", "FAIL")
+        return Dict("Status" => "FAIL", "Message" => "Phase build aborted: Stoichiometric invalidity detected in new space.\n" * audit_report)
+    end
+    Log("FLOW", "CHEM_OK", "Stoichiometry validated for $TargetPhase", "OK")
 
     # 2. Identify variable indices and names
     var_indices = [i for (i, c) in enumerate(NewConfig) if get(c, "Role", "Variable") == C.ROLE_VAR]
@@ -240,9 +261,9 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::String, CurrentPhase::String, Sele
         name = get(c, "Name", "")
         if role == C.ROLE_FIX
             lvls = get(c, "Levels", [0.0, 0.0, 0.0])
-            df[!, C.PRE_FIXED * name] = fill(length(lvls) >= 2 ? lvls[2] : 0.0, N_Runs)
+            df[!, C.PRE_FIXED*name] = fill(length(lvls) >= 2 ? lvls[2] : 0.0, N_Runs)
         elseif role == C.ROLE_FILL
-            df[!, C.PRE_FILL * name] = fill(0.0, N_Runs)
+            df[!, C.PRE_FILL*name] = fill(0.0, N_Runs)
         end
     end
 
@@ -253,8 +274,8 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::String, CurrentPhase::String, Sele
             n = string(get(o, "Name", ""))
             isempty(n) && continue
             push!(out_names, n)
-            df[!, C.PRE_RESULT * n] = Vector{Union{Missing,Float64}}(missing, N_Runs)
-            df[!, C.PRE_PRED * n] = Vector{Union{Missing,Float64}}(missing, N_Runs)
+            df[!, C.PRE_RESULT*n] = Vector{Union{Missing,Float64}}(missing, N_Runs)
+            df[!, C.PRE_PRED*n] = Vector{Union{Missing,Float64}}(missing, N_Runs)
         end
     end
     df[!, C.COL_SCORE] = Vector{Union{Missing,Float64}}(missing, N_Runs)
@@ -285,4 +306,4 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::String, CurrentPhase::String, Sele
     )
 end
 
-end # module
+end # module Sys_Flow
