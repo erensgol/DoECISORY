@@ -2,8 +2,8 @@
 # DAISHODOE - HUGGING FACE SPACES DOCKERFILE
 # ======================================================================================
 
-# Use the official Julia 1.10 image as a parent image
-FROM julia:1.10
+# Use the official Julia 1.12 image as a parent image
+FROM julia:1.12
 
 # Temporarily switch to root to install missing system dependencies for Plotly Kaleido
 USER root
