@@ -208,11 +208,6 @@ function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
     # Scientific Safeguard: NaN or Inf should be 0.0, others clamped to [0, 1]
     return (isnan(res) || isinf(res)) ? 0.0 : clamp(res, 0.0, 1.0)
 end
-
-function ARTS_CalcDesirability_DDEF(Val::Float64, Goal::AbstractDict)
-    return ARTS_CalcDesirability_DDEF(Val, ARTS_ExtractGoal_DDEF(Goal))
-end
-
 # --------------------------------------------------------------------------------------
 # --- LINEAR PLOTS (PARETO, ACTUAL VS PRED) ---
 # --------------------------------------------------------------------------------------

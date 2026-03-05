@@ -347,33 +347,43 @@ function DAISHO_Warmup_DDEF()
 
         # 4. Lib_Arts: Rendering pipeline
         if mod["Status"] == "OK"
-            Lib_Arts.ARTS_RenderPareto_DDEF(mod, "Dummy", 0.95, 0.90)
-            Y_pred = Lib_Vise.VISE_Predict_DDEF(mod, X_dummy)
-            Lib_Arts.ARTS_RenderFit_DDEF(Y_dummy, Y_pred, "Dummy")
-            Lib_Arts.ARTS_CalcDesirability_DDEF(20.0,
-                Dict("Type" => "Nominal", "Min" => 10.0, "Max" => 30.0, "Target" => 20.0))
-
-            # New: Golden Zone Warmup
-            Lib_Arts.ARTS_RenderGoldenZone_DDEF([mod], goals, X_dummy[1:3, :], ["V1", "V2", "V3"])
+            try
+                Lib_Arts.ARTS_RenderPareto_DDEF(mod, "Warmup_Out", 0.95, 0.90)
+                Y_pred = Lib_Vise.VISE_Predict_DDEF(mod, X_dummy)
+                Lib_Arts.ARTS_RenderFit_DDEF(Y_dummy, Y_pred, "Warmup_Out")
+                Lib_Arts.ARTS_CalcDesirability_DDEF(20.0,
+                    Dict("Type" => "Nominal", "Min" => 10.0, "Max" => 30.0, "Target" => 20.0))
+                Lib_Arts.ARTS_RenderOptimalZone_DDEF([mod], goals, X_dummy[1:3, :], ["V1", "V2", "V3"])
+            catch e
+                FAST_Log_DDEF("BOOT", "Warmup_Arts", "Visualisation pre-compilation skipped: $e", "WARN")
+            end
         end
 
         # New: Model Tournament & Report Warmup
         if mod["Status"] == "OK"
-            Lib_Vise.VISE_SelectBestModel_DDEF(X_dummy[1:10, 1:1], Y_dummy[1:10], ["V1"])
-            Lib_Vise.VISE_SensitivityAnalysis_DDEF(mod, X_dummy[1, :])
-            r_dummy = Dict("OutNames" => ["W"], "Models" => [mod], "R2_Adj" => [0.9], "R2_Pred" => [0.8])
-            Lib_Vise.VISE_GenerateScientificReport_DDEF(r_dummy)
+            try
+                Lib_Vise.VISE_SelectBestModel_DDEF(X_dummy[1:10, 1:1], Y_dummy[1:10], ["V1"])
+                Lib_Vise.VISE_SensitivityAnalysis_DDEF(mod, X_dummy[1, :])
+                r_dummy = Dict("OutNames" => ["W"], "Models" => [mod], "R2_Adj" => [0.9], "R2_Pred" => [0.8])
+                Lib_Vise.VISE_GenerateScientificReport_DDEF(r_dummy)
+            catch e
+                FAST_Log_DDEF("BOOT", "Warmup_Vise", "Analytics pre-compilation skipped: $e", "WARN")
+            end
         end
 
         # 5. Subsystem warm-up
-        Sys_Fast.FAST_CacheWrite_DDEF("_warmup_test", DataFrames.DataFrame(x=[1, 2, 3]))
-        Sys_Fast.FAST_CacheRead_DDEF("_warmup_test")
-        Sys_Fast.FAST_CacheEvict_DDEF("_warmup_test")
-        Sys_Fast.FAST_AcquireLock_DDEF("_warmup")
-        Sys_Fast.FAST_ReleaseLock_DDEF("_warmup")
+        try
+            Sys_Fast.FAST_CacheWrite_DDEF("_warmup_test", DataFrames.DataFrame(x=[1, 2, 3]))
+            Sys_Fast.FAST_CacheRead_DDEF("_warmup_test")
+            Sys_Fast.FAST_CacheEvict_DDEF("_warmup_test")
+            Sys_Fast.FAST_AcquireLock_DDEF("_warmup")
+            Sys_Fast.FAST_ReleaseLock_DDEF("_warmup")
+        catch e
+            FAST_Log_DDEF("BOOT", "Warmup_Sys", "Subsystem pre-compilation skipped: $e", "WARN")
+        end
 
     catch e
-        FAST_Log_DDEF("BOOT", "Warmup_Warn", "Non-critical warmup error: $e", "WARN")
+        FAST_Log_DDEF("BOOT", "Warmup_Warn", "Critical warmup block failed: $e", "WARN")
     end
 
     _SYSTEM_READY[] = true  # Signal the loading overlay to dismiss
