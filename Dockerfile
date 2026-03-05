@@ -1,5 +1,5 @@
 # ======================================================================================
-# DAISHODOE - HUGGING FACE SPACES DOCKERFILE (MAX COMPATIBILITY MODE)
+# DAISHODOE - HUGGING FACE SPACES DOCKERFILE 
 # ======================================================================================
 
 # Use the official Julia 1.12 image
@@ -27,12 +27,11 @@ WORKDIR $HOME/app
 # Copy application files
 COPY --chown=user:user . .
 
-# --- STABILITY SETTINGS ---
-# Forcing serial precompilation (1 task) to prevent OOM kills on 16GB RAM instances.
-# Setting CPU target to generic for cloud hardware abstraction.
+# --- STABILITY & PERFORMANCE SETTINGS ---
 ENV JULIA_NUM_PRECOMPILE_TASKS=1
 ENV JULIA_CPU_TARGET="generic"
 ENV JULIA_PKG_SERVER="https://pkg.julialang.org"
+ENV JULIA_NUM_THREADS=2
 
 # STEP 1: Download packages only (Network/IO Intensive)
 RUN julia --project="." -e 'import Pkg; Pkg.instantiate()'
@@ -44,4 +43,4 @@ RUN julia --project="." -e 'import Pkg; Pkg.precompile()'
 EXPOSE 7860
 
 # Launch the Application
-CMD ["julia", "-t", "auto", "--project=.", "app.jl"]
+CMD ["julia", "--project=.", "app.jl"]

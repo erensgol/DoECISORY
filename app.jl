@@ -354,7 +354,7 @@ function DAISHO_Warmup_DDEF()
 
         # New: Model Tournament & Report Warmup
         if mod["Status"] == "OK"
-            Lib_Vise.VISE_SelectBestModel_DDEF(X_dummy[1:10, :1], Y_dummy[1:10], ["V1"])
+            Lib_Vise.VISE_SelectBestModel_DDEF(X_dummy[1:10, 1:1], Y_dummy[1:10], ["V1"])
             Lib_Vise.VISE_SensitivityAnalysis_DDEF(mod, X_dummy[1, :])
             r_dummy = Dict("OutNames" => ["W"], "Models" => [mod], "R2_Adj" => [0.9], "R2_Pred" => [0.8])
             Lib_Vise.VISE_GenerateScientificReport_DDEF(r_dummy)
