@@ -1,8 +1,8 @@
 # ======================================================================================
-# DAISHODOE - HUGGING FACE SPACES DOCKERFILE
+# DAISHODOE - HUGGING FACE SPACES DOCKERFILE (MAX COMPATIBILITY MODE)
 # ======================================================================================
 
-# Use the official Julia 1.12 image as a parent image
+# Use the official Julia 1.12 image
 FROM julia:1.12
 
 # Temporarily switch to root to install missing system dependencies for Plotly Kaleido
@@ -27,15 +27,21 @@ WORKDIR $HOME/app
 # Copy application files
 COPY --chown=user:user . .
 
-# Switch back to user
-USER user
+# --- STABILITY SETTINGS ---
+# Forcing serial precompilation (1 task) to prevent OOM kills on 16GB RAM instances.
+# Setting CPU target to generic for cloud hardware abstraction.
+ENV JULIA_NUM_PRECOMPILE_TASKS=1
+ENV JULIA_CPU_TARGET="generic"
+ENV JULIA_PKG_SERVER="https://pkg.julialang.org"
 
-# Instantiate the Julia environment and Precompile
-RUN julia --project="." -e 'import Pkg; Pkg.instantiate(); Pkg.precompile()'
+# STEP 1: Download packages only (Network/IO Intensive)
+RUN julia --project="." -e 'import Pkg; Pkg.instantiate()'
+
+# STEP 2: Precompile packages (CPU Intensive - Serial mode)
+RUN julia --project="." -e 'import Pkg; Pkg.precompile()'
 
 # Expose the port Hugging Face expects
 EXPOSE 7860
 
-# Launch the Application. 
-# Explicitly injecting -t auto to ensure multi-threaded execution dynamically checks CPU Cores.
+# Launch the Application
 CMD ["julia", "-t", "auto", "--project=.", "app.jl"]
