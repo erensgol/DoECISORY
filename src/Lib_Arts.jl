@@ -14,13 +14,14 @@ using Printf
 using Statistics
 using Combinatorics
 using Distributions
+using DataFrames
 using Main.Sys_Fast
 
 export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
     ARTS_RenderContour_DDEF, ARTS_RenderSlice_DDEF, ARTS_RenderTrend_DDEF,
     ARTS_RenderSpace_DDEF, ARTS_RenderCandidates_DDEF, ARTS_Render_DDEF,
     ARTS_GetTheme_DDEF, ARTS_CalcDesirability_DDEF, ARTS_ExtractGoal_DDEF,
-    ARTS_Downsample_DDEF, ARTS_RenderGoldenZone_DDEF, ARTS_RenderInteractionMatrix_DDEF,
+    ARTS_Downsample_DDEF, ARTS_RenderOptimalZone_DDEF, ARTS_RenderInteractionMatrix_DDEF,
     ARTS_BaseLayout_DDEF, ARTS_Predict_DDEF, ARTS_BuildGrid_DDEF,
     ARTS_AdaptiveGridN_DDEF, ARTS_RenderSpaceImpl_DDEF
 
@@ -29,20 +30,24 @@ export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
 # --------------------------------------------------------------------------------------
 
 # Theme as a module-level const for zero-alloc access
-const THEME = (
-    Magenta="#440154",
-    Yellow="#FDE725",
-    Green="#5EC962",
-    Cyan="#21918C",
-    Red="#FF0000",
-    Blue="#3B528B",
-    Purple="#440154",
-    Text="#666666",
-    TextBright="#000000",
-    Grid="#E6E6E6",
-    Bg="#FFFFFF",
-    Font="Inter, sans-serif",
-)
+# Theme linked to Sys_Fast constants for single-source-of-truth
+const THEME = let C = Sys_Fast.CONST_DATA
+    # Mapping to British English Constants
+    (
+        Magenta    = C.COLOUR_MAGENTA,
+        Yellow     = C.COLOUR_YELLOW,
+        Green      = C.COLOUR_GREEN,
+        Cyan       = C.COLOUR_CYAN,
+        Red        = C.COLOUR_RED,
+        Blue       = C.COLOUR_BLUE,
+        Purple     = C.COLOUR_MAGENTA,
+        Text       = C.COLOUR_GREY_D,
+        TextBright = C.COLOUR_BLACK,
+        Grid       = C.COLOUR_GREY_L,
+        Bg         = C.COLOUR_WHITE,
+        Font       = C.FONT_DEFAULT,
+    )
+end
 
 """
     ARTS_GetTheme_DDEF() -> NamedTuple
@@ -53,7 +58,7 @@ ARTS_GetTheme_DDEF() = THEME
 # --- GRAPHICAL STANDARD SCALES ---
 
 const _STANDARD_HEIGHT = 500
-const _SCENE_HEIGHT = 550
+const _SCENE_HEIGHT = 500
 
 """
     ARTS_BaseLayout_DDEF(title; [height]) -> Layout
@@ -88,16 +93,21 @@ function ARTS_BaseLayout_DDEF(title::String; height=_STANDARD_HEIGHT)
     )
 end
 
-# High-fidelity Viridis color mapping for surfaces and heatmaps
-const VIRIDIS_SCALE = [
-    [0.0, "#440154"], [0.25, "#3B528B"], [0.5, "#21918C"],
-    [0.75, "#5EC962"], [1.0, "#FDE725"],
-]
+# High-fidelity Viridis colour mapping for surfaces and heatmaps
+const VIRIDIS_SCALE = let C = Sys_Fast.CONST_DATA
+    [
+        [0.0,  C.COLOUR_MAGENTA], 
+        [0.25, C.COLOUR_BLUE], 
+        [0.5,  C.COLOUR_CYAN],
+        [0.75, C.COLOUR_GREEN], 
+        [1.0,  C.COLOUR_YELLOW],
+    ]
+end
 
 # --- SMART DOWNSAMPLING & GRID LIMITER ---
 
 # Maximum safe grid points for browser rendering (N×N per plot)
-const _MAX_GRID_POINTS = 2500   # 50×50 = 2500 points per surface
+const _MAX_GRID_POINTS = 40000   # 200×200 = 40,000 points per surface
 const _MAX_JSON_BYTES = 5_000_000  # ~5 MB per figure JSON
 
 """
@@ -144,10 +154,15 @@ function ARTS_ExtractGoal_DDEF(Goal::AbstractDict)
     G_Max = Float64(get(Goal, "Max", Inf))
     G_Tgt = Float64(get(Goal, "Target", (G_Min + G_Max) / 2))
     Type = string(get(Goal, "Type", "Nominal"))
-    Weight = Float64(get(Goal, "Weight", 1.0))
+    # Weight must be non-negative for mathematical stability
+    Weight = max(0.0, Float64(get(Goal, "Weight", 1.0)))
     is_max = occursin("Maximise", Type)
     is_min = occursin("Minimise", Type)
     return (G_Min, G_Max, G_Tgt, is_max, is_min, Weight)
+end
+
+function ARTS_CalcDesirability_DDEF(Val::Float64, Goal::AbstractDict)
+    return ARTS_CalcDesirability_DDEF(Val, ARTS_ExtractGoal_DDEF(Goal))
 end
 
 """
@@ -156,14 +171,42 @@ Harrington's Desirability Function for multi-objective optimisation mapping.
 """
 function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
     G_Min, G_Max, G_Tgt, is_max, is_min, _ = GoalTup
+    res = 0.0
+    
     if is_max
-        return Val >= G_Tgt ? 1.0 : Val <= G_Min ? 0.0 : (Val - G_Min) / (G_Tgt - G_Min)
+        if Val >= G_Tgt
+            res = 1.0
+        elseif Val <= G_Min
+            res = 0.0
+        else
+            denom = G_Tgt - G_Min
+            res = denom > 1e-9 ? (Val - G_Min) / denom : 1.0
+        end
     elseif is_min
-        return Val <= G_Tgt ? 1.0 : Val >= G_Max ? 0.0 : (G_Max - Val) / (G_Max - G_Tgt)
-    else  # Nominal
-        (Val < G_Min || Val > G_Max) && return 0.0
-        return Val < G_Tgt ? (Val - G_Min) / (G_Tgt - G_Min) : (G_Max - Val) / (G_Max - G_Tgt)
+        if Val <= G_Tgt
+            res = 1.0
+        elseif Val >= G_Max
+            res = 0.0
+        else
+            denom = G_Max - G_Tgt
+            res = denom > 1e-9 ? (G_Max - Val) / denom : 1.0
+        end
+    else # Nominal
+        if Val <= G_Min || Val >= G_Max
+            res = 0.0
+        elseif abs(Val - G_Tgt) < 1e-12
+            res = 1.0
+        elseif Val < G_Tgt
+            denom = G_Tgt - G_Min
+            res = denom > 1e-9 ? (Val - G_Min) / denom : 1.0
+        else # Val > G_Tgt
+            denom = G_Max - G_Tgt
+            res = denom > 1e-9 ? (G_Max - Val) / denom : 1.0
+        end
     end
+    
+    # Scientific Safeguard: NaN or Inf should be 0.0, others clamped to [0, 1]
+    return (isnan(res) || isinf(res)) ? 0.0 : clamp(res, 0.0, 1.0)
 end
 
 function ARTS_CalcDesirability_DDEF(Val::Float64, Goal::AbstractDict)
@@ -312,7 +355,7 @@ end
 
 """
     ARTS_BuildGrid_DDEF(X, ix, iy, N_requested) -> (x1, x2, Grid)
-Constructs a prediction grid for surface/contour plots centered on factor means.
+Constructs a prediction grid for surface/contour plots centred on factor means.
 """
 function ARTS_BuildGrid_DDEF(X::Matrix{Float64}, ix::Int, iy::Int, N_requested::Int)
     # Adaptive grid limiter
@@ -335,7 +378,7 @@ Renders a 3D Response Surface (RSM) for two selected variables.
 function ARTS_RenderSurface_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int},
     Lbls::Vector{String}, OutName::String)
     ix, iy = Idx[1], Idx[2]
-    N_Grid = 35
+    N_Grid = 100
     x1, x2, Grid = ARTS_BuildGrid_DDEF(X, ix, iy, N_Grid)
 
     Z = reshape(ARTS_Predict_DDEF(Model, Grid), N_Grid, N_Grid)'
@@ -362,7 +405,7 @@ Renders a 2D Contour map (Heatmap) with labeled isolating lines.
 function ARTS_RenderContour_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int},
     Lbls::Vector{String}, OutName::String)
     ix, iy = Idx[1], Idx[2]
-    N = 35
+    N = 100
     x1, x2, Grid = ARTS_BuildGrid_DDEF(X, ix, iy, N)
 
     Z = reshape(ARTS_Predict_DDEF(Model, Grid), N, N)'
@@ -391,11 +434,11 @@ function ARTS_RenderSlice_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int}
     ix, iy = Idx[1], Idx[2]
     K = size(X, 2)
 
-    x1 = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=35))
+    x1 = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=100))
     y_vals = (minimum(view(X, :, iy)), mean(view(X, :, iy)), maximum(view(X, :, iy)))
     y_names = ("Min", "Mean", "Max")
     styles = ("solid", "dash", "solid")
-    colors = (TH.Magenta, TH.Cyan, TH.Yellow)
+    colours = (TH.Magenta, TH.Cyan, TH.Yellow)
 
     col_means = vec(mean(X; dims=1))
     traces = GenericTrace[]
@@ -408,7 +451,7 @@ function ARTS_RenderSlice_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int}
         z = ARTS_Predict_DDEF(Model, Grid)
         push!(traces, scatter(; x=x1, y=z, mode="lines",
             name="$(Lbls[2])=$(y_names[i])",
-            line=attr(color=colors[i], dash=styles[i], width=2)))
+            line=attr(color=colours[i], dash=styles[i], width=2)))
     end
 
     layout = ARTS_BaseLayout_DDEF("Interaction Slice: $OutName")
@@ -425,7 +468,7 @@ function ARTS_RenderTrend_DDEF(Model::Dict, X::Matrix{Float64}, Y_Real::Vector{F
     Idx::Vector{Int}, Lbls::Vector{String}, OutName::String)
     TH = THEME
     ix = Idx[1]
-    N = 35
+    N = 100
 
     xr = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N))
     Grid = repeat(mean(X; dims=1), N)
@@ -449,16 +492,18 @@ end
     ARTS_RenderSpace_DDEF(Models, Goals, X, Idx, Lbls, [Best_Point]) -> Plot
 Visualises the multi-objective desirability space.
 """
-function ARTS_RenderSpace_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int}, Lbls::Vector{String}, Best_Point::Vector{Float64}=Float64[])
-    return ARTS_RenderSpaceImpl_DDEF(Models, Goals, X, Idx, Lbls, Best_Point, false)[1]
+function ARTS_RenderSpace_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int}, Lbls::Vector{String}, 
+    Leaders_DF::AbstractDataFrame=DataFrame())
+    return ARTS_RenderSpaceImpl_DDEF(Models, Goals, X, Idx, Lbls, Leaders_DF, false)[1]
 end
 
 """
     ARTS_RenderCandidates_DDEF(Models, Goals, X, Idx, Lbls, [Best_Point]) -> (Plot, PctString)
 Visualises the top quartile of the desirability space (Optimal Solution Space).
 """
-function ARTS_RenderCandidates_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int}, Lbls::Vector{String}, Best_Point::Vector{Float64}=Float64[])
-    p, pct_str = ARTS_RenderSpaceImpl_DDEF(Models, Goals, X, Idx, Lbls, Best_Point, true)
+function ARTS_RenderCandidates_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int}, Lbls::Vector{String}, 
+    Leaders_DF::AbstractDataFrame=DataFrame())
+    p, pct_str = ARTS_RenderSpaceImpl_DDEF(Models, Goals, X, Idx, Lbls, Leaders_DF, true)
     return p, pct_str
 end
 
@@ -466,10 +511,11 @@ end
     ARTS_RenderSpaceImpl_DDEF(Models, Goals, X, Idx, Lbls, Best_Point, is_candidate) -> (Plot, PctString)
 Core rendering logic for desirability-based solution spaces.
 """
-function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int}, Lbls::Vector{String}, Best_Point::Vector{Float64}, is_candidate::Bool)
+function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int}, Lbls::Vector{String}, 
+    Leaders_DF::AbstractDataFrame, is_candidate::Bool)
     ix, iy = Idx[1], Idx[2]
 
-    N = ARTS_AdaptiveGridN_DDEF(80, 10000)
+    N = ARTS_AdaptiveGridN_DDEF(200, 40000)
     K = size(X, 2)
 
     x1 = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N))
@@ -479,11 +525,25 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
     z_vals = [0.0]
     if K > 2
         iz = first(setdiff(1:K, Idx))
-        if !isempty(Best_Point)
-            z_vals = [minimum(view(X, :, iz)), Best_Point[iz], maximum(view(X, :, iz))]
-        else
-            z_vals = [minimum(view(X, :, iz)), mean(view(X, :, iz)), maximum(view(X, :, iz))]
+        z_min = minimum(view(X, :, iz))
+        z_max = maximum(view(X, :, iz))
+        
+        # Determine z_mid from first leader or mean
+        z_mid = mean(view(X, :, iz))
+        if is_candidate && nrow(Leaders_DF) > 0
+            C = Sys_Fast.FAST_Constants_DDEF()
+            in_cols = filter(n -> startswith(n, C.PRE_INPUT), names(Leaders_DF))
+            if iz <= length(in_cols)
+                z_mid = Leaders_DF[1, Symbol(in_cols[iz])]
+            end
         end
+
+        # Scientific Safeguard: Ensure Z-dimension has depth even if variable is constant
+        if abs(z_max - z_min) < 1e-4
+            z_min -= 0.5
+            z_max += 0.5
+        end
+        z_vals = [z_min, z_mid, z_max]
     end
 
     traces = GenericTrace[]
@@ -515,11 +575,17 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
                 Scores[i] *= (d_val^goal_tup[6])
             end
         end
-        ScoreMat = reshape(Scores .^ pow_factor, N, N)'
+        # Final ScoreMat Clamping & NaN-safe stats
+        ScoreMat = clamp.(reshape(Scores .^ pow_factor, N, N)', 0.0, 1.0)
+        ScoreMat[isnan.(ScoreMat)] .= 0.0
         all_scores[s] = ScoreMat
 
-        global_max = max(global_max, maximum(ScoreMat))
-        global_min = min(global_min, minimum(ScoreMat))
+        # Robust min/max ignoring NaNs for colorbar stability
+        valid_scores_mat = filter(!isnan, ScoreMat)
+        if !isempty(valid_scores_mat)
+            global_max = max(global_max, maximum(valid_scores_mat))
+            global_min = min(global_min, minimum(valid_scores_mat))
+        end
     end
 
     all_non_zero = Float64[]
@@ -548,47 +614,105 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
 
         Z_layer = fill(iz > 0 ? zv : 0.0, N, N)
 
-        if any(!isnan, Masked)
+        # Draw if there's data OR if it's a boundary layer (to preserve 3D volume structure)
+        if any(!isnan, Masked) || s == 1 || s == 3
+            # If a boundary layer is empty, show a ultra-faint ghost surface to avoid visual collapse
+            is_empty_layer = !any(!isnan, Masked)
+            if is_empty_layer
+                Masked = fill(0.0, N, N) # Show as zero/min color
+            end
+
             alpha_val = (s == 2 || iz == 0) ? (is_candidate ? 0.85 : 0.70) : (is_candidate ? 0.35 : 0.20)
-            trace_name = (s == 2 && K > 2 && !isempty(Best_Point)) ? "Level: $(round(zv; digits=2))" : "Slice $s"
+            if is_empty_layer; alpha_val = 0.05; end # Ghost mode
+            trace_name = (s == 2 && K > 2 && nrow(Leaders_DF) > 0) ? "Level: $(round(zv; digits=2))" : "Slice $s"
 
             push!(traces, surface(;
                 x=x1, y=x2, z=Z_layer,
                 surfacecolor=Masked,
                 colorscale=VIRIDIS_SCALE,
-                cmin=is_candidate ? thresh : global_min,
-                cmax=global_max,
+                cmin=0.0, # Hard Lockdown
+                cmax=1.0, # Hard Lockdown
                 showscale=(s == 1),
                 opacity=alpha_val,
                 name=trace_name,
                 showlegend=false,
                 contours=attr(z=attr(show=true, usecolormap=true, width=3)),
+                colorbar=attr(
+                    title="Desirability",
+                    len=0.6, thickness=15, x=1.02,
+                    tickvals=[0, 0.2, 0.4, 0.6, 0.8, 1.0],
+                    ticktext=["0.0", "0.2", "0.4", "0.6", "0.8", "1.0"]
+                )
             ))
         end
     end
 
-    if !isempty(Best_Point)
-        bx, by = Best_Point[ix], Best_Point[iy]
-        bz = iz > 0 ? Best_Point[iz] : 0.0
+    if is_candidate && nrow(Leaders_DF) > 0
+        C = Sys_Fast.FAST_Constants_DDEF()
         th = THEME
-        push!(traces, scatter3d(;
-            x=[bx], y=[by], z=[bz],
-            mode="markers+text",
-            marker=attr(size=3, color=th.Red, symbol="diamond", line=attr(color=th.Bg, width=1)),
-            name="Leader",
-            text=[" Leader "],
-            textposition="top center",
-            textfont=attr(color=th.TextBright, size=11, family=th.Font)
-        ))
+        in_cols = filter(n -> startswith(n, C.PRE_INPUT), names(Leaders_DF))
+        id_col = findfirst(c -> uppercase(c) == "ID" || uppercase(c) == "EXP_ID", names(Leaders_DF))
+        score_col = findfirst(c -> uppercase(c) == "SCORE", names(Leaders_DF))
+
+        # Extract top 9 candidates for visualization
+        # Type 1: Global TOP (1-3)
+        # Type 2: Input-Diversity (first 3)
+        # Type 3: Output-Diversity (first 3)
+        
+        added_top, added_in, added_out = 0, 0, 0
+        for r in 1:nrow(Leaders_DF)
+            # Find candidate type from ID (using standardized prefixes)
+            id_val = !isnothing(id_col) ? string(Leaders_DF[r, id_col]) : "L$r"
+            id_upper = uppercase(id_val)
+            
+            is_top = occursin("TOP", id_upper)
+            is_in = occursin("INP", id_upper)
+            is_out = occursin("OUT", id_upper)
+
+            marker_type = ""
+            if is_top && added_top < 3
+                added_top += 1
+                marker_type = "TOP"
+            elseif is_in && added_in < 3
+                added_in += 1
+                marker_type = "INP"
+            elseif is_out && added_out < 3
+                added_out += 1
+                marker_type = "OUT"
+            else
+                continue # Skip extra candidates
+            end
+
+            bx = Leaders_DF[r, Symbol(in_cols[ix])]
+            by = Leaders_DF[r, Symbol(in_cols[iy])]
+            bz = iz > 0 ? Leaders_DF[r, Symbol(in_cols[iz])] : 0.0
+            
+            # Colour shifting: Pure Red -> Pinkish-Red (INP) -> Orange-Red (OUT)
+            marker_colour = marker_type == "TOP" ? th.Red : (marker_type == "INP" ? "#C2185B" : "#F4511E")
+            marker_name = marker_type == "TOP" ? "Global Leader ($id_val)" : 
+                          (marker_type == "INP" ? "Input-Based Leader ($id_val)" : "Output-Based Leader ($id_val)")
+            
+            push!(traces, scatter3d(;
+                x=[bx], y=[by], z=[bz],
+                mode="markers",
+                marker=attr(size=4.0, color=marker_colour, symbol="diamond", 
+                           line=attr(color=th.Bg, width=1)),
+                showlegend=false,
+                name=marker_name,
+                hovertext=["$marker_name<br>Score: $(round(Leaders_DF[r, score_col], digits=3))"],
+                hoverinfo="text"
+            ))
+        end
     end
 
-    plotTitle = is_candidate ? "Optimal Solution Space ($pct_str% of Total Space)" : "Design Space: $(Lbls[1]) vs $(Lbls[2])"
+    plotTitle = is_candidate ? "Candidates ($pct_str% of Total Space)" : "Design Space: $(Lbls[1]) vs $(Lbls[2])"
     layout = ARTS_BaseLayout_DDEF(plotTitle; height=_SCENE_HEIGHT)
     layout[:scene] = attr(
         xaxis=attr(title=Lbls[1]),
         yaxis=attr(title=Lbls[2]),
-        zaxis=attr(title=iz > 0 ? (length(Lbls) > 2 ? Lbls[3] : "Slice Domain") : "Level"),
-        camera=attr(eye=attr(x=1.5, y=1.5, z=0.5)),
+        zaxis=attr(title=iz > 0 ? (length(Lbls) > 2 ? Lbls[3] : "Z-Axis") : "Level", 
+                   range=abs(z_vals[3]-z_vals[1]) < 1e-6 ? [z_vals[1]-0.5, z_vals[1]+0.5] : nothing),
+        camera=attr(eye=attr(x=1.6, y=1.6, z=0.8)),
         aspectmode="cube",
         domain=attr(x=[0.0, 0.88], y=[0.0, 1.0]),
     )
@@ -597,12 +721,12 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
 end
 
 """
-    ARTS_RenderGoldenZone_DDEF(Models, Goals, X, InNames) -> Plot
-Renders a 3D isometric volume of the 'Golden Zone' (Top 10% Desirability).
+    ARTS_RenderOptimalZone_DDEF(Models, Goals, X, InNames) -> (Plot, PctString)
+Renders a 3D isometric volume of the 'Optimal Zone' (Top 10% Desirability).
 """
-function ARTS_RenderGoldenZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames::Vector{String})
+function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames::Vector{String})
     TH = THEME
-    N = 25 # Coarser grid for volume stability
+    N = 50 # High-fidelity grid for volume stability (50^3 = 125,000 pts)
     Dim = size(X, 2)
     Dim < 3 && return Plot([], ARTS_BaseLayout_DDEF("Visualisation requires at least 3 variables."))
 
@@ -636,31 +760,43 @@ function ARTS_RenderGoldenZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames::
             Scores[i] *= (d^parsed_goals[m][6])
         end
     end
-    Scores = Scores .^ pow
+    Scores = clamp.(Scores .^ pow, 0.0, 1.0)
 
-    # Target the top 10% desirable space
-    valid_scores = Scores[Scores.>1e-6]
+    # Target the top 10% desirable space (NaN-safe)
+    valid_scores = filter(s -> !isnan(s) && s > 1e-6, Scores)
     thresh = isempty(valid_scores) ? 0.9 : quantile(valid_scores, 0.90)
+
+    # Calculate Volume Percentage for Optimal Zone
+    pts_above = count(s -> !isnan(s) && s >= thresh, Scores)
+    pct = (pts_above / length(Scores)) * 100.0
+    pct_str = @sprintf("%.2f", pct)
 
     trace = volume(;
         x=Grid[:, 1], y=Grid[:, 2], z=Grid[:, 3],
         value=Scores,
         isomin=thresh,
-        isomax=maximum(Scores),
+        isomax=1.0, # Hard Lockdown
         opacity=0.3,
         surface_count=5,
         colorscale=VIRIDIS_SCALE,
-        colorbar=attr(title="Quality Index", len=0.6)
+        cmin=0.0,
+        cmax=1.0,
+        colorbar=attr(
+            title="Quality Index", 
+            len=0.6, 
+            tickvals=[0, 0.2, 0.4, 0.6, 0.8, 1.0],
+            ticktext=["0.0", "0.2", "0.4", "0.6", "0.8", "1.0"]
+        )
     )
 
-    layout = ARTS_BaseLayout_DDEF("The Golden Zone (Top 10% Composite Desirability)"; height=_SCENE_HEIGHT)
+    layout = ARTS_BaseLayout_DDEF("Optimal Zone ($pct_str% of Total Space)"; height=_SCENE_HEIGHT)
     layout[:scene] = attr(
         xaxis=attr(title=InNames[1]),
         yaxis=attr(title=InNames[2]),
         zaxis=attr(title=InNames[3]),
         aspectmode="cube"
     )
-    return Plot(trace, layout)
+    return Plot(trace, layout), pct_str
 end
 
 # --------------------------------------------------------------------------------------
@@ -668,10 +804,10 @@ end
 # --------------------------------------------------------------------------------------
 
 """
-    ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, [Best_Point]) -> Vector{Dict}
+    ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, [Leaders_DF]) -> Vector{Dict}
 Primary output orchestrator for generating all selected plot types.
 """
-function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, Best_Point=Float64[])
+function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, Leaders_DF::AbstractDataFrame=DataFrame())
     graphs = Dict{String,Any}[]
     graphs_lock = ReentrantLock()
     NumVars = size(X, 2)
@@ -696,13 +832,6 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                 end
             end)
 
-            # 1.5. Factor Synergy Matrix (Interaction Heatmap)
-            push!(tasks, Threads.@spawn begin
-                p_synergy = ARTS_RenderInteractionMatrix_DDEF(Models[m], InNames)
-                lock(graphs_lock) do
-                    push!(graphs, Dict("Type" => "Synergy", "Title" => "Synergy: $name", "Plot" => p_synergy))
-                end
-            end)
         end
 
         # 2. Variable Interactions & Surface Mapping
@@ -744,24 +873,24 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
             end
 
             push!(tasks, Threads.@spawn begin
-                p1 = ARTS_RenderSpace_DDEF(Models, Goals, X, c, lbls, Best_Point)
-                cand_plot, cand_pct = ARTS_RenderCandidates_DDEF(Models, Goals, X, c, lbls, Best_Point)
+                p1 = ARTS_RenderSpace_DDEF(Models, Goals, X, c, lbls, Leaders_DF)
+                cand_plot, cand_pct = ARTS_RenderCandidates_DDEF(Models, Goals, X, c, lbls, Leaders_DF)
                 lock(graphs_lock) do
                     push!(graphs, Dict("Type" => "DesignSpace", "Title" => "Design Space: $(lbls[1])-$(lbls[2])", "Plot" => p1))
-                    push!(graphs, Dict("Type" => "Candidates", "Title" => "Optimal Solution Space: $(cand_pct)% of Total, $(lbls[1])-$(lbls[2])", "Plot" => cand_plot))
+                    push!(graphs, Dict("Type" => "Candidates", "Title" => "Candidates: $(lbls[1])-$(lbls[2])", "Plot" => cand_plot))
                 end
             end)
         end
-
-        # --- THE GOLDEN ZONE ---
-        if get(Opts, "GoldenZone", true) && NumVars >= 3
-            push!(tasks, Threads.@spawn begin
-                p_gz = ARTS_RenderGoldenZone_DDEF(Models, Goals, X, InNames)
-                lock(graphs_lock) do
-                    push!(graphs, Dict("Type" => "GoldenZone", "Title" => "The Golden Zone (3D Landscape)", "Plot" => p_gz))
-                end
-            end)
-        end
+ 
+         # --- THE OPTIMAL ZONE ---
+         if get(Opts, "GoldenZone", true) && NumVars >= 3
+             push!(tasks, Threads.@spawn begin
+                 p_gz, gz_pct = ARTS_RenderOptimalZone_DDEF(Models, Goals, X, InNames)
+                 lock(graphs_lock) do
+                     push!(graphs, Dict("Type" => "OptimalZone", "Title" => "Optimal Zone", "Plot" => p_gz))
+                 end
+             end)
+         end
     end
 
     # Wait for all plotting threads to compute
@@ -778,50 +907,12 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
         "Trend" => 6,
         "DesignSpace" => 7,
         "Candidates" => 8,
-        "GoldenZone" => 0 # Primary highlight
+        "OptimalZone" => 9
     )
     sort!(graphs, by=g -> get(TypePriority, g["Type"], 99))
 
     return graphs
 end
 
-"""
-    ARTS_RenderInteractionMatrix_DDEF(Model, InNames) -> Plot
-Renders a synergistic heatmap showing the magnitude of interaction effects.
-"""
-function ARTS_RenderInteractionMatrix_DDEF(Model::Dict, InNames::Vector{String})
-    TH = THEME
-    K = length(InNames)
-    K < 2 && return Plot([], ARTS_BaseLayout_DDEF("Visualisation requires at least 2 variables."))
-
-    coefs = Model["Coefs"]
-    names = Model["TermNames"]
-    Mat = zeros(K, K)
-
-    # Diagonal: Linear components
-    for i in 1:K
-        idx = findfirst(==(InNames[i]), names)
-        !isnothing(idx) && (Mat[i, i] = abs(coefs[idx]))
-    end
-
-    # Off-diagonal: Interaction components (A × B)
-    for i in 1:K, j in (i+1):K
-        term = "$(InNames[i]) × $(InNames[j])"
-        rev_term = "$(InNames[j]) × $(InNames[i])"
-        idx = findfirst(n -> n == term || n == rev_term, names)
-        if !isnothing(idx)
-            val = abs(coefs[idx])
-            Mat[i, j] = val
-            Mat[j, i] = val
-        end
-    end
-
-    trace = heatmap(; z=Mat, x=InNames, y=InNames, colorscale=VIRIDIS_SCALE, showscale=true)
-
-    layout = ARTS_BaseLayout_DDEF("Inter-Factor Synergistic Landscape")
-    layout[:xaxis][:title] = "Factor A"
-    layout[:yaxis][:title] = "Factor B"
-    return Plot(trace, layout)
-end
 
 end # module Lib_Arts

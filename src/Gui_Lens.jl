@@ -32,22 +32,22 @@ Constructs a single goal-specification row for the optimisation objectives table
 """
 function LENS_BuildGoalRow_DDEF(i)
     return html_tr([
-        html_td(dcc_input(id="lens-goal-name-$i", type="text", value="", style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0", disabled=true), style=merge(BASE_STYLE_CELL, Dict("width" => "20%", "backgroundColor" => "#FFFFFF", "borderBottom" => "none")), className="p-0"),
-        html_td(dcc_input(id="lens-goal-min-$i", type="number", value=nothing, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "15%", "borderBottom" => "none")), className="p-0"),
-        html_td(dcc_input(id="lens-goal-target-$i", type="number", value=nothing, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "15%", "borderBottom" => "none")), className="p-0"),
-        html_td(dcc_input(id="lens-goal-max-$i", type="number", value=nothing, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "15%", "borderBottom" => "none")), className="p-0"),
+        html_td(dcc_input(id="lens-goal-name-$i", type="text", value="", style=merge(BASE_STYLE_INPUT_CENTRE, Dict("fontSize" => "10px")), className="px-1 py-0", disabled=true), style=merge(BASE_STYLE_CELL, Dict("width" => "20%", "backgroundColor" => "#FFFFFF", "borderBottom" => "none")), className="p-0"),
+        html_td(dcc_input(id="lens-goal-min-$i", type="number", value=nothing, style=merge(BASE_STYLE_INPUT_CENTRE, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "15%", "borderBottom" => "none")), className="p-0"),
+        html_td(dcc_input(id="lens-goal-target-$i", type="number", value=nothing, style=merge(BASE_STYLE_INPUT_CENTRE, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "15%", "borderBottom" => "none")), className="p-0"),
+        html_td(dcc_input(id="lens-goal-max-$i", type="number", value=nothing, style=merge(BASE_STYLE_INPUT_CENTRE, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "15%", "borderBottom" => "none")), className="p-0"),
         html_td(dbc_select(id="lens-goal-type-$i", options=[
                     Dict("label" => "Nominal", "value" => "Nominal"),
                     Dict("label" => "Maximise", "value" => "Maximise"),
                     Dict("label" => "Minimise", "value" => "Minimise"),
                 ], value="Nominal", className="form-select form-select-sm border-0 py-0", style=Dict("width" => "100%", "fontSize" => "10px", "backgroundColor" => "transparent", "color" => "#000000", "boxShadow" => "none")), style=merge(BASE_STYLE_CELL, Dict("width" => "20%")), className="p-1"),
         html_td(dbc_select(id="lens-goal-weight-$i", options=[
-                    Dict("label" => "★☆☆☆☆", "value" => "0.1"),
-                    Dict("label" => "★★☆☆☆", "value" => "0.5"),
-                    Dict("label" => "★★★☆☆", "value" => "1.0"),
-                    Dict("label" => "★★★★☆", "value" => "5.0"),
-                    Dict("label" => "★★★★★", "value" => "10.0"),
-                ], value="1.0", className="form-select form-select-sm border-0 py-0 text-center", style=Dict("width" => "100%", "fontSize" => "12px", "backgroundColor" => "transparent", "color" => "#B8860B", "boxShadow" => "none")), style=merge(BASE_STYLE_CELL, Dict("width" => "15%", "borderBottom" => "none")), className="p-1")
+                    Dict("label" => "★☆☆☆☆", "value" => "0.25"),
+                    Dict("label" => "★★☆☆☆", "value" => "0.50"),
+                    Dict("label" => "★★★☆☆", "value" => "1.00"),
+                    Dict("label" => "★★★★☆", "value" => "2.50"),
+                    Dict("label" => "★★★★★", "value" => "5.00"),
+                ], value="1.00", className="form-select form-select-sm border-0 py-0 text-center", style=Dict("width" => "100%", "fontSize" => "12px", "backgroundColor" => "transparent", "color" => "#B8860B", "boxShadow" => "none")), style=merge(BASE_STYLE_CELL, Dict("width" => "15%", "borderBottom" => "none")), className="p-1")
     ])
 end
 
@@ -300,7 +300,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         path = ""
         try  # Error guard for sync callback
             (isnothing(active_cont) || active_cont == "") &&
-                return [], "No Data Source", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.0", 3)..., Dash.no_update(), Dash.no_update(), "d-none", [true], "", ""
+                return [], "No Data Source", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", [true], "", ""
 
             Sys_Fast.FAST_Log_DDEF("LENS", "Sync", "Synchronizing from Master Vault...", "INFO")
             path = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
@@ -318,7 +318,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             goals_target = fill(0.0, 3)
             goals_max = fill(0.0, 3)
             goals_type = fill("Nominal", 3)
-            goals_weight = fill("1.0", 3)
+            goals_weight = fill("1.00", 3)
 
             for (i, c) in enumerate(out_cols[1:min(length(out_cols), 3)])
                 raw_vals = skipmissing(df[!, c])
@@ -361,7 +361,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 if !isnothing(g_idx)
                     saved_g = saved_goals[g_idx]
                     goals_type[i] = string(get(saved_g, "Type", "Nominal"))
-                    goals_weight[i] = string(get(saved_g, "Weight", 1.0))
+                    goals_weight[i] = Printf.@sprintf("%.2f", Main.Sys_Fast.FAST_SafeNum_DDEF(get(saved_g, "Weight", 1.0)))
                     goals_target[i] = Float64(get(saved_g, "Target", goals_target[i]))
                     goals_min[i] = Float64(get(saved_g, "Min", goals_min[i]))
                     goals_max[i] = Float64(get(saved_g, "Max", goals_max[i]))
@@ -406,7 +406,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "SYNC_FAIL", bt, "FAIL")
             return [], html_span("❌ Sync Error: $(first(string(e), 120))", className="text-danger small"),
-            nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.0", 3)..., Dash.no_update(), Dash.no_update(), "d-none", [true], "", ""
+            nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", [true], "", ""
         finally
             # Guaranteed temp file cleanup
             !isempty(path) && try
@@ -579,8 +579,8 @@ function LENS_RegisterCallbacks_DDEF(app)
 
                 # Column ordering: ID, Input Variables, Predicted Outputs, Score
                 id_col = findfirst(c -> c == C.COL_EXP_ID || c == C.COL_ID, lcols)
-                in_cols_l = sort(filter(c -> startswith(c, C.PRE_INPUT), lcols))
-                pred_cols_l = sort(filter(c -> startswith(c, C.PRE_PRED), lcols))
+                in_cols_l = filter(c -> startswith(c, C.PRE_INPUT), lcols)
+                pred_cols_l = filter(c -> startswith(c, C.PRE_PRED), lcols)
                 score_col = findfirst(==(C.COL_SCORE), lcols)
 
                 # Build display header names
@@ -710,18 +710,23 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         function format_line(items)
             return html_div([
-                    html_span(item, style=Dict("flex" => "1", "textAlign" => "center", "minWidth" => "20%", "whiteSpace" => "nowrap", "padding" => "0 5px", "fontSize" => "12px")) for item in items
-                ], style=Dict("display" => "flex", "justifyContent" => "space-around", "width" => "100%", "maxWidth" => "800px", "margin" => "0 auto"))
+                    html_span(item, style=Dict(
+                        "width" => "33.3%", 
+                        "textAlign" => "center", 
+                        "whiteSpace" => "nowrap", 
+                        "padding" => "4px 0", 
+                        "fontSize" => "11px", 
+                        "fontWeight" => "600",
+                        "color" => "#2C3E50"
+                    )) for item in items
+                ], style=Dict("display" => "flex", "width" => "100%", "justifyContent" => "space-around"))
         end
 
-        if length(info_parts) > 4
-            info_html = html_div([
-                    format_line(info_parts[1:min(length(info_parts), 4)]),
-                    format_line(info_parts[5:end])
-                ], style=Dict("display" => "flex", "flexDirection" => "column", "gap" => "4px", "width" => "100%", "justifyContent" => "center", "alignItems" => "center"))
-        else
-            info_html = format_line(info_parts)
-        end
+        info_html = html_div([
+                format_line(info_parts[1:min(length(info_parts), 3)]),
+                length(info_parts) > 3 ? format_line(info_parts[4:min(length(info_parts), 6)]) : html_div(),
+                length(info_parts) > 6 ? format_line(info_parts[7:min(length(info_parts), 9)]) : html_div()
+            ], style=Dict("display" => "flex", "flexDirection" => "column", "width" => "100%", "padding" => "2px 0"))
 
         return g[idx]["figure"], g[idx]["title"], "/ $(length(g))", info_html
     end

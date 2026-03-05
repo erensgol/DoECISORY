@@ -10,7 +10,7 @@ module Gui_Base
 using Dash
 using DashBootstrapComponents
 
-export BASE_STYLE_CELL, BASE_STYLE_INPUT, BASE_STYLE_INPUT_CENTER
+export BASE_STYLE_CELL, BASE_STYLE_INPUT, BASE_STYLE_INPUT_CENTRE
 export BASE_STYLE_HEADER, BASE_STYLE_DATATABLE_CELL, BASE_STYLE_INLINE_HEADER, BASE_STYLE_HR, BASE_EMPTY_FIGURE
 export BASE_SafeRows_DDEF, BASE_GetTrigger_DDEF
 export BASE_PageHeader_DDEF, BASE_GlassPanel_DDEF, BASE_DataTable_DDEF, BASE_Modal_DDEF, BASE_ConvertThemePlotlyWhite_DDEF!
@@ -36,7 +36,7 @@ const BASE_STYLE_INPUT = Dict(
     "fontFamily" => "Inter",
 )
 
-const BASE_STYLE_INPUT_CENTER = merge(BASE_STYLE_INPUT, Dict("textAlign" => "center"))
+const BASE_STYLE_INPUT_CENTRE = merge(BASE_STYLE_INPUT, Dict("textAlign" => "center"))
 
 const BASE_STYLE_HEADER = Dict(
     "backgroundColor" => "#FFFFFF", "color" => "#666666",
@@ -134,15 +134,15 @@ function BASE_DataTable_DDEF(id::String, columns::Vector, data; kwargs...)
 end
 
 """
-    BASE_Modal_DDEF(id, title, body, footer; [size], [is_open], [centered], [close_button])
+    BASE_Modal_DDEF(id, title, body, footer; [size], [is_open], [centred], [close_button])
 Standardised modal constructor for popup dialogs.
 """
-function BASE_Modal_DDEF(id::String, title, body, footer; size="lg", is_open=false, centered=true, close_button=true)
+function BASE_Modal_DDEF(id::String, title, body, footer; size="lg", is_open=false, centred=true, close_button=true)
     return dbc_modal([
             dbc_modalheader(dbc_modaltitle(title); close_button=close_button),
             dbc_modalbody(body),
             dbc_modalfooter(footer)
-        ]; id=id, is_open=is_open, size=size, centered=centered)
+        ]; id=id, is_open=is_open, size=size, centered=centred)
 end
 
 # --------------------------------------------------------------------------------------

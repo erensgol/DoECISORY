@@ -34,7 +34,7 @@ const ROLE_OPTIONS = [
     Dict("label" => "Fixed", "value" => "Fixed"),
 ]
 
-const ROLE_COLORS = Dict(
+const ROLE_COLOURS = Dict(
     "Variable" => "#440154",
     "Fixed" => "#FDE725",
 )
@@ -76,11 +76,11 @@ function DECK_BuildIdRowUI_DDEF(i, row, visible, show_del=false)
 
     mw_v = Float64(get(row, "MW", 0.0))
     hl_v = Float64(get(row, "HalfLife", 0.0))
-    dot1_color = mw_v > 0.0 ? "#5EC962" : "#2C2C2C"
-    dot2_color = hl_v > 0.0 ? "#5EC962" : "#2C2C2C"
+    dot1_colour = mw_v > 0.0 ? "#5EC962" : "#2C2C2C"
+    dot2_colour = hl_v > 0.0 ? "#5EC962" : "#2C2C2C"
     dots = html_span([
-            html_span("●", id="deck-dot1-$i", style=Dict("color" => dot1_color, "fontSize" => "0.45rem", "marginRight" => "1px")),
-            html_span("●", id="deck-dot2-$i", style=Dict("color" => dot2_color, "fontSize" => "0.45rem", "marginRight" => "2px")),
+            html_span("●", id="deck-dot1-$i", style=Dict("color" => dot1_colour, "fontSize" => "0.45rem", "marginRight" => "1px")),
+            html_span("●", id="deck-dot2-$i", style=Dict("color" => dot2_colour, "fontSize" => "0.45rem", "marginRight" => "2px")),
         ], style=Dict("display" => "inline-flex", "alignItems" => "center"))
 
     prop_btn = html_button(html_i(className="fas fa-cog", style=Dict("fontSize" => "0.80rem", "color" => is_filler ? "#F39C12" : "#A6A6A6")),
@@ -122,9 +122,9 @@ function DECK_BuildLevelRowUI_DDEF(i, row, visible)
     show_l3 = (i <= 3) # Visible only for Variables
 
     html_tr([
-            html_td(dcc_input(id="deck-l1-$i", type="number", value=l1_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px", "display" => show_l1 ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0"),
-            html_td(dcc_input(id="deck-l2-$i", type="number", value=l2_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px", "display" => show_l2 ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0"),
-            html_td(dcc_input(id="deck-l3-$i", type="number", value=l3_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px", "display" => show_l3 ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "34%")), className="p-0")
+            html_td(dcc_input(id="deck-l1-$i", type="number", value=l1_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTRE, Dict("fontSize" => "10px", "display" => show_l1 ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0"),
+            html_td(dcc_input(id="deck-l2-$i", type="number", value=l2_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTRE, Dict("fontSize" => "10px", "display" => show_l2 ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0"),
+            html_td(dcc_input(id="deck-l3-$i", type="number", value=l3_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTRE, Dict("fontSize" => "10px", "display" => show_l3 ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "34%")), className="p-0")
         ]; style=row_style, id="deck-row-level-$i")
 end
 
@@ -141,9 +141,9 @@ function DECK_BuildLimitsRowUI_DDEF(i, row, visible)
     show_minmax = (i <= 3)
 
     html_tr([
-            html_td(dcc_input(id="deck-min-$i", type="number", value=min_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px", "display" => show_minmax ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0"),
-            html_td(dcc_input(id="deck-unit-$i", type="text", value=unit_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "34%")), className="p-0"),
-            html_td(dcc_input(id="deck-max-$i", type="number", value=max_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px", "display" => show_minmax ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0")
+            html_td(dcc_input(id="deck-min-$i", type="number", value=min_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTRE, Dict("fontSize" => "10px", "display" => show_minmax ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0"),
+            html_td(dcc_input(id="deck-unit-$i", type="text", value=unit_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTRE, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "34%")), className="p-0"),
+            html_td(dcc_input(id="deck-max-$i", type="number", value=max_val, debounce=true, style=merge(BASE_STYLE_INPUT_CENTRE, Dict("fontSize" => "10px", "display" => show_minmax ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "33%")), className="p-0")
         ]; style=row_style, id="deck-row-limits-$i")
 end
 
@@ -153,16 +153,16 @@ Renders a row for the response metrics table.
 """
 function DECK_BuildOutRow_DDEF(i, def_name, def_unit)
     # Indicator dot for decay correction status
-    out_dot = html_span("●", id="deck-out-dot-$i",
-        style=Dict("color" => "#2C2C2C", "fontSize" => "0.45rem", "marginRight" => "2px", "verticalAlign" => "middle"))
+    out_dot = html_span("●",
+        style=Dict("color" => get(ROLE_COLOURS, "Output", "#666666"), "fontSize" => "0.45rem", "marginRight" => "2px", "verticalAlign" => "middle"))
 
     prop_btn = html_button(html_i(className="fas fa-cog", style=Dict("fontSize" => "0.80rem", "color" => "#A6A6A6")),
         id="btn-out-prop-$i", n_clicks=0,
         style=Dict("cursor" => "pointer", "background" => "none", "border" => "none", "padding" => "2px"))
 
     return html_tr([
-        html_td(dcc_input(id="deck-out-name-$i", type="text", value=def_name, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "40%")), className="p-0"),
-        html_td(dcc_input(id="deck-out-unit-$i", type="text", value=def_unit, style=merge(BASE_STYLE_INPUT_CENTER, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "40%")), className="p-0"),
+        html_td(dcc_input(id="deck-out-name-$i", type="text", value=def_name, style=merge(BASE_STYLE_INPUT_CENTRE, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "40%")), className="p-0"),
+        html_td(dcc_input(id="deck-out-unit-$i", type="text", value=def_unit, style=merge(BASE_STYLE_INPUT_CENTRE, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_STYLE_CELL, Dict("width" => "40%")), className="p-0"),
         html_td(html_span([out_dot, prop_btn], style=Dict("display" => "inline-flex", "alignItems" => "center", "justifyContent" => "center")), style=merge(BASE_STYLE_CELL, Dict("textAlign" => "center", "width" => "20%")), className="p-0")
     ])
 end
@@ -536,6 +536,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
             end
         end
 
+
         # 3. Stoichiometry Sum Check (Max Limit 100%)
         if !isempty(D["Idx_Chem"]) || !isempty(D["Idx_Fill"])
             sum_max = 0.0
@@ -720,6 +721,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         isnothing(stored) && return ntuple(_ -> Dash.no_update(), 14 * MAX_ROWS)
         rows = get(stored, "rows", [])
         count = get(stored, "count", 0)
+
 
         # All rows are now table-rows (ID, Level, Limits all use html_table)
         out_styles = [Dict("display" => (i <= 4 || i <= count) ? "table-row" : "none") for i in 1:MAX_ROWS]

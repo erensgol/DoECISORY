@@ -84,6 +84,11 @@ using Main.Gui_Lens
 FAST_Log_DDEF("BOOT", "Complete", "Core Libraries Integrated", "OK")
 
 # --------------------------------------------------------------------------------------
+# --- TRANSIENT HOUSEKEEPING ---
+# --------------------------------------------------------------------------------------
+Sys_Fast.FAST_InitializeWorkforce_DDEF()
+
+# --------------------------------------------------------------------------------------
 # --- APP CONFIGURATION ---
 # --------------------------------------------------------------------------------------
 
@@ -174,7 +179,7 @@ app.layout = html_div([
             html_div([
                     html_div(className="spinner-border text-primary mb-3", style=Dict("width" => "3rem", "height" => "3rem")),
                     html_h4("DaishoDoE", className="fw-bold mb-2", style=Dict("color" => "#000000")),
-                    html_p("Synchronizing scientific modules...", className="text-secondary", id="sys-loading-msg"),
+                    html_p("Synchronising scientific modules...", className="text-secondary", id="sys-loading-msg"),
                 ], style=Dict(
                     "display" => "flex", "flexDirection" => "column", "alignItems" => "center",
                     "justifyContent" => "center", "height" => "100vh",
@@ -314,7 +319,7 @@ function DAISHO_Warmup_DDEF()
             Dict("Name" => "B", "Role" => "Variable", "L1" => "4", "L2" => "5", "L3" => "6", "MW" => 200.0, "Unit" => "mM"),
             Dict("Name" => "C", "Role" => "Filler", "L1" => 0, "L2" => 0, "L3" => 0, "MW" => 300, "Unit" => "MR"),
         ]
-        Sys_Fast.FAST_SanitizeInput_DDEF(dummy_rows)
+        Sys_Fast.FAST_SanitiseInput_DDEF(dummy_rows)
 
         # 2. Lib_Mole: Stoichiometry engine
         Lib_Mole.MOLE_ParseTable_DDEF(dummy_rows)

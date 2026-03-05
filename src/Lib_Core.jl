@@ -21,7 +21,7 @@ using Main.Lib_Arts
 
 export CORE_GenDesign_DDEF, CORE_CalcNextRange_DDEF, CORE_MapLevels_DDEF,
     CORE_ExtractLeader_DDEF, CORE_GenerateOptimalDesign_DDEF,
-    CORE_OptimizeDesirability_DDEF, CORE_ValidateDesign_DDEF,
+    CORE_OptimiseDesirability_DDEF, CORE_ValidateDesign_DDEF,
     CORE_D_Efficiency_DDEF, CORE_CalcDesignMetrics_DDEF
 
 # --------------------------------------------------------------------------------------
@@ -210,10 +210,10 @@ end
 # --------------------------------------------------------------------------------------
 
 """
-    CORE_OptimizeDesirability_DDEF(Models, Goals, X_Bounds; MaxTime, PenaltyFn) -> Vector{Float64}
+    CORE_OptimiseDesirability_DDEF(Models, Goals, X_Bounds; MaxTime, PenaltyFn) -> Vector{Float64}
 Globally optimises parameters by maximising composite desirability using BlackBoxOptim.
 """
-function CORE_OptimizeDesirability_DDEF(Models::AbstractVector, Goals::AbstractVector, X_Bounds::AbstractMatrix{Float64};
+function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractVector, X_Bounds::AbstractMatrix{Float64};
     MaxTime::Float64=3.0, PenaltyFn::Union{Function,Nothing}=nothing)
     Dim = size(X_Bounds, 1)
     NumModels = length(Models)
@@ -259,7 +259,7 @@ function CORE_OptimizeDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
             d = Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
             s *= d^gtup[6]
         end
-        score = s^pow_factor
+        score = clamp(s^pow_factor, 0.0, 1.0)
 
         # Apply external scientific constraints (Penalties)
         if PenaltyFn !== nothing

@@ -492,7 +492,7 @@ end
 Performs high-density grid search across factor space for desirability exploration.
 """
 function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
-    X_Bounds::AbstractMatrix{Float64}; Steps::Int=21)
+    X_Bounds::AbstractMatrix{Float64}; Steps::Int=51)
     Dim = size(X_Bounds, 1)
 
     # Thread-aware density balancing
@@ -590,7 +590,8 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
                 d = Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
                 s *= d^gtup[6]
             end
-            Scores[i] = s^pow
+            res_val = s^pow
+            Scores[i] = (isnan(res_val) || isinf(res_val)) ? 0.0 : clamp(res_val, 0.0, 1.0)
         end
     end
 
@@ -688,7 +689,7 @@ function VISE_GenerateScientificReport_DDEF(Res::Dict)
     end
 
     if haskey(Res, "BestScore") && !isempty(get(Res, "BestPoint", []))
-        write(io, "#### IV. Optimal Scenario & Golden Zone Coordinates\n")
+        write(io, "#### IV. Optimal Scenario & Optimal Zone Coordinates\n")
         @printf(io, "- **Composite Desirability (D)**: %.4f\n", Res["BestScore"])
 
         best_pt = Res["BestPoint"]
@@ -699,11 +700,11 @@ function VISE_GenerateScientificReport_DDEF(Res::Dict)
                 @printf(io, "  - *%s*: %.4f\n", in_names[i], val)
             end
         end
-        write(io, "\n*Stability analysis suggests these coordinates reside within a high-confidence 'Golden Zone' for experimental reproducibility.*\n\n")
+        write(io, "\n*Stability analysis suggests these coordinates reside within a high-confidence 'Optimal Zone' for experimental reproducibility.*\n\n")
     end
 
     write(io, "---\n")
-    write(io, "*Generated via DaishoDoE Engine v$(Sys_Fast.CONST_DATA.VERSION) — High-Fidelity Academic Module. Optimized for publication in Computer Methods and Programs in Biomedicine (CMPB) editorial standards.*\n")
+    write(io, "*Generated via DaishoDoE Engine v$(Sys_Fast.CONST_DATA.VERSION) — High-Fidelity Academic Module. Optimised for publication in Computer Methods and Programs in Biomedicine (CMPB) editorial standards.*\n")
 
     return String(take!(io))
 end
@@ -734,8 +735,8 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         Log("VISE", "DATA_QUALITY", "Pre-flight issues: $(join(issues, " | "))", "WARN")
     end
 
-    # Apply standardization to the raw data
-    Sys_Fast.FAST_NormalizeCols_DDEF(df_raw)
+    # Apply standardisation to the raw data
+    Sys_Fast.FAST_NormaliseCols_DDEF(df_raw)
 
     col_phase = Symbol(C.COL_PHASE)
     df_train = hasproperty(df_raw, col_phase) ?
@@ -872,7 +873,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         num_candidates = length(SC)
 
         # 2. BlackBoxOptim for absolute Global Maximum (Best_Point)
-        Best_Point = Lib_Core.CORE_OptimizeDesirability_DDEF(models, Goals, bounds)
+        Best_Point = Lib_Core.CORE_OptimiseDesirability_DDEF(models, Goals, bounds)
 
         # --- Leader Candidate Selection (Diversity-Focused) ---
         used_indices = Int[]
@@ -880,9 +881,15 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         cand_tags = String[]
         cand_count = 0
 
-        top_indices = partialsortperm(SC, 1:num_candidates; rev=true)
+        top_indices = partialsortperm(SC, 1:min(8, num_candidates); rev=true)
+        # Benchmark score is the score of the 8th leader (or the last of what we have)
+        bench_score = SC[top_indices[end]]
+        score_limit = bench_score * 0.90
+        
+        # Candidate pool: All points strictly within 10% of the top-8 benchmark
+        tier_indices = findall(>=(score_limit), SC)
 
-        # 1. Top 8 Global Leaders
+        # 1. Top 8 Global Leaders (Already identified)
         for k in 1:min(8, length(top_indices))
             p_idx = VISE_ClampIndex_DDEF(top_indices[k], num_candidates)
             cand_count += 1
@@ -891,60 +898,55 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
             push!(used_indices, p_idx)
         end
 
-        # 2. Input-Based Diversity
+        # 2. Input-Based Diversity: Seek MINIMUM use of factors within the top tier
         for i in 1:min(3, size(XT, 2))
             tag_pre = i <= length(InNames) ? first(InNames[i] * "   ", 3) : "IN$i"
-            s_i = sortperm(XT[:, i])
-            slice_len = max(1, round(Int, length(s_i) * 0.1))
-            slice_indices = s_i[1:slice_len]
-            slice_scores = SC[slice_indices]
-            best_in_slice_local = sortperm(slice_scores; rev=true)
-            sorted_slice_global = slice_indices[best_in_slice_local]
-            selected_idx = -1
-            for m in eachindex(sorted_slice_global)
-                idx_val = VISE_ClampIndex_DDEF(sorted_slice_global[m], num_candidates)
-                if !(idx_val in used_indices)
-                    selected_idx = idx_val
-                    break
+            
+            # Find the best point in the tier that MINIMIZES this input
+            best_idx = -1
+            min_val = Inf
+            for idx in tier_indices
+                val = XT[idx, i]
+                if val < min_val
+                    min_val = val
+                    best_idx = idx
                 end
             end
-            if selected_idx == -1
-                selected_idx = VISE_ClampIndex_DDEF(sorted_slice_global[1], num_candidates)
-                tag_str = "$(tag_pre)-01(D)"
-            else
-                tag_str = "$(tag_pre)-01"
-                push!(used_indices, selected_idx)
+
+            if best_idx != -1
+                tag_str = (best_idx in used_indices) ? "INP-$(tag_pre)(D)" : "INP-$(tag_pre)"
+                push!(cand_indices, best_idx)
+                push!(cand_tags, tag_str)
+                push!(used_indices, best_idx)
+                cand_count += 1
             end
-            cand_count += 1
-            push!(cand_indices, selected_idx)
-            push!(cand_tags, tag_str)
         end
 
-        # 3. Output-Based Diversity
-        valid_mask_sc = SC .> 1e-4
+        # 3. Output-Based Diversity: Seek BEST desirability for specific outputs within top tier
         for i in 1:min(3, size(YP, 2))
             tag_pre = i <= length(OutNames) ? first(OutNames[i] * "   ", 3) : "OUT$i"
-            sorted_desc = sortperm(YP[:, i]; rev=true)
-            valid_sorted = filter(idx -> valid_mask_sc[idx], sorted_desc)
-            isempty(valid_sorted) && (valid_sorted = sorted_desc)
-            selected_idx = -1
-            for m in eachindex(valid_sorted)
-                idx_val = VISE_ClampIndex_DDEF(valid_sorted[m], num_candidates)
-                if !(idx_val in used_indices)
-                    selected_idx = idx_val
-                    break
+            mod_goal = get(models[i], "Goal", Dict())
+            gtup = Lib_Arts.ARTS_ExtractGoal_DDEF(mod_goal)
+            
+            # Find the best point in the tier that MAXIMIZES desirability for this specific output
+            best_idx = -1
+            max_d = -Inf
+            for idx in tier_indices
+                val = YP[idx, i]
+                d_val = Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
+                if d_val > max_d
+                    max_d = d_val
+                    best_idx = idx
                 end
             end
-            if selected_idx == -1
-                selected_idx = VISE_ClampIndex_DDEF(valid_sorted[1], num_candidates)
-                tag_str = "$(tag_pre)-01(D)"
-            else
-                tag_str = "$(tag_pre)-01"
-                push!(used_indices, selected_idx)
+
+            if best_idx != -1
+                tag_str = (best_idx in used_indices) ? "OUT-$(tag_pre)(D)" : "OUT-$(tag_pre)"
+                push!(cand_indices, best_idx)
+                push!(cand_tags, tag_str)
+                push!(used_indices, best_idx)
+                cand_count += 1
             end
-            cand_count += 1
-            push!(cand_indices, selected_idx)
-            push!(cand_tags, tag_str)
         end
 
         # --- CONSTRUCT CONSISTENT LEADERS_DF ---
@@ -1031,14 +1033,15 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
                 d = Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
                 s *= d^gtup[6]
             end
-            Actual_Scores[i] = s^pow
+            res = s^pow
+            Actual_Scores[i] = (isnan(res) || isinf(res)) ? 0.0 : clamp(res, 0.0, 1.0)
         end
     end
 
-    # Standardize phase name for robust comparison
+    # Standardise phase name for robust comparison
     target_phase_stripped = strip(uppercase(Phase))
 
-    # Locate row indices that belong to the current phase by searching for normalized match
+    # Locate row indices that belong to the current phase by searching for normalised match
     row_idx_in_raw = Int[]
     if hasproperty(df_raw, col_phase)
         for (idx, row) in enumerate(eachrow(df_raw))
@@ -1093,7 +1096,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     end
 
     graphs = Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, InNames, OutNames,
-        Goals, r2_vec, r2_pred_vec, Opts, Best_Point)
+        Goals, r2_vec, r2_pred_vec, Opts, Leaders_DF)
 
     # --- Scientific Vitals (Mathematical Health Check) ---
     vitals = Dict("D" => 0.0, "Condition" => Inf, "MaxVIF" => 0.0, "LOF" => 1.0)

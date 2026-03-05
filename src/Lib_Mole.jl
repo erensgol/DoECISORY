@@ -11,6 +11,7 @@ module Lib_Mole
 using DataFrames
 using Printf
 using Unitful
+using Statistics
 using Main.Sys_Fast
 
 export MOLE_ParseTable_DDEF, MOLE_QuickAudit_DDEF, MOLE_CalcMass_DDEF,
@@ -51,8 +52,8 @@ MOLE_ApproxEq_DDEF(a::Real, b::Real; atol::Float64=_STOI_TOLERANCE) = isapprox(a
 Parses structured data from the UI's DataTable into operational categories.
 """
 function MOLE_ParseTable_DDEF(TableData::AbstractVector)
-    # SanitizeInput returns (clean_data, warnings)
-    clean_data, input_warnings = Sys_Fast.FAST_SanitizeInput_DDEF(TableData)
+    # SanitiseInput returns (clean_data, warnings)
+    clean_data, input_warnings = Sys_Fast.FAST_SanitiseInput_DDEF(TableData)
 
     safe_num = Sys_Fast.FAST_SafeNum_DDEF
     CONST = Sys_Fast.FAST_Constants_DDEF()
@@ -265,7 +266,11 @@ function MOLE_AuditMatrix_DDEF(Design::AbstractMatrix, Names::AbstractVector,
     R, C = size(Design)
     total_masses = Vector{Float64}(undef, R)
 
-    # Note: Design is physical units mapped by CORE_MapLevels
+    # Note: Design MUST correspond exactly to Names/MWs columns here
+    if C != length(Names)
+        return zeros(R) # Dimension mismatch safety
+    end
+
     for i in 1:R
         ratios = Design[i, :]
         df = MOLE_CalcMass_DDEF(Names, MWs, ratios, Vol, Conc)
@@ -281,18 +286,61 @@ Performs high-level feasibility audit on a proposed experimental batch.
 function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
     Vol::Float64, Conc::Float64)
     D = MOLE_ParseTable_DDEF(TableData)
-    chems = D["Idx_Chem"]
-    names = D["Names"][chems]
-    mws = D["MWs"][chems]
+    idx_var = D["Idx_Var"]
+    idx_chem = D["Idx_Chem"]
+    
+    R, C = size(Design)
+    
+    # Validation: Matrix columns must match Variable count
+    if C != length(idx_var)
+        return Dict(
+            "IsFeasible" => true, 
+            "AvgMass_mg" => 0.0, "MaxMass_mg" => 0.0, "MinMass_mg" => 0.0, "StdDev_mg" => 0.0,
+            "RunMasses" => zeros(R)
+        )
+    end
 
-    masses = MOLE_AuditMatrix_DDEF(Design, names, mws, Vol, Conc)
+    # Mapping variables, fixed values and auto-balancing filler
+    idx_fix = D["Idx_Fix"]
+    idx_fill = D["Idx_Fill"]
+    
+    masses = Vector{Float64}(undef, R)
+    for i in 1:R
+        # Full ratio vector (100% basis)
+        ratios_full = zeros(length(D["Names"]))
+        for (j, v_idx) in enumerate(idx_var)
+            ratios_full[v_idx] = Design[i, j]
+        end
+        for f_idx in idx_fix
+            ratios_full[f_idx] = D["Mids"][f_idx]
+        end
+        
+        # Filler balancing (H2O, Solvent etc.)
+        if !isempty(idx_fill)
+             other_sum = sum(ratios_full) # Currently filler is 0.0
+             ratios_full[idx_fill[1]] = max(0.0, 100.0 - other_sum)
+        end
+        
+        # Extract chemical-only data for gravimetric calculation
+        r_chem = ratios_full[idx_chem]
+        n_chem = D["Names"][idx_chem]
+        w_chem = D["MWs"][idx_chem]
+        
+        if isempty(idx_chem)
+            masses[i] = 0.0
+        else
+            df = MOLE_CalcMass_DDEF(n_chem, w_chem, r_chem, Vol, Conc)
+            masses[i] = sum(df.TARGET_MASS_mg)
+        end
+    end
 
-    avg_mass = mean(masses)
-    max_mass = maximum(masses)
-    min_mass = minimum(masses)
-    std_mass = std(masses)
+    avg_mass = isempty(masses) ? 0.0 : mean(masses)
+    max_mass = isempty(masses) ? 0.0 : maximum(masses)
+    min_mass = isempty(masses) ? 0.0 : minimum(masses)
+    std_mass = length(masses) > 1 ? std(masses) : 0.0
 
-    is_feasible = min_mass >= 0.0 && avg_mass > 0.0
+    # Tolerance-safe feasibility check
+    is_feasible = isempty(idx_chem) || (min_mass >= -1e-6 && avg_mass >= 0.0)
 
     return Dict(
         "IsFeasible" => is_feasible,

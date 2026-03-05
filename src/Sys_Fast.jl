@@ -16,11 +16,11 @@ using Base64
 
 export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
     FAST_Constants_DDEF, FAST_SafeNum_DDEF, FAST_GetLabDefaults_DDEF,
-    FAST_InitMaster_DDEF, FAST_NormalizeCols_DDEF,
-    FAST_SanitizeJSON_DDEF, FAST_PrepareDownload_DDEF,
+    FAST_InitMaster_DDEF, FAST_NormaliseCols_DDEF,
+    FAST_SanitiseJSON_DDEF, FAST_PrepareDownload_DDEF,
     FAST_GenerateSmartName_DDEF, FAST_GetTransientPath_DDEF, FAST_ReadToStore_DDEF,
     FAST_ReadConfig_DDEF, FAST_UpdateConfig_DDEF, FAST_GetThreadInfo_DDEF,
-    FAST_SanitizeInput_DDEF,
+    FAST_SanitiseInput_DDEF,
     FAST_AcquireLock_DDEF, FAST_ReleaseLock_DDEF, FAST_IsLocked_DDEF,
     FAST_CacheRead_DDEF, FAST_CacheWrite_DDEF, FAST_CacheEvict_DDEF,
     FAST_SpawnCompute_DDEF, FAST_GetComputeThreads_DDEF, FAST_WriteLeaders_DDEF,
@@ -28,6 +28,7 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
     FAST_FormatDuration_DDEF, FAST_ValidateDataFrame_DDEF,
     FAST_SystemAudit_DDEF, FAST_GetSystemQuote_DDEF,
     FAST_ScientificAudit_DDEF, FAST_RoundCols_DDEF,
+    FAST_InitializeWorkforce_DDEF, FAST_CleanWorkforce_DDEF,
     CONST_DATA
 
 # --------------------------------------------------------------------------------------
@@ -42,22 +43,25 @@ Base.@kwdef struct Constants
     VERSION::String = "v1.0 In Dev."
 
     # --- Standard Base Colours ---
-    COLOR_RED::String = "#FF0000"
-    COLOR_WHITE::String = "#FFFFFF"
-    COLOR_BLACK::String = "#000000"
+    COLOUR_RED::String = "#FF0000"
+    COLOUR_WHITE::String = "#FFFFFF"
+    COLOUR_BLACK::String = "#000000"
 
     # --- Standard Grey Colours ---
-    COLOR_GRAY_D::String = "#666666"
-    COLOR_GRAY_M::String = "#A6A6A6"
-    COLOR_GRAY_L::String = "#E6E6E6"
-    COLOR_GRAY_G::String = "#DCDCDC"
+    COLOUR_GREY_D::String = "#666666"
+    COLOUR_GREY_M::String = "#A6A6A6"
+    COLOUR_GREY_L::String = "#E6E6E6"  # Light Grey / Grid
+    COLOUR_GREY_G::String = "#DCDCDC"  # Glass Overlay / Background
 
     # --- Standard Viridis Colours ---
-    COLOR_YELLOW::String = "#FDE725"  # Viridis 1.00
-    COLOR_GREEN::String = "#5EC962"   # Viridis 0.75
-    COLOR_CYAN::String = "#21918C"    # Viridis 0.50
-    COLOR_BLUE::String = "#3B528B"    # Viridis 0.25
-    COLOR_MAGENTA::String = "#440154" # Viridis 0.00
+    COLOUR_YELLOW::String = "#FDE725"  # Viridis 1.00
+    COLOUR_GREEN::String = "#5EC962"   # Viridis 0.75
+    COLOUR_CYAN::String = "#21918C"    # Viridis 0.50
+    COLOUR_BLUE::String = "#3B528B"    # Viridis 0.25
+    COLOUR_MAGENTA::String = "#440154" # Viridis 0.00
+
+    # --- Aesthetic Constants ---
+    FONT_DEFAULT::String = "Inter, sans-serif"
 
     # --- Excel Sheet Names ---
     SHEET_DATA::String = "DATA"
@@ -101,11 +105,67 @@ Returns the global system constants container.
 FAST_Constants_DDEF() = CONST_DATA
 
 # --------------------------------------------------------------------------------------
+# --- TRANSIENT STORAGE MANAGEMENT (ANTI-BLOAT) ---
+# --------------------------------------------------------------------------------------
+
+"""
+    DAISHO_TEMP_ROOT
+Dedicated directory for all DaishoDoE transient operations to prevent AppData scattering.
+"""
+const DAISHO_TEMP_ROOT = joinpath(tempdir(), "DaishoDoE_Workforce")
+
+"""
+    FAST_InitializeWorkforce_DDEF()
+Ensures the transient directory exists and performs an initial cleanse of old files.
+"""
+function FAST_InitializeWorkforce_DDEF()
+    try
+        if !isdir(DAISHO_TEMP_ROOT)
+            mkpath(DAISHO_TEMP_ROOT)
+            FAST_Log_DDEF("FAST", "WORKFORCE", "Created transient bunker: $DAISHO_TEMP_ROOT", "OK")
+        else
+            # Clean up files older than 2 hours or starting with DAISHO_ on boot
+            FAST_CleanWorkforce_DDEF(true) 
+            FAST_Log_DDEF("FAST", "WORKFORCE", "Transient bunker scavenged and ready.", "OK")
+        end
+    catch e
+        FAST_Log_DDEF("FAST", "WORKFORCE_FAIL", "Could not initialize temp directory: $e", "FAIL")
+    end
+end
+
+"""
+    FAST_CleanWorkforce_DDEF([BootMode])
+Wipes the transient directory. If BootMode is true, it's more aggressive.
+"""
+function FAST_CleanWorkforce_DDEF(BootMode::Bool=false)
+    isdir(DAISHO_TEMP_ROOT) || return
+    try
+        files = readdir(DAISHO_TEMP_ROOT; join=true)
+        for f in files
+            isfile(f) || continue
+            # On boot, we wipe everything in our workforce folder
+            # Or if it starts with DAISHO_ / DDE_ in the general temp folder (legacy cleanup)
+            rm(f; force=true)
+        end
+        
+        # Legacy cleanup for files left in the general temp dir
+        if BootMode
+            gen_files = readdir(tempdir(); join=true)
+            for f in gen_files
+                (isfile(f) && (occursin("DAISHO_", basename(f)) || occursin("DDE_TEMP_", basename(f)))) && rm(f; force=true)
+            end
+        end
+    catch e
+        FAST_Log_DDEF("FAST", "CLEAN_WARN", "Scavenging failed: $e", "WARN")
+    end
+end
+
+# --------------------------------------------------------------------------------------
 # --- LOGGING SYSTEM ---
 # --------------------------------------------------------------------------------------
 
 # Pre-computed ANSI colour lookup
-const _LOG_COLORS = (;
+const _LOG_COLOURS = (;
     INFO="\e[34m",
     OK="\e[32m",
     WARN="\e[33m",
@@ -113,7 +173,7 @@ const _LOG_COLORS = (;
     WAIT="\e[36m",
     LIST="\e[37m",
 )
-const _LOG_COLOR_DEFAULT = "\e[34m"
+const _LOG_COLOUR_DEFAULT = "\e[34m"
 const _LOG_RESET = "\e[0m"
 
 """
@@ -121,7 +181,7 @@ const _LOG_RESET = "\e[0m"
 Standardised console logging with ANSI colour support and timestamps.
 """
 function FAST_Log_DDEF(Source::String, Event::String, Detail::String="", Type::String="INFO")
-    c = get(_LOG_COLORS, Symbol(Type), _LOG_COLOR_DEFAULT)
+    c = get(_LOG_COLOURS, Symbol(Type), _LOG_COLOUR_DEFAULT)
     ts = Dates.format(now(), "HH:MM:SS")
     @printf("\e[34m[%s]%s \e[32m%-12s%s: %s%-15s%s %s%s%s\n",
         ts, _LOG_RESET, Source, _LOG_RESET, c, Event, _LOG_RESET, c, Detail, _LOG_RESET)
@@ -133,10 +193,10 @@ end
 # --------------------------------------------------------------------------------------
 
 """
-    FAST_NormalizeCols_DDEF(df) -> DataFrame
-Standardises input column names to internal format by stripping whitespace.
+    FAST_NormaliseCols_DDEF(df)
+Ensures Excel column names are consistently formatted (uppercase, no leading/trailing spaces).
 """
-function FAST_NormalizeCols_DDEF(df::DataFrame)
+function FAST_NormaliseCols_DDEF(df::DataFrame)
     isempty(df) && return df
     rename!(df, names(df) .=> strip.(names(df)))
     return df
@@ -156,7 +216,7 @@ function FAST_ReadExcel_DDEF(FilePath::String, SheetName::String)
 
         df = DataFrame(XLSX.readtable(FilePath, SheetName))
         FAST_Log_DDEF("FAST", "IO Read", "$(nrow(df)) rows from [$SheetName]", "OK")
-        return FAST_NormalizeCols_DDEF(df)
+        return FAST_NormaliseCols_DDEF(df)
     catch e
         FAST_Log_DDEF("FAST", "IO Error", "ReadExcel ('$SheetName'): $(string(e))", "FAIL")
         return DataFrame()
@@ -256,13 +316,13 @@ function FAST_SafeNum_DDEF(Input)
 end
 
 """
-    FAST_SanitizeInput_DDEF(rows) -> (Vector{Dict}, Vector{String})
-Batch-level type coercion for Dash JSON inputs.
+    FAST_SanitiseInput_DDEF(TableData) -> (CleanVector, Warnings)
+Standardises user-inputted DataTable rows into scientific numeric formats.
 """
-function FAST_SanitizeInput_DDEF(rows::AbstractVector)
+function FAST_SanitiseInput_DDEF(TableData::AbstractVector)
     sanitized = Dict{String,Any}[]
     warnings = String[]
-    for (idx, raw) in enumerate(rows)
+    for (idx, raw) in enumerate(TableData)
         r = Dict{String,Any}(string(k) => v for (k, v) in raw)
         # String fields
         r["Name"] = string(get(r, "Name", "Unknown"))
@@ -317,13 +377,13 @@ function FAST_GetLabDefaults_DDEF()
 end
 
 """
-    FAST_SanitizeJSON_DDEF(x)
+    FAST_SanitiseJSON_DDEF(x)
 Recursively replaces NaNs with null for JSON compatibility.
 """
-function FAST_SanitizeJSON_DDEF(x)
+function FAST_SanitiseJSON_DDEF(x)
     x isa AbstractFloat && isnan(x) && return nothing
-    x isa Dict && return Dict(k => FAST_SanitizeJSON_DDEF(v) for (k, v) in x)
-    x isa AbstractVector && return map(FAST_SanitizeJSON_DDEF, x)
+    x isa Dict && return Dict(k => FAST_SanitiseJSON_DDEF(v) for (k, v) in x)
+    x isa AbstractVector && return map(FAST_SanitiseJSON_DDEF, x)
     return x
 end
 
@@ -383,7 +443,7 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
                 df_old = FAST_ReadExcel_DDEF(File, C.SHEET_DATA)
                 if !isempty(df_old)
                     # Support legacy files
-                    FAST_NormalizeCols_DDEF(df_old)
+                    FAST_NormaliseCols_DDEF(df_old)
 
                     # Preserve existing column order
                     headers = names(df_old)
@@ -414,7 +474,7 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
         # 5. File Construction Via SafeWrite
 
         # Build Config
-        clean_config = FAST_SanitizeJSON_DDEF(Config)
+        clean_config = FAST_SanitiseJSON_DDEF(Config)
         json_str = isempty(Config) ? "{}" : JSON3.write(clean_config)
         config_df = DataFrame(
             "PARAMETER" => ["MasterConfig"],
@@ -466,10 +526,16 @@ end
 
 """
     FAST_GetTransientPath_DDEF([Base64Content]) -> String
-Creates a temporary file path and optionally writes content to it.
+Creates a identifiable temporary file path inside the Workforce bunker.
 """
 function FAST_GetTransientPath_DDEF(Base64Content::Union{String,Nothing}=nothing)
-    tmp_path = joinpath(tempdir(), "DDE_TEMP_$(Dates.format(now(), "HHmmss_SSS"))_$(rand(1000:9999)).xlsx")
+    # Ensure directory exists (failsafe)
+    isdir(DAISHO_TEMP_ROOT) || mkpath(DAISHO_TEMP_ROOT)
+    
+    ts = Dates.format(now(), "HHmmss_SSS")
+    rnd = rand(1000:9999)
+    tmp_path = joinpath(DAISHO_TEMP_ROOT, "DAISHO_TEMP_$(ts)_$(rnd).xlsx")
+    
     if !isnothing(Base64Content)
         write(tmp_path, base64decode(split(Base64Content, ',')[end]))
     end
@@ -528,7 +594,7 @@ function FAST_UpdateConfig_DDEF(File::String, Updates::Dict)
             current_config[string(k)] = v
         end
 
-        clean_config = FAST_SanitizeJSON_DDEF(current_config)
+        clean_config = FAST_SanitiseJSON_DDEF(current_config)
         json_str = JSON3.write(clean_config)
 
         config_df = DataFrame(
@@ -548,7 +614,7 @@ function FAST_UpdateConfig_DDEF(File::String, Updates::Dict)
 end
 
 """
-    FAST_GetThreadInfo_DDEF() -> (Count, StatusColor, Msg)
+    FAST_GetThreadInfo_DDEF() -> (Count, StatusColour, Msg)
 Detects current Julia thread count and provides performance status.
 """
 function FAST_GetThreadInfo_DDEF()
@@ -837,10 +903,9 @@ function FAST_GetSystemQuote_DDEF()
     quotes = [
         "Data is the new oil, but intelligence is the refinery.",
         "Equipped with his five senses, man explores the universe around him and calls the adventure Science.",
-        "In God we trust, all others must bring data. (W. Edwards Deming)",
-        "The best way to predict the future is to create it.",
+        "The art of discovery is the art of seeing what everyone else has seen, and thinking what no one else has thought.",
         "Everything must be made as simple as possible, but not simpler.",
-        "The art of discovery is the art of seeing what everyone else has seen, and thinking what no one else has thought."
+        "The best way to predict the future is to create it."
     ]
     return rand(quotes)
 end

@@ -5,7 +5,7 @@
 :root {
     /* --- PALETTE: DAISHO --- */
     --bg-body: #DCDCDC;
-    /* Brand Gray */
+    /* Brand Grey */
     --bg-surface: #FFFFFF;
     /* Pure White Surface */
     --bg-panel: #FFFFFF;
@@ -17,9 +17,9 @@
     --text-primary: #000000;
     /* Dark Text */
     --text-secondary: #666666;
-    /* Slate Gray */
+    /* Slate Grey */
     --text-tertiary: #A6A6A6;
-    /* Muted Gray */
+    /* Muted Grey */
 
     /* Custom Accents */
     --accent-primary: #666666;
