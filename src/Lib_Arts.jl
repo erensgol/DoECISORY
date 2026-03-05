@@ -333,7 +333,8 @@ function ARTS_Predict_DDEF(Model, X)
     end
 
     Beta = Model["Coefs"]
-    N, K = size(X)
+    N = size(X, 1)
+    K = 3 # Fixed 3-variable system
     if occursin("linear", ModelType)
         Xd = hcat(ones(N), X)
         return Xd * Beta
@@ -432,7 +433,7 @@ function ARTS_RenderSlice_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int}
     Lbls::Vector{String}, OutName::String)
     TH = THEME
     ix, iy = Idx[1], Idx[2]
-    K = size(X, 2)
+    K = 3 # Fixed 3-variable system
 
     x1 = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=100))
     y_vals = (minimum(view(X, :, iy)), mean(view(X, :, iy)), maximum(view(X, :, iy)))
@@ -516,41 +517,45 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
     ix, iy = Idx[1], Idx[2]
 
     N = ARTS_AdaptiveGridN_DDEF(200, 40000)
-    K = size(X, 2)
+    K = 3 # Fixed 3-variable system
 
     x1 = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N))
     x2 = collect(range(minimum(view(X, :, iy)), maximum(view(X, :, iy)); length=N))
-
-    iz = 0
-    z_vals = [0.0]
-    if K > 2
-        iz = first(setdiff(1:K, Idx))
-        z_min = minimum(view(X, :, iz))
-        z_max = maximum(view(X, :, iz))
-        
-        # Determine z_mid from first leader or mean
-        z_mid = mean(view(X, :, iz))
-        if is_candidate && nrow(Leaders_DF) > 0
-            C = Sys_Fast.FAST_Constants_DDEF()
-            in_cols = filter(n -> startswith(n, C.PRE_INPUT), names(Leaders_DF))
-            if iz <= length(in_cols)
-                z_mid = Leaders_DF[1, Symbol(in_cols[iz])]
-            end
+    
+    # --- CROSS-SECTION LOGIC (CENTRING) ---
+    # Centering on top leader average (user request) instead of global mean
+    col_ref = vec(mean(X; dims=1))
+    if nrow(Leaders_DF) > 0
+        C = Sys_Fast.FAST_Constants_DDEF()
+        in_cols = filter(n -> startswith(n, C.PRE_INPUT), names(Leaders_DF))
+        if length(in_cols) == K
+            # Average coordinates of top 8 leaders (or all if < 8)
+            num_ref = min(8, nrow(Leaders_DF))
+            ref_matrix = Matrix{Float64}(Leaders_DF[1:num_ref, Symbol.(in_cols)])
+            col_ref = vec(mean(ref_matrix; dims=1))
         end
-
-        # Scientific Safeguard: Ensure Z-dimension has depth even if variable is constant
-        if abs(z_max - z_min) < 1e-4
-            z_min -= 0.5
-            z_max += 0.5
-        end
-        z_vals = [z_min, z_mid, z_max]
     end
+
+    # iz is always the 3rd variable not being used for the 2D slice
+    iz = first(setdiff(1:3, Idx))
+    z_min = minimum(view(X, :, iz))
+    z_max = maximum(view(X, :, iz))
+    
+    # Use the iz-th component of our reference centre
+    z_mid = col_ref[iz]
+
+    # Scientific Safeguard: Ensure Z-dimension has depth even if variable is constant
+    if abs(z_max - z_min) < 1e-4
+        z_min -= 0.5
+        z_max += 0.5
+    end
+    z_vals = [z_min, z_mid, z_max]
 
     traces = GenericTrace[]
     global_max, global_min = 0.0, 1.0
     all_scores = Vector{Matrix{Float64}}(undef, length(z_vals))
 
-    col_means = vec(mean(X; dims=1))
+    col_means = col_ref # Use the calculated reference for naming consistency below
 
     parsed_goals = [ARTS_ExtractGoal_DDEF(Goals[m]) for m in eachindex(Models)]
 
@@ -647,21 +652,21 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
         end
     end
 
-    if is_candidate && nrow(Leaders_DF) > 0
+    if nrow(Leaders_DF) > 0
         C = Sys_Fast.FAST_Constants_DDEF()
         th = THEME
         in_cols = filter(n -> startswith(n, C.PRE_INPUT), names(Leaders_DF))
         id_col = findfirst(c -> uppercase(c) == "ID" || uppercase(c) == "EXP_ID", names(Leaders_DF))
         score_col = findfirst(c -> uppercase(c) == "SCORE", names(Leaders_DF))
 
-        # Extract top 9 candidates for visualization
-        # Type 1: Global TOP (1-3)
-        # Type 2: Input-Diversity (first 3)
-        # Type 3: Output-Diversity (first 3)
+        # Limits based on plot type: Candidates (14 mixed) vs Design Space (8 Top only)
+        top_limit = 8
+        inp_limit = is_candidate ? 3 : 0
+        out_limit = is_candidate ? 3 : 0
         
         added_top, added_in, added_out = 0, 0, 0
         for r in 1:nrow(Leaders_DF)
-            # Find candidate type from ID (using standardized prefixes)
+            # Find candidate type from ID (using standardised prefixes)
             id_val = !isnothing(id_col) ? string(Leaders_DF[r, id_col]) : "L$r"
             id_upper = uppercase(id_val)
             
@@ -670,13 +675,13 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
             is_out = occursin("OUT", id_upper)
 
             marker_type = ""
-            if is_top && added_top < 3
+            if is_top && added_top < top_limit
                 added_top += 1
                 marker_type = "TOP"
-            elseif is_in && added_in < 3
+            elseif is_in && added_in < inp_limit
                 added_in += 1
                 marker_type = "INP"
-            elseif is_out && added_out < 3
+            elseif is_out && added_out < out_limit
                 added_out += 1
                 marker_type = "OUT"
             else
@@ -687,16 +692,16 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
             by = Leaders_DF[r, Symbol(in_cols[iy])]
             bz = iz > 0 ? Leaders_DF[r, Symbol(in_cols[iz])] : 0.0
             
-            # Colour shifting: Pure Red -> Pinkish-Red (INP) -> Orange-Red (OUT)
-            marker_colour = marker_type == "TOP" ? th.Red : (marker_type == "INP" ? "#C2185B" : "#F4511E")
+            # Colour coding: Red (Global), White (Input Diversity), Black (Output Diversity)
+            marker_colour = marker_type == "TOP" ? th.Red : (marker_type == "INP" ? th.Bg : th.TextBright)
             marker_name = marker_type == "TOP" ? "Global Leader ($id_val)" : 
                           (marker_type == "INP" ? "Input-Based Leader ($id_val)" : "Output-Based Leader ($id_val)")
             
             push!(traces, scatter3d(;
                 x=[bx], y=[by], z=[bz],
                 mode="markers",
-                marker=attr(size=4.0, color=marker_colour, symbol="diamond", 
-                           line=attr(color=th.Bg, width=1)),
+                marker=attr(size=2, color=marker_colour, symbol="diamond", 
+                           line=attr(color=th.TextBright, width=1)),
                 showlegend=false,
                 name=marker_name,
                 hovertext=["$marker_name<br>Score: $(round(Leaders_DF[r, score_col], digits=3))"],
@@ -705,7 +710,7 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
         end
     end
 
-    plotTitle = is_candidate ? "Candidates ($pct_str% of Total Space)" : "Design Space: $(Lbls[1]) vs $(Lbls[2])"
+    plotTitle = is_candidate ? "Candidates ($pct_str%)" : "Design Space: $(Lbls[1]) vs $(Lbls[2])"
     layout = ARTS_BaseLayout_DDEF(plotTitle; height=_SCENE_HEIGHT)
     layout[:scene] = attr(
         xaxis=attr(title=Lbls[1]),
@@ -727,23 +732,15 @@ Renders a 3D isometric volume of the 'Optimal Zone' (Top 10% Desirability).
 function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames::Vector{String})
     TH = THEME
     N = 50 # High-fidelity grid for volume stability (50^3 = 125,000 pts)
-    Dim = size(X, 2)
-    Dim < 3 && return Plot([], ARTS_BaseLayout_DDEF("Visualisation requires at least 3 variables."))
-
     ranges = [range(minimum(view(X, :, i)), maximum(view(X, :, i)); length=N) for i in 1:3]
-    Grid = Matrix{Float64}(undef, N^3, Dim)
+    Grid = Matrix{Float64}(undef, N^3, 3)
 
-    # Fill 3D Grid
+    # Fill 3D Grid (Fixed 3-variable design)
     idx = 1
     for (x, y, z) in Iterators.product(ranges...)
         Grid[idx, 1] = x
         Grid[idx, 2] = y
         Grid[idx, 3] = z
-        if Dim > 3
-            for d in 4:Dim
-                Grid[idx, d] = mean(view(X, :, d))
-            end
-        end
         idx += 1
     end
 
@@ -789,7 +786,7 @@ function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames:
         )
     )
 
-    layout = ARTS_BaseLayout_DDEF("Optimal Zone ($pct_str% of Total Space)"; height=_SCENE_HEIGHT)
+    layout = ARTS_BaseLayout_DDEF("Optimal Zone ($pct_str%)"; height=_SCENE_HEIGHT)
     layout[:scene] = attr(
         xaxis=attr(title=InNames[1]),
         yaxis=attr(title=InNames[2]),
@@ -810,7 +807,7 @@ Primary output orchestrator for generating all selected plot types.
 function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, Leaders_DF::AbstractDataFrame=DataFrame())
     graphs = Dict{String,Any}[]
     graphs_lock = ReentrantLock()
-    NumVars = size(X, 2)
+    NumVars = 3 # Fixed 3-variable system
     NumOut = length(OutNames)
 
     Combos = NumVars >= 2 ? collect(combinations(1:NumVars, 2)) : Vector{Int}[]
@@ -867,10 +864,9 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
     if get(Opts, "DesignSpace", true) && !isempty(Combos)
         for c in Combos
             lbls = [InNames[c[1]], InNames[c[2]]]
-            if NumVars > 2
-                iz = first(setdiff(1:NumVars, c))
-                push!(lbls, InNames[iz])
-            end
+            # 3 variables means iz is always the one not in c
+            iz = first(setdiff(1:3, c))
+            push!(lbls, InNames[iz])
 
             push!(tasks, Threads.@spawn begin
                 p1 = ARTS_RenderSpace_DDEF(Models, Goals, X, c, lbls, Leaders_DF)

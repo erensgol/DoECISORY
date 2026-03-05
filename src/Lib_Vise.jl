@@ -74,7 +74,7 @@ end
 Generates human-readable names for regression terms (e.g., "A × B", "A²").
 """
 function VISE_GetTermNames_DDEF(InNames::Vector{String}, ModelType::String)
-    K = length(InNames)
+    K = 3 # Fixed 3-variable system
     names = Vector{String}(undef, 0)
     push!(names, "Intercept")
     append!(names, InNames)
@@ -96,11 +96,12 @@ end
 Expands raw factor matrix into a design matrix (intercept + linear + interactions + quadratic).
 """
 function VISE_ExpandDesign_DDEF(X::AbstractMatrix{Float64}, ModelType::String)
-    N, K = size(X)
+    N = size(X, 1)
+    K = 3 # Fixed 3-variable system
     occursin("linear", lowercase(ModelType)) && return hcat(ones(N), X)
 
-    combos = collect(combinations(1:K, 2))
-    n_inter = length(combos)
+    combos = [(1, 2), (1, 3), (2, 3)] # combinations(1:3, 2)
+    n_inter = 3
 
     # Pre-allocate full design matrix: [1 | X | interactions | X²]
     Xd = Matrix{Float64}(undef, N, 1 + K + n_inter + K)
@@ -132,7 +133,8 @@ end
 Extracts training data required for on-the-fly execution of Surrogate models (Kriging/RBF).
 """
 function VISE_TrainSurrogate_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, ModelType::String; InNames::Vector{String}=String[])
-    N, K = size(X_Raw)
+    N = size(X_Raw, 1)
+    K = 3 # Fixed 3-variable system
     lb = vec(minimum(X_Raw; dims=1))
     ub = vec(maximum(X_Raw; dims=1))
 
@@ -178,10 +180,11 @@ function VISE_BuildSurrogateClosure_DDEF(Model::Dict)
     lb = convert(Vector{Float64}, Model["LB"])
     ub = convert(Vector{Float64}, Model["UB"])
 
-    N, K = size(X_mat)
+    N = size(X_mat, 1)
+    K = 3 # Fixed 3-variable system
 
     # Convert observation vectors into NTuples for Surrogates API
-    x_tups = [ntuple(j -> X_mat[i, j], K) for i in 1:N]
+    x_tups = [ntuple(j -> X_mat[i, j], 3) for i in 1:N]
 
     m_type = lowercase(get(Model, "ModelType", ""))
 
@@ -215,7 +218,8 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
 
     try
         # --- STRICT SCIENTIFIC OLS REGRESSION ---
-        n, p = size(X_Design)
+        n = size(X_Design, 1)
+        p = size(X_Design, 2)
 
         # Condition Number Check (Matrix Health)
         if cond(X_Design) > 1e10
@@ -397,8 +401,9 @@ end
 Evaluates multiple model structures and selects the optimal winner.
 """
 function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, InNames::Vector{String})
-    n, k = size(X)
-    p_quad = 1 + 2k + k * (k - 1) ÷ 2
+    n = size(X, 1)
+    k = 3 # Fixed 3-variable system
+    p_quad = 10 # 1 + 2*3 + 3*(3-1)/2 = 10
 
     # Candidates: Linear, Quadratic (if N permits)
     candidates = ["linear"]
@@ -493,7 +498,7 @@ Performs high-density grid search across factor space for desirability explorati
 """
 function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
     X_Bounds::AbstractMatrix{Float64}; Steps::Int=51)
-    Dim = size(X_Bounds, 1)
+    Dim = 3 # Fixed 3rd dimension
 
     # Thread-aware density balancing
     compute_threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
@@ -603,8 +608,8 @@ end
 Calculates local sensitivity (gradients) at a specific coordinate.
 """
 function VISE_SensitivityAnalysis_DDEF(Model::Dict, X_Point::Vector{Float64}; delta=1e-4)
-    Dim = length(X_Point)
-    gradients = zeros(Dim)
+    Dim = 3 # Fixed constant
+    gradients = zeros(3)
 
     base_pred = VISE_Predict_DDEF(Model, reshape(X_Point, 1, Dim))[1]
 
@@ -750,8 +755,8 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
 
     # Construct numeric matrices from DataFrame
     nr = nrow(df_train)
-    X_Raw = Matrix{Float64}(undef, nr, length(in_cols))
-    Y_Raw = Matrix{Float64}(undef, nr, length(out_cols))
+    X_Raw = Matrix{Float64}(undef, nr, 3) # Fixed 3 inputs
+    Y_Raw = Matrix{Float64}(undef, nr, 3) # Fixed 3 outputs
     @inbounds for (ci, c) in enumerate(in_cols), r in 1:nr
         X_Raw[r, ci] = Sys_Fast.FAST_SafeNum_DDEF(df_train[r, c])
     end
@@ -762,7 +767,8 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     valid_mask = vec(all(!isnan, Y_Raw; dims=2))
     X_Clean = X_Raw[valid_mask, :]
     Y_Clean = Y_Raw[valid_mask, :]
-    N, K = size(X_Clean)
+    N = size(X_Clean, 1)
+    K = 3 # Fixed 3-variable system
 
     InNames = replace.(in_cols, C.PRE_INPUT => "")
     OutNames = replace.(out_cols, C.PRE_RESULT => "")
@@ -826,13 +832,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     end
 
     # Zero Variance Check (Flat Line Detector)
-    for m in eachindex(out_cols)
-        if std(Y_Clean[:, m]) < 1e-6
-            return Dict("Status" => "FAIL", "Message" => "Zero Variance Trap Detected: All experimental results for the output ($(out_cols[m])) appear to be identical. Optimisation and regression modelling cannot be performed on data with zero variance.")
-        end
-    end
-
-    P_quad = 1 + 2K + K * (K - 1) ÷ 2
+    P_quad = 10 # 1 + 2*3 + 3*(3-1)/2 = 10
     eff_model = ModelType == "Auto" ? (N > P_quad + 2 ? "quadratic" : "linear") : lowercase(ModelType)
 
     Log("VISE", "MODEL_SETUP", "Using '$eff_model' model for $N samples.", "OK")

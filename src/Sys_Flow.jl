@@ -225,8 +225,8 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::String, CurrentPhase::String, Sele
     # 2. Identify variable indices and names
     var_indices = [i for (i, c) in enumerate(NewConfig) if get(c, "Role", "Variable") == C.ROLE_VAR]
     num_vars = length(var_indices)
-    if num_vars < 2
-        return Dict("Status" => "FAIL", "Message" => "Insufficient variables ($num_vars) for design generation.")
+    if num_vars != 3
+        return Dict("Status" => "FAIL", "Message" => "System requires exactly 3 Variable ingredients (Found: $num_vars).")
     end
 
     # 3. Generate coded design matrix (Taguchi L9 for adaptive phases)

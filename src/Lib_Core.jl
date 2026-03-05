@@ -46,15 +46,14 @@ const _TL9_DESIGN = Int8[
     CORE_GenDesign_DDEF(Method::String, FactorCount::Int) -> Matrix{Int8}
 Generates a coded (-1, 0, 1) experiment matrix for the specified method.
 """
-function CORE_GenDesign_DDEF(Method::String, FactorCount::Int)
+function CORE_GenDesign_DDEF(Method::String, FactorCount::Int=3)
     CONST = Sys_Fast.FAST_Constants_DDEF()
-    Sys_Fast.FAST_Log_DDEF("CORE", "DESIGN_GEN", "Generating matrix for $Method", "WAIT")
+    Sys_Fast.FAST_Log_DDEF("CORE", "DESIGN_GEN", "Generating matrix for $Method (Strict 3-Var Mode)", "WAIT")
 
     design = if Method == CONST.METHOD_BB
         copy(_BB_DESIGN)
     elseif Method == CONST.METHOD_TL9
-        FactorCount > 3 && Sys_Fast.FAST_Log_DDEF("CORE", "LIMIT_WARN", "Taguchi L9 limited to 3 variables. Truncating.", "WARN")
-        _TL9_DESIGN[:, 1:min(FactorCount, 3)]
+        copy(_TL9_DESIGN)
     else
         Sys_Fast.FAST_Log_DDEF("CORE", "METHOD_ERROR", "Undefined Method: $Method", "FAIL")
         Int8[;;]
@@ -74,12 +73,8 @@ end
 Maps coded entries (-1, 0, 1) to physical units based on factor level configurations.
 """
 function CORE_MapLevels_DDEF(CodedMatrix::AbstractMatrix, Config::AbstractVector)
-    rows, cols = size(CodedMatrix)
-
-    if cols > length(Config)
-        Sys_Fast.FAST_Log_DDEF("CORE", "MAP_ERROR", "Matrix columns exceed Config length.", "FAIL")
-        return zeros(Float64, rows, cols)
-    end
+    rows = size(CodedMatrix, 1)
+    cols = 3 # Fixed 3rd dimension
 
     # Pre-allocate result and fill via vectorised indexing for performance
     result = Matrix{Float64}(undef, rows, cols)
@@ -158,9 +153,10 @@ end
     CORE_GenerateOptimalDesign_DDEF(FactorCount::Int, RunCount::Int) -> Matrix{Int8}
 Generates a D-Optimal design matrix for quadratic response surfaces via `ExperimentalDesign.jl`.
 """
-function CORE_GenerateOptimalDesign_DDEF(FactorCount::Int, RunCount::Int)
+function CORE_GenerateOptimalDesign_DDEF(FactorCount::Int=3, RunCount::Int=15)
     CONST = Sys_Fast.FAST_Constants_DDEF()
-    Sys_Fast.FAST_Log_DDEF("CORE", "OPTIMAL_GEN", "Generating D-Optimal design for $FactorCount factors and $RunCount runs.", "WAIT")
+    FactorCount = 3 # Force 3
+    Sys_Fast.FAST_Log_DDEF("CORE", "OPTIMAL_GEN", "Generating D-Optimal design for strict 3-variable system ($RunCount runs).", "WAIT")
 
     try
         # Define the parameter space: each factor has 3 levels (-1, 0, 1)
@@ -215,7 +211,7 @@ Globally optimises parameters by maximising composite desirability using BlackBo
 """
 function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractVector, X_Bounds::AbstractMatrix{Float64};
     MaxTime::Float64=3.0, PenaltyFn::Union{Function,Nothing}=nothing)
-    Dim = size(X_Bounds, 1)
+    Dim = 3 # Fixed dimension
     NumModels = length(Models)
 
     # Pre-parse goals for fast execution

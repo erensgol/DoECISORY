@@ -185,17 +185,17 @@ function LENS_Layout_DDEF()
                                 ]; panel_class="mb-3", content_class="glass-content p-2"),
 
                             # Chart Viewer Panel
-                            html_div([
-                                    html_div(id="lens-graph-title",
-                                        className="text-center small text-secondary mb-1 fw-bold"),
-                                    dcc_loading(
-                                        dcc_graph(
-                                            id="lens-graph-main",
-                                            style=Dict("minHeight" => "500px"),
-                                            config=Dict("displayModeBar" => true, "displaylogo" => false, "responsive" => true),
-                                            figure=BASE_EMPTY_FIGURE,
-                                        ); type="default", color="#21918C"),
-                                ], className="glass-panel mb-2 p-2", style=Dict("border" => "1px solid #DCDCDC", "borderRadius" => "8px")),
+                            BASE_GlassPanel_DDEF("PLOTS", [
+                                html_div(id="lens-graph-title",
+                                    className="text-center small text-secondary mb-1 fw-bold"),
+                                dcc_loading(
+                                    dcc_graph(
+                                        id="lens-graph-main",
+                                        style=Dict("minHeight" => "500px"),
+                                        config=Dict("displayModeBar" => true, "displaylogo" => false, "responsive" => true),
+                                        figure=BASE_EMPTY_FIGURE,
+                                    ); type="default", color="#21918C"),
+                            ]; panel_class="mb-2", content_class="glass-content p-2"),
 
                             # Graph Navigation Controls
                             dbc_row(dbc_col(html_div([
