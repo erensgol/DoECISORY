@@ -135,7 +135,7 @@ app.index_string = """
 const navbar = html_div([
         html_div([
                 dcc_link(html_div([
-                            html_img(src="/assets/logo.png", style=Dict("height" => "28px", "marginRight" => "10px")),
+                            html_img(src="/assets/favicon.ico", style=Dict("height" => "32px", "marginRight" => "10px", "borderRadius" => "4px")),
                             html_span("DaishoDoE", className="text-dark fw-bold tracking-tight"),
                         ], className="nav-brand"), href="/", style=Dict("textDecoration" => "none")),
             ], style=Dict("flex" => "1")),
