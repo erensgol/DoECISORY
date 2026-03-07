@@ -59,10 +59,10 @@ end
 # --------------------------------------------------------------------------------------
 
 """
-    DECK_BuildIdRowUI_DDEF(i, row, visible, [show_del]) -> html_tr
+    DECK_BuildIdRowUi_DDEF(i, row, visible, [show_del]) -> html_tr
 Table-based ID row including delete button (optional), name input, and property icons.
 """
-function DECK_BuildIdRowUI_DDEF(i, row, visible, show_del=false)
+function DECK_BuildIdRowUi_DDEF(i, row, visible, show_del=false)
     row_style = Dict("display" => visible ? "table-row" : "none")
     name_val = string(get(row, "Name", ""))
     is_filler = get(row, "IsFiller", false)
@@ -74,11 +74,17 @@ function DECK_BuildIdRowUI_DDEF(i, row, visible, show_del=false)
         style=Dict("cursor" => "pointer", "color" => "#666666", "fontSize" => "1.1rem", "fontWeight" => "700",
             "lineHeight" => "1", "background" => "none", "border" => "none", "padding" => "0")) : nothing
 
-    mw_v = Float64(get(row, "MW", 0.0))
+    # Automatic radioactive flag for UI (syncs with data logic)
     hl_v = Float64(get(row, "HalfLife", 0.0))
+    is_radio = (get(row, "IsRadioactive", false) == true) || (hl_v > 0.0)
+    
+    mw_v = Float64(get(row, "MW", 0.0))
     dot1_colour = mw_v > 0.0 ? "#5EC962" : "#2C2C2C"
     dot2_colour = hl_v > 0.0 ? "#5EC962" : "#2C2C2C"
+    
     dots = html_span([
+            is_radio ? html_i(className="fas fa-radiation text-danger me-1", style=Dict("fontSize" => "0.7rem")) : nothing,
+            is_filler ? html_i(className="fas fa-fill-drip text-warning me-1", style=Dict("fontSize" => "0.7rem")) : nothing,
             html_span("●", id="deck-dot1-$i", style=Dict("color" => dot1_colour, "fontSize" => "0.45rem", "marginRight" => "1px")),
             html_span("●", id="deck-dot2-$i", style=Dict("color" => dot2_colour, "fontSize" => "0.45rem", "marginRight" => "2px")),
         ], style=Dict("display" => "inline-flex", "alignItems" => "center"))
@@ -107,10 +113,10 @@ function DECK_BuildIdRowUI_DDEF(i, row, visible, show_del=false)
 end
 
 """
-    DECK_BuildLevelRowUI_DDEF(i, row, visible) -> html_tr
+    DECK_BuildLevelRowUi_DDEF(i, row, visible) -> html_tr
 Renders the 3-column levels portion of the row (Lower, Centre, Upper).
 """
-function DECK_BuildLevelRowUI_DDEF(i, row, visible)
+function DECK_BuildLevelRowUi_DDEF(i, row, visible)
     row_style = Dict("display" => visible ? "table-row" : "none")
     l1_val = get(row, "L1", 0.0)
     l2_val = get(row, "L2", 0.0)
@@ -129,10 +135,10 @@ function DECK_BuildLevelRowUI_DDEF(i, row, visible)
 end
 
 """
-    DECK_BuildLimitsRowUI_DDEF(i, row, visible) -> html_tr
+    DECK_BuildLimitsRowUi_DDEF(i, row, visible) -> html_tr
 Renders the 3-column limits portion of the row (Min Limit, Unit, Max Limit).
 """
-function DECK_BuildLimitsRowUI_DDEF(i, row, visible)
+function DECK_BuildLimitsRowUi_DDEF(i, row, visible)
     row_style = Dict("display" => visible ? "table-row" : "none")
     min_val = get(row, "Min", 0.0)
     max_val = get(row, "Max", 0.0)
@@ -186,7 +192,7 @@ function DECK_BuildIdTable_DDEF(rows_range, initial_rows, active_count, show_del
     html_table([
             html_thead(html_tr(th_children)),
             html_tbody([
-                DECK_BuildIdRowUI_DDEF(i, initial_rows[i], i <= active_count, show_del)
+                DECK_BuildIdRowUi_DDEF(i, initial_rows[i], i <= active_count, show_del)
                 for i in rows_range
             ]),
         ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
@@ -204,7 +210,7 @@ function DECK_BuildLevelTable_DDEF(rows_range, initial_rows, active_count)
                 html_th("UPPER", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "34%")), className="p-0"),
             ])),
             html_tbody([
-                DECK_BuildLevelRowUI_DDEF(i, initial_rows[i], i <= active_count)
+                DECK_BuildLevelRowUi_DDEF(i, initial_rows[i], i <= active_count)
                 for i in rows_range
             ]),
         ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
@@ -222,7 +228,7 @@ function DECK_BuildLimitsTable_DDEF(rows_range, initial_rows, active_count)
                 html_th("MAX LIMIT", style=merge(BASE_STYLE_INLINE_HEADER, Dict("textAlign" => "center", "padding" => "2px", "width" => "33%")), className="p-0"),
             ])),
             html_tbody([
-                DECK_BuildLimitsRowUI_DDEF(i, initial_rows[i], i <= active_count)
+                DECK_BuildLimitsRowUi_DDEF(i, initial_rows[i], i <= active_count)
                 for i in rows_range
             ]),
         ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
@@ -274,7 +280,7 @@ function DECK_Layout_DDEF()
                                         html_div([dcc_input(id="deck-mw-$i", type="number", value=0.0) for i in 1:MAX_ROWS]),
                                         html_div([dbc_select(id="deck-role-$i", options=ROLE_OPTIONS, value="Variable") for i in 1:MAX_ROWS]),
                                         html_div([html_button("", id="deck-del-$i", n_clicks=0) for i in 1:4])
-                                    ], style=Dict("display" => "none")),
+                                    ], style=Dict("display" => "none"))
                             ]; style=Dict("display" => "none"))
                     ], xs=12)),
 
@@ -344,6 +350,7 @@ function DECK_Layout_DDEF()
                                                         options=[
                                                             Dict("label" => "Box-Behnken (15 Runs, Quadratic)", "value" => "BoxBehnken"),
                                                             Dict("label" => "Taguchi L9 (9 Runs, Linear)", "value" => "Taguchi_L9"),
+                                                            Dict("label" => "D-Optimal (15 Runs, Quadratic)", "value" => "DOptimal"),
                                                         ],
                                                         value="BoxBehnken", clearable=false, className="mb-3"),
                                                 ], xs=12)), dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)),
@@ -353,8 +360,13 @@ function DECK_Layout_DDEF()
                                                     className="w-100 mb-2"), xs=12)),
                                             dbc_row(dbc_col(dbc_button([html_i(className="fas fa-vial me-2"), "Quick Audit"],
                                                     id="deck-btn-audit", n_clicks=0, color="secondary", outline=true, size="sm",
-                                                    className="w-100 mb-2"), xs=12)), dbc_row(dbc_col(dcc_loading(html_div(id="deck-run-output", className="mt-2 small"),
-                                                    type="default", color="#21918C"), xs=12)), dbc_row(dbc_col(dbc_button([html_i(className="fas fa-play me-2"), "Generate Protocol"],
+                                                    className="w-100 mb-2"), xs=12)),
+                                            dbc_row(dbc_col(dbc_button([html_i(className="fas fa-microscope me-2"), "Scientific Audit"],
+                                                    id="deck-btn-sci-audit", n_clicks=0, color="secondary", outline=true, size="sm",
+                                                    className="w-100 mb-2"), xs=12)),
+                                            dbc_row(dbc_col(dcc_loading(html_div(id="deck-run-output", className="mt-2 small"),
+                                                    type="default", color="#21918C"), xs=12)),
+                                            dbc_row(dbc_col(dbc_button([html_i(className="fas fa-play me-2"), "Generate Protocol"],
                                                     id="deck-btn-run", n_clicks=0, color="primary", size="sm",
                                                     className="w-100 fw-bold mb-2"), xs=12)),
                                         ]; right_node=html_i(className="fas fa-sliders-h text-secondary"), panel_class="mb-3 h-auto"), xs=12)),
@@ -396,11 +408,7 @@ function DECK_Layout_DDEF()
                                             Dict("label" => "Years", "value" => "Years")
                                         ], value="Hours", size="sm", className="mb-3"), xs=6)
                             ]),
-                            # Hidden dummy elements
-                            html_div([
-                                    dbc_switch(id="deck-prop-is-radio", value=false, style=Dict("display" => "none")),
-                                    dbc_switch(id="deck-prop-is-filler", value=false, style=Dict("display" => "none")),
-                                ], style=Dict("display" => "none")),
+                            # Switches removed as per User Request: Features are now automatic based on values.
                         ]),
                         dbc_modalfooter([
                             dbc_button("Cancel", id="btn-prop-cancel", className="ms-auto", color="secondary", outline=true, size="sm"),
@@ -416,13 +424,16 @@ function DECK_Layout_DDEF()
                         dbc_modalbody([
                             dcc_store(id="deck-out-prop-target-id", data=Dict("index" => 0)),
                             dcc_store(id="deck-out-prop-trigger-save", data=0),
-                            html_div("Decay Analysis Correction", className="small fw-bold text-muted mb-2"),
-                            html_p("Type YES below to apply radioactive decay correction to this response.", className="small text-secondary mb-2"),
                             dbc_row([
-                                dbc_col(dbc_input(id="deck-out-prop-confirm", type="text", placeholder="Type YES...", size="sm", className="mb-2"), xs=12)
+                                dbc_col([
+                                    dbc_label([html_i(className="fas fa-history text-success me-2"), "Decay Correction"], className="small mb-0"),
+                                    html_p("Mathematically correct this response for radioactive decay between calibration and experiment.", 
+                                           className="text-muted mb-2", style=Dict("fontSize" => "10px")),
+                                ], xs=8),
+                                dbc_col(dbc_switch(id="deck-out-prop-is-corr", value=false, className="mt-2"), xs=4, className="text-end"),
                             ]),
-                            # Hidden dummy for removed switch ID
-                            html_div(dbc_switch(id="deck-out-prop-is-corr", value=false, style=Dict("display" => "none")), style=Dict("display" => "none")),
+                            # Hidden dummy for legacy confirm field
+                            dcc_input(id="deck-out-prop-confirm", type="text", value="", style=Dict("display" => "none")),
                         ]),
                         dbc_modalfooter([
                             dbc_button("Cancel", id="btn-out-prop-cancel", className="ms-auto", color="secondary", outline=true, size="sm"),
@@ -488,6 +499,11 @@ function DECK_Layout_DDEF()
                 BASE_Modal_DDEF("deck-modal-audit", "Quick Audit Report",
                     dbc_row(dbc_col(html_div(id="deck-audit-output"), xs=12)),
                     dbc_button("Close", id="deck-btn-audit-close", className="ms-auto")),
+
+                # Scientific Audit Modal
+                BASE_Modal_DDEF("deck-modal-sci-audit", [html_i(className="fas fa-certificate me-2 text-info"), "Detailed Scientific Audit"],
+                    dbc_row(dbc_col(dcc_loading(html_div(id="deck-sci-audit-output"), type="default", color="#21918C"), xs=12)),
+                    dbc_button("Close", id="deck-btn-sci-audit-close", className="ms-auto", color="secondary", outline=true)),
             ], fluid=true, className="px-4 py-3")
     catch e
         @error "DECK LAYOUT ERROR" exception = (e, catch_backtrace())
@@ -524,7 +540,18 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
             end
             push!(all_names, n)
 
-            # 2. Strict Level Increase Rule (L1 < L2 < L3)
+            # 2b. Unit Validation Check
+            unit = string(get(r, "Unit", ""))
+            mw = Float64(get(r, "MW", 0.0))
+            if mw > 0.0 && !isempty(unit) && unit != "-" && unit != "%M" && unit != "MR"
+                ok_m, _, _ = Lib_Mole.MOLE_ValidatePhysicalUnit_DDEF(unit, "Mass")
+                ok_c, _, _ = Lib_Mole.MOLE_ValidatePhysicalUnit_DDEF(unit, "Concentration")
+                if !ok_m && !ok_c
+                    return (false, "Unit Error: Ingredient '$n' has invalid chemical unit '$unit'.")
+                end
+            end
+
+            # 2c. Strict Level Increase Rule (L1 < L2 < L3)
             role = get(r, "Role", "")
             if role == "Variable"
                 l1 = Sys_Fast.FAST_SafeNum_DDEF(get(r, "L1", 0.0))
@@ -578,6 +605,26 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
         configs = [Dict("Levels" => [D["Rows"][i]["L1"], D["Rows"][i]["L2"], D["Rows"][i]["L3"]])
                    for i in D["Idx_Var"]]
         real_matrix = Lib_Core.CORE_MapLevels_DDEF(design_coded, configs)
+
+        # 5b. Matrix Validation (Det-Check)
+        valid_dsgn, dsgn_issues = Lib_Core.CORE_ValidateDesign_DDEF(real_matrix, configs)
+        if !valid_dsgn
+            return (false, "Validation Error: " * dsgn_issues)
+        end
+
+        d_eff = Lib_Core.CORE_D_Efficiency_DDEF(real_matrix)
+
+        # 5c. Stoichiometric Feasibility Check
+        valid_stoi, stoi_issues = Lib_Mole.MOLE_ValidateDesignFeasibility_DDEF(real_matrix, D["Rows"])
+        if !valid_stoi
+            return (false, "Stoichiometric Error: " * stoi_issues)
+        end
+        
+        # 5d. Total Mass Audit
+        run_masses = Lib_Mole.MOLE_AuditMatrix_DDEF(real_matrix, D["Names"][D["Idx_Chem"]], D["MWs"][D["Idx_Chem"]], Sys_Fast.FAST_SafeNum_DDEF(vol), Sys_Fast.FAST_SafeNum_DDEF(conc))
+        if any(isnan, run_masses) || any(<(0.0), run_masses)
+            return (false, "Mass Calculation Error: One or more runs resulted in invalid chemical mass. Please check your MW and Concentration values.")
+        end
 
         # 6. Session & Phase Logic
         phase_num = 1
@@ -674,7 +721,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
 
         ConfigDict = Dict(
             "Ingredients" => D["Rows"],
-            "Global" => Dict("Volume" => sv, "Conc" => sc, "Method" => method, "FillerName" => f_name, "FillerMW" => f_mw),
+            "Global" => Dict("Volume" => sv, "Conc" => sc, "Method" => method, "FillerName" => f_name, "FillerMW" => f_mw, "DEfficiency" => d_eff),
             "Outputs" => output_data,
         )
         success = Sys_Fast.FAST_InitMaster_DDEF(path,
@@ -682,7 +729,8 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
             [string(get(r, "Name", "")) for r in output_data],
             df, ConfigDict)
 
-        return (success, success ? "Success" : "Master Initialization Failed")
+        msg = success ? "Protocol successfully generated. (D-Efficiency: $(round(d_eff, digits=4)))" : "Master Initialization Failed"
+        return (success, msg)
     catch e
         @error "DECK GENERATION FAILED" exception = (e, catch_backtrace())
         return (false, string(e))
@@ -716,9 +764,10 @@ function DECK_RegisterCallbacks_DDEF(app)
         # Indicator dot styles (chemical + radioactive)
         [Output("deck-dot1-$i", "style") for i in 1:MAX_ROWS]...,
         [Output("deck-dot2-$i", "style") for i in 1:MAX_ROWS]...,
+        [Output("deck-unit-$i", "style") for i in 1:MAX_ROWS]...,
         Input("deck-store-factors", "data")
     ) do stored
-        isnothing(stored) && return ntuple(_ -> Dash.no_update(), 14 * MAX_ROWS)
+        isnothing(stored) && return ntuple(_ -> Dash.no_update(), 15 * MAX_ROWS)
         rows = get(stored, "rows", [])
         count = get(stored, "count", 0)
 
@@ -741,7 +790,30 @@ function DECK_RegisterCallbacks_DDEF(app)
         dot2_styles = [Dict("color" => (i <= length(rows) && Float64(get(rows[i], "HalfLife", 0.0)) > 0.0 ? "#5EC962" : "#2C2C2C"),
             "fontSize" => "0.45rem", "marginRight" => "2px") for i in 1:MAX_ROWS]
 
-        return (out_styles..., out_styles..., out_styles..., out_names..., out_roles..., out_l1s..., out_l2s..., out_l3s..., out_mins..., out_maxs..., out_mws..., out_units..., dot1_styles..., dot2_styles...)
+        # Real-time unit validation styles
+        unit_styles = [
+            let
+                s = merge(BASE_STYLE_INPUT_CENTRE, Dict("fontSize" => "10px"))
+                if i <= length(rows) && i <= count
+                    u = string(get(rows[i], "Unit", ""))
+                    mw = Float64(get(rows[i], "MW", 0.0))
+                    if mw > 0.0 && !isempty(u) && u != "-" && u != "%M" && u != "MR"
+                        ok_m, _, _ = Lib_Mole.MOLE_ValidatePhysicalUnit_DDEF(u, "Mass")
+                        ok_c, _, _ = Lib_Mole.MOLE_ValidatePhysicalUnit_DDEF(u, "Concentration")
+                        if !ok_m && !ok_c
+                            s["color"] = "#FF0000"
+                            s["fontWeight"] = "bold"
+                            s["border"] = "1px solid #FF0000"
+                        else
+                            s["color"] = "#21918C"
+                        end
+                    end
+                end
+                s
+            end for i in 1:MAX_ROWS
+        ]
+
+        return (out_styles..., out_styles..., out_styles..., out_names..., out_roles..., out_l1s..., out_l2s..., out_l3s..., out_mins..., out_maxs..., out_mws..., out_units..., dot1_styles..., dot2_styles..., unit_styles...)
     end
 
 
@@ -854,13 +926,14 @@ function DECK_RegisterCallbacks_DDEF(app)
                 isnothing(save_prop_trig) && return ntuple(_ -> Dash.no_update(), 17)
                 isnothing(store_data) && return ntuple(_ -> Dash.no_update(), 17)
 
-                # Modal States extraction (explicit indices 254-259)
+                # Modal States extraction (Updated indices)
                 target = args[254]
-                is_rad = args[255]
-                hl_val = args[256]
-                hl_unit = args[257]
-                is_fill = args[258]
-                mw_modal = args[259]
+                hl_val = args[255]
+                hl_unit = args[256]
+                mw_modal = args[257]
+                
+                # Automatic Radioactive Check
+                is_rad = !isnothing(hl_val) && Sys_Fast.FAST_SafeNum_DDEF(hl_val) > 0.0
 
                 t_type = string(get(target, "type", get(target, :type, "")))
                 t_idx = Int(get(target, "index", get(target, :index, 0)))
@@ -876,10 +949,10 @@ function DECK_RegisterCallbacks_DDEF(app)
 
                             safe_hl = isnothing(hl_val) ? 0.0 : Sys_Fast.FAST_SafeNum_DDEF(hl_val)
                             safe_hl = isnan(safe_hl) ? 0.0 : safe_hl
-                            new_r["IsRadioactive"] = safe_hl > 0.0
+                            new_r["IsRadioactive"] = is_rad
                             new_r["HalfLife"] = safe_hl
                             new_r["HalfLifeUnit"] = isnothing(hl_unit) ? "Hours" : string(hl_unit)
-                            new_r["IsFiller"] = is_fill
+                            # is_filler is maintained only via Stoichiometry Settings or internal row state
                         end
                         push!(new_rows, new_r)
                     end
@@ -941,7 +1014,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             _sn = Sys_Fast.FAST_SafeNum_DDEF
             _sn0(x) = (v = _sn(x); isnan(v) ? 0.0 : v)
             max_idx = min(count, length(all_names), length(all_roles), length(all_l1s), length(all_l2s), length(all_l3s), length(all_mins), length(all_maxs), length(all_mws), length(all_units))
-            snap_rows() = [
+            _DECK_SnapRows_DDEF() = [
                 let
                     mw_val = _sn0(all_mws[i])
                     unit_val = !isnothing(all_units[i]) ? string(all_units[i]) : ""
@@ -994,7 +1067,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             # --- A. DELETE ROW ---
             del_ids = ["deck-del-$i" for i in 1:MAX_ROWS]
             if trig in del_ids
-                rows = snap_rows()
+                rows = _DECK_SnapRows_DDEF()
                 ri = findfirst(==(trig), del_ids)
                 if ri !== nothing && ri <= length(rows) && ri > 4
                     deleteat!(rows, ri)
@@ -1006,7 +1079,7 @@ function DECK_RegisterCallbacks_DDEF(app)
 
             # --- B. ADD ROW ---
             if trig == "deck-btn-add-row"
-                rows = snap_rows()
+                rows = _DECK_SnapRows_DDEF()
                 # Use length(rows) as the source of truth for current valid rows
                 current_count = length(rows)
                 new_count = min(current_count + 1, MAX_ROWS)
@@ -1114,7 +1187,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                         end
                     end
 
-                    json_str = JSON3.write(Dict("Inputs" => snap_rows(), "Outputs" => out_d, "Global" => g_dict))
+                    json_str = JSON3.write(Dict("Inputs" => _DECK_SnapRows_DDEF(), "Outputs" => out_d, "Global" => g_dict))
                     b64 = base64encode(json_str)
                     dl_dict = Dict("filename" => "Daisho_Workspace.json", "content" => b64, "base64" => true)
                     lbl = html_div([html_i(className="fas fa-check-circle me-2"), "Workspace Exported"],
@@ -1125,14 +1198,6 @@ function DECK_RegisterCallbacks_DDEF(app)
                     return NO, NO, NO, NO, NO, NO, NO, html_div("❌ Save Error: " * string(e), className="badge bg-danger text-white p-2 w-100", style=Dict("fontSize" => "0.6rem")), NO, NO, NO,
                     NO, NO, NO, NO, NO, NO
                 end
-
-                # --- E. PHASE TRANSITION ---
-            elseif trig == "store-session-config" && !isnothing(session) && session != ""
-                # DEPRECATED: Excel-Centric approach now handles phase transition.
-                # Phase2 design is generated in Sys_Flow.FLOW_BuildNextPhase_DDEF and
-                # written directly to Excel. User downloads from Analysis and uploads
-                # to Design page. No cross-page state passing needed.
-                nothing
 
                 # --- F. IMPORT PROTOCOL ---
             elseif trig == "deck-upload" && !isnothing(up_cont)
@@ -1469,22 +1534,17 @@ function DECK_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # --- 5. CHEM PROPERTIES MODAL ---
     callback!(app,
         Output("deck-modal-prop", "is_open"),
         Output("deck-prop-title", "children"),
         Output("deck-prop-target-id", "data"),
-        Output("deck-prop-is-radio", "value"),
         Output("deck-prop-hl", "value"),
         Output("deck-prop-hl-unit", "value"),
-        Output("deck-prop-is-filler", "value"),
         Output("deck-prop-trigger-save", "data"),
         Output("deck-prop-mw", "value"),
         Input("btn-prop-cancel", "n_clicks"),
         Input("btn-prop-save", "n_clicks"),
         [Input("btn-prop-$i", "n_clicks") for i in 1:MAX_ROWS]...,
-        State("deck-prop-is-radio", "value"),
-        State("deck-prop-is-filler", "value"),
         State("deck-store-factors", "data"),
         prevent_initial_call=true
     ) do args...
@@ -1494,11 +1554,11 @@ function DECK_RegisterCallbacks_DDEF(app)
         trig = split(ctx.triggered[1].prop_id, ".")[1]
 
         if trig == "btn-prop-cancel"
-            return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update()
+            return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update()
         end
 
         if trig == "btn-prop-save"
-            return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), (randn()), Dash.no_update()
+            return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), (randn()), Dash.no_update()
         end
 
         m = match(r"btn-prop-(\d+)", trig)
@@ -1527,7 +1587,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 end
             end
 
-            return true, title, Dict("type" => "in", "index" => idx), rad_state, hl_state, hlu_state, fill_state, Dash.no_update(), mw_state
+            return true, title, Dict("type" => "in", "index" => idx), hl_state, hlu_state, Dash.no_update(), mw_state
         end
 
         return (ntuple(_ -> Dash.no_update(), 9)...,)
@@ -1667,7 +1727,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                         end
                     end
                     if i == idx
-                        new_r["IsCorr"] = !isnothing(s_confirm) && strip(uppercase(string(s_confirm))) == "YES"
+                        new_r["IsCorr"] = s_corr
                     end
                     push!(new_rows, new_r)
                 end
@@ -1830,6 +1890,136 @@ function DECK_RegisterCallbacks_DDEF(app)
                 "fontSize" => "0.45rem", "marginRight" => "2px", "verticalAlign" => "middle")
             for i in 1:3
         )
+    end
+
+    # --- 9. DETAILED SCIENTIFIC AUDIT MODAL ---
+    callback!(app,
+        Output("deck-sci-audit-output", "children"),
+        Output("deck-modal-sci-audit", "is_open"),
+        Input("deck-btn-sci-audit", "n_clicks"),
+        Input("deck-btn-sci-audit-close", "n_clicks"),
+        State("deck-modal-sci-audit", "is_open"),
+        State("deck-dd-method", "value"),
+        State("deck-input-vol", "value"),
+        State("deck-input-conc", "value"),
+        State("deck-store-factors", "data"),
+        [State("deck-name-$i", "value") for i in 1:MAX_ROWS]...,
+        [State("deck-role-$i", "value") for i in 1:MAX_ROWS]...,
+        [State("deck-l1-$i", "value") for i in 1:MAX_ROWS]...,
+        [State("deck-l2-$i", "value") for i in 1:MAX_ROWS]...,
+        [State("deck-l3-$i", "value") for i in 1:MAX_ROWS]...,
+        [State("deck-min-$i", "value") for i in 1:MAX_ROWS]...,
+        [State("deck-max-$i", "value") for i in 1:MAX_ROWS]...,
+        [State("deck-mw-$i", "value") for i in 1:MAX_ROWS]...,
+        [State("deck-unit-$i", "value") for i in 1:MAX_ROWS]...,
+        prevent_initial_call=true
+    ) do args...
+        try
+            n_op, n_cl, is_op, method, vol, conc, store_data = args[1:7]
+            ctx = callback_context()
+            trig = isempty(ctx.triggered) ? "" : split(ctx.triggered[1].prop_id, ".")[1]
+            trig == "deck-btn-sci-audit-close" && return Dash.no_update(), false
+            trig != "deck-btn-sci-audit" && return Dash.no_update(), is_op
+
+            # Unpack factors
+            offset = 8
+            all_names = collect(args[offset:offset+MAX_ROWS-1])
+            all_roles = collect(args[offset+MAX_ROWS:offset+2MAX_ROWS-1])
+            all_l1s = collect(args[offset+2MAX_ROWS:offset+3MAX_ROWS-1])
+            all_l2s = collect(args[offset+3MAX_ROWS:offset+4MAX_ROWS-1])
+            all_l3s = collect(args[offset+4MAX_ROWS:offset+5MAX_ROWS-1])
+            all_mws = collect(args[offset+7MAX_ROWS:offset+8MAX_ROWS-1])
+            all_units = collect(args[offset+8MAX_ROWS:offset+9MAX_ROWS-1])
+
+            count = isnothing(store_data) ? 1 : get(store_data, "count", 1)
+            rows = Dict{String,Any}[]
+            for i in 1:count
+                name = isnothing(all_names[i]) ? "" : strip(string(all_names[i]))
+                if i > 3 && isempty(name)
+                    continue
+                end
+                push!(rows, Dict(
+                    "Name" => name,
+                    "Role" => isnothing(all_roles[i]) ? (i <= 3 ? "Variable" : (i == 4 ? "Filler" : "Fixed")) : string(all_roles[i]),
+                    "L1" => Sys_Fast.FAST_SafeNum_DDEF(all_l1s[i]),
+                    "L2" => Sys_Fast.FAST_SafeNum_DDEF(all_l2s[i]),
+                    "L3" => Sys_Fast.FAST_SafeNum_DDEF(all_l3s[i]),
+                    "MW" => Sys_Fast.FAST_SafeNum_DDEF(all_mws[i]),
+                    "Unit" => isnothing(all_units[i]) ? "" : string(all_units[i]),
+                ))
+            end
+
+            D = Lib_Mole.MOLE_ParseTable_DDEF(rows)
+            num_vars = length(D["Idx_Var"])
+            num_vars != 3 && return html_div("Protocol requires exactly 3 Variables. Detection: $num_vars", className="text-danger fw-bold"), true
+
+            # Generate virtual design for audit
+            design_coded = Lib_Core.CORE_GenDesign_DDEF(method, 3)
+            configs = [Dict("Levels" => [D["Rows"][i]["L1"], D["Rows"][i]["L2"], D["Rows"][i]["L3"]]) for i in D["Idx_Var"]]
+            real_matrix = Lib_Core.CORE_MapLevels_DDEF(design_coded, configs)
+
+            # 1. Mathematical Health
+            d_eff = Lib_Core.CORE_D_Efficiency_DDEF(real_matrix)
+            metrics = Lib_Core.CORE_CalcDesignMetrics_DDEF(real_matrix) 
+
+            # 2. Stoichiometry Feasibility (Full Matrix)
+            valid_stoi, stoi_issues = Lib_Mole.MOLE_ValidateDesignFeasibility_DDEF(real_matrix, D["Rows"])
+            
+            # 3. Mass Audit (Full Matrix)
+            masses = Lib_Mole.MOLE_AuditMatrix_DDEF(real_matrix, D["Names"][D["Idx_Chem"]], D["MWs"][D["Idx_Chem"]], Sys_Fast.FAST_SafeNum_DDEF(vol), Sys_Fast.FAST_SafeNum_DDEF(conc))
+            min_mass = isempty(masses) ? 0.0 : minimum(masses)
+            max_mass = isempty(masses) ? 0.0 : maximum(masses)
+
+            # Build UI Report
+            return html_div([
+                html_h5("DESIGN INTEGRITY REPORT", className="text-info fw-bold mb-3"),
+                
+                # Efficiency Section
+                html_div([
+                    html_div("Mathematical Efficiency", className="small fw-bold text-muted mb-1"),
+                    dbc_row([
+                        dbc_col(Gui_Base.BASE_MiniVitals_DDEF("D-Efficiency", @sprintf("%.1f%%", d_eff*100), d_eff > 0.6 ? "success" : "warning"), xs=6, md=3),
+                        dbc_col(Gui_Base.BASE_MiniVitals_DDEF("Condition #", @sprintf("%.1e", metrics["Condition"]), metrics["Condition"] < 1e4 ? "success" : "danger"), xs=6, md=3),
+                        dbc_col(Gui_Base.BASE_MiniVitals_DDEF("A-Efficiency", @sprintf("%.2f", metrics["A"]), "info"), xs=6, md=3),
+                        dbc_col(Gui_Base.BASE_MiniVitals_DDEF("G-Efficiency", @sprintf("%.2f", metrics["G"]), "info"), xs=6, md=3),
+                    ], className="mb-3 g-2")
+                ]),
+
+                # Stoichiometry Section
+                html_div([
+                    html_div("Chemical Stoichiometry", className="small fw-bold text-muted mb-1"),
+                    dbc_alert([
+                        html_i(className="fas $(valid_stoi ? "fa-check-circle" : "fa-exclamation-triangle") me-2"),
+                        html_strong(valid_stoi ? "PHASE FEASIBLE: " : "PHASE VIOLATION: "),
+                        valid_stoi ? "All experimental coordinates are physically accessible within the search space." : stoi_issues
+                    ], color=valid_stoi ? "success" : "danger", className="py-2 small mb-3")
+                ]),
+
+                # Mass Audit Section
+                html_div([
+                    html_div("Mass Inventory (per run)", className="small fw-bold text-muted mb-1"),
+                    dbc_row([
+                        dbc_col(html_div([
+                            html_span("Min Mass: ", className="text-secondary small"),
+                            html_span(@sprintf("%.4f mg", min_mass), className="fw-bold")
+                        ]), xs=6),
+                        dbc_col(html_div([
+                            html_span("Max Mass: ", className="text-secondary small"),
+                            html_span(@sprintf("%.4f mg", max_mass), className="fw-bold")
+                        ]), xs=6),
+                    ], className="bg-light p-2 rounded small mb-3")
+                ]),
+
+                html_div([
+                    html_i(className="fas fa-info-circle me-2"),
+                    "This audit simulates the full experimental matrix based on your current settings. Passing this check ensures a high probability of successful protocol execution."
+                ], className="text-muted small italic border-top pt-2")
+            ]), true
+
+        catch e
+            bt = sprint(showerror, e, catch_backtrace())
+            return html_div("Scientific Audit Failed: $e", className="text-danger"), true
+        end
     end
 end
 end # module

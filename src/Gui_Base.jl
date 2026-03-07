@@ -13,7 +13,7 @@ using DashBootstrapComponents
 export BASE_STYLE_CELL, BASE_STYLE_INPUT, BASE_STYLE_INPUT_CENTRE
 export BASE_STYLE_HEADER, BASE_STYLE_DATATABLE_CELL, BASE_STYLE_INLINE_HEADER, BASE_STYLE_HR, BASE_EMPTY_FIGURE
 export BASE_SafeRows_DDEF, BASE_GetTrigger_DDEF
-export BASE_PageHeader_DDEF, BASE_GlassPanel_DDEF, BASE_DataTable_DDEF, BASE_Modal_DDEF, BASE_ConvertThemePlotlyWhite_DDEF!
+export BASE_PageHeader_DDEF, BASE_GlassPanel_DDEF, BASE_DataTable_DDEF, BASE_Modal_DDEF, BASE_ConvertThemePlotlyWhite!_DDEF, BASE_MiniVitals_DDEF
 
 # --------------------------------------------------------------------------------------
 # --- SHARED STYLE CONSTANTS ---
@@ -166,10 +166,10 @@ function BASE_GetTrigger_DDEF(ctx)
 end
 
 """
-    BASE_ConvertThemePlotlyWhite_DDEF!(fig_dict)
+    BASE_ConvertThemePlotlyWhite!_DDEF(fig_dict)
 Mutates a PlotlyJS figure object into a standardised white theme for academic reports.
 """
-function BASE_ConvertThemePlotlyWhite_DDEF!(fig_dict)
+function BASE_ConvertThemePlotlyWhite!_DDEF(fig_dict)
     if haskey(fig_dict, "layout")
         lay = fig_dict["layout"]
         lay["template"] = "plotly_white"
@@ -198,6 +198,17 @@ function BASE_ConvertThemePlotlyWhite_DDEF!(fig_dict)
         end
     end
     return fig_dict
+end
+
+"""
+    BASE_MiniVitals_DDEF(label, value, color) -> dbc_card
+Compact metric display unit for scientific dashboards.
+"""
+function BASE_MiniVitals_DDEF(label::String, value::String, color::String="info")
+    return dbc_card([
+        html_div(label, className="small text-muted text-uppercase fw-bold", style=Dict("fontSize" => "0.6rem", "letterSpacing" => "0.5px")),
+        html_div(value, className="h6 mb-0 fw-bold text-$color")
+    ], body=true, className="p-2 border-0 shadow-sm bg-white text-center")
 end
 
 end # module Gui_Base

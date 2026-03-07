@@ -23,6 +23,7 @@ using Main.Lib_Arts
 using Main.Lib_Mole
 using Main.Lib_Core
 using Surrogates
+using HypothesisTests
 
 export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
     VISE_Predict_DDEF, VISE_Execute_DDEF, VISE_CrossValidate_DDEF,
@@ -30,7 +31,8 @@ export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
     VISE_TrainSurrogate_DDEF, VISE_BuildSurrogateClosure_DDEF,
     VISE_SelectBestModel_DDEF, VISE_CalcMetrics_DDEF,
     VISE_SensitivityAnalysis_DDEF, VISE_GenerateScientificReport_DDEF,
-    VISE_CalcVIF_DDEF, VISE_LackOfFit_DDEF
+    VISE_CalcVIF_DDEF, VISE_LackOfFit_DDEF, VISE_GenerateAnovaTable_DDEF,
+    VISE_PerformNormalityTest_DDEF, VISE_ExportToExcel_DDEF
 
 # --------------------------------------------------------------------------------------
 # --- PHYSICAL CORRECTIONS & MATH MODELS ---
@@ -46,7 +48,9 @@ function VISE_ApplyRadioDecay_DDEF(RawValue::Float64, HalfLife::Float64, HalfLif
     # Normalise Half-Life to Hours
     unit_upper = uppercase(strip(HalfLifeUnit))
     hl_hours = HalfLife
-    if occursin("MIN", unit_upper)
+    if occursin("SEC", unit_upper)
+        hl_hours = HalfLife / 3600.0
+    elseif occursin("MIN", unit_upper)
         hl_hours = HalfLife / 60.0
     elseif occursin("DAY", unit_upper)
         hl_hours = HalfLife * 24.0
@@ -242,12 +246,8 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
         SSE = sum(abs2, Resid)
         SST = var(Y) * (length(Y) - 1)
 
-        R2 = SST > 1e-9 ? 1.0 - SSE / SST : 0.0
-        isnan(R2) && (R2 = 0.0)
-
         n, p = size(X_Design)
-        R2_Adj = n > p ? 1.0 - (1.0 - R2) * ((n - 1) / (n - p)) : 0.0
-        RMSE = n > p ? sqrt(SSE / (n - p)) : 0.0
+        R2, R2_Adj, RMSE, AIC = VISE_CalcMetrics_DDEF(Y, Y_Pred, p)
 
         F_Stat, P_Value = NaN, NaN
         P_Coefs = fill(NaN, p)
@@ -282,7 +282,7 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
         return Dict(
             "Coefs" => Beta, "TermNames" => TNames,
             "R2" => R2, "R2_Adj" => R2_Adj,
-            "RMSE" => RMSE, "F_Stat" => F_Stat,
+            "RMSE" => RMSE, "AIC" => AIC, "F_Stat" => F_Stat,
             "P_Value" => P_Value, "P_Coefs" => P_Coefs,
             "SE_Coefs" => SE_Coefs, "t_Stats" => t_Stats,
             "VIFs" => vifs, "Condition" => cond_num,
@@ -377,6 +377,128 @@ function VISE_LackOfFit_DDEF(X_Design::AbstractMatrix, Y::AbstractVector)
 end
 
 """
+    VISE_GenerateAnovaTable_DDEF(Model::Dict, X::AbstractMatrix, Y::AbstractVector) -> DataFrame
+Constructs a comprehensive ANOVA table for experimental validation.
+"""
+function VISE_GenerateAnovaTable_DDEF(Model::Dict, X::AbstractMatrix, Y::AbstractVector)
+    n = length(Y)
+    m_type = get(Model, "ModelType", "linear")
+    Xd = VISE_ExpandDesign_DDEF(X, m_type)
+    p = size(Xd, 2)
+    
+    Beta = get(Model, "Coefs", Float64[])
+    isempty(Beta) && return DataFrame()
+    
+    Y_Pred = Xd * Beta
+    Resid = Y .- Y_Pred
+    
+    # 1. SS Calculations
+    SS_Total = var(Y) * (n - 1)
+    SS_Resid = sum(abs2, Resid)
+    SS_Reg = max(0.0, SS_Total - SS_Resid)
+    
+    # 2. DF Calculations
+    DF_Total = n - 1
+    DF_Reg = p - 1
+    DF_Resid = n - p
+    
+    # 3. Lack-of-Fit Logic
+    unique_rows = Dict{Vector{Float64},Vector{Float64}}()
+    for i in 1:n
+        row = X[i, :]
+        if haskey(unique_rows, row)
+            push!(unique_rows[row], Y[i])
+        else
+            unique_rows[row] = [Y[i]]
+        end
+    end
+    
+    SS_PE = 0.0
+    DF_PE = 0
+    for (r, vals) in unique_rows
+        if length(vals) > 1
+            SS_PE += sum(abs2, vals .- mean(vals))
+            DF_PE += (length(vals) - 1)
+        end
+    end
+    
+    SS_LOF = max(0.0, SS_Resid - SS_PE)
+    DF_LOF = DF_Resid - DF_PE
+    
+    # 4. Assembly
+    sources = ["Model", "Residual", "Total"]
+    ss_vals = [SS_Reg, SS_Resid, SS_Total]
+    df_vals = [DF_Reg, DF_Resid, DF_Total]
+    
+    if DF_PE > 0 && DF_LOF > 0
+        insert!(sources, 2, "Lack of Fit")
+        insert!(ss_vals, 2, SS_LOF)
+        insert!(df_vals, 2, DF_LOF)
+        
+        insert!(sources, 3, "Pure Error")
+        insert!(ss_vals, 3, SS_PE)
+        insert!(df_vals, 3, DF_PE)
+    end
+    
+    df_anova = DataFrame(
+        Source = sources,
+        SS = round.(ss_vals; digits=4),
+        df = df_vals,
+        MS = fill(NaN, length(sources)),
+        F = fill(NaN, length(sources)),
+        P = fill(NaN, length(sources))
+    )
+    
+    # Calculate MS, F, P
+    for i in 1:nrow(df_anova)
+        if df_anova.df[i] > 0
+            df_anova.MS[i] = round(df_anova.SS[i] / df_anova.df[i]; digits=4)
+        end
+    end
+    
+    # Model F-Test
+    idx_mod = findfirst(==("Model"), sources)
+    idx_res = findfirst(==("Residual"), sources)
+    if !isnothing(idx_mod) && !isnothing(idx_res) && df_anova.MS[idx_res] > 1e-12
+        f = df_anova.MS[idx_mod] / df_anova.MS[idx_res]
+        df_anova.F[idx_mod] = round(f; digits=2)
+        df_anova.P[idx_mod] = round(1.0 - cdf(FDist(df_anova.df[idx_mod], df_anova.df[idx_res]), f); digits=4)
+    end
+    
+    # LOF F-Test
+    idx_lof = findfirst(==("Lack of Fit"), sources)
+    idx_pe = findfirst(==("Pure Error"), sources)
+    if !isnothing(idx_lof) && !isnothing(idx_pe) && df_anova.MS[idx_pe] > 1e-12
+        f_lof = df_anova.MS[idx_lof] / df_anova.MS[idx_pe]
+        df_anova.F[idx_lof] = round(f_lof; digits=2)
+        df_anova.P[idx_lof] = round(1.0 - cdf(FDist(df_anova.df[idx_lof], df_anova.df[idx_pe]), f_lof); digits=4)
+    end
+    
+    return df_anova
+end
+
+"""
+    VISE_PerformNormalityTest_DDEF(Model::Dict, X::AbstractMatrix, Y::AbstractVector) -> Dict
+Executes Shapiro-Wilk test on model residuals.
+"""
+function VISE_PerformNormalityTest_DDEF(Model::Dict, X::AbstractMatrix, Y::AbstractVector)
+    m_type = get(Model, "ModelType", "linear")
+    Xd = VISE_ExpandDesign_DDEF(X, m_type)
+    Beta = get(Model, "Coefs", Float64[])
+    isempty(Beta) && return Dict("p" => NaN, "IsNormal" => false)
+    
+    Resid = Y .- (Xd * Beta)
+    
+    try
+        sw = HypothesisTests.ShapiroWilkTest(Resid)
+        p = HypothesisTests.pvalue(sw)
+        return Dict("p" => round(p; digits=4), "IsNormal" => p > 0.05, "Test" => "Shapiro-Wilk")
+    catch
+        return Dict("p" => NaN, "IsNormal" => false, "Test" => "Fail")
+    end
+end
+
+"""
     VISE_CalcMetrics_DDEF(Y_Real, Y_Pred, p) -> (R2, R2_Adj, RMSE, AIC)
 Calculates core statistical metrics (R², Adjusted R², RMSE, AIC).
 """
@@ -394,6 +516,88 @@ function VISE_CalcMetrics_DDEF(Y_Real::AbstractVector{Float64}, Y_Pred::Abstract
     AIC = n > 0 && SSE > 0 ? n * log(SSE / n) + 2p : Inf
 
     return (R2, R2_Adj, RMSE, AIC)
+end
+
+"""
+    VISE_ExportToExcel_DDEF(FilePath::String, Results::Dict) -> Bool
+Exports all statistical models, ANOVA tables, and metrics to a professional XLSX file.
+"""
+function VISE_ExportToExcel_DDEF(FilePath::String, Results::Dict)
+    try
+        XLSX.openxlsx(FilePath, mode="w") do xf
+            # 1. Overview Sheet
+            sheet_ov = xf[1]
+            XLSX.rename!(sheet_ov, "Summary")
+            sheet_ov["A1"] = "DaishoDoE Scientific Intelligence Report"
+            sheet_ov["A2"] = "Generated: $(Dates.now())"
+            
+            # 2. Models Sheet
+            sheet_mod = XLSX.addsheet!(xf, "Model_Statistics")
+            sheet_mod["A1"] = ["Response", "Model Type", "R2", "R2_Adj", "RMSE", "P-Value", "Normality (p)"]
+            
+            row_idx = 2
+            for (i, out_name) in enumerate(get(Results, "OutNames", []))
+                m = Results["Models"][i]
+                norm = VISE_PerformNormalityTest_DDEF(m, Results["X_Clean"], Results["Y_Clean"][:, i])
+                
+                sheet_mod[row_idx, 1] = out_name
+                sheet_mod[row_idx, 2] = get(m, "ModelType", "N/A")
+                sheet_mod[row_idx, 3] = round(get(m, "R2", 0.0); digits=4)
+                sheet_mod[row_idx, 4] = round(get(m, "R2_Adj", 0.0); digits=4)
+                sheet_mod[row_idx, 5] = round(get(m, "RMSE", 0.0); digits=4)
+                sheet_mod[row_idx, 6] = round(get(m, "P_Value", 1.0); digits=4)
+                sheet_mod[row_idx, 7] = norm["p"]
+                
+                row_idx += 1
+            end
+            
+            # 3. ANOVA & Coefficients (Specific sheets per output)
+            for (i, out_name) in enumerate(get(Results, "OutNames", []))
+                m = Results["Models"][i]
+                safe_name = first(replace(out_name, r"[^\w]" => "_"), 25)
+                
+                # ANOVA Sheet
+                sh_ano = XLSX.addsheet!(xf, "ANOVA_$(safe_name)")
+                df_anova = VISE_GenerateAnovaTable_DDEF(m, Results["X_Clean"], Results["Y_Clean"][:, i])
+                XLSX.writetable!(sh_ano, df_anova; anchor_cell=XLSX.CellRef("A1"))
+                
+                # Coefficients Sheet
+                sh_coef = XLSX.addsheet!(xf, "Coefs_$(safe_name)")
+                terms = get(m, "TermNames", [])
+                coefs = get(m, "Coefs", [])
+                p_vals = get(m, "P_Coefs", [])
+                vifs = get(m, "VIFs", [])
+                
+                sh_coef["A1"] = ["Term", "Coefficient", "P-Value", "VIF", "Significance"]
+                for j in eachindex(terms)
+                    sh_coef[j+1, 1] = terms[j]
+                    sh_coef[j+1, 2] = round(coefs[j]; digits=4)
+                    sh_coef[j+1, 3] = isnan(p_vals[j]) ? "N/A" : round(p_vals[j]; digits=4)
+                    sh_coef[j+1, 4] = (j == 1) ? 1.0 : round(vifs[j]; digits=2)
+                    sh_coef[j+1, 5] = (!isnan(p_vals[j]) && p_vals[j] < 0.05) ? "*" : ""
+                end
+            end
+
+            # 4. Radiation & Decay Correction Sheet (If applicable)
+            if haskey(Results, "RadioCorrection")
+                sh_rad = XLSX.addsheet!(xf, "Radiation_Decay_Correction")
+                sh_rad["A1"] = ["Component/Response", "Half-Life", "Unit", "Delta-T (Hours)", "Decay Factor (DF)", "Correction Applied"]
+                data = Results["RadioCorrection"]
+                for (r_idx, itm) in enumerate(data)
+                    sh_rad[r_idx+1, 1] = itm["Name"]
+                    sh_rad[r_idx+1, 2] = itm["HalfLife"]
+                    sh_rad[r_idx+1, 3] = itm["Unit"]
+                    sh_rad[r_idx+1, 4] = round(itm["DeltaT"]; digits=4)
+                    sh_rad[r_idx+1, 5] = round(itm["DecayFactor"]; digits=6)
+                    sh_rad[r_idx+1, 6] = itm["IsCorrected"] ? "YES" : "NO"
+                end
+            end
+        end
+        return true
+    catch e
+        Sys_Fast.FAST_Log_DDEF("VISE", "EXPORT_ERR", "Excel export failed: $e", "FAIL")
+        return false
+    end
 end
 
 """
@@ -626,13 +830,42 @@ end
 
 """
     VISE_GenerateScientificReport_DDEF(Res) -> String
-Generates high-fidelity academic compendium following CMPB editorial standards.
+Generates high-fidelity academic compendium following rigorous editorial standards.
 """
 function VISE_GenerateScientificReport_DDEF(Res::Dict)
     io = IOBuffer()
     write(io, "## [ACADEMIC COMPENDIUM] DAISHODOE ANALYTICAL REPORT\n")
     write(io, Printf.@sprintf("*Protocol Execution: %s | High-Fidelity Research Tier*\n", Dates.format(now(), "yyyy-mm-dd HH:MM")))
     write(io, "---\n\n")
+
+    # --- Section: Global Design Vitals ---
+    if haskey(Res, "Vitals")
+        v = Res["Vitals"]
+        write(io, "### I. Experimental Design Vitals\n")
+        write(io, "Rigorous mathematical audit of the underlying design matrix topology.\n\n")
+        @printf(io, "- **D-Efficiency**: %.2f%% (Goal: >60%% for industrial robustness)\n", v["D"] * 100)
+        @printf(io, "- **Condition Number**: %.2e (Goal: <1e4 for numerical stability)\n", v["Condition"])
+        @printf(io, "- **Lack-of-Fit (P)**: %.4f ", v["LOF"])
+        if v["LOF"] < 0.05
+            write(io, "(`SIGNIFICANT` - Potential systematic bias or missing higher-order terms)\n")
+        else
+            write(io, "(`NON-SIGNIFICANT` - Model captures the underlying phenomenon accurately)\n")
+        end
+        write(io, "\n")
+    end
+
+    # --- Section: Radioactive Decay Correction ---
+    if haskey(Res, "RadioCorrection") && !isempty(Res["RadioCorrection"])
+        write(io, "### II. Radioactive Decay Correction (Audit)\n")
+        write(io, "Systematic correction applied to compensate for isothermal decay between calibration and experimental execution.\n\n")
+        for itm in Res["RadioCorrection"]
+            @printf(io, "- **%s**: Applied correction for isotope decay.\n", itm["Name"])
+            @printf(io, "  - *Half-Life (T½)*: %.2f %s\n", itm["HalfLife"], itm["Unit"])
+            @printf(io, "  - *Decay Time (Δt)*: %.2f hours\n", itm["DeltaT"])
+            @printf(io, "  - *Decay Factor (DF)*: %.4f (Correction: 1/DF)\n", itm["DecayFactor"])
+        end
+        write(io, "\n")
+    end
 
     out_names = Res["OutNames"]
     for (m_idx, name) in enumerate(out_names)
@@ -642,12 +875,16 @@ function VISE_GenerateScientificReport_DDEF(Res::Dict)
         r2a = get(Res, "R2_Adj", fill(NaN, length(out_names)))[m_idx]
         q2 = get(Res, "R2_Pred", fill(NaN, length(out_names)))[m_idx]
         rmse = get(mod, "RMSE", 0.0)
+        aic = get(mod, "AIC", NaN)
 
         write(io, "### Dimension Analysis: **$(name)**\n")
-        write(io, "#### I. Statistical Fidelity & Variance Explanation\n")
+        write(io, "#### II. Statistical Fidelity & Variance Explanation\n")
         write(io, Printf.@sprintf("- **Objective Metric**: \$R^2_{Adj} = %.4f\$ (Adjusted for degrees of freedom)\n", r2a))
         write(io, Printf.@sprintf("- **Predictive Stability**: \$Q^2_{Pred} = %.4f\$ (Leave-one-out cross-validation)\n", q2))
         write(io, Printf.@sprintf("- **Residual Magnitude**: \$RMSE = %.4f\$ (Root Mean Squared Error)\n", rmse))
+        if !isnan(aic) && !isinf(aic)
+            write(io, Printf.@sprintf("- **Information Criterion**: \$AIC = %.4f\$ (Akaike Information Criterion)\n", aic))
+        end
 
         # Reliability Interpretation
         quality = q2 > 0.85 ? "SUPERIOR" : q2 > 0.7 ? "ROBUST" : q2 > 0.4 ? "FORMATIVE" : "TENTATIVE"
@@ -658,22 +895,31 @@ function VISE_GenerateScientificReport_DDEF(Res::Dict)
             write(io, "Exercise caution during phase transition; additional data points may be required for high-fidelity mapping.\n")
         end
 
-        # Lack of Fit Check (Simplified display in report)
-        write(io, "\n#### II. Orthogonality & Collinearity Diagnostics\n")
+        # Factor Sensitivity summary for this output
+        if haskey(Res, "Sensitivities") && m_idx <= length(Res["Sensitivities"])
+            sens = Res["Sensitivities"][m_idx]
+            in_names = get(Res, "InNames", [])
+            if !isempty(sens) && length(sens) == length(in_names)
+                perm = sortperm(sens; rev=true)
+                write(io, "- **Top Sensitivity**: `$(in_names[perm[1]])` contributes $(round(sens[perm[1]]*100; digits=1))% to the response variance at the optimum.\n")
+            end
+        end
+
+        # VIF Check
+        write(io, "\n#### III. Orthogonality & Collinearity Diagnostics\n")
         vifs = get(mod, "VIFs", Float64[])
         max_vif = isempty(vifs) ? 0.0 : maximum(vifs)
         if max_vif > 10.0
-            @printf(io, "- **Multicollinearity Trace**: `WARNING` (Max VIF: %.2f). Parameters show significant correlation; isolation of individual effects remains challenging.\n", max_vif)
+            @printf(io, "- **Multicollinearity Trace**: `WARNING` (Max VIF: %.2f). Parameters show significant correlation.\n", max_vif)
         elseif max_vif > 0.0
             @printf(io, "- **Multicollinearity Trace**: `CLEAN` (Max VIF: %.2f). The design preserves factor orthogonality.\n", max_vif)
         end
 
         # Driver Analysis
-        write(io, "\n#### III. Principal Factor Topology\n")
+        write(io, "\n#### IV. Principal Factor Topology\n")
         coefs = mod["Coefs"]
         t_stats = get(mod, "t_Stats", Float64[])
         if length(coefs) > 1 && !isempty(t_stats)
-            # Find top 3 significant drivers
             abs_t = abs.(view(t_stats, 2:length(t_stats)))
             perm = sortperm(abs_t; rev=true)
 
@@ -683,18 +929,12 @@ function VISE_GenerateScientificReport_DDEF(Res::Dict)
             impact = top_t > 0 ? "positive (synergistic)" : "inverse (antagonistic)"
 
             @printf(io, "- **Primary Driver**: `%s` is the dominant factor (\$t = %.2f\$), manifesting a clear *%s* impact.\n", top_term, top_t, impact)
-
-            if length(perm) > 1
-                sec_idx = perm[2] + 1
-                sec_term = mod["TermNames"][sec_idx]
-                @printf(io, "- **Secondary Interaction**: `%s` contributes significantly to the response landscape.\n", sec_term)
-            end
         end
         write(io, "\n")
     end
 
     if haskey(Res, "BestScore") && !isempty(get(Res, "BestPoint", []))
-        write(io, "#### IV. Optimal Scenario & Optimal Zone Coordinates\n")
+        write(io, "#### V. Optimal Scenario & Optimal Zone Coordinates\n")
         @printf(io, "- **Composite Desirability (D)**: %.4f\n", Res["BestScore"])
 
         best_pt = Res["BestPoint"]
@@ -709,7 +949,7 @@ function VISE_GenerateScientificReport_DDEF(Res::Dict)
     end
 
     write(io, "---\n")
-    write(io, "*Generated via DaishoDoE Engine v$(Sys_Fast.CONST_DATA.VERSION) — High-Fidelity Academic Module. Optimised for publication in Computer Methods and Programs in Biomedicine (CMPB) editorial standards.*\n")
+    write(io, "*Generated via DaishoDoE Engine v$(Sys_Fast.CONST_DATA.VERSION) — High-Fidelity Academic Module. Optimised for publication in high-impact scientific journals.*\n")
 
     return String(take!(io))
 end
@@ -729,6 +969,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
 
     Log("VISE", "EXECUTION_START", "Analyzing Phase: $Phase", "WAIT")
     t0 = time()
+    boundary_warnings = String[]
 
     df_raw = Sys_Fast.FAST_ReadExcel_DDEF(DataFile, C.SHEET_DATA)
     isempty(df_raw) && (df_raw = Sys_Fast.FAST_ReadExcel_DDEF(DataFile, "DATA_RECORDS"))
@@ -779,6 +1020,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         d_eff > 0.5 ? "OK" : "WARN")
 
     # --- RADIOACTIVITY DECAY CORRECTION ---
+    radio_correction_audit = []
     radio_opts = get(Opts, "RadioOpts", Dict("Apply" => false, "t_cal" => "", "t_exp" => ""))
     if get(radio_opts, "Apply", false)
         t_cal_str = get(radio_opts, "t_cal", "")
@@ -786,18 +1028,14 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
 
         if !isempty(t_cal_str) && !isempty(t_exp_str)
             try
-                # Parse HTML5 datetime-local (yyyy-mm-ddThh:mm)
                 dt_cal = Dates.DateTime(t_cal_str, "yyyy-mm-dd\\THH:MM")
                 dt_exp = Dates.DateTime(t_exp_str, "yyyy-mm-dd\\THH:MM")
-
-                # Delta t in Hours
-                delta_t_ms = Dates.value(dt_exp - dt_cal) # Milliseconds
-                delta_t_hours = delta_t_ms / (1000.0 * 60.0 * 60.0)
+                delta_t_hours = Dates.value(dt_exp - dt_cal) / (1000.0 * 60.0 * 60.0)
 
                 if delta_t_hours > 0
                     config = Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
 
-                    # Correct Inputs (X) if radioactive
+                    # Correct Inputs (X)
                     in_meta = get(config, "Ingredients", [])
                     for (ci, name) in enumerate(InNames)
                         idx = findfirst(x -> get(x, "Name", "") == name, in_meta)
@@ -807,26 +1045,42 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
                             for r in 1:N
                                 X_Clean[r, ci] = VISE_ApplyRadioDecay_DDEF(X_Clean[r, ci], hl, hlu, delta_t_hours)
                             end
-                            Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_CORRECT", "Input $(name) corrected (Δt = $(round(delta_t_hours; digits=2))h)", "WARN")
+                            
+                            # Log for Excel/Report
+                            lambda = log(2) / (hl * (hlu == "Days" ? 24.0 : (hlu == "Minutes" ? 1/60 : 1.0))) # simplified factor for audit
+                            push!(radio_correction_audit, Dict(
+                                "Name" => name, "IsCorrected" => true,
+                                "HalfLife" => hl, "Unit" => hlu, "DeltaT" => delta_t_hours,
+                                "DecayFactor" => exp(-lambda * delta_t_hours)
+                            ))
+                            Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_CORRECT", "Input $name corrected.", "WARN")
                         end
                     end
 
-                    # Correct Outputs (Y) if radioactive
+                    # Correct Outputs (Y)
                     out_meta = get(config, "Outputs", [])
                     for (ci, name) in enumerate(OutNames)
                         idx = findfirst(x -> get(x, "Name", "") == name, out_meta)
                         if !isnothing(idx) && get(out_meta[idx], "IsRadioactive", false)
                             hl = Float64(get(out_meta[idx], "HalfLife", 0.0))
                             hlu = string(get(out_meta[idx], "HalfLifeUnit", "Hours"))
-                            for r in 1:N
-                                Y_Clean[r, ci] = VISE_ApplyRadioDecay_DDEF(Y_Clean[r, ci], hl, hlu, delta_t_hours)
+                            if hl > 0
+                                for r in 1:N
+                                    Y_Clean[r, ci] = VISE_ApplyRadioDecay_DDEF(Y_Clean[r, ci], hl, hlu, delta_t_hours)
+                                end
+                                lambda = log(2) / (hl * (hlu == "Days" ? 24.0 : (hlu == "Minutes" ? 1/60 : 1.0)))
+                                push!(radio_correction_audit, Dict(
+                                    "Name" => name, "IsCorrected" => true,
+                                    "HalfLife" => hl, "Unit" => hlu, "DeltaT" => delta_t_hours,
+                                    "DecayFactor" => exp(-lambda * delta_t_hours)
+                                ))
+                                Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_CORRECT", "Output $name corrected.", "WARN")
                             end
-                            Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_CORRECT", "Output $(name) corrected (Δt = $(round(delta_t_hours; digits=2))h)", "WARN")
                         end
                     end
                 end
             catch e
-                Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_ERROR", "Failed to parse dates or apply correction: $e", "FAIL")
+                Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_ERROR", "Failed to apply correction: $e", "FAIL")
             end
         end
     end
@@ -890,6 +1144,18 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         tier_indices = findall(>=(score_limit), SC)
 
         # 1. Top 8 Global Leaders (Already identified)
+        top_idx = top_indices[1]
+        for i in 1:3
+            val = XT[top_idx, i]
+            b_min, b_max = bounds[i, 1], bounds[i, 2]
+            # AskLeader expects [min, target, max]
+            v_range = [b_min, (b_min + b_max) / 2, b_max]
+            is_valid, msg = Main.Sys_Flow.FLOW_AskLeader_DDEF(val, v_range)
+            if !is_valid
+                push!(boundary_warnings, "$(InNames[i]): $msg")
+            end
+        end
+
         for k in 1:min(8, length(top_indices))
             p_idx = VISE_ClampIndex_DDEF(top_indices[k], num_candidates)
             cand_count += 1
@@ -1095,6 +1361,14 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         Log("VISE", "PERSIST_FAIL", "Failed to save predictions: $e", "WARN")
     end
 
+    # --- Inject Surrogate Closures for Plotting ---
+    for m in models
+        m_type = lowercase(get(m, "ModelType", ""))
+        if m_type == "kriging" || m_type == "rbf"
+            m["_Closure"] = VISE_BuildSurrogateClosure_DDEF(m)
+        end
+    end
+
     graphs = Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, InNames, OutNames,
         Goals, r2_vec, r2_pred_vec, Opts, Leaders_DF)
 
@@ -1124,16 +1398,53 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     catch e
         Log("VISE", "VITALS_WARN", "Health diagnostics incomplete: $e", "WARN")
     end
+    # --- Sensitivity Analysis at Optimal Point ---
+    sens_list = Vector{Float64}[]
+    if !isempty(Best_Point)
+        for m in models
+            push!(sens_list, VISE_SensitivityAnalysis_DDEF(m, Best_Point))
+        end
+    end
+
+    # --- New: Academic Tier Diagnostics ---
+    anova_tables = []
+    normality_results = []
+    residuals_list = []
+    for (i, m) in enumerate(models)
+        if get(m, "Status", "") == "OK"
+            push!(anova_tables, VISE_GenerateAnovaTable_DDEF(m, X_Clean, Y_Clean[:, i]))
+            push!(normality_results, VISE_PerformNormalityTest_DDEF(m, X_Clean, Y_Clean[:, i]))
+            
+            # Residuals for Q-Q plot
+            m_type = get(m, "ModelType", "linear")
+            Xd = VISE_ExpandDesign_DDEF(X_Clean, m_type)
+            yp = Xd * get(m, "Coefs", zeros(size(Xd, 2)))
+            push!(residuals_list, Y_Clean[:, i] .- yp)
+        else
+            push!(anova_tables, DataFrame())
+            push!(normality_results, Dict("p" => NaN, "IsNormal" => false))
+            push!(residuals_list, Float64[])
+        end
+    end
 
     return Dict(
         "Status" => "OK", "Graphs" => graphs,
         "Models" => models, "R2_Adj" => r2_vec,
         "R2_Pred" => r2_pred_vec, "BestPoint" => Best_Point,
-        "Leaders" => Leaders_DF, "OutNames" => OutNames,
-        "BestScore" => isempty(Leaders_DF) ? 0.0 : maximum(Leaders_DF[!, Symbol(C.COL_SCORE)]),
+        "Sensitivities" => sens_list,
+        "Leaders" => Leaders_DF, "InNames" => InNames, "OutNames" => OutNames,
+        "Vitals" => vitals,
+        "BoundaryWarnings" => boundary_warnings,
         "Elapsed" => Sys_Fast.FAST_FormatDuration_DDEF(time() - t0),
-        "Vitals" => vitals # New: High-fidelity diagnostics
+        # Academic Tier Data
+        "ANOVA" => anova_tables,
+        "Normality" => normality_results,
+        "Residuals" => residuals_list,
+        "RadioCorrection" => radio_correction_audit,
+        "X_Clean" => X_Clean,
+        "Y_Clean" => Y_Clean
     )
 end
+
 
 end # module Lib_Vise

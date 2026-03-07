@@ -167,6 +167,20 @@ function MOLE_QuickAudit_DDEF(TableData::AbstractVector, Vol::Float64, Conc::Flo
         is_valid = false
     end
 
+    # --- NEW: Unit Validation Audit ---
+    for r in D["Rows"]
+        unit = string(get(r, "Unit", ""))
+        mw = Float64(get(r, "MW", 0.0))
+        if mw > 0.0 && !isempty(unit) && unit != "-" && unit != "%M" && unit != "MR"
+            # Try Mass then Concentration
+            ok_m, _, _ = MOLE_ValidatePhysicalUnit_DDEF(unit, "Mass")
+            ok_c, _, _ = MOLE_ValidatePhysicalUnit_DDEF(unit, "Concentration")
+            if !ok_m && !ok_c
+                write(io, "![WARN] Unit Error: Component '$(get(r, "Name", ""))' has invalid chemical unit '$unit'.\n")
+            end
+        end
+    end
+
     # Filler auto-balance with tolerance-safe subtraction
     if !isempty(idx_fill) && is_valid
         other_chems = setdiff(idx_chem, idx_fill)

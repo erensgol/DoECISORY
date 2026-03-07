@@ -3,72 +3,18 @@ module Sys_Flow
 # ======================================================================================
 # DAISHODOE - SYSTEM FLOW (PROCESS & STATE)
 # ======================================================================================
-# Purpose: Navigation Routing, Session State Management, and Process Logic.
+# Purpose: Experimental Phase Transitions and Process Logic.
 # Module Tag: FLOW
 # ======================================================================================
 
-using Dash
 using JSON3
 using DataFrames
 using Main.Sys_Fast
 
-export FLOW_RouteUrl_DDEF, FLOW_PackState_DDEF, FLOW_UnpackState_DDEF,
-    FLOW_AskLeader_DDEF, FLOW_NextPhase_DDEF, FLOW_GetCandidates_DDEF,
+export    FLOW_AskLeader_DDEF, FLOW_NextPhase_DDEF, FLOW_GetCandidates_DDEF,
     FLOW_BuildNextPhase_DDEF
 
-# --------------------------------------------------------------------------------------
-# --- ROUTING & STATE MANAGEMENT ---
-# --------------------------------------------------------------------------------------
 
-# Pre-built immutable route table
-const _ROUTES = Dict{String,String}(
-    "/" => "PAGE_HOME",
-    "/home" => "PAGE_HOME",
-    "/design" => "PAGE_DESIGN",
-    "/analysis" => "PAGE_ANALYSIS",
-)
-
-"""
-    FLOW_RouteUrl_DDEF(PathName) -> String
-Maps URL pathnames to internal page identifiers.
-"""
-function FLOW_RouteUrl_DDEF(PathName::String)
-    return get(_ROUTES, PathName) do
-        html_div("404: Page Not Found", className="text-danger")
-    end
-end
-
-"""
-    DaishoState
-Session state structure for storage in dcc_store.
-"""
-struct DaishoState
-    TargetFile::String
-    ActivePhase::String
-    CurrentConfig::Dict{String,Any}
-end
-
-const _EMPTY_STATE = DaishoState("", "Phase1", Dict{String,Any}())
-
-"""
-    FLOW_PackState_DDEF(TargetFile, ActivePhase, [Config]) -> String
-Serialises the application state into a JSON string.
-"""
-FLOW_PackState_DDEF(TargetFile::String, ActivePhase::String, Config::Dict=Dict{String,Any}()) =
-    JSON3.write(DaishoState(TargetFile, ActivePhase, Config))
-
-"""
-    FLOW_UnpackState_DDEF(JsonString) -> DaishoState
-Deserialises the application state from a JSON string.
-"""
-function FLOW_UnpackState_DDEF(JsonString::String)
-    (isempty(JsonString) || JsonString == "null") && return _EMPTY_STATE
-    try
-        return JSON3.read(JsonString, DaishoState)
-    catch
-        return _EMPTY_STATE
-    end
-end
 
 # --------------------------------------------------------------------------------------
 # --- PROCESS FLOW LOGIC ---
@@ -92,10 +38,10 @@ function FLOW_AskLeader_DDEF(LeaderVal::Float64, CurrentRange::Vector{Float64})
 end
 
 """
-    FLOW_NextPhase_DDEF(MasterFile, CurrentPhase, [SelectedID]) -> Dict
+    FLOW_NextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor=0.5) -> Dict
 Calculates the configuration for the subsequent experimental phase.
 """
-function FLOW_NextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedLeaderID::String="")
+function FLOW_NextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedLeaderID::String="", ZoomFactor::Float64=0.5)
     Leader = Main.Lib_Core.CORE_ExtractLeader_DDEF(MasterFile, CurrentPhase, SelectedLeaderID)
     isempty(Leader) && return Dict("Status" => "FAIL",
         "Message" => "No valid leader found in $CurrentPhase.")
@@ -137,7 +83,7 @@ function FLOW_NextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedL
         "Message" => "Could not restore configuration.")
 
     Leader["OldConfig"] = OldConfig
-    NewConfig = Main.Lib_Core.CORE_CalcNextRange_DDEF(Leader)
+    NewConfig = Main.Lib_Core.CORE_CalcNextRange_DDEF(Leader, ZoomFactor)
 
     p_num = tryparse(Int, replace(CurrentPhase, "Phase" => ""))
 
@@ -183,15 +129,15 @@ end
 # --------------------------------------------------------------------------------------
 
 """
-    FLOW_BuildNextPhase_DDEF(MasterFile, CurrentPhase, [SelectedID]) -> Dict
+    FLOW_BuildNextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor=0.5, Method="TL9") -> Dict
 Calculates new ranges, generates design matrix for the next phase, and writes to Excel.
 """
-function FLOW_BuildNextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedLeaderID::String="")
+function FLOW_BuildNextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedLeaderID::String="", ZoomFactor::Float64=0.5, Method::String="TL9")
     C = Sys_Fast.CONST_DATA
     Log = Sys_Fast.FAST_Log_DDEF
 
     # 1. Calculate new ranges via existing logic
-    res = FLOW_NextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID)
+    res = FLOW_NextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor)
     if res["Status"] != "OK"
         return res
     end
@@ -201,8 +147,8 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::String, CurrentPhase::String, Sele
     Log("FLOW", "PHASE_BUILD", "Building $TargetPhase design from $CurrentPhase leader...", "WAIT")
 
     # 1.5 CHEMICAL PRE-FLIGHT AUDIT (Bridge Lib_Mole -> Sys_Flow)
-    vol = get(res["Global"], "Volume", 5.0)
-    conc = get(res["Global"], "Concentration", 10.0)
+    vol = Float64(get(res["Global"], "Volume", 5.0))
+    conc = Float64(get(res["Global"], "Concentration", 10.0))
 
     # Lib_Mole expects a specific format: names, roles, l1, l2, l3, mw
     dummy_chem_rows = map(NewConfig) do c
@@ -229,8 +175,8 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::String, CurrentPhase::String, Sele
         return Dict("Status" => "FAIL", "Message" => "System requires exactly 3 Variable ingredients (Found: $num_vars).")
     end
 
-    # 3. Generate coded design matrix (Taguchi L9 for adaptive phases)
-    design_coded = Main.Lib_Core.CORE_GenDesign_DDEF(C.METHOD_TL9, num_vars)
+    # 3. Generate coded design matrix
+    design_coded = Main.Lib_Core.CORE_GenDesign_DDEF(Method, num_vars)
     N_Runs = size(design_coded, 1)
 
     # 4. Build level configs for mapping

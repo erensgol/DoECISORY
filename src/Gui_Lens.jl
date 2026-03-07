@@ -82,6 +82,9 @@ function LENS_Layout_DDEF()
                                                 className="w-100 fw-bold mb-2"), xs=12)),
                                         dbc_row(dbc_col(dbc_button([html_i(className="fas fa-file-export me-1"), " Report"],
                                                 id="lens-btn-download-report", color="secondary", outline=true, size="sm",
+                                                className="w-100 fw-bold mb-2"), xs=12)),
+                                        dbc_row(dbc_col(dbc_button([html_i(className="fas fa-file-excel me-1"), " Scientific (XLSX)"],
+                                                id="lens-btn-export-excel", color="secondary", outline=true, size="sm",
                                                 className="w-100 fw-bold mb-3"), xs=12)),
                                         dbc_row(dbc_col(html_hr(style=BASE_STYLE_HR, className="my-2"), xs=12)),
 
@@ -141,11 +144,16 @@ function LENS_Layout_DDEF()
                                                 id="lens-btn-next-phase", color="secondary", outline=true, size="sm",
                                                 className="w-100 fw-bold mb-2", disabled=true), xs=12)),
                                         dbc_row(dbc_col(dbc_button([html_i(className="fas fa-play me-2"), "Run Analysis"],
-                                                id="lens-btn-run", color="primary", size="sm", className="w-100 fw-bold mb-2"), xs=12)), dcc_download(id="lens-download-result"),
+                                                id="lens-btn-run", color="primary", size="sm", className="w-100 fw-bold mb-2"), xs=12)), 
+                                        dcc_download(id="lens-download-phase"),
+                                        dcc_download(id="lens-download-analysis"),
                                         dcc_download(id="lens-download-plots"),
+                                        dcc_download(id="lens-download-report-file"),
                                         dbc_row(dbc_col(dcc_loading(html_div(id="lens-run-output", className="mt-2 small"),
                                                 type="default", color="#21918C"), xs=12)),
-                                        dbc_row(dbc_col(dcc_loading(html_div(id="lens-export-output", className="mt-1 small"),
+                                        dbc_row(dbc_col(dcc_loading(html_div(id="lens-export-plots-status", className="mt-1 small"),
+                                                type="default", color="#21918C"), xs=12)),
+                                        dbc_row(dbc_col(dcc_loading(html_div(id="lens-export-excel-status", className="mt-1 small"),
                                                 type="default", color="#21918C"), xs=12)),
                                     ]; right_node=html_i(className="fas fa-sliders-h text-secondary"), overflow="visible"), xs=12)),
                         ]; xs=12, lg=3, className="mb-3 mb-lg-0"),
@@ -170,7 +178,7 @@ function LENS_Layout_DDEF()
                                 ]; panel_class="mb-3", content_class="glass-content p-2"),
 
                             # Model Performance Panel
-                            BASE_GlassPanel_DDEF(["MODEL PERFORMANCE", html_span("", className="ms-2 text-muted fw-normal")], [
+                            BASE_GlassPanel_DDEF(["MODEL PERFORMANCE", html_span(id="lens-radio-badge", className="ms-2")], [
                                     dbc_row(dbc_col(html_div(id="lens-results-text", className="small px-2 table-responsive"), xs=12)),
                                 ]; panel_class="mb-3", content_class="glass-content p-2"),
 
@@ -211,6 +219,7 @@ function LENS_Layout_DDEF()
                             dcc_store(id="lens-store-graphs", data=[]),
                             dcc_store(id="lens-store-index", data=0),
                             dcc_store(id="lens-store-report", data=""),
+                            dcc_store(id="lens-store-results", data=Dict()),
                             dcc_store(id="lens-signal-process", data=Dict("ts" => 0, "success" => false)),
                         ]; xs=12, lg=9),
                 ], className="g-3"),
@@ -222,12 +231,28 @@ function LENS_Layout_DDEF()
             # Phase Wizard Modal
             BASE_Modal_DDEF("lens-modal-wizard", "Phase Transition Wizard",
                 dbc_row(dbc_col([
-                        html_p("The system will generate a new experimental phase based on the centre point you select.",
+                        html_p("Configure initial settings for the new experimental phase.",
                             className="text-muted small"),
-                        dbc_label("Source Phase"),
+                        dbc_label("Source Phase", className="small mb-1"),
                         dcc_dropdown(id="lens-wiz-dd-source", options=[], clearable=false, className="mb-3"),
-                        dbc_label("Generated Target Phase"),
+                        dbc_label("Generated Target Phase", className="small mb-1"),
                         dbc_input(id="lens-wiz-input-target", disabled=true, className="mb-3 text-success fw-bold"),
+                        
+                        dbc_row([
+                            dbc_col([
+                                dbc_label("Zoom Factor", className="small mb-1"),
+                                dcc_slider(id="lens-wiz-slider-zoom", min=0.1, max=1.0, step=0.05, value=0.5, 
+                                           marks=Dict(0.1=>"0.1", 0.5=>"0.5", 1.0=>"1.0"), className="mb-3")
+                            ], xs=6),
+                            dbc_col([
+                                dbc_label("Initial Method", className="small mb-1"),
+                                dcc_dropdown(id="lens-wiz-dd-method", options=[
+                                    Dict("label" => "Taguchi L9", "value" => "TL9"),
+                                    Dict("label" => "Box-Behnken", "value" => "BoxBehnken"),
+                                    Dict("label" => "D-Optimal", "value" => "DOPT")
+                                ], value="TL9", clearable=false, className="mb-3")
+                            ], xs=6)
+                        ])
                     ], xs=12)),
                 html_div([
                     dbc_button("Cancel", id="lens-wiz-btn-cancel", color="secondary", outline=true, className="me-2"),
@@ -248,10 +273,47 @@ function LENS_Layout_DDEF()
                                 ], []; row_selectable="single", selected_rows=[]), id="lens-container-candidates", className="table-responsive"),
                     ], xs=12)),
                 dbc_row([
-                        dbc_col(dbc_button([html_i(className="fas fa-chevron-left me-1"), "Back"], id="lens-lead-btn-back", color="secondary", outline=true, size="sm", className="w-100 mb-2 mb-md-0"), xs=12, md=2),
-                        dbc_col(dbc_button([html_i(className="fas fa-times me-1"), "Cancel"], id="lens-lead-btn-cancel", color="secondary", outline=true, size="sm", className="w-100 mb-2 mb-md-0"), xs=12, md=2, className="ms-md-auto"),
-                        dbc_col(dbc_button([html_i(className="fas fa-save me-1"), "SAVE & GENERATE NEXT PHASE"], id="lens-lead-btn-confirm", color="primary", disabled=true, size="sm", className="w-100"), xs=12, md=5),
-                    ], className="w-100 g-2"); size="xl", close_button=false),], fluid=true, className="px-4 py-3")
+                        dbc_col(dbc_button([html_i(className="fas fa-chevron-left me-1"), "Back"], id="lens-lead-btn-back", color="secondary", outline=true, size="sm", className="w-100 mb-2 mb-md-0"), xs=12, md=3),
+                        dbc_col(dbc_button([html_i(className="fas fa-times me-1"), "Cancel"], id="lens-lead-btn-cancel", color="secondary", outline=true, size="sm", className="w-100 mb-2 mb-md-0"), xs=12, md=3, className="ms-md-auto"),
+                        dbc_col(dbc_button([html_i(className="fas fa-eye me-1"), "NEXT: PREVIEW & ADJUST"], id="lens-lead-btn-confirm", color="primary", disabled=true, size="sm", className="w-100"), xs=12, md=5),
+                    ], className="w-100 g-2"); size="xl", close_button=false),
+
+            # NEW: Phase Preview & Adjustment Modal
+            BASE_Modal_DDEF("lens-modal-preview", [html_i(className="fas fa-vial me-2 text-success"), "Preview & Adjust Target Phase"],
+                dbc_row([
+                    dbc_col([
+                        dbc_alert([
+                            html_i(className="fas fa-check-circle me-2"),
+                            "Review the proposed search space and stoichiometry before finalising the next experimental phase."
+                        ], color="success", className="small py-2 mb-3"),
+                        
+                        html_div(id="lens-container-preview-table", className="table-responsive mb-3"),
+                        
+                        dbc_row([
+                            dbc_col([
+                                dbc_label("Refine Zoom Factor", className="small mb-1"),
+                                dcc_slider(id="lens-prev-slider-zoom", min=0.1, max=1.0, step=0.05, value=0.5, className="mb-3")
+                            ], xs=6),
+                            dbc_col([
+                                dbc_label("Refine Design Method", className="small mb-1"),
+                                dcc_dropdown(id="lens-prev-dd-method", options=[
+                                    Dict("label" => "Taguchi L9", "value" => "TL9"),
+                                    Dict("label" => "Box-Behnken", "value" => "BoxBehnken"),
+                                    Dict("label" => "D-Optimal", "value" => "DOPT")
+                                ], value="TL9", clearable=false, className="mb-3")
+                            ], xs=6)
+                        ]),
+                        
+                        html_div(id="lens-container-preview-audit", className="mt-2")
+                    ], xs=12)
+                ]),
+                dbc_row([
+                    dbc_col(dbc_button([html_i(className="fas fa-chevron-left me-1"), "Back"], id="lens-prev-btn-back", color="secondary", outline=true, size="sm", className="w-100"), xs=12, md=3),
+                    dbc_col(dbc_button([html_i(className="fas fa-save me-1"), "CONFIRM & COMMIT TO EXCEL"], id="lens-prev-btn-commit", color="primary", size="sm", className="w-100"), xs=12, md=6, className="ms-auto"),
+                ], className="w-100 g-2"); size="xl", close_button=false),
+                
+            dcc_store(id="lens-store-next-phase-proposal", data=Dict()),
+        ], fluid=true, className="px-4 py-3")
 end
 
 # --------------------------------------------------------------------------------------
@@ -349,7 +411,9 @@ function LENS_RegisterCallbacks_DDEF(app)
                 model_opts = [
                     Dict("label" => "Automatic (Auto)", "value" => "Auto"),
                     Dict("label" => "Linear", "value" => "Linear"),
-                    Dict("label" => "Quadratic", "value" => "Quadratic")
+                    Dict("label" => "Quadratic", "value" => "Quadratic"),
+                    Dict("label" => "Kriging (Surrogate)", "value" => "kriging"),
+                    Dict("label" => "RBF (Surrogate)", "value" => "rbf")
                 ]
                 model_val = "Auto"
             end
@@ -424,8 +488,10 @@ function LENS_RegisterCallbacks_DDEF(app)
         Output("lens-btn-next-phase", "disabled"),
         Output("lens-btn-view-report", "disabled"),
         Output("lens-store-report", "data"),
+        Output("lens-store-results", "data"),
         Output("sync-lens-analysis", "data"),
         Output("lens-leaders-text", "children"),
+        Output("lens-radio-badge", "children"), # NEW: Output for the radio correction badge
         Input("lens-btn-run", "n_clicks"),
         State("lens-dd-phase", "value"),
         State("lens-dd-model", "value"),
@@ -470,9 +536,9 @@ function LENS_RegisterCallbacks_DDEF(app)
                 ))
             end
         end
-        (n === nothing || n == 0) && return [], "", "", true, true, "", Dash.no_update(), Dash.no_update()
+        (n === nothing || n == 0) && return [], "", "", true, true, "", Dash.no_update(), Dash.no_update(), "", "" # Corrected: 10 outputs
         isnothing(base64_file) &&
-            return [], "", html_span("Please upload data first.", className="text-warning"), true, true, "", Dash.no_update(), Dash.no_update()
+            return [], "", html_span("Please upload data first.", className="text-warning"), true, true, "", Dash.no_update(), Dash.no_update(), "", "" # Corrected: 10 outputs
 
         # Race condition lock: reject concurrent analysis requests
         if !Sys_Fast.FAST_AcquireLock_DDEF("VISE_ANALYSIS")
@@ -480,7 +546,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 "Analysis already running. New request rejected.", "WARN")
             return Dash.no_update(), Dash.no_update(),
             html_span("⚠ An analysis is already in progress. Please wait.",
-                className="text-warning fw-bold"), true, true, Dash.no_update(), Dash.no_update(), Dash.no_update()
+                className="text-warning fw-bold"), true, true, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update() # Corrected: 10 outputs
         end
 
         # Create temp file BEFORE try so finally can always clean it
@@ -503,7 +569,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             res = Lib_Vise.VISE_Execute_DDEF(path, phase_str, goals, model_str; Opts=opts)
 
             if res["Status"] != "OK"
-                return [], "", html_span("❌ Analysis Failed: $(res["Message"])", className="text-danger"), true, true, "", Dash.no_update(), ""
+                return [], "", html_span("❌ Analysis Failed: $(res["Message"])", className="text-danger"), true, true, "", Dash.no_update(), Dash.no_update(), "", "" # Corrected: 10 outputs
             end
 
             # Generate and capture Scientific Report
@@ -562,7 +628,96 @@ function LENS_RegisterCallbacks_DDEF(app)
                                 html_span(@sprintf("%.1e", res["Vitals"]["Condition"]), className="fw-bold text-dark"),
                             ]),
                         ], className="d-flex justify-content-center small py-1 bg-light rounded")
-                ]) : html_div())
+                ]) : html_div()),
+
+                # --- NEW: SENSITIVITY ANALYSIS TABLE ---
+                (haskey(res, "Sensitivities") && !isempty(res["Sensitivities"]) ? html_div([
+                    html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px dashed #DCDCDC", "margin" => "10px 0")),
+                    html_h6("Factor Sensitivity (at Optimum)", className="fw-bold small text-center mb-2", style=Dict("color" => "#21918C")),
+                    html_table([
+                        html_thead(html_tr([
+                            html_th("Factor", style=Dict("textAlign" => "left", "padding" => "4px")),
+                            [html_th(out, style=Dict("textAlign" => "center", "padding" => "4px")) for out in res["OutNames"]]...
+                        ])),
+                        html_tbody([
+                            html_tr([
+                                html_td(res["InNames"][fi], className="fw-bold", style=Dict("padding" => "4px")),
+                                [html_td(@sprintf("%.1f%%", res["Sensitivities"][mi][fi]*100), 
+                                         style=Dict("textAlign" => "center", "padding" => "4px", 
+                                                    "color" => res["Sensitivities"][mi][fi] > 0.5 ? "#FF0000" : "#000000")) 
+                                 for mi in 1:length(res["OutNames"])]...
+                            ]) for fi in 1:length(res["InNames"])
+                        ])
+                    ], className="table table-sm table-borderless small mx-auto", style=Dict("width" => "90%"))
+                ]) : html_div()),
+
+                # --- NEW: ACADEMIC ANOVA & COEFFICIENTS TIER ---
+                html_div([
+                    html_hr(style=Dict("height" => "2px", "border" => "none", "borderTop" => "2px solid #21918C", "margin" => "15px 0")),
+                    html_h6("ACADEMIC DIAGNOSTICS (CMPB TIER)", className="fw-bold text-center mb-3", style=Dict("color" => "#21918C", "letterSpacing" => "1px")),
+                    
+                    # Loop through each output for detailed ANOVA
+                    [html_div([
+                        html_div("Analysis of Variance (ANOVA): $out_name", className="small fw-bold mb-1", style=Dict("color" => "#444")),
+                        # ANOVA Table
+                        let df_ano = res["ANOVA"][i]
+                            html_table([
+                                html_thead(html_tr([
+                                    html_th("Source", style=Dict("padding" => "2px")),
+                                    html_th("df", style=Dict("padding" => "2px")),
+                                    html_th("MS", style=Dict("padding" => "2px")),
+                                    html_th("F-Value", style=Dict("padding" => "2px")),
+                                    html_th("P-Value", style=Dict("padding" => "2px"))
+                                ])),
+                                html_tbody([
+                                    html_tr([
+                                        html_td(r.Source, style=Dict("padding" => "2px")),
+                                        html_td(r.df, style=Dict("padding" => "2px")),
+                                        html_td(isnan(r.MS) ? "-" : @sprintf("%.4f", r.MS), style=Dict("padding" => "2px")),
+                                        html_td(isnan(r.F) ? "-" : @sprintf("%.2f", r.F), style=Dict("padding" => "2px")),
+                                        html_td(isnan(r.P) ? "-" : @sprintf("%.4f", r.P), 
+                                                className=(!isnan(r.P) && r.P < 0.05) ? "fw-bold text-success" : "",
+                                                style=Dict("padding" => "2px"))
+                                    ]) for r in eachrow(df_ano)
+                                ])
+                            ], className="table table-sm table-hover small mb-3 border")
+                        end,
+                        
+                        html_div("Term Significance (Coefficients): $out_name", className="small fw-bold mb-1", style=Dict("color" => "#444")),
+                        # Coefficients Table
+                        let m = res["Models"][i]
+                            html_table([
+                                html_thead(html_tr([
+                                    html_th("Term", style=Dict("padding" => "2px")),
+                                    html_th("Beta", style=Dict("padding" => "2px")),
+                                    html_th("P-Value", style=Dict("padding" => "2px")),
+                                    html_th("VIF", style=Dict("padding" => "2px"))
+                                ])),
+                                html_tbody([
+                                    html_tr([
+                                        html_td(m["TermNames"][j], style=Dict("padding" => "2px")),
+                                        html_td(@sprintf("%.4f", m["Coefs"][j]), style=Dict("padding" => "2px")),
+                                        html_td(isnan(m["P_Coefs"][j]) ? "N/A" : @sprintf("%.4f", m["P_Coefs"][j]),
+                                                className=(!isnan(m["P_Coefs"][j]) && m["P_Coefs"][j] < 0.05) ? "fw-bold text-success" : "",
+                                                style=Dict("padding" => "2px")),
+                                        html_td(j == 1 ? "-" : @sprintf("%.2f", m["VIFs"][j]), style=Dict("padding" => "2px"))
+                                    ]) for j in 1:length(m["TermNames"])
+                                ])
+                            ], className="table table-sm table-hover small mb-4 border")
+                        end
+                    ]) for (i, out_name) in enumerate(res["OutNames"])]...
+                ], className="px-2 mt-3"),
+
+                # --- NEW: BOUNDARY WARNINGS (AskLeader Integration) ---
+                let warnings = get(res, "BoundaryWarnings", String[])
+                    !isempty(warnings) ? dbc_alert([
+                        html_div([
+                            html_i(className="fas fa-exclamation-triangle me-2"),
+                            html_strong("Boundary Warning (Search Space Limit)"),
+                        ], className="mb-1"),
+                        html_ul([html_li(w, className="mb-0") for w in warnings], className="ps-3 mb-0 small")
+                    ], color="warning", className="mt-2 py-2 border-0 shadow-sm") : html_div()
+                end
             ])
 
             # --- Persist Analysis Configuration (Goals & RadioOpts) ---
@@ -622,19 +777,23 @@ function LENS_RegisterCallbacks_DDEF(app)
                     ], className="table table-sm table-borderless mb-0 mx-auto", style=Dict("width" => "100%", "marginTop" => "5px"))
             end
 
+            # Radio Badge Logic
+            rad_badge = (haskey(res, "RadioCorrection") && !isempty(res["RadioCorrection"])) ? 
+                dbc_badge([html_i(className="fas fa-radiation me-1"), "Radio-Corrected"], color="warning", className="ms-2 text-dark fw-bold") : ""
+
             # Show elapsed time in analysis success message
             elapsed_str = get(res, "Elapsed", "")
             elapsed_badge = isempty(elapsed_str) ? "" :
                             html_span(" ($elapsed_str)", className="text-muted")
 
             return graphs, summary, html_span(["✅ Analysis Complete", elapsed_badge],
-                className="text-success fw-bold small"), false, false, sci_report, updated_base64, leaders_html
+                className="text-success fw-bold small"), false, false, sci_report, updated_base64, Dash.no_update(), leaders_html, rad_badge # Corrected sequence
 
         catch e  # Surface analysis errors to UI
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "ANALYSIS_CRASH", bt, "FAIL")
             return [], "",
-            html_span("❌ Critical Error: $(first(string(e), 150))", className="text-danger fw-bold"), true, true, "", Dash.no_update(), ""
+            html_span("❌ Critical Error: $(first(string(e), 150))", className="text-danger fw-bold"), true, true, "", Dash.no_update(), Dash.no_update(), "", "" # Corrected: 10 outputs
         finally
             # Guaranteed temp file cleanup (prevents disk leak)
             Sys_Fast.FAST_CleanTransient_DDEF(path)
@@ -708,7 +867,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             curr_start += c
         end
 
-        function format_line(items)
+        function LENS_FormatLine_DDEF(items)
             return html_div([
                     html_span(item, style=Dict(
                         "width" => "33.3%", 
@@ -723,9 +882,9 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
 
         info_html = html_div([
-                format_line(info_parts[1:min(length(info_parts), 3)]),
-                length(info_parts) > 3 ? format_line(info_parts[4:min(length(info_parts), 6)]) : html_div(),
-                length(info_parts) > 6 ? format_line(info_parts[7:min(length(info_parts), 9)]) : html_div()
+                LENS_FormatLine_DDEF(info_parts[1:min(length(info_parts), 3)]),
+                length(info_parts) > 3 ? LENS_FormatLine_DDEF(info_parts[4:min(length(info_parts), 6)]) : html_div(),
+                length(info_parts) > 6 ? LENS_FormatLine_DDEF(info_parts[7:min(length(info_parts), 9)]) : html_div()
             ], style=Dict("display" => "flex", "flexDirection" => "column", "width" => "100%", "padding" => "2px 0"))
 
         return g[idx]["figure"], g[idx]["title"], "/ $(length(g))", info_html
@@ -820,16 +979,31 @@ function LENS_RegisterCallbacks_DDEF(app)
     # --- 7. UI: MODAL SEQUENTIAL SWITCHING ---
     callback!(app,
         Output("lens-modal-leader", "is_open"),
+        Output("lens-modal-preview", "is_open"),
         Input("lens-wiz-btn-next", "n_clicks"),
-        Input("lens-lead-btn-cancel", "n_clicks"),
         Input("lens-lead-btn-back", "n_clicks"),
-        Input("lens-signal-process", "data")
-    ) do n_nxt, n_cncl, n_bck, sig
+        Input("lens-lead-btn-confirm", "n_clicks"),
+        Input("lens-prev-btn-back", "n_clicks"),
+        Input("lens-signal-process", "data"),
+        prevent_initial_call=true
+    ) do n_nxt, n_bck_lead, n_nxt_prev, n_bck_prev, sig
         trig = BASE_GetTrigger_DDEF(callback_context())
-        trig == "lens-wiz-btn-next" && return true
-        (trig == "lens-lead-btn-cancel" || trig == "lens-lead-btn-back") && return false
-        trig == "lens-signal-process" && return !(get(sig, "success", false))
-        return Dash.no_update()
+        
+        # Leader Modal
+        if trig == "lens-wiz-btn-next" return true, false end
+        if trig == "lens-lead-btn-back" return false, false end
+        if trig == "lens-leader-btn-confirm" return false, true end # Moving to preview
+        
+        # Preview Modal
+        if trig == "lens-lead-btn-confirm" return false, true end
+        if trig == "lens-prev-btn-back" return true, false end # Back to leader
+        
+        # Success signal
+        if trig == "lens-signal-process" && get(sig, "success", false)
+            return false, false
+        end
+        
+        return Dash.no_update(), Dash.no_update()
     end
 
     # --- 8. UI: REPORT MODAL CONTROL ---
@@ -843,6 +1017,24 @@ function LENS_RegisterCallbacks_DDEF(app)
         n > 0 && return true, report
         return false, ""
     end
+
+    # --- 8B. UI: SCIENTIFIC REPORT DOWNLOAD (TXT) ---
+    callback!(app,
+        Output("lens-download-report-file", "data"),
+        Input("lens-btn-download-txt", "n_clicks"),
+        State("lens-store-report", "data"),
+        State("lens-input-project", "value"),
+        State("lens-dd-phase", "value"),
+        prevent_initial_call=true
+    ) do n, report, project, phase
+        (isnothing(n) || n == 0 || isnothing(report) || isempty(report)) && return Dash.no_update()
+        
+        proj = isnothing(project) ? "Daisho" : project
+        ph = isnothing(phase) ? "Phase1" : phase
+        fname = "Daisho_$(proj)_$(ph)_Scientific_Report.txt"
+        
+        return Dict("filename" => fname, "content" => report)
+    end
     # --- 9. UI: CONDITIONAL ACTION ENABLING ---
     callback!(app,
         Output("lens-lead-btn-confirm", "disabled"),
@@ -851,77 +1043,134 @@ function LENS_RegisterCallbacks_DDEF(app)
         return isnothing(s) || isempty(s)
     end
 
-    # --- 10. LOGIC: RESULT FINALIZATION ---
+    # --- 10. LOGIC: PHASE PROPOSAL GENERATOR (PREVIEW) ---
     callback!(app,
-        Output("lens-download-result", "data"),
-        Output("lens-signal-process", "data"),
+        Output("lens-store-next-phase-proposal", "data"),
+        Output("lens-prev-slider-zoom", "value"),
+        Output("lens-prev-dd-method", "value"),
         Input("lens-lead-btn-confirm", "n_clicks"),
-        Input("lens-btn-download-report", "n_clicks"),
-        State("lens-input-project", "value"),
+        Input("lens-prev-slider-zoom", "value"),
+        Input("lens-prev-dd-method", "value"),
+        State("lens-wiz-slider-zoom", "value"),
+        State("lens-wiz-dd-method", "value"),
+        State("lens-wiz-dd-source", "value"),
+        State("lens-table-candidates", "selected_rows"),
+        State("lens-table-candidates", "data"),
+        State("store-master-vault", "data"),
+        prevent_initial_call=true
+    ) do n_prev, zoom_p, meth_p, zoom_w, meth_w, src, sel_rows, cand_data, base64_file
+        trig = BASE_GetTrigger_DDEF(callback_context())
+        
+        # Initial values from wizard if first entry to preview
+        z = trig == "lens-lead-btn-confirm" ? zoom_w : zoom_p
+        m = trig == "lens-lead-btn-confirm" ? meth_w : meth_p
+        
+        (isnothing(base64_file) || isnothing(sel_rows) || isempty(sel_rows)) && return Dict(), z, m
+        
+        sel_id = string(cand_data[sel_rows[1] + 1]["ID"])
+        path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
+        
+        # Call Flow Propose logic (NextPhase)
+        res = Sys_Flow.FLOW_NextPhase_DDEF(path, src, sel_id, Float64(z))
+        Sys_Fast.FAST_CleanTransient_DDEF(path)
+        
+        res["SelectedMethod"] = m
+        res["SelectedZoom"] = z
+        return res, z, m
+    end
+
+    # --- 11. UI: RENDER PREVIEW CONTENT ---
+    callback!(app,
+        Output("lens-container-preview-table", "children"),
+        Output("lens-container-preview-audit", "children"),
+        Input("lens-store-next-phase-proposal", "data"),
+        prevent_initial_call=true
+    ) do res
+        (isnothing(res) || isempty(res) || res["Status"] != "OK") && return html_div("No proposal available."), ""
+        
+        conf = res["NewConfig"]
+        
+        # 1. Comparison Table
+        rows = []
+        for c in conf
+            role = get(c, "Role", "Variable")
+            lvls = get(c, "Levels", [0.0, 0.0, 0.0])
+            push!(rows, html_tr([
+                html_td(get(c, "Name", "???")),
+                html_td(role, className=role == "Variable" ? "text-primary fw-bold" : "text-muted"),
+                html_td(round(lvls[1], digits=3)),
+                html_td(html_b(round(lvls[2], digits=3)), className="bg-light"),
+                html_td(round(lvls[3], digits=3))
+            ]))
+        end
+        
+        tbl = html_table([
+            html_thead(html_tr([
+                html_th("Ingredient"), html_th("Role"), html_th("Min"), html_th("Centre"), html_th("Max")
+            ])),
+            html_tbody(rows)
+        ], className="table table-sm table-hover align-middle small")
+
+        # 2. Stoichiometry Audit
+        vol = get(res["Global"], "Volume", 5.0)
+        conc = get(res["Global"], "Concentration", 10.0)
+        
+        chem_rows = [Dict("Name"=>get(c,"Name",""), "Role"=>get(c,"Role",""), "L1"=>get(c,"Levels",[0.0,0.0,0.0])[1], "L2"=>get(c,"Levels",[0.0,0.0,0.0])[2], "L3"=>get(c,"Levels",[0.0,0.0,0.0])[3], "MW"=>get(c,"MW",0.0)) for c in conf]
+        
+        audit_ok, audit_report, _, _, _ = Main.Lib_Mole.MOLE_QuickAudit_DDEF(chem_rows, vol, conc)
+        
+        audit_html = dbc_alert([
+            html_h6(["Stochiometry Audit (Proposed Phase): ", audit_ok ? "✅ PASS" : "❌ FAIL"], className="small fw-bold"),
+            html_pre(audit_report, className="x-small mb-0", style=Dict("fontSize"=>"10px"))
+        ], color=audit_ok ? "success" : "danger", className="py-2 px-3 mt-2")
+        
+        return tbl, audit_html
+    end
+
+    # --- 12. LOGIC: COMMIT PHASE TO EXCEL ---
+    callback!(app,
+        Output("lens-download-phase", "data"),
+        Output("lens-signal-process", "data"),
+        Input("lens-prev-btn-commit", "n_clicks"),
+        State("lens-store-next-phase-proposal", "data"),
         State("lens-table-candidates", "selected_rows"),
         State("lens-table-candidates", "data"),
         State("lens-wiz-dd-source", "value"),
         State("store-master-vault", "data"),
         prevent_initial_call=true
-    ) do n_sav, n_rep, project, row, data, src, base64_file
-        (isnothing(n_sav) || n_sav == 0) && (isnothing(n_rep) || n_rep == 0) && return Dash.no_update(), Dash.no_update()
-
-        # Create path before try for guaranteed cleanup
-        path = ""
-        try  # Error guard for finalization callback
-            trig = BASE_GetTrigger_DDEF(callback_context())
-
-            isnothing(base64_file) && return nothing, Dash.no_update()
-            path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
-
-            # Excel-Centric Phase Transition: generate Phase2 design and write to Excel
-            target_phase_label = isnothing(src) ? "Phase1" : src
-            if trig == "lens-lead-btn-confirm"
-                sel_row = data[row[1]+1]
-                sel_keys = collect(keys(sel_row))
-                id_idx = findfirst(k -> occursin("ID", uppercase(string(k))), sel_keys)
-                id = !isnothing(id_idx) ? string(sel_row[sel_keys[id_idx]]) : ""
-
-                res_build = Sys_Flow.FLOW_BuildNextPhase_DDEF(path, isnothing(src) ? "Phase1" : src, id)
-                if res_build["Status"] == "OK"
-                    target_phase_label = res_build["TargetPhase"]
-                    Sys_Fast.FAST_Log_DDEF("FLOW", "PHASE_COMPLETE",
-                        "$(res_build["TargetPhase"]) ($(res_build["N_Runs"]) runs) ready for download.", "OK")
-                else
-                    Sys_Fast.FAST_Log_DDEF("FLOW", "PHASE_FAIL",
-                        "Phase transition failed: $(get(res_build, "Message", "Unknown"))", "FAIL")
-                end
-            end
-
-            # Read updated file (now contains Phase2 data) and prepare download
-            ok, bytes = Sys_Fast.FAST_PrepareDownload_DDEF(path)
-            updated_base64 = Sys_Fast.FAST_ReadToStore_DDEF(path)
-
-            fname = Sys_Fast.FAST_GenerateSmartName_DDEF(
-                isnothing(project) ? "Daisho" : project, target_phase_label, "READY")
-
-            return (
-                Dict("filename" => fname, "content" => base64encode(bytes), "base64" => true),
-                Dict("success" => ok, "base64" => updated_base64),
-            )
-
-        catch e  # Surface finalization errors
-            bt = sprint(showerror, e, catch_backtrace())
-            Sys_Fast.FAST_Log_DDEF("LENS", "FINALIZE_CRASH", bt, "FAIL")
-            return nothing, Dict("success" => false)
-        finally
-            # Guaranteed temp file cleanup
-            !isempty(path) && try
-                rm(path; force=true)
-            catch
-            end
+    ) do n_commit, proposal, sel_rows, cand_data, src, base64_file
+        (isnothing(n_commit) || n_commit == 0 || isnothing(proposal) || proposal["Status"] != "OK") && return Dash.no_update()
+        
+        sel_id = string(cand_data[sel_rows[1] + 1]["ID"])
+        zoom = get(proposal, "SelectedZoom", 0.5)
+        meth = get(proposal, "SelectedMethod", "TL9")
+        
+        path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
+        
+        res = Sys_Flow.FLOW_BuildNextPhase_DDEF(path, src, sel_id, Float64(zoom), meth)
+        
+        if res["Status"] == "OK"
+            new_vault = Sys_Fast.FAST_ReadToStore_DDEF(path)
+            # Need actual bytes for download
+            _, bytes = Sys_Fast.FAST_PrepareDownload_DDEF(path)
+            
+            Sys_Fast.FAST_CleanTransient_DDEF(path)
+            
+            # Use smart naming
+            fname = Sys_Fast.FAST_GenerateSmartName_DDEF("Daisho", res["TargetPhase"], "READY")
+            
+            return Dict("filename" => fname, "content" => base64encode(bytes), "base64" => true), 
+                   Dict("success" => true, "msg" => "Phase Created Successfully", "base64" => new_vault)
+        else
+            Sys_Fast.FAST_CleanTransient_DDEF(path)
+            return Dash.no_update(), Dict("success" => false, "msg" => res["Message"])
         end
     end
 
     # --- 11. HIGH-RES PLOT EXPORT ---
     callback!(app,
         Output("lens-download-plots", "data"),
-        Output("lens-export-output", "children"),
+        Output("lens-export-plots-status", "children"),
         Input("lens-btn-export-plots", "n_clicks"),
         State("lens-store-graphs", "data"),
         State("lens-input-project", "value"),
@@ -945,7 +1194,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 title = get(g, "title", "Plot_$i")
 
                 # Apply Light Theme via BASE function
-                fig_dict = BASE_ConvertThemePlotlyWhite_DDEF!(fig_dict)
+                fig_dict = BASE_ConvertThemePlotlyWhite!_DDEF(fig_dict)
 
                 safe_title = replace(title, r"[^\w\-_\\.]" => "_")
                 filepath = joinpath(export_dir, "$(safe_title).png")
@@ -984,6 +1233,45 @@ function LENS_RegisterCallbacks_DDEF(app)
             return Dash.no_update(),
             html_span("❌ Error during plot export (Kaleido missing?): $e",
                 className="text-danger fw-bold")
+        end
+    end
+    # --- 12. SCIENTIFIC EXCEL EXPORT ---
+    callback!(app,
+        Output("lens-download-analysis", "data"),
+        Output("lens-export-excel-status", "children"),
+        Input("lens-btn-export-excel", "n_clicks"),
+        State("lens-store-results", "data"),
+        State("lens-input-project", "value"),
+        State("lens-dd-phase", "value"),
+        State("store-master-vault", "data"),
+        prevent_initial_call=true
+    ) do n, res, proj, phase, mv
+        (isnothing(n) || n == 0 || isnothing(res) || isempty(res)) && return Dash.no_update(), Dash.no_update()
+        isnothing(mv) && return Dash.no_update(), html_span("❌ No data source found.", className="text-danger")
+
+        path = ""
+        try
+            path = Sys_Fast.FAST_GetTransientPath_DDEF(mv)
+            
+            # Use the new ExportToExcel function from Lib_Vise
+            success = Lib_Vise.VISE_ExportToExcel_DDEF(path, res)
+            
+            if success
+                bytes = read(path)
+                pj = isnothing(proj) ? "Daisho" : proj
+                ph = isnothing(phase) ? "Phase1" : phase
+                fname = "Daisho_$(pj)_$(ph)_Scientific_Analysis.xlsx"
+                
+                return Dict("filename" => fname, "content" => base64encode(bytes), "base64" => true),
+                       html_span("✅ Scientific XLSX downloaded.", className="text-success fw-bold small")
+            else
+                return Dash.no_update(), html_span("❌ Excel export failed.", className="text-danger small")
+            end
+        catch e
+            Sys_Fast.FAST_Log_DDEF("LENS", "EXCEL_EXPORT_FAIL", string(e), "FAIL")
+            return Dash.no_update(), html_span("❌ Export Error: $e", className="text-danger small")
+        finally
+            Sys_Fast.FAST_CleanTransient_DDEF(path)
         end
     end
 end

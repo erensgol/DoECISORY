@@ -50,10 +50,12 @@ function CORE_GenDesign_DDEF(Method::String, FactorCount::Int=3)
     CONST = Sys_Fast.FAST_Constants_DDEF()
     Sys_Fast.FAST_Log_DDEF("CORE", "DESIGN_GEN", "Generating matrix for $Method (Strict 3-Var Mode)", "WAIT")
 
-    design = if Method == CONST.METHOD_BB
+    design = if Method == CONST.METHOD_BB || Method == "BB"
         copy(_BB_DESIGN)
-    elseif Method == CONST.METHOD_TL9
+    elseif Method == CONST.METHOD_TL9 || Method == "TL9"
         copy(_TL9_DESIGN)
+    elseif Method == CONST.METHOD_DOPT || Method == "DOPT"
+        CORE_GenerateOptimalDesign_DDEF(FactorCount, 15)
     else
         Sys_Fast.FAST_Log_DDEF("CORE", "METHOD_ERROR", "Undefined Method: $Method", "FAIL")
         Int8[;;]
@@ -92,10 +94,10 @@ end
 # --------------------------------------------------------------------------------------
 
 """
-    CORE_CalcNextRange_DDEF(LeaderInfo) -> Vector{Dict}
+    CORE_CalcNextRange_DDEF(LeaderInfo, ZoomFactor=0.5) -> Vector{Dict}
 Calculates the search space for the next phase using Zoom (reduction) or Shift (translation).
 """
-function CORE_CalcNextRange_DDEF(LeaderInfo::Dict)
+function CORE_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5)
     CONST = Sys_Fast.FAST_Constants_DDEF()
     NewConf = deepcopy(LeaderInfo["OldConfig"])
     SelVals = LeaderInfo["Vals"]
@@ -115,7 +117,7 @@ function CORE_CalcNextRange_DDEF(LeaderInfo::Dict)
         at_limit = abs(Val - L_Old[1]) < Tol || abs(Val - L_Old[3]) < Tol
 
         New_Mid = Val
-        New_Range = at_limit ? Range : Range * 0.5
+        New_Range = at_limit ? Range : Range * ZoomFactor
         action = at_limit ? "SHIFT" : "ZOOM"
         Sys_Fast.FAST_Log_DDEF("CORE", action,
             "Var $i -> $(action == "SHIFT" ? "Centre shifted" : "Range reduced")", "LIST")
@@ -243,7 +245,7 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
     end
 
     # Define the Objective Function (BBO Minimises, so we return -Score)
-    function objective(x)
+    function CORE_CalcObjective_DDEF(x)
         s = 1.0
         x_tup = ntuple(i -> x[i], Dim)
         for m in 1:NumModels
@@ -270,7 +272,7 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
     Main.Sys_Fast.FAST_Log_DDEF("CORE", "BBO_START", "Initiating BlackBoxOptim for Global Desirability (MaxTime: $(MaxTime)s)...", "WAIT")
 
     # Suppress BBO prints via TraceMode=:silent
-    res = bboptimize(objective;
+    res = bboptimize(CORE_CalcObjective_DDEF;
         SearchRange=search_range,
         NumDimensions=Dim,
         MaxTime=MaxTime,

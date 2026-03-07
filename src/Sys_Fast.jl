@@ -17,13 +17,13 @@ using Base64
 export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
     FAST_Constants_DDEF, FAST_SafeNum_DDEF, FAST_GetLabDefaults_DDEF,
     FAST_InitMaster_DDEF, FAST_NormaliseCols_DDEF,
-    FAST_SanitiseJSON_DDEF, FAST_PrepareDownload_DDEF,
+    FAST_SanitiseJson_DDEF, FAST_PrepareDownload_DDEF,
     FAST_GenerateSmartName_DDEF, FAST_GetTransientPath_DDEF, FAST_ReadToStore_DDEF,
     FAST_ReadConfig_DDEF, FAST_UpdateConfig_DDEF, FAST_GetThreadInfo_DDEF,
     FAST_SanitiseInput_DDEF,
-    FAST_AcquireLock_DDEF, FAST_ReleaseLock_DDEF, FAST_IsLocked_DDEF,
+    FAST_AcquireLock_DDEF, FAST_ReleaseLock_DDEF,
     FAST_CacheRead_DDEF, FAST_CacheWrite_DDEF, FAST_CacheEvict_DDEF,
-    FAST_SpawnCompute_DDEF, FAST_GetComputeThreads_DDEF, FAST_WriteLeaders_DDEF,
+    FAST_GetComputeThreads_DDEF, FAST_WriteLeaders_DDEF,
     FAST_SafeExcelWrite_DDEF, FAST_CleanTransient_DDEF,
     FAST_FormatDuration_DDEF, FAST_ValidateDataFrame_DDEF,
     FAST_SystemAudit_DDEF, FAST_GetSystemQuote_DDEF,
@@ -93,6 +93,7 @@ Base.@kwdef struct Constants
     # --- Design Methods ---
     METHOD_BB::String = "BoxBehnken"
     METHOD_TL9::String = "Taguchi_L9"
+    METHOD_DOPT::String = "DOptimal"
 
 end
 
@@ -348,6 +349,14 @@ function FAST_SanitiseInput_DDEF(TableData::AbstractVector)
                 r[key] = fv
             end
         end
+
+        # Automatic Feature Recognition (User Request)
+        # If Half-Life is provided (>0), it IS radioactive.
+        if r["HalfLife"] > 0.0
+            r["IsRadioactive"] = true
+        end
+        # Note: IsFiller is centrally managed but we ensure logic consistency here.
+        # If MW is entered, it acts as a chemical component.
         push!(sanitized, r)
     end
     if !isempty(warnings)
@@ -377,13 +386,13 @@ function FAST_GetLabDefaults_DDEF()
 end
 
 """
-    FAST_SanitiseJSON_DDEF(x)
-Recursively replaces NaNs with null for JSON compatibility.
+    FAST_SanitiseJson_DDEF(x)
+Recursively replaces NaNs with null for Json compatibility.
 """
-function FAST_SanitiseJSON_DDEF(x)
+function FAST_SanitiseJson_DDEF(x)
     x isa AbstractFloat && isnan(x) && return nothing
-    x isa Dict && return Dict(k => FAST_SanitiseJSON_DDEF(v) for (k, v) in x)
-    x isa AbstractVector && return map(FAST_SanitiseJSON_DDEF, x)
+    x isa Dict && return Dict(k => FAST_SanitiseJson_DDEF(v) for (k, v) in x)
+    x isa AbstractVector && return map(FAST_SanitiseJson_DDEF, x)
     return x
 end
 
@@ -474,7 +483,7 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
         # 5. File Construction Via SafeWrite
 
         # Build Config
-        clean_config = FAST_SanitiseJSON_DDEF(Config)
+        clean_config = FAST_SanitiseJson_DDEF(Config)
         json_str = isempty(Config) ? "{}" : JSON3.write(clean_config)
         config_df = DataFrame(
             "PARAMETER" => ["MasterConfig"],
@@ -594,7 +603,7 @@ function FAST_UpdateConfig_DDEF(File::String, Updates::Dict)
             current_config[string(k)] = v
         end
 
-        clean_config = FAST_SanitiseJSON_DDEF(current_config)
+        clean_config = FAST_SanitiseJson_DDEF(current_config)
         json_str = JSON3.write(clean_config)
 
         config_df = DataFrame(
@@ -654,17 +663,6 @@ function FAST_ReleaseLock_DDEF(op_name::String)
     islocked(lk) && unlock(lk)
 end
 
-"""
-    FAST_IsLocked_DDEF(op_name) -> Bool
-Checks whether a named operation is currently locked (running).
-"""
-function FAST_IsLocked_DDEF(op_name::String)::Bool
-    lock(_LOCK_GUARD) do
-        haskey(_OPERATION_LOCKS, op_name) || return false
-        return islocked(_OPERATION_LOCKS[op_name])
-    end
-end
-
 # --------------------------------------------------------------------------------------
 # --- IN-MEMORY TRANSIENT CACHE ---
 # --------------------------------------------------------------------------------------
@@ -721,22 +719,6 @@ Returns available threads for computation, reserving 1 for the HTTP loop.
 function FAST_GetComputeThreads_DDEF()::Int
     total = Threads.nthreads()
     return max(1, total - 1)
-end
-
-"""
-    FAST_SpawnCompute_DDEF(fn) -> Task
-Spawns a heavy computation on a background thread.
-"""
-function FAST_SpawnCompute_DDEF(fn::Function)
-    return Threads.@spawn begin
-        try
-            fn()
-        catch e
-            bt = sprint(showerror, e, catch_backtrace())
-            FAST_Log_DDEF("COMPUTE", "TASK_FAIL", bt, "FAIL")
-            rethrow(e)
-        end
-    end
 end
 
 # --------------------------------------------------------------------------------------

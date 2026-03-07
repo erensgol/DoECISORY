@@ -144,6 +144,10 @@ const navbar = html_div([
                 html_a("Analyse", href="/analysis", className="nav-item"),
             ], className="nav-links d-flex justify-content-center"),
         html_div([
+                html_span([
+                    html_i(className="fas fa-shield-alt me-1"),
+                    "Certificate"
+                ], id="nav-btn-sci-audit", className="badge bg-secondary text-white small opacity-75 me-2", style=Dict("cursor" => "pointer")),
                 html_span("v1.0 In Dev.", className="badge bg-secondary text-white small opacity-75"),
             ], className="nav-actions", style=Dict("flex" => "1", "textAlign" => "right")),
     ], className="glass-navbar d-flex align-items-center justify-content-between")
@@ -172,6 +176,20 @@ app.layout = html_div([
         duration=4000, icon="danger",
         style=Dict("position" => "fixed", "top" => 60, "right" => 20,
             "width" => 350, "zIndex" => 9999)),
+
+    # Scientific Integrity Modal
+    dbc_modal([
+            dbc_modalheader("Scientific Integrity Certificate"),
+            dbc_modalbody(dcc_markdown(id="modal-sci-audit-content")),
+            dbc_modalfooter(dbc_button("Close", id="btn-close-sci-audit", className="ms-auto", n_clicks=0))
+        ], id="modal-sci-audit", size="lg", is_open=false),
+
+    # System Status Modal
+    dbc_modal([
+            dbc_modalheader("Advanced System Diagnostics"),
+            dbc_modalbody(html_pre(id="modal-sys-audit-content", style=Dict("whiteSpace" => "pre-wrap"))),
+            dbc_modalfooter(dbc_button("Close", id="btn-close-sys-audit", className="ms-auto", n_clicks=0))
+        ], id="modal-sys-audit", size="lg", is_open=false),
 
     # System readiness overlay + polling
     dcc_interval(id="sys-ready-poll", interval=800, max_intervals=-1),
@@ -269,11 +287,68 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
                     dbc_row(dbc_col(html_div([
                                     html_div([
                                             html_div([html_i(className="fas fa-server text-success me-2"), html_span("System Online", className="text-secondary fw-bold")], className="d-flex align-items-center me-4"),
-                                            html_div([html_i(className="fas fa-microchip text-$tstyle me-2"), html_span(tmsg, className="text-secondary fw-bold")], className="d-flex align-items-center"),
+                                            html_div([html_i(className="fas fa-microchip text-$tstyle me-2"), html_span(tmsg, className="text-secondary fw-bold")], className="d-flex align-items-center me-4"),
+                                            html_div([
+                                                html_span([html_i(className="fas fa-cog me-1"), "Diagnostics"], 
+                                                    id="btn-open-sys-audit", className="badge bg-light text-dark border", 
+                                                    style=Dict("cursor" => "pointer"))
+                                            ], className="d-flex align-items-center"),
                                         ], className="d-flex justify-content-center align-items-center p-3 rounded-pill",
                                         style=Dict("background" => "#FFFFFF", "border" => "1px solid #DCDCDC", "boxShadow" => "0 4px 6px -1px #E6E6E6", "display" => "inline-flex", "margin" => "0 auto"))
                                 ], className="text-center"), xs=12), style=Dict("maxWidth" => "900px", "margin" => "0 auto")),], fluid=true, className="pb-5 mt-2")
         ])
+    end
+end
+
+# 3. Scientific Audit Callback
+callback!(app,
+    Output("modal-sci-audit", "is_open"),
+    Output("modal-sci-audit-content", "children"),
+    Input("nav-btn-sci-audit", "n_clicks"),
+    Input("btn-close-sci-audit", "n_clicks"),
+    State("modal-sci-audit", "is_open"),
+    prevent_initial_call=true
+) do n_open, n_close, is_open
+    ctx = callback_context()
+    if isnothing(ctx.triggered) || isempty(ctx.triggered)
+        return is_open, Dash.no_update()
+    end
+    
+    trig = split(ctx.triggered[1].prop_id, ".")[1]
+    if trig == "nav-btn-sci-audit"
+        if !isnothing(n_open) && n_open > 0
+            return true, Sys_Fast.FAST_ScientificAudit_DDEF()
+        end
+        return is_open, Dash.no_update()
+    else
+        return false, Dash.no_update()
+    end
+end
+
+# 4. System Diagnostic Callback
+callback!(app,
+    Output("modal-sys-audit", "is_open"),
+    Output("modal-sys-audit-content", "children"),
+    Input("btn-open-sys-audit", "n_clicks"),
+    Input("btn-close-sys-audit", "n_clicks"),
+    State("modal-sys-audit", "is_open"),
+    prevent_initial_call=true
+) do n_open, n_close, is_open
+    ctx = callback_context()
+    # Robust check for trigger
+    if isnothing(ctx.triggered) || isempty(ctx.triggered)
+        return is_open, Dash.no_update()
+    end
+    
+    trig = split(ctx.triggered[1].prop_id, ".")[1]
+    if trig == "btn-open-sys-audit"
+        # Only open if actually clicked
+        if !isnothing(n_open) && n_open > 0
+            return true, Sys_Fast.FAST_SystemAudit_DDEF()
+        end
+        return is_open, Dash.no_update()
+    else
+        return false, Dash.no_update()
     end
 end
 

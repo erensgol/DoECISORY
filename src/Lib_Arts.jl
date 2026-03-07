@@ -20,7 +20,7 @@ using Main.Sys_Fast
 export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
     ARTS_RenderContour_DDEF, ARTS_RenderSlice_DDEF, ARTS_RenderTrend_DDEF,
     ARTS_RenderSpace_DDEF, ARTS_RenderCandidates_DDEF, ARTS_Render_DDEF,
-    ARTS_GetTheme_DDEF, ARTS_CalcDesirability_DDEF, ARTS_ExtractGoal_DDEF,
+    ARTS_CalcDesirability_DDEF, ARTS_ExtractGoal_DDEF,
     ARTS_Downsample_DDEF, ARTS_RenderOptimalZone_DDEF, ARTS_RenderInteractionMatrix_DDEF,
     ARTS_BaseLayout_DDEF, ARTS_Predict_DDEF, ARTS_BuildGrid_DDEF,
     ARTS_AdaptiveGridN_DDEF, ARTS_RenderSpaceImpl_DDEF
@@ -48,12 +48,6 @@ const THEME = let C = Sys_Fast.CONST_DATA
         Font       = C.FONT_DEFAULT,
     )
 end
-
-"""
-    ARTS_GetTheme_DDEF() -> NamedTuple
-Returns the global visual identity of the application.
-"""
-ARTS_GetTheme_DDEF() = THEME
 
 # --- GRAPHICAL STANDARD SCALES ---
 
@@ -108,7 +102,6 @@ end
 
 # Maximum safe grid points for browser rendering (N×N per plot)
 const _MAX_GRID_POINTS = 40000   # 200×200 = 40,000 points per surface
-const _MAX_JSON_BYTES = 5_000_000  # ~5 MB per figure JSON
 
 """
     ARTS_AdaptiveGridN_DDEF(preferred, [max_total]) -> Int
@@ -319,11 +312,22 @@ end
 Internal evaluator for plotting grids (stateless design matrix expansion).
 """
 function ARTS_Predict_DDEF(Model, X)
+    # Handle Surrogate Models (Kriging/RBF) via injected closure
+    if haskey(Model, "_Closure") && !isnothing(Model["_Closure"])
+        surr = Model["_Closure"]
+        N_new = size(X, 1)
+        # Fixed 3-variable system
+        preds = zeros(N_new)
+        for i in 1:N_new
+            preds[i] = surr(ntuple(d -> X[i, d], 3))
+        end
+        return preds
+    end
+
     ModelType = get(Model, "ModelType", "quadratic")
 
-    # Handle Surrogate Models (Kriging/RBF) if applicable
+    # Legacy Surrogate check (fallback)
     if ModelType == "kriging" || ModelType == "rbf"
-        # Closures should be used if available, otherwise return NaNs for plotting skip
         return fill(NaN, size(X, 1))
     end
 
@@ -378,6 +382,15 @@ function ARTS_RenderSurface_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
     x1, x2, Grid = ARTS_BuildGrid_DDEF(X, ix, iy, N_Grid)
 
     Z = reshape(ARTS_Predict_DDEF(Model, Grid), N_Grid, N_Grid)'
+    
+    # Downsample safeguard for large JSON payloads
+    if length(Z) > _MAX_GRID_POINTS
+        target_N = Int(sqrt(_MAX_GRID_POINTS))
+        Z = ARTS_Downsample_DDEF(Z, target_N, target_N)
+        r_str = max(1, length(x1) ÷ target_N)
+        x1 = x1[unique([collect(1:r_str:length(x1)); length(x1)])]
+        x2 = x2[unique([collect(1:r_str:length(x2)); length(x2)])]
+    end
 
     trace = surface(; x=collect(x1), y=collect(x2), z=Z, colorscale=VIRIDIS_SCALE,
         contours=attr(z=attr(show=true, usecolormap=true, project_z=true)),
@@ -405,6 +418,15 @@ function ARTS_RenderContour_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
     x1, x2, Grid = ARTS_BuildGrid_DDEF(X, ix, iy, N)
 
     Z = reshape(ARTS_Predict_DDEF(Model, Grid), N, N)'
+    
+    # Downsample safeguard for large JSON payloads
+    if length(Z) > _MAX_GRID_POINTS
+        target_N = Int(sqrt(_MAX_GRID_POINTS))
+        Z = ARTS_Downsample_DDEF(Z, target_N, target_N)
+        r_str = max(1, length(x1) ÷ target_N)
+        x1 = x1[unique([collect(1:r_str:length(x1)); length(x1)])]
+        x2 = x2[unique([collect(1:r_str:length(x2)); length(x2)])]
+    end
 
     trace = contour(; x=collect(x1), y=collect(x2), z=Z, colorscale=VIRIDIS_SCALE,
         contours=attr(coloring="heatmap", showlabels=true),
@@ -791,15 +813,130 @@ function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames:
     return Plot(trace, layout), pct_str
 end
 
+"""
+    ARTS_RenderInteractionMatrix_DDEF(Model, InNames, OutName) -> Plot
+Renders a Heatmap matrix illustrating factor interaction strengths (synergy/antagonism).
+"""
+function ARTS_RenderInteractionMatrix_DDEF(Model::Dict, InNames::Vector{String}, OutName::String)
+    TH = THEME
+    K = 3 # Fixed 3rd dimension
+    M = zeros(K, K)
+    
+    ModelType = get(Model, "ModelType", "quadratic")
+    if occursin("quadratic", ModelType) && haskey(Model, "Coefs") && length(Model["Coefs"]) >= 10
+        Beta = Model["Coefs"]
+        M[1, 1] = Beta[8]; M[2, 2] = Beta[9]; M[3, 3] = Beta[10]
+        M[1, 2] = M[2, 1] = Beta[5]
+        M[1, 3] = M[3, 1] = Beta[6]
+        M[2, 3] = M[3, 2] = Beta[7]
+    end
+    
+    trace = heatmap(z=M, x=InNames, y=InNames, colorscale=[[0, TH.Purple], [0.5, TH.Bg], [1, TH.Yellow]], zmid=0)
+    layout = ARTS_BaseLayout_DDEF("Interaction Landscape: $OutName")
+    return Plot(trace, layout)
+end
+
+"""
+    ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::String) -> Plot
+Renders a Q-Q Plot (Normal Probability Plot) for residual diagnostic analysis.
+"""
+function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::String)
+    TH = THEME
+    n = length(Residuals)
+    sorted_res = sort(Residuals)
+    
+    # Standardise residuals
+    z_res = (sorted_res .- mean(sorted_res)) ./ std(sorted_res)
+    
+    # Theoretical quantiles for normal distribution
+    p_vals = [(i - 0.5) / n for i in 1:n]
+    theoretical = quantile.(Normal(0, 1), p_vals)
+    
+    trace_pts = scatter(
+        x=theoretical, y=z_res, mode="markers",
+        marker=attr(color=TH.Purple, size=8, opacity=0.7, line=attr(width=1, color="#FFFFFF")),
+        name="Residuals"
+    )
+    
+    # Reference Line (y=x)
+    lims = [minimum([theoretical; z_res]), maximum([theoretical; z_res])]
+    trace_line = scatter(
+        x=lims, y=lims, mode="lines",
+        line=attr(color=TH.Yellow, width=2, dash="dash"),
+        name="Normal Dist"
+    )
+    
+    layout = ARTS_BaseLayout_DDEF("Normal Probability (Q-Q): $OutName")
+    layout[:xaxis][:title] = "Theoretical Quantiles"
+    layout[:yaxis][:title] = "Standardised Residuals"
+    
+    return Plot([trace_pts, trace_line], layout)
+end
+
+"""
+    ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residuals::AbstractVector{Float64}, OutName::String) -> Plot
+Renders Residuals vs. Predicted plot to check for homoscedasticity.
+"""
+function ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residuals::AbstractVector{Float64}, OutName::String)
+    TH = THEME
+    
+    trace_pts = scatter(
+        x=Y_Pred, y=Residuals, mode="markers",
+        marker=attr(color=TH.Purple, size=9, opacity=0.7, line=attr(width=1, color="#FFFFFF")),
+        name="Residuals"
+    )
+    
+    # zero line
+    trace_zero = scatter(
+        x=[minimum(Y_Pred), maximum(Y_Pred)], y=[0, 0], mode="lines",
+        line=attr(color=TH.Yellow, width=2, dash="solid"),
+        showlegend=false
+    )
+    
+    layout = ARTS_BaseLayout_DDEF("Residuals vs. Predicted: $OutName")
+    layout[:xaxis][:title] = "Predicted Value"
+    layout[:yaxis][:title] = "Residual"
+    
+    return Plot([trace_pts, trace_zero], layout)
+end
+
+"""
+    ARTS_RenderSensitivityPlot_DDEF(Sens::AbstractVector{Float64}, InNames::Vector{String}, OutName::String) -> Plot
+Renders localized factor sensitivity percentage contribution at the optimal point.
+"""
+function ARTS_RenderSensitivityPlot_DDEF(Sens::AbstractVector{Float64}, InNames::Vector{String}, OutName::String)
+    TH = THEME
+    
+    trace = bar(
+        x=InNames, y=Sens .* 100.0,
+        marker=attr(
+            color=[TH.Purple, TH.Bg, TH.Yellow], # High-fidelity palette
+            line=attr(width=1.5, color="#FFFFFF")
+        ),
+        textposition="auto",
+        text=[@sprintf("%.1f%%", s*100) for s in Sens]
+    )
+    
+    layout = ARTS_BaseLayout_DDEF("Local Sensitivity Index: $OutName")
+    layout[:yaxis][:title] = "Contribution (%)"
+    layout[:xaxis][:title] = "Experimental Factor"
+    
+    return Plot(trace, layout)
+end
+
 # --------------------------------------------------------------------------------------
 # --- MASTER RENDERER DISPATCHER ---
 # --------------------------------------------------------------------------------------
 
 """
-    ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, [Leaders_DF]) -> Vector{Dict}
+    ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, Leaders_DF, Sens, Residuals) -> Vector{Dict}
 Primary output orchestrator for generating all selected plot types.
 """
-function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, Leaders_DF::AbstractDataFrame=DataFrame())
+function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts,
+    Leaders_DF::AbstractDataFrame=DataFrame(),
+    Sens::Vector{Vector{Float64}}=Vector{Float64}[],
+    Residuals::Vector{Vector{Float64}}=Vector{Float64}[])
+
     graphs = Dict{String,Any}[]
     graphs_lock = ReentrantLock()
     NumVars = 3 # Fixed 3-variable system
@@ -817,13 +954,32 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
         if get(Opts, "Pareto", true)
             push!(tasks, Threads.@spawn begin
                 p1 = ARTS_RenderPareto_DDEF(Models[m], name, R2s[m], Q2s[m])
-                p2 = ARTS_RenderFit_DDEF(Y[:, m], ARTS_Predict_DDEF(Models[m], X), name)
+                y_pred = ARTS_Predict_DDEF(Models[m], X)
+                p2 = ARTS_RenderFit_DDEF(Y[:, m], y_pred, name)
+                
                 lock(graphs_lock) do
                     push!(graphs, Dict("Type" => "Pareto", "Title" => "Pareto: $name", "Plot" => p1))
                     push!(graphs, Dict("Type" => "Fit", "Title" => "Fit: $name", "Plot" => p2))
                 end
+                
+                # New Academic Diagnostics
+                if m <= length(Residuals) && !isempty(Residuals[m])
+                    p_qq = ARTS_RenderQQPlot_DDEF(Residuals[m], name)
+                    p_res = ARTS_RenderResidualsVsPred_DDEF(y_pred, Residuals[m], name)
+                    lock(graphs_lock) do
+                        push!(graphs, Dict("Type" => "QQ", "Title" => "Q-Q Plot: $name", "Plot" => p_qq))
+                        push!(graphs, Dict("Type" => "Residuals", "Title" => "Residuals: $name", "Plot" => p_res))
+                    end
+                end
+                
+                # Sensitivity bar chart
+                if m <= length(Sens) && !isempty(Sens[m])
+                    p_sens = ARTS_RenderSensitivityPlot_DDEF(Sens[m], InNames, name)
+                    lock(graphs_lock) do
+                        push!(graphs, Dict("Type" => "Sensitivity", "Title" => "Sensitivity: $name", "Plot" => p_sens))
+                    end
+                end
             end)
-
         end
 
         # 2. Variable Interactions & Surface Mapping
@@ -846,9 +1002,14 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                 push!(tasks, Threads.@spawn begin
                     p1 = ARTS_RenderSlice_DDEF(Models[m], X, c, lbls, name)
                     p2 = ARTS_RenderTrend_DDEF(Models[m], X, Y[:, m], c, lbls, name)
+                    p3 = ARTS_RenderInteractionMatrix_DDEF(Models[m], InNames, name)
                     lock(graphs_lock) do
                         push!(graphs, Dict("Type" => "Slice", "Title" => "Interact: $name ($tag)", "Plot" => p1))
                         push!(graphs, Dict("Type" => "Trend", "Title" => "Trend: $name ($tag)", "Plot" => p2))
+                        # Only add matrix once per response
+                        if !any(g -> g["Type"] == "IntMatrix" && g["Title"] == "Matrix: $name", graphs)
+                            push!(graphs, Dict("Type" => "IntMatrix", "Title" => "Matrix: $name", "Plot" => p3))
+                        end
                     end
                 end)
             end
@@ -872,7 +1033,7 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                 end
             end)
         end
- 
+
          # --- THE OPTIMAL ZONE ---
          if get(Opts, "GoldenZone", true) && NumVars >= 3
              push!(tasks, Threads.@spawn begin
@@ -892,18 +1053,21 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
     TypePriority = Dict(
         "Pareto" => 1,
         "Fit" => 2,
-        "Surface" => 3,
-        "Contour" => 4,
-        "Slice" => 5,
-        "Trend" => 6,
-        "DesignSpace" => 7,
-        "Candidates" => 8,
-        "OptimalZone" => 9
+        "QQ" => 3,
+        "Residuals" => 4,
+        "Surface" => 5,
+        "Contour" => 6,
+        "Slice" => 7,
+        "Trend" => 8,
+        "IntMatrix" => 9,
+        "Sensitivity" => 10,
+        "DesignSpace" => 11,
+        "Candidates" => 12,
+        "OptimalZone" => 13
     )
     sort!(graphs, by=g -> get(TypePriority, g["Type"], 99))
 
     return graphs
 end
-
 
 end # module Lib_Arts
