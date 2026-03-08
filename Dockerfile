@@ -2,8 +2,8 @@
 # DAISHODOE - HUGGING FACE SPACES DOCKERFILE 
 # ======================================================================================
 
-# Use the official Julia 1.12 image
-FROM julia:1.12
+# Use the official Julia 1.11 image (Stable)
+FROM julia:1.11-bookworm
 
 # Temporarily switch to root to install missing system dependencies for Plotly Kaleido
 USER root
@@ -43,4 +43,4 @@ RUN julia --project="." -e 'import Pkg; Pkg.precompile()'
 EXPOSE 7860
 
 # Launch the Application
-CMD ["julia", "--project=.", "app.jl"]
+CMD ["julia", "--project=.", "--startup-file=no", "app.jl"]

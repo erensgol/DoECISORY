@@ -507,9 +507,9 @@ end
 # --- SERVER EXECUTION ---
 # --------------------------------------------------------------------------------------
 
-# HuggingFace Spaces detection
-const APP_IsHfSpaces_DDEC = haskey(ENV, "SPACE_ID")
-const APP_Port_DDEC = APP_IsHfSpaces_DDEC ? 7860 : 8060
+# HuggingFace Spaces detection & Port robustness
+const APP_IsHfSpaces_DDEC = haskey(ENV, "SPACE_ID") || haskey(ENV, "PORT")
+const APP_Port_DDEC = parse(Int, get(ENV, "PORT", APP_IsHfSpaces_DDEC ? "7860" : "8060"))
 
 # Spawn warmup in BACKGROUND so server starts instantly
 Threads.@spawn APP_Warmup_DDEF()
@@ -519,11 +519,15 @@ try
     Sys_Fast.FAST_Log_DDEF("SERVER", "Ready",
         "DaishoDoE Engine listening on :$(APP_Port_DDEC) ($env_label)", "OK")
 
-    run_server(app, "0.0.0.0", APP_Port_DDEC)
+    # Force debug=false for production stability on HF
+    # debug=true enables reloader which can cause issues in Docker
+    run_server(app, "0.0.0.0", APP_Port_DDEC; debug=false)
 catch e
-    if isa(e, Base.IOError) && e.code == -4091
-        println("\n>>> CRITICAL WARNING: Port $(APP_Port_DDEC) occupied. Please terminate existing sessions.\n")
+    if isa(e, Base.IOError)
+        # Port conflict or binding error logging
+        FAST_Log_DDEF("CRITICAL", "IO_PORT_FAIL", "Fatal I/O error on port $(APP_Port_DDEC): $e", "FAIL")
     else
+        FAST_Log_DDEF("CRITICAL", "SERVER_CRASH", "Unexpected server termination: $e", "FAIL")
         rethrow(e)
     end
 end
