@@ -22,12 +22,13 @@ using Main.Sys_Fast
 using Main.Lib_Arts
 using Main.Lib_Mole
 using Main.Lib_Core
+using Main.Sys_Flow
 using Surrogates
 using HypothesisTests
 
 export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
     VISE_Predict_DDEF, VISE_Execute_DDEF, VISE_CrossValidate_DDEF,
-    VISE_GetTermNames_DDEF, VISE_ClampIndex_DDEF, VISE_ApplyRadioDecay_DDEF,
+    VISE_GetTermNames_DDEF, VISE_ClampIndex_DDEF,
     VISE_TrainSurrogate_DDEF, VISE_BuildSurrogateClosure_DDEF,
     VISE_SelectBestModel_DDEF, VISE_CalcMetrics_DDEF,
     VISE_SensitivityAnalysis_DDEF, VISE_GenerateScientificReport_DDEF,
@@ -35,42 +36,7 @@ export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
     VISE_PerformNormalityTest_DDEF, VISE_ExportToExcel_DDEF
 
 # --------------------------------------------------------------------------------------
-# --- PHYSICAL CORRECTIONS & MATH MODELS ---
-# --------------------------------------------------------------------------------------
-
-"""
-    VISE_ApplyRadioDecay_DDEF(RawValue, HalfLife, HalfLifeUnit, DeltaTHours) -> Float64
-Applies mathematical decay correction for radioactive elements (reverse-calculation).
-"""
-function VISE_ApplyRadioDecay_DDEF(RawValue::Float64, HalfLife::Float64, HalfLifeUnit::String, DeltaTHours::Float64)
-    HalfLife <= 0.0 && return RawValue
-
-    # Normalise Half-Life to Hours
-    unit_upper = uppercase(strip(HalfLifeUnit))
-    hl_hours = HalfLife
-    if occursin("SEC", unit_upper)
-        hl_hours = HalfLife / 3600.0
-    elseif occursin("MIN", unit_upper)
-        hl_hours = HalfLife / 60.0
-    elseif occursin("DAY", unit_upper)
-        hl_hours = HalfLife * 24.0
-    elseif occursin("YEAR", unit_upper) || occursin("YR", unit_upper)
-        hl_hours = HalfLife * 24.0 * 365.25
-    end
-
-    hl_hours <= 0.0 && return RawValue
-
-    lambda = log(2) / hl_hours
-    decay_factor = exp(-lambda * DeltaTHours)
-
-    # Avoid extreme inflation
-    decay_factor < 1e-6 && return RawValue
-
-    return RawValue / decay_factor
-end
-
-# --------------------------------------------------------------------------------------
-# --- DESIGN MATRIX EXPANSION & NAMING ---
+# --- PHYSICAL CORRECTIONS & MATH MODELS (MOVED TO Lib_Mole) ---
 # --------------------------------------------------------------------------------------
 
 """
@@ -380,28 +346,35 @@ end
     VISE_GenerateAnovaTable_DDEF(Model::Dict, X::AbstractMatrix, Y::AbstractVector) -> DataFrame
 Constructs a comprehensive ANOVA table for experimental validation.
 """
-function VISE_GenerateAnovaTable_DDEF(Model::Dict, X::AbstractMatrix, Y::AbstractVector)
+function VISE_GenerateAnovaTable_DDEF(Model::Dict, X_Raw::Any, Y_Raw::Any)
+    # Ensure Matrix/Vector format (handles JSON deserialization artifacts)
+    X = (X_Raw isa AbstractMatrix) ? Float64.(collect(X_Raw)) : (X_Raw isa AbstractVector && !isempty(X_Raw) && X_Raw[1] isa AbstractVector) ? 
+        Float64.(reduce(vcat, transpose.(collect.(X_Raw)))) : (X_Raw isa AbstractVector && length(X_Raw) % 3 == 0) ? 
+        reshape(Float64.(collect(X_Raw)), :, 3) : X_Raw
+        
+    Y = (Y_Raw isa AbstractVector) ? Float64.(collect(Y_Raw)) : Y_Raw
+
     n = length(Y)
     m_type = get(Model, "ModelType", "linear")
     Xd = VISE_ExpandDesign_DDEF(X, m_type)
     p = size(Xd, 2)
-    
+
     Beta = get(Model, "Coefs", Float64[])
     isempty(Beta) && return DataFrame()
-    
+
     Y_Pred = Xd * Beta
     Resid = Y .- Y_Pred
-    
+
     # 1. SS Calculations
     SS_Total = var(Y) * (n - 1)
     SS_Resid = sum(abs2, Resid)
     SS_Reg = max(0.0, SS_Total - SS_Resid)
-    
+
     # 2. DF Calculations
     DF_Total = n - 1
     DF_Reg = p - 1
     DF_Resid = n - p
-    
+
     # 3. Lack-of-Fit Logic
     unique_rows = Dict{Vector{Float64},Vector{Float64}}()
     for i in 1:n
@@ -412,7 +385,7 @@ function VISE_GenerateAnovaTable_DDEF(Model::Dict, X::AbstractMatrix, Y::Abstrac
             unique_rows[row] = [Y[i]]
         end
     end
-    
+
     SS_PE = 0.0
     DF_PE = 0
     for (r, vals) in unique_rows
@@ -421,41 +394,41 @@ function VISE_GenerateAnovaTable_DDEF(Model::Dict, X::AbstractMatrix, Y::Abstrac
             DF_PE += (length(vals) - 1)
         end
     end
-    
+
     SS_LOF = max(0.0, SS_Resid - SS_PE)
     DF_LOF = DF_Resid - DF_PE
-    
+
     # 4. Assembly
     sources = ["Model", "Residual", "Total"]
     ss_vals = [SS_Reg, SS_Resid, SS_Total]
     df_vals = [DF_Reg, DF_Resid, DF_Total]
-    
+
     if DF_PE > 0 && DF_LOF > 0
         insert!(sources, 2, "Lack of Fit")
         insert!(ss_vals, 2, SS_LOF)
         insert!(df_vals, 2, DF_LOF)
-        
+
         insert!(sources, 3, "Pure Error")
         insert!(ss_vals, 3, SS_PE)
         insert!(df_vals, 3, DF_PE)
     end
-    
+
     df_anova = DataFrame(
-        Source = sources,
-        SS = round.(ss_vals; digits=4),
-        df = df_vals,
-        MS = fill(NaN, length(sources)),
-        F = fill(NaN, length(sources)),
-        P = fill(NaN, length(sources))
+        Source=sources,
+        SS=round.(ss_vals; digits=4),
+        df=df_vals,
+        MS=fill(NaN, length(sources)),
+        F=fill(NaN, length(sources)),
+        P=fill(NaN, length(sources))
     )
-    
+
     # Calculate MS, F, P
     for i in 1:nrow(df_anova)
         if df_anova.df[i] > 0
             df_anova.MS[i] = round(df_anova.SS[i] / df_anova.df[i]; digits=4)
         end
     end
-    
+
     # Model F-Test
     idx_mod = findfirst(==("Model"), sources)
     idx_res = findfirst(==("Residual"), sources)
@@ -464,7 +437,7 @@ function VISE_GenerateAnovaTable_DDEF(Model::Dict, X::AbstractMatrix, Y::Abstrac
         df_anova.F[idx_mod] = round(f; digits=2)
         df_anova.P[idx_mod] = round(1.0 - cdf(FDist(df_anova.df[idx_mod], df_anova.df[idx_res]), f); digits=4)
     end
-    
+
     # LOF F-Test
     idx_lof = findfirst(==("Lack of Fit"), sources)
     idx_pe = findfirst(==("Pure Error"), sources)
@@ -473,7 +446,7 @@ function VISE_GenerateAnovaTable_DDEF(Model::Dict, X::AbstractMatrix, Y::Abstrac
         df_anova.F[idx_lof] = round(f_lof; digits=2)
         df_anova.P[idx_lof] = round(1.0 - cdf(FDist(df_anova.df[idx_lof], df_anova.df[idx_pe]), f_lof); digits=4)
     end
-    
+
     return df_anova
 end
 
@@ -481,14 +454,21 @@ end
     VISE_PerformNormalityTest_DDEF(Model::Dict, X::AbstractMatrix, Y::AbstractVector) -> Dict
 Executes Shapiro-Wilk test on model residuals.
 """
-function VISE_PerformNormalityTest_DDEF(Model::Dict, X::AbstractMatrix, Y::AbstractVector)
+function VISE_PerformNormalityTest_DDEF(Model::Dict, X_Raw::Any, Y_Raw::Any)
+    # Ensure Matrix/Vector format (handles JSON deserialization artifacts)
+    X = (X_Raw isa AbstractMatrix) ? Float64.(collect(X_Raw)) : (X_Raw isa AbstractVector && !isempty(X_Raw) && X_Raw[1] isa AbstractVector) ? 
+        Float64.(reduce(vcat, transpose.(collect.(X_Raw)))) : (X_Raw isa AbstractVector && length(X_Raw) % 3 == 0) ? 
+        reshape(Float64.(collect(X_Raw)), :, 3) : X_Raw
+        
+    Y = (Y_Raw isa AbstractVector) ? Float64.(collect(Y_Raw)) : Y_Raw
+
     m_type = get(Model, "ModelType", "linear")
     Xd = VISE_ExpandDesign_DDEF(X, m_type)
     Beta = get(Model, "Coefs", Float64[])
     isempty(Beta) && return Dict("p" => NaN, "IsNormal" => false)
-    
+
     Resid = Y .- (Xd * Beta)
-    
+
     try
         sw = HypothesisTests.ShapiroWilkTest(Resid)
         p = HypothesisTests.pvalue(sw)
@@ -522,7 +502,7 @@ end
     VISE_ExportToExcel_DDEF(FilePath::String, Results::Dict) -> Bool
 Exports all statistical models, ANOVA tables, and metrics to a professional XLSX file.
 """
-function VISE_ExportToExcel_DDEF(FilePath::String, Results::Dict)
+function VISE_ExportToExcel_DDEF(FilePath::String, Results::Any)
     try
         XLSX.openxlsx(FilePath, mode="w") do xf
             # 1. Overview Sheet
@@ -530,16 +510,31 @@ function VISE_ExportToExcel_DDEF(FilePath::String, Results::Dict)
             XLSX.rename!(sheet_ov, "Summary")
             sheet_ov["A1"] = "DaishoDoE Scientific Intelligence Report"
             sheet_ov["A2"] = "Generated: $(Dates.now())"
-            
+
             # 2. Models Sheet
             sheet_mod = XLSX.addsheet!(xf, "Model_Statistics")
             sheet_mod["A1"] = ["Response", "Model Type", "R2", "R2_Adj", "RMSE", "P-Value", "Normality (p)"]
+
+            # Ensure Matrix format for consistency across JSON/Store transfers
+            X_Clean = Results["X_Clean"]
+            if !(X_Clean isa AbstractMatrix)
+                if X_Clean isa AbstractVector && !isempty(X_Clean) && X_Clean[1] isa AbstractVector
+                    X_Clean = reduce(vcat, transpose.(collect.(X_Clean)))
+                elseif X_Clean isa AbstractVector && length(X_Clean) % 3 == 0
+                    X_Clean = reshape(Float64.(collect(X_Clean)), :, 3)
+                end
+            end
             
+            Y_Clean = Results["Y_Clean"]
+            if !(Y_Clean isa AbstractMatrix) && Y_Clean isa AbstractVector && !isempty(Y_Clean) && Y_Clean[1] isa AbstractVector
+                 Y_Clean = reduce(vcat, transpose.(collect.(Y_Clean)))
+            end
+
             row_idx = 2
             for (i, out_name) in enumerate(get(Results, "OutNames", []))
                 m = Results["Models"][i]
-                norm = VISE_PerformNormalityTest_DDEF(m, Results["X_Clean"], Results["Y_Clean"][:, i])
-                
+                norm = VISE_PerformNormalityTest_DDEF(m, X_Clean, Y_Clean[:, i])
+
                 sheet_mod[row_idx, 1] = out_name
                 sheet_mod[row_idx, 2] = get(m, "ModelType", "N/A")
                 sheet_mod[row_idx, 3] = round(get(m, "R2", 0.0); digits=4)
@@ -547,27 +542,27 @@ function VISE_ExportToExcel_DDEF(FilePath::String, Results::Dict)
                 sheet_mod[row_idx, 5] = round(get(m, "RMSE", 0.0); digits=4)
                 sheet_mod[row_idx, 6] = round(get(m, "P_Value", 1.0); digits=4)
                 sheet_mod[row_idx, 7] = norm["p"]
-                
+
                 row_idx += 1
             end
-            
+
             # 3. ANOVA & Coefficients (Specific sheets per output)
             for (i, out_name) in enumerate(get(Results, "OutNames", []))
                 m = Results["Models"][i]
                 safe_name = first(replace(out_name, r"[^\w]" => "_"), 25)
-                
+
                 # ANOVA Sheet
                 sh_ano = XLSX.addsheet!(xf, "ANOVA_$(safe_name)")
-                df_anova = VISE_GenerateAnovaTable_DDEF(m, Results["X_Clean"], Results["Y_Clean"][:, i])
+                df_anova = VISE_GenerateAnovaTable_DDEF(m, X_Clean, Y_Clean[:, i])
                 XLSX.writetable!(sh_ano, df_anova; anchor_cell=XLSX.CellRef("A1"))
-                
+
                 # Coefficients Sheet
                 sh_coef = XLSX.addsheet!(xf, "Coefs_$(safe_name)")
                 terms = get(m, "TermNames", [])
                 coefs = get(m, "Coefs", [])
                 p_vals = get(m, "P_Coefs", [])
                 vifs = get(m, "VIFs", [])
-                
+
                 sh_coef["A1"] = ["Term", "Coefficient", "P-Value", "VIF", "Significance"]
                 for j in eachindex(terms)
                     sh_coef[j+1, 1] = terms[j]
@@ -701,7 +696,7 @@ end
 Performs high-density grid search across factor space for desirability exploration.
 """
 function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
-    X_Bounds::AbstractMatrix{Float64}; Steps::Int=51)
+    X_Bounds::AbstractMatrix{Float64}; Steps::Int=41)
     Dim = 3 # Fixed 3rd dimension
 
     # Thread-aware density balancing
@@ -948,8 +943,7 @@ function VISE_GenerateScientificReport_DDEF(Res::Dict)
         write(io, "\n*Stability analysis suggests these coordinates reside within a high-confidence 'Optimal Zone' for experimental reproducibility.*\n\n")
     end
 
-    write(io, "---\n")
-    write(io, "*Generated via DaishoDoE Engine v$(Sys_Fast.CONST_DATA.VERSION) — High-Fidelity Academic Module. Optimised for publication in high-impact scientific journals.*\n")
+    write(io, "*Generated via DaishoDoE Engine v$(Sys_Fast.FAST_Data_DDEC.VERSION) — High-Fidelity Academic Module. Optimised for publication in high-impact scientific journals.*\n")
 
     return String(take!(io))
 end
@@ -964,7 +958,7 @@ Higher-level entry point for phase-based experimental analysis and optimisation.
 """
 function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVector,
     ModelType::String="Auto"; Opts=Dict{String,Any}())
-    C = Sys_Fast.FAST_Constants_DDEF()
+    C = Sys_Fast.FAST_Data_DDEC
     Log = Sys_Fast.FAST_Log_DDEF
 
     Log("VISE", "EXECUTION_START", "Analyzing Phase: $Phase", "WAIT")
@@ -982,7 +976,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     end
 
     # Apply standardisation to the raw data
-    Sys_Fast.FAST_NormaliseCols_DDEF(df_raw)
+    Sys_Fast.FAST_NormaliseCols_DDEF!(df_raw)
 
     col_phase = Symbol(C.COL_PHASE)
     df_train = hasproperty(df_raw, col_phase) ?
@@ -1021,10 +1015,10 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
 
     # --- RADIOACTIVITY DECAY CORRECTION ---
     radio_correction_audit = []
-    radio_opts = get(Opts, "RadioOpts", Dict("Apply" => false, "t_cal" => "", "t_exp" => ""))
+    radio_opts = get(Opts, "RadioOpts", Dict("Apply" => false, "CalibrationTime" => "", "ExperimentalTime" => ""))
     if get(radio_opts, "Apply", false)
-        t_cal_str = get(radio_opts, "t_cal", "")
-        t_exp_str = get(radio_opts, "t_exp", "")
+        t_cal_str = get(radio_opts, "CalibrationTime", "")
+        t_exp_str = get(radio_opts, "ExperimentalTime", "")
 
         if !isempty(t_cal_str) && !isempty(t_exp_str)
             try
@@ -1043,11 +1037,11 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
                             hl = Float64(get(in_meta[idx], "HalfLife", 0.0))
                             hlu = string(get(in_meta[idx], "HalfLifeUnit", "Hours"))
                             for r in 1:N
-                                X_Clean[r, ci] = VISE_ApplyRadioDecay_DDEF(X_Clean[r, ci], hl, hlu, delta_t_hours)
+                                X_Clean[r, ci] = Lib_Mole.MOLE_ApplyRadioDecay_DDEF(X_Clean[r, ci], hl, hlu, delta_t_hours)
                             end
-                            
+
                             # Log for Excel/Report
-                            lambda = log(2) / (hl * (hlu == "Days" ? 24.0 : (hlu == "Minutes" ? 1/60 : 1.0))) # simplified factor for audit
+                            lambda = log(2) / (hl * (hlu == "Days" ? 24.0 : (hlu == "Minutes" ? 1 / 60 : 1.0))) # simplified factor for audit
                             push!(radio_correction_audit, Dict(
                                 "Name" => name, "IsCorrected" => true,
                                 "HalfLife" => hl, "Unit" => hlu, "DeltaT" => delta_t_hours,
@@ -1066,9 +1060,9 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
                             hlu = string(get(out_meta[idx], "HalfLifeUnit", "Hours"))
                             if hl > 0
                                 for r in 1:N
-                                    Y_Clean[r, ci] = VISE_ApplyRadioDecay_DDEF(Y_Clean[r, ci], hl, hlu, delta_t_hours)
+                                    Y_Clean[r, ci] = Lib_Mole.MOLE_ApplyRadioDecay_DDEF(Y_Clean[r, ci], hl, hlu, delta_t_hours)
                                 end
-                                lambda = log(2) / (hl * (hlu == "Days" ? 24.0 : (hlu == "Minutes" ? 1/60 : 1.0)))
+                                lambda = log(2) / (hl * (hlu == "Days" ? 24.0 : (hlu == "Minutes" ? 1 / 60 : 1.0)))
                                 push!(radio_correction_audit, Dict(
                                     "Name" => name, "IsCorrected" => true,
                                     "HalfLife" => hl, "Unit" => hlu, "DeltaT" => delta_t_hours,
@@ -1139,7 +1133,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         # Benchmark score is the score of the 8th leader (or the last of what we have)
         bench_score = SC[top_indices[end]]
         score_limit = bench_score * 0.90
-        
+
         # Candidate pool: All points strictly within 10% of the top-8 benchmark
         tier_indices = findall(>=(score_limit), SC)
 
@@ -1167,7 +1161,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         # 2. Input-Based Diversity: Seek MINIMUM use of factors within the top tier
         for i in 1:min(3, size(XT, 2))
             tag_pre = i <= length(InNames) ? first(InNames[i] * "   ", 3) : "IN$i"
-            
+
             # Find the best point in the tier that MINIMIZES this input
             best_idx = -1
             min_val = Inf
@@ -1193,7 +1187,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
             tag_pre = i <= length(OutNames) ? first(OutNames[i] * "   ", 3) : "OUT$i"
             mod_goal = get(models[i], "Goal", Dict())
             gtup = Lib_Arts.ARTS_ExtractGoal_DDEF(mod_goal)
-            
+
             # Find the best point in the tier that MAXIMIZES desirability for this specific output
             best_idx = -1
             max_d = -Inf
@@ -1259,7 +1253,8 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         end
 
         # Write candidate sets to the transient file for FLOW leader extraction
-        Sys_Fast.FAST_WriteLeaders_DDEF(DataFile, Phase, Leaders_DF)
+        # --- SAVE LEADERS (MOVED TO Sys_Flow) ---
+        Main.Sys_Flow.FLOW_WriteLeaders_DDEF(DataFile, Phase, Leaders_DF)
 
         # 3. Physical Feasibility Bridge (The Golden Bridge)
         config = Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
@@ -1406,7 +1401,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         end
     end
 
-    # --- New: Academic Tier Diagnostics ---
+    # --- Academic Tier Diagnostics ---
     anova_tables = []
     normality_results = []
     residuals_list = []
@@ -1414,7 +1409,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         if get(m, "Status", "") == "OK"
             push!(anova_tables, VISE_GenerateAnovaTable_DDEF(m, X_Clean, Y_Clean[:, i]))
             push!(normality_results, VISE_PerformNormalityTest_DDEF(m, X_Clean, Y_Clean[:, i]))
-            
+
             # Residuals for Q-Q plot
             m_type = get(m, "ModelType", "linear")
             Xd = VISE_ExpandDesign_DDEF(X_Clean, m_type)

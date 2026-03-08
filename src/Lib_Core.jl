@@ -19,24 +19,20 @@ using DataFrames
 using BlackBoxOptim
 using Main.Lib_Arts
 
-export CORE_GenDesign_DDEF, CORE_CalcNextRange_DDEF, CORE_MapLevels_DDEF,
+export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF,
     CORE_ExtractLeader_DDEF, CORE_GenerateOptimalDesign_DDEF,
     CORE_OptimiseDesirability_DDEF, CORE_ValidateDesign_DDEF,
     CORE_D_Efficiency_DDEF, CORE_CalcDesignMetrics_DDEF
 
-# --------------------------------------------------------------------------------------
-# --- EXPERIMENTAL DESIGN GENERATOR ---
-# --------------------------------------------------------------------------------------
-
 # Pre-allocated immutable design matrices (coded format)
-const _BB_DESIGN = Int8[
+const CORE_BbDesign_DDEC = Int8[
     -1 -1 0; -1 1 0; 1 -1 0; 1 1 0;
     -1 0 -1; -1 0 1; 1 0 -1; 1 0 1;
     0 -1 -1; 0 -1 1; 0 1 -1; 0 1 1;
     0 0 0; 0 0 0; 0 0 0
 ]
 
-const _TL9_DESIGN = Int8[
+const CORE_Tl9Design_DDEC = Int8[
     -1 -1 -1; -1 0 0; -1 1 1;
     0 -1 0; 0 0 1; 0 1 -1;
     1 -1 1; 1 0 -1; 1 1 0
@@ -47,14 +43,14 @@ const _TL9_DESIGN = Int8[
 Generates a coded (-1, 0, 1) experiment matrix for the specified method.
 """
 function CORE_GenDesign_DDEF(Method::String, FactorCount::Int=3)
-    CONST = Sys_Fast.FAST_Constants_DDEF()
+    C = Sys_Fast.FAST_Data_DDEC
     Sys_Fast.FAST_Log_DDEF("CORE", "DESIGN_GEN", "Generating matrix for $Method (Strict 3-Var Mode)", "WAIT")
 
-    design = if Method == CONST.METHOD_BB || Method == "BB"
-        copy(_BB_DESIGN)
-    elseif Method == CONST.METHOD_TL9 || Method == "TL9"
-        copy(_TL9_DESIGN)
-    elseif Method == CONST.METHOD_DOPT || Method == "DOPT"
+    design = if Method == C.METHOD_BB || Method == "BB"
+        copy(CORE_BbDesign_DDEC)
+    elseif Method == C.METHOD_TL9 || Method == "TL9"
+        copy(CORE_Tl9Design_DDEC)
+    elseif Method == C.METHOD_DOPT || Method == "DOPT"
         CORE_GenerateOptimalDesign_DDEF(FactorCount, 15)
     else
         Sys_Fast.FAST_Log_DDEF("CORE", "METHOD_ERROR", "Undefined Method: $Method", "FAIL")
@@ -93,59 +89,7 @@ end
 # --- ADAPTIVE SEARCH LOGIC (ZOOM / SHIFT) ---
 # --------------------------------------------------------------------------------------
 
-"""
-    CORE_CalcNextRange_DDEF(LeaderInfo, ZoomFactor=0.5) -> Vector{Dict}
-Calculates the search space for the next phase using Zoom (reduction) or Shift (translation).
-"""
-function CORE_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5)
-    CONST = Sys_Fast.FAST_Constants_DDEF()
-    NewConf = deepcopy(LeaderInfo["OldConfig"])
-    SelVals = LeaderInfo["Vals"]
-
-    Sys_Fast.FAST_Log_DDEF("CORE", "SEARCH_SPACE", "Calculating adaptive design update...", "WAIT")
-
-    vars = [(i, conf) for (i, conf) in enumerate(NewConf) if get(conf, "Role", "Variable") == CONST.ROLE_VAR]
-
-    n_update = min(length(vars), length(SelVals))
-    @inbounds for j in 1:n_update
-        i, conf = vars[j]
-        L_Old = conf["Levels"]
-        Val = SelVals[j]
-        Range = L_Old[3] - L_Old[1]
-
-        Tol = Range * 0.05
-        at_limit = abs(Val - L_Old[1]) < Tol || abs(Val - L_Old[3]) < Tol
-
-        New_Mid = Val
-        New_Range = at_limit ? Range : Range * ZoomFactor
-        action = at_limit ? "SHIFT" : "ZOOM"
-        Sys_Fast.FAST_Log_DDEF("CORE", action,
-            "Var $i -> $(action == "SHIFT" ? "Centre shifted" : "Range reduced")", "LIST")
-
-        New_Min = New_Mid - New_Range / 2
-        New_Max = New_Mid + New_Range / 2
-
-        # Symmetrical boundary clamping: guard both lower and upper physical limits
-        if New_Min < 0.0
-            overshoot = -New_Min
-            New_Min = 0.0
-            New_Max += overshoot  # Compensate to preserve range width
-            Sys_Fast.FAST_Log_DDEF("CORE", "CLAMP", "Var $i hit lower boundary. Range shifted upward.", "WARN")
-        end
-
-        # If upper limit is defined in old config, respect it as a hard ceiling
-        org_max = L_Old[3] + Range * 0.1  # Allow 10% overshoot beyond original max
-        if New_Max > org_max && org_max > 0.0
-            New_Max = org_max
-            Sys_Fast.FAST_Log_DDEF("CORE", "CLAMP", "Var $i hit upper boundary ceiling.", "WARN")
-        end
-
-        conf["Levels"] = [New_Min, New_Mid, New_Max]
-    end
-
-    Sys_Fast.FAST_Log_DDEF("CORE", "SEARCH_SPACE", "New space configured successfully.", "OK")
-    return NewConf
-end
+# --- NEXT RANGE CALCULATION MOVED TO Sys_Flow.jl ---
 
 # --------------------------------------------------------------------------------------
 # --- EXPERIMENTAL DESIGN - OPTIMAL GENERATION ---
@@ -156,7 +100,7 @@ end
 Generates a D-Optimal design matrix for quadratic response surfaces via `ExperimentalDesign.jl`.
 """
 function CORE_GenerateOptimalDesign_DDEF(FactorCount::Int=3, RunCount::Int=15)
-    CONST = Sys_Fast.FAST_Constants_DDEF()
+    C = Sys_Fast.FAST_Data_DDEC
     FactorCount = 3 # Force 3
     Sys_Fast.FAST_Log_DDEF("CORE", "OPTIMAL_GEN", "Generating D-Optimal design for strict 3-variable system ($RunCount runs).", "WAIT")
 
@@ -212,7 +156,7 @@ end
 Globally optimises parameters by maximising composite desirability using BlackBoxOptim.
 """
 function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractVector, X_Bounds::AbstractMatrix{Float64};
-    MaxTime::Float64=3.0, PenaltyFn::Union{Function,Nothing}=nothing)
+    MaxTime::Float64=5.0, PenaltyFn::Union{Function,Nothing}=nothing)
     Dim = 3 # Fixed dimension
     NumModels = length(Models)
 
@@ -297,8 +241,8 @@ end
 Retrieves experiment data for the optimal (leader) run from a previous phase record.
 """
 function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID::String="")
-    CONST = Sys_Fast.FAST_Constants_DDEF()
-    sheet = CONST.PREFIX_LEADERS * PhaseCode
+    C = Sys_Fast.FAST_Data_DDEC
+    sheet = C.PREFIX_LEADERS * PhaseCode
 
     df = Sys_Fast.FAST_ReadExcel_DDEF(FilePath, sheet)
     if isempty(df)
@@ -328,7 +272,7 @@ function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID
     end
 
     row = df[idx, :]
-    input_cols = filter(n -> startswith(n, CONST.PRE_INPUT), cols)
+    input_cols = filter(n -> startswith(n, C.PRE_INPUT), cols)
     vals = Sys_Fast.FAST_SafeNum_DDEF.(values(row[input_cols]))
 
     id_str = isnothing(col_id) ? "N/A" : string(row[col_id])

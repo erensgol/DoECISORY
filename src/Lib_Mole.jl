@@ -16,32 +16,68 @@ using Main.Sys_Fast
 
 export MOLE_ParseTable_DDEF, MOLE_QuickAudit_DDEF, MOLE_CalcMass_DDEF,
     MOLE_ApproxEq_DDEF, MOLE_ValidatePhysicalUnit_DDEF,
-    MOLE_AuditMatrix_DDEF, MOLE_AuditBatch_DDEF, MOLE_ValidateDesignFeasibility_DDEF, DaishoIngredient
+    MOLE_AuditMatrix_DDEF, MOLE_AuditBatch_DDEF, MOLE_ValidateDesignFeasibility_DDEF, MOLE_Ingredient_DDES,
+    MOLE_ApplyRadioDecay_DDEF
 
 # --------------------------------------------------------------------------------------
 # --- DATA STRUCTURES ---
 # --------------------------------------------------------------------------------------
 
 """
-    DaishoIngredient
+    MOLE_Ingredient_DDES
 Represents chemical and operational properties of a single component.
 """
-struct DaishoIngredient
+struct MOLE_Ingredient_DDES
     Name::String
     Role::String            # Expected values: "Variable", "Fixed", "Filler"
     Levels::Vector{Float64} # [Min, Mid, Max] values
     MW::Float64             # Molecular Weight (g/mol)
 end
 
+# --- PHYSICAL CORRECTIONS & MATH MODELS ---
+# --------------------------------------------------------------------------------------
+
+"""
+    MOLE_ApplyRadioDecay_DDEF(RawValue, HalfLife, HalfLifeUnit, DeltaTHours) -> Float64
+Applies mathematical decay correction for radioactive elements (reverse-calculation).
+(Moved from Lib_Vise.jl)
+"""
+function MOLE_ApplyRadioDecay_DDEF(RawValue::Float64, HalfLife::Float64, HalfLifeUnit::String, DeltaTHours::Float64)
+    HalfLife <= 0.0 && return RawValue
+
+    # Normalise Half-Life to Hours
+    unit_upper = uppercase(strip(HalfLifeUnit))
+    hl_hours = HalfLife
+    if occursin("SEC", unit_upper)
+        hl_hours = HalfLife / 3600.0
+    elseif occursin("MIN", unit_upper)
+        hl_hours = HalfLife / 60.0
+    elseif occursin("DAY", unit_upper)
+        hl_hours = HalfLife * 24.0
+    elseif occursin("YEAR", unit_upper) || occursin("YR", unit_upper)
+        hl_hours = HalfLife * 24.0 * 365.25
+    end
+
+    hl_hours <= 0.0 && return RawValue
+
+    lambda = log(2) / hl_hours
+    decay_factor = exp(-lambda * DeltaTHours)
+
+    # Avoid extreme inflation
+    decay_factor < 1e-6 && return RawValue
+
+    return RawValue / decay_factor
+end
+
 # --- FLOATING-POINT TOLERANCE COMPARATOR ---
 
-const _STOI_TOLERANCE = 1e-6   # 0.0001% — sufficient for stoichiometry precision
+const MOLE_StoiTolerance_DDEC = 1e-6   # 0.0001% — sufficient for stoichiometry precision
 
 """
     MOLE_ApproxEq_DDEF(a::Real, b::Real; atol=1e-6) -> Bool
 Tolerance-based equality for floating-point chemical calculations.
 """
-MOLE_ApproxEq_DDEF(a::Real, b::Real; atol::Float64=_STOI_TOLERANCE) = isapprox(a, b; atol)
+MOLE_ApproxEq_DDEF(a::Real, b::Real; atol::Float64=MOLE_StoiTolerance_DDEC) = isapprox(a, b; atol)
 
 # --------------------------------------------------------------------------------------
 # --- CHEMICAL TABLE PARSING ---
@@ -56,7 +92,7 @@ function MOLE_ParseTable_DDEF(TableData::AbstractVector)
     clean_data, input_warnings = Sys_Fast.FAST_SanitiseInput_DDEF(TableData)
 
     safe_num = Sys_Fast.FAST_SafeNum_DDEF
-    CONST = Sys_Fast.FAST_Constants_DDEF()
+    C = Sys_Fast.FAST_Data_DDEC
 
     names_vec = string.(get.(clean_data, "Name", "Unknown"))
     roles = string.(get.(clean_data, "Role", "Fixed"))
@@ -66,8 +102,8 @@ function MOLE_ParseTable_DDEF(TableData::AbstractVector)
     mws = Float64.(get.(clean_data, "MW", 0.0))
 
     roles_lower = lowercase.(roles)
-    tag_var = lowercase(CONST.ROLE_VAR)
-    tag_fill = lowercase(CONST.ROLE_FILL)
+    tag_var = lowercase(C.ROLE_VAR)
+    tag_fill = lowercase(C.ROLE_FILL)
 
     idx_var = findall(==(tag_var), roles_lower)
     idx_fill = findall(==(tag_fill), roles_lower)
@@ -302,13 +338,13 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
     D = MOLE_ParseTable_DDEF(TableData)
     idx_var = D["Idx_Var"]
     idx_chem = D["Idx_Chem"]
-    
+
     R, C = size(Design)
-    
+
     # Validation: Matrix columns must match Variable count
     if C != length(idx_var)
         return Dict(
-            "IsFeasible" => true, 
+            "IsFeasible" => true,
             "AvgMass_mg" => 0.0, "MaxMass_mg" => 0.0, "MinMass_mg" => 0.0, "StdDev_mg" => 0.0,
             "RunMasses" => zeros(R)
         )
@@ -317,7 +353,7 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
     # Mapping variables, fixed values and auto-balancing filler
     idx_fix = D["Idx_Fix"]
     idx_fill = D["Idx_Fill"]
-    
+
     masses = Vector{Float64}(undef, R)
     for i in 1:R
         # Full ratio vector (100% basis)
@@ -328,18 +364,18 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
         for f_idx in idx_fix
             ratios_full[f_idx] = D["Mids"][f_idx]
         end
-        
+
         # Filler balancing (H2O, Solvent etc.)
         if !isempty(idx_fill)
-             other_sum = sum(ratios_full) # Currently filler is 0.0
-             ratios_full[idx_fill[1]] = max(0.0, 100.0 - other_sum)
+            other_sum = sum(ratios_full) # Currently filler is 0.0
+            ratios_full[idx_fill[1]] = max(0.0, 100.0 - other_sum)
         end
-        
+
         # Extract chemical-only data for gravimetric calculation
         r_chem = ratios_full[idx_chem]
         n_chem = D["Names"][idx_chem]
         w_chem = D["MWs"][idx_chem]
-        
+
         if isempty(idx_chem)
             masses[i] = 0.0
         else

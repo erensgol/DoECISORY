@@ -14,7 +14,7 @@ using DataFrames
 using PlotlyJS
 
 # --- Hot Reload Support (Revise.jl) ---
-const _HAS_REVISE = try
+const APP_HasRevise_DDEC = try
     using Revise
     true
 catch
@@ -23,7 +23,8 @@ end
 
 # --- Module Scope Fix ---
 # We force inclusion into Main to avoid scope issues in Dash subprocesses
-if _HAS_REVISE && !haskey(ENV, "DASH_DEBUG")
+# We force inclusion into Main to avoid scope issues in Dash subprocesses
+if APP_HasRevise_DDEC && !haskey(ENV, "DASH_DEBUG")
     Revise.includet("src/Sys_Fast.jl")
 else
     Base.include(Main, "src/Sys_Fast.jl")
@@ -56,14 +57,14 @@ for (label, file) in [
     ("Molecule Engine: Lib_Mole", "src/Lib_Mole.jl"),
     ("Visual Engine: Lib_Arts", "src/Lib_Arts.jl"),
     ("Algorithm Core: Lib_Core", "src/Lib_Core.jl"),
-    ("Analysis Suite: Lib_Vise", "src/Lib_Vise.jl"),
     ("System Flow Bus: Sys_Flow", "src/Sys_Flow.jl"),
+    ("Analysis Suite: Lib_Vise", "src/Lib_Vise.jl"),
     ("GUI Base Component: Gui_Base", "src/Gui_Base.jl"),
     ("GUI Design Deck: Gui_Deck", "src/Gui_Deck.jl"),
     ("GUI Analysis Lens: Gui_Lens", "src/Gui_Lens.jl"),
 ]
     FAST_Log_DDEF("BOOT", "Loading", label, "INFO")
-    if _HAS_REVISE && !haskey(ENV, "DASH_DEBUG")
+    if APP_HasRevise_DDEC && !haskey(ENV, "DASH_DEBUG")
         Revise.includet(file)
     else
         Base.include(Main, file)
@@ -132,7 +133,7 @@ app.index_string = """
 # --------------------------------------------------------------------------------------
 
 # 1. Navigation Controller (Constant UI)
-const navbar = html_div([
+const APP_Navbar_DDEC = html_div([
         html_div([
                 dcc_link(html_div([
                             html_img(src="/assets/favicon.ico", style=Dict("height" => "32px", "marginRight" => "10px", "borderRadius" => "4px")),
@@ -145,23 +146,23 @@ const navbar = html_div([
             ], className="nav-links d-flex justify-content-center"),
         html_div([
                 html_span([
-                    html_i(className="fas fa-shield-alt me-1"),
-                    "Certificate"
-                ], id="nav-btn-sci-audit", className="badge bg-secondary text-white small opacity-75 me-2", style=Dict("cursor" => "pointer")),
+                        html_i(className="fas fa-shield-alt me-1"),
+                        "Certificate"
+                    ], id="nav-btn-sci-audit", className="badge bg-secondary text-white small opacity-75 me-2", style=Dict("cursor" => "pointer")),
                 html_span("v1.0 In Dev.", className="badge bg-secondary text-white small opacity-75"),
             ], className="nav-actions", style=Dict("flex" => "1", "textAlign" => "right")),
     ], className="glass-navbar d-flex align-items-center justify-content-between")
 
 # 2. Page Content Render Area (Constant UI)
-const content = html_div(id="page-content", className="app-container")
+const APP_Content_DDEC = html_div(id="page-content", className="app-container")
 
 # 3. Main Application Framework
-const _SYSTEM_READY = Ref(false)
+const APP_SystemReady_DDEC = Threads.Atomic{Bool}(false)
 
 app.layout = html_div([
     dcc_location(id="url", refresh=false),
-    navbar,
-    content,
+    APP_Navbar_DDEC,
+    APP_Content_DDEC,
 
     # Global State Architecture
     dcc_store(id="store-session-config", storage_type="session"),
@@ -192,7 +193,7 @@ app.layout = html_div([
         ], id="modal-sys-audit", size="lg", is_open=false),
 
     # System readiness overlay + polling
-    dcc_interval(id="sys-ready-poll", interval=800, max_intervals=-1),
+    dcc_interval(id="sys-ready-poll", interval=2000, max_intervals=-1),
     html_div(id="sys-loading-overlay", children=[
             html_div([
                     html_div(className="spinner-border text-primary mb-3", style=Dict("width" => "3rem", "height" => "3rem")),
@@ -214,16 +215,14 @@ app.layout = html_div([
 # --------------------------------------------------------------------------------------
 
 # 1. Global State Sync Bus
-callback!(app,
-    Output("store-master-vault", "data"),
-    Input("sync-deck-content", "data"),
-    Input("sync-lens-content", "data"),
-    Input("sync-lens-analysis", "data"),
-    prevent_initial_call=true
-) do deck, lens, lens_analysis
+"""
+    APP_SyncVault_DDEF(deck, lens, lens_analysis) -> Any
+Orchestrates the synchronisation of data between UI components and the session store.
+"""
+function APP_SyncVault_DDEF(deck::Any, lens::Any, lens_analysis::Any)
     ctx = callback_context()
     isempty(ctx.triggered) && return Dash.no_update()
-    trig = split(ctx.triggered[1].prop_id, ".")[1]
+    trig::String = split(ctx.triggered[1].prop_id, ".")[1]
 
     if trig == "sync-deck-content"
         return deck
@@ -234,15 +233,29 @@ callback!(app,
     end
 end
 
+callback!(app,
+    Output("store-master-vault", "data"),
+    Input("sync-deck-content", "data"),
+    Input("sync-lens-content", "data"),
+    Input("sync-lens-analysis", "data"),
+    prevent_initial_call=true
+) do deck, lens, lens_analysis
+    return APP_SyncVault_DDEF(deck, lens, lens_analysis)
+end
+
 # 2. Main Navigation Orchestrator
-callback!(app, Output("page-content", "children"), Input("url", "pathname")) do pathname
+"""
+    APP_RoutePage_DDEF(pathname::String) -> Any
+Handles top-level routing and renders the appropriate layout or portal dashboard.
+"""
+function APP_RoutePage_DDEF(pathname::String)
     if pathname == "/design"
         return DECK_Layout_DDEF()
     elseif pathname == "/analysis"
         return LENS_Layout_DDEF()
     else
         # --- PORTAL DASHBOARD ---
-        nt, tstyle, tmsg = Sys_Fast.FAST_GetThreadInfo_DDEF()
+        nt::Int, tstyle::String, tmsg::String = Sys_Fast.FAST_GetThreadInfo_DDEF()
         return html_div([
             # Hero Section
             dbc_container([
@@ -289,10 +302,10 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
                                             html_div([html_i(className="fas fa-server text-success me-2"), html_span("System Online", className="text-secondary fw-bold")], className="d-flex align-items-center me-4"),
                                             html_div([html_i(className="fas fa-microchip text-$tstyle me-2"), html_span(tmsg, className="text-secondary fw-bold")], className="d-flex align-items-center me-4"),
                                             html_div([
-                                                html_span([html_i(className="fas fa-cog me-1"), "Diagnostics"], 
-                                                    id="btn-open-sys-audit", className="badge bg-light text-dark border", 
-                                                    style=Dict("cursor" => "pointer"))
-                                            ], className="d-flex align-items-center"),
+                                                    html_span([html_i(className="fas fa-cog me-1"), "Diagnostics"],
+                                                        id="btn-open-sys-audit", className="badge bg-light text-dark border",
+                                                        style=Dict("cursor" => "pointer"))
+                                                ], className="d-flex align-items-center"),
                                         ], className="d-flex justify-content-center align-items-center p-3 rounded-pill",
                                         style=Dict("background" => "#FFFFFF", "border" => "1px solid #DCDCDC", "boxShadow" => "0 4px 6px -1px #E6E6E6", "display" => "inline-flex", "margin" => "0 auto"))
                                 ], className="text-center"), xs=12), style=Dict("maxWidth" => "900px", "margin" => "0 auto")),], fluid=true, className="pb-5 mt-2")
@@ -300,7 +313,38 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
     end
 end
 
-# 3. Scientific Audit Callback
+callback!(app, Output("page-content", "children"), Input("url", "pathname")) do pathname
+    return APP_RoutePage_DDEF(isnothing(pathname) ? "/" : pathname)
+end
+
+# 3-4. Audit Callbacks
+"""
+    APP_HandleAudit_DDEF(n_open, n_close, current_state, audit_fn::Function)
+Generic handler for scientific and system audit modals. 
+Broad types used for Dash-Julia interoperability.
+"""
+function APP_HandleAudit_DDEF(n_open::Any, n_close::Any, current_state::Any, audit_fn::Function)
+    ctx = callback_context()
+    if isnothing(ctx.triggered) || isempty(ctx.triggered)
+        return (current_state == true || current_state == 1), Dash.no_update()
+    end
+
+    trig::String = split(ctx.triggered[1].prop_id, ".")[1]
+    # Coerce current state to boolean safely
+    is_open::Bool = (current_state == true || current_state == 1)
+
+    if occursin("open", trig) || occursin("nav", trig)
+        # Check if the opening button was actually clicked
+        if !isnothing(n_open) && n_open > 0
+            return true, audit_fn()
+        end
+        return is_open, Dash.no_update()
+    else
+        # Close triggered
+        return false, Dash.no_update()
+    end
+end
+
 callback!(app,
     Output("modal-sci-audit", "is_open"),
     Output("modal-sci-audit-content", "children"),
@@ -309,23 +353,9 @@ callback!(app,
     State("modal-sci-audit", "is_open"),
     prevent_initial_call=true
 ) do n_open, n_close, is_open
-    ctx = callback_context()
-    if isnothing(ctx.triggered) || isempty(ctx.triggered)
-        return is_open, Dash.no_update()
-    end
-    
-    trig = split(ctx.triggered[1].prop_id, ".")[1]
-    if trig == "nav-btn-sci-audit"
-        if !isnothing(n_open) && n_open > 0
-            return true, Sys_Fast.FAST_ScientificAudit_DDEF()
-        end
-        return is_open, Dash.no_update()
-    else
-        return false, Dash.no_update()
-    end
+    return APP_HandleAudit_DDEF(n_open, n_close, is_open, Sys_Fast.FAST_ScientificAudit_DDEF)
 end
 
-# 4. System Diagnostic Callback
 callback!(app,
     Output("modal-sys-audit", "is_open"),
     Output("modal-sys-audit-content", "children"),
@@ -334,34 +364,35 @@ callback!(app,
     State("modal-sys-audit", "is_open"),
     prevent_initial_call=true
 ) do n_open, n_close, is_open
-    ctx = callback_context()
-    # Robust check for trigger
-    if isnothing(ctx.triggered) || isempty(ctx.triggered)
-        return is_open, Dash.no_update()
-    end
-    
-    trig = split(ctx.triggered[1].prop_id, ".")[1]
-    if trig == "btn-open-sys-audit"
-        # Only open if actually clicked
-        if !isnothing(n_open) && n_open > 0
-            return true, Sys_Fast.FAST_SystemAudit_DDEF()
-        end
-        return is_open, Dash.no_update()
-    else
-        return false, Dash.no_update()
-    end
+    return APP_HandleAudit_DDEF(n_open, n_close, is_open, Sys_Fast.FAST_SystemAudit_DDEF)
 end
 
 # Loading overlay dismiss callback (polls until warmup completes)
+"""
+    APP_HandleLoadingOverlay_DDEF(n::Any) -> Tuple{Any, Bool}
+Manages the visibility of the initial loading screen based on background JIT warmup status.
+"""
+function APP_HandleLoadingOverlay_DDEF(n::Any)
+    ready::Bool = APP_SystemReady_DDEC[]
+    n_val::Int = isnothing(n) ? 0 : Int(n)
+
+    # Only log status if NOT ready, reduce frequency to ~1 min
+    if !ready && n_val % 30 == 0
+        Sys_Fast.FAST_Log_DDEF("BOOT", "UI_SYNC", "Status Check: Waiting for System Warmup... (Poll #$n_val)", "INFO")
+    end
+
+    if ready
+        return Dict("display" => "none"), true
+    end
+    return Dash.no_update(), false
+end
+
 callback!(app,
     Output("sys-loading-overlay", "style"),
     Output("sys-ready-poll", "disabled"),
     Input("sys-ready-poll", "n_intervals")
 ) do n
-    if _SYSTEM_READY[]
-        return Dict("display" => "none"), true  # Hide overlay, stop polling
-    end
-    return Dash.no_update(), false
+    return APP_HandleLoadingOverlay_DDEF(n)
 end
 
 # Register Child Callbacks
@@ -372,15 +403,19 @@ LENS_RegisterCallbacks_DDEF(app)
 # --- JIT WARMUP ROUTINE ---
 # --------------------------------------------------------------------------------------
 
-function DAISHO_Warmup_DDEF()
-    t0 = time()
+"""
+    APP_Warmup_DDEF() -> Nothing
+Executes JIT pre-compilation on critical hot-paths within a background task to ensure zero-latency UI interaction.
+"""
+function APP_Warmup_DDEF()::Nothing
+    t0::Float64 = time()
     FAST_Log_DDEF("BOOT", "Warmup", "JIT pre-compilation starting (background)...", "WAIT")
 
     # Development mode check: skip heavy warmup if DAISHO_DEV is set
     if haskey(ENV, "DAISHO_DEV") && ENV["DAISHO_DEV"] == "true"
         FAST_Log_DDEF("BOOT", "Warmup", "Development Mode: Skipping JIT warmup for speed.", "INFO")
-        _SYSTEM_READY[] = true
-        return
+        APP_SystemReady_DDEC[] = true
+        return nothing
     end
 
     try
@@ -389,33 +424,34 @@ function DAISHO_Warmup_DDEF()
         Sys_Fast.FAST_SafeNum_DDEF(42)
         Sys_Fast.FAST_SafeNum_DDEF(missing)
         Sys_Fast.FAST_SafeNum_DDEF(nothing)
-        dummy_rows = [
-            Dict("Name" => "A", "Role" => "Variable", "L1" => 1, "L2" => 2, "L3" => 3, "MW" => 100, "Unit" => "mg"),
-            Dict("Name" => "B", "Role" => "Variable", "L1" => "4", "L2" => "5", "L3" => "6", "MW" => 200.0, "Unit" => "mM"),
-            Dict("Name" => "C", "Role" => "Filler", "L1" => 0, "L2" => 0, "L3" => 0, "MW" => 300, "Unit" => "MR"),
+        
+        dummy_rows::Vector{Dict{String,Any}} = [
+            Dict{String,Any}("Name" => "A", "Role" => "Variable", "L1" => 1, "L2" => 2, "L3" => 3, "MW" => 100, "Unit" => "mg"),
+            Dict{String,Any}("Name" => "B", "Role" => "Variable", "L1" => "4", "L2" => "5", "L3" => "6", "MW" => 200.0, "Unit" => "mM"),
+            Dict{String,Any}("Name" => "C", "Role" => "Filler", "L1" => 0, "L2" => 0, "L3" => 0, "MW" => 300, "Unit" => "MR"),
         ]
         Sys_Fast.FAST_SanitiseInput_DDEF(dummy_rows)
 
         # 2. Lib_Mole: Stoichiometry engine
         Lib_Mole.MOLE_ParseTable_DDEF(dummy_rows)
         Lib_Mole.MOLE_CalcMass_DDEF(
-            ["A", "B", "C"], [100.0, 200.0, 300.0], [30.0, 30.0, 40.0], 5.0, 10.0
+            String["A", "B", "C"], Float64[100.0, 200.0, 300.0], Float64[30.0, 30.0, 40.0], 5.0, 10.0
         )
         Lib_Mole.MOLE_ApproxEq_DDEF(1.0, 1.0 + 1e-12)
 
         # 3. Lib_Vise: Regression + GridSearch (core hot path)
-        X_dummy = Float64[1 2 3; 4 5 6; 7 8 9; 2 4 6; 3 6 9; 5 3 1; 8 2 4; 6 7 5;
+        X_dummy::Matrix{Float64} = Float64[1 2 3; 4 5 6; 7 8 9; 2 4 6; 3 6 9; 5 3 1; 8 2 4; 6 7 5;
             1 5 9; 4 8 2; 7 1 5; 3 9 6]
-        Y_dummy = Float64[10, 20, 30, 15, 25, 12, 28, 22, 18, 24, 14, 26]
+        Y_dummy::Vector{Float64} = Float64[10, 20, 30, 15, 25, 12, 28, 22, 18, 24, 14, 26]
 
-        mod = Lib_Vise.VISE_Regress_DDEF(X_dummy, Y_dummy, "quadratic";
-            InNames=["Var1", "Var2", "Var3"])
+        mod::Dict{String,Any} = Lib_Vise.VISE_Regress_DDEF(X_dummy, Y_dummy, "quadratic";
+            InNames=String["Var1", "Var2", "Var3"])
         Lib_Vise.VISE_CrossValidate_DDEF(X_dummy, Y_dummy, "quadratic")
         Lib_Vise.VISE_ClampIndex_DDEF(5, 10)
 
         if mod["Status"] == "OK"
-            bounds = hcat([1.0, 2.0, 1.0], [8.0, 9.0, 9.0])
-            goals = [Dict("Type" => "Nominal", "Min" => 10.0, "Max" => 30.0, "Target" => 20.0)]
+            bounds::Matrix{Float64} = hcat([1.0, 2.0, 1.0], [8.0, 9.0, 9.0])
+            goals::Vector{Dict{String,Any}} = [Dict{String,Any}("Type" => "Nominal", "Min" => 10.0, "Max" => 30.0, "Target" => 20.0)]
             mod["Goal"] = goals[1]
             Lib_Vise.VISE_GridSearch_DDEF([mod], goals, bounds; Steps=5)
         end
@@ -424,11 +460,11 @@ function DAISHO_Warmup_DDEF()
         if mod["Status"] == "OK"
             try
                 Lib_Arts.ARTS_RenderPareto_DDEF(mod, "Warmup_Out", 0.95, 0.90)
-                Y_pred = Lib_Vise.VISE_Predict_DDEF(mod, X_dummy)
+                Y_pred::Vector{Float64} = Lib_Vise.VISE_Predict_DDEF(mod, X_dummy)
                 Lib_Arts.ARTS_RenderFit_DDEF(Y_dummy, Y_pred, "Warmup_Out")
                 Lib_Arts.ARTS_CalcDesirability_DDEF(20.0,
-                    Dict("Type" => "Nominal", "Min" => 10.0, "Max" => 30.0, "Target" => 20.0))
-                Lib_Arts.ARTS_RenderOptimalZone_DDEF([mod], goals, X_dummy[1:3, :], ["V1", "V2", "V3"])
+                    Dict{String,Any}("Type" => "Nominal", "Min" => 10.0, "Max" => 30.0, "Target" => 20.0))
+                Lib_Arts.ARTS_RenderOptimalZone_DDEF([mod], goals, X_dummy[1:3, :], String["V1", "V2", "V3"])
             catch e
                 FAST_Log_DDEF("BOOT", "Warmup_Arts", "Visualisation pre-compilation skipped: $e", "WARN")
             end
@@ -437,9 +473,9 @@ function DAISHO_Warmup_DDEF()
         # New: Model Tournament & Report Warmup
         if mod["Status"] == "OK"
             try
-                Lib_Vise.VISE_SelectBestModel_DDEF(X_dummy[1:10, 1:1], Y_dummy[1:10], ["V1"])
+                Lib_Vise.VISE_SelectBestModel_DDEF(X_dummy[1:10, 1:1], Y_dummy[1:10], String["V1"])
                 Lib_Vise.VISE_SensitivityAnalysis_DDEF(mod, X_dummy[1, :])
-                r_dummy = Dict("OutNames" => ["W"], "Models" => [mod], "R2_Adj" => [0.9], "R2_Pred" => [0.8])
+                r_dummy::Dict{String,Any} = Dict{String,Any}("OutNames" => String["W"], "Models" => [mod], "R2_Adj" => Float64[0.9], "R2_Pred" => Float64[0.8])
                 Lib_Vise.VISE_GenerateScientificReport_DDEF(r_dummy)
             catch e
                 FAST_Log_DDEF("BOOT", "Warmup_Vise", "Analytics pre-compilation skipped: $e", "WARN")
@@ -461,9 +497,10 @@ function DAISHO_Warmup_DDEF()
         FAST_Log_DDEF("BOOT", "Warmup_Warn", "Critical warmup block failed: $e", "WARN")
     end
 
-    _SYSTEM_READY[] = true  # Signal the loading overlay to dismiss
-    elapsed = round(time() - t0; digits=2)
+    APP_SystemReady_DDEC[] = true  # Signal the loading overlay to dismiss
+    elapsed::Float64 = round(time() - t0; digits=2)
     FAST_Log_DDEF("BOOT", "Warmup", "JIT pre-compilation complete ($(elapsed)s) — System READY", "OK")
+    return nothing
 end
 
 # --------------------------------------------------------------------------------------
@@ -471,21 +508,21 @@ end
 # --------------------------------------------------------------------------------------
 
 # HuggingFace Spaces detection
-const _IS_HF_SPACES = haskey(ENV, "SPACE_ID")
-const PORT = _IS_HF_SPACES ? 7860 : 8060
+const APP_IsHfSpaces_DDEC = haskey(ENV, "SPACE_ID")
+const APP_Port_DDEC = APP_IsHfSpaces_DDEC ? 7860 : 8060
 
 # Spawn warmup in BACKGROUND so server starts instantly
-Threads.@spawn DAISHO_Warmup_DDEF()
+Threads.@spawn APP_Warmup_DDEF()
 
 try
-    env_label = _IS_HF_SPACES ? "HuggingFace Spaces" : "Local $(Threads.nthreads())T"
+    env_label = APP_IsHfSpaces_DDEC ? "HuggingFace Spaces" : "Local $(Threads.nthreads())T"
     Sys_Fast.FAST_Log_DDEF("SERVER", "Ready",
-        "DaishoDoE Engine listening on :$PORT ($env_label)", "OK")
+        "DaishoDoE Engine listening on :$(APP_Port_DDEC) ($env_label)", "OK")
 
-    run_server(app, "0.0.0.0", PORT)
+    run_server(app, "0.0.0.0", APP_Port_DDEC)
 catch e
     if isa(e, Base.IOError) && e.code == -4091
-        println("\n>>> CRITICAL WARNING: Port $PORT occupied. Please terminate existing sessions.\n")
+        println("\n>>> CRITICAL WARNING: Port $(APP_Port_DDEC) occupied. Please terminate existing sessions.\n")
     else
         rethrow(e)
     end
