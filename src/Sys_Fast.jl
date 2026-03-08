@@ -134,12 +134,12 @@ Scavenges the local transient bunker. If 'all' is true, attempts a deeper sweep 
 """
 function FAST_CleanWorkforce_DDEF(all::Bool=false)::Nothing
     !isdir(FAST_TempRoot_DDEC) && return nothing
-    
+
     try
         # Use broadcasting and filtering for idiomatic file removal
         targets = filter(isfile, readdir(FAST_TempRoot_DDEC; join=true))
         foreach(f -> rm(f; force=true), targets)
-        
+
         all && FAST_Log_DDEF("FAST", "CLEAN_DEEP", "Extended workforce sweep executed.", "INFO")
     catch e
         FAST_Log_DDEF("FAST", "CLEAN_WARN", "Workforce scavenging lookup encountered obstacles: $e", "WARN")
@@ -169,7 +169,7 @@ Standardised console logging with ANSI colour support and timestamps.
 """
 function FAST_Log_DDEF(Source::String, Event::String, Detail::Any="", Type::String="INFO")
     c = get(FAST_LogColours_DDEC, Symbol(Type), FAST_LogColourDefault_DDEC)
-    ts = Dates.format(now(), "HH:MM:SS")
+    ts = Dates.format(now(), "HH:MM:SS.sss") # Added milliseconds for boot diagnostics
     det_str = isnothing(Detail) ? "null" : string(Detail)
     @printf("\e[34m[%s]%s \e[32m%-12s%s: %s%-15s%s %s%s%s\n",
         ts, FAST_LogReset_DDEC, Source, FAST_LogReset_DDEC, c, Event, FAST_LogReset_DDEC, c, det_str, FAST_LogReset_DDEC)
@@ -185,10 +185,14 @@ end
 Standardises DataFrame column names: Strips whitespace and forces Uppercase.
 Mutates the DataFrame in-place for performance.
 """
-function FAST_NormaliseCols_DDEF!(df::DataFrame)::DataFrame
+function FAST_NormaliseCols_DDEF!(df::DataFrame; force_upper::Bool=false)::DataFrame
     isempty(df) && return df
-    # Robust renaming approach for maximum compatibility across DataFrames versions
-    mapping = [n => Symbol(uppercase(strip(string(n)))) for n in names(df)]
+    # Robust renaming approach: only uppercase if explicitly requested
+    if force_upper
+        mapping = [n => Symbol(uppercase(strip(string(n)))) for n in names(df)]
+    else
+        mapping = [n => Symbol(strip(string(n))) for n in names(df)]
+    end
     rename!(df, mapping)
     return df
 end
@@ -200,7 +204,7 @@ Returns an empty DataFrame if the file doesn't exist.
 """
 function FAST_ReadExcel_DDEF(FilePath::Union{String,Nothing}, SheetName::String)::DataFrame
     (isnothing(FilePath) || isempty(FilePath) || !isfile(FilePath)) && return DataFrame()
-    
+
     # 1. Broad Validation: File extension check
     ext = lowercase(splitext(FilePath)[2])
     if ext != ".xlsx" && ext != ".xlsm"
@@ -261,7 +265,7 @@ function FAST_SafeExcelWrite_DDEF(File::Union{String,Nothing}, Updates::Dict{Str
 
     # 3. Guard against empty writes
     valid_pairs = [sn => all_data[sn] for sn in sheet_order if !isempty(all_data[sn]) || sn == "CONFIG"]
-    
+
     if !isempty(valid_pairs)
         XLSX.writetable(File, valid_pairs...; overwrite=true)
     end
@@ -276,7 +280,7 @@ Mutates input for memory efficiency.
 function FAST_RoundCols_DDEF!(df::DataFrame)::DataFrame
     # Idiomatic mapcols! for high-performance in-place rounding
     mapcols!(df) do col
-        if eltype(col) <: Union{Missing, AbstractFloat}
+        if eltype(col) <: Union{Missing,AbstractFloat}
             return passmissing(x -> round(x; digits=3)).(col)
         end
         return col
@@ -308,16 +312,16 @@ Type-safe numeric conversion. Handles missing, nothing, and localised string for
 function FAST_SafeNum_DDEF(Input::Any)::Float64
     # 1. Immediate exit for null types
     (Input === missing || Input === nothing) && return NaN
-    
+
     # 2. Direct numeric bypass
     Input isa AbstractFloat && return Float64(Input)
     Input isa Integer && return Float64(Input)
     Input isa Bool && return Input ? 1.0 : 0.0
-    
+
     # 3. Robust string parsing
     s::String = strip(string(Input))
     (isempty(s) || s == "-" || lowercase(s) == "nan") && return NaN
-    
+
     # Handle comma/dot ambiguity
     clean_s = replace(s, ',' => '.')
     res = tryparse(Float64, clean_s)
@@ -329,20 +333,20 @@ end
 Transforms raw UI Table data into typed scientific Dictionaries.
 Implements automatic feature recognition for radioactivity and filler logic.
 """
-function FAST_SanitiseInput_DDEF(TableData::AbstractVector)::Tuple{Vector{Dict{String,Any}}, Vector{String}}
+function FAST_SanitiseInput_DDEF(TableData::AbstractVector)::Tuple{Vector{Dict{String,Any}},Vector{String}}
     warnings = String[]
-    
+
     sanitized = map(enumerate(TableData)) do (idx, raw)
         # Idiomatic key conversion
         r = Dict{String,Any}(string(k) => v for (k, v) in raw)
-        
+
         # 1. Structural Normalization
         row_name = string(get(r, "Name", "Unnamed_Item_$(idx)"))
         r["Name"] = row_name
         r["Role"] = string(get(r, "Role", "Variable"))
         r["Unit"] = string(get(r, "Unit", ""))
         r["HalfLifeUnit"] = string(get(r, "HalfLifeUnit", "Hours"))
-        
+
         # Boolean Logic
         r["IsRadioactive"] = get(r, "IsRadioactive", false) == true
         r["IsFiller"] = get(r, "IsFiller", false) == true
@@ -352,7 +356,7 @@ function FAST_SanitiseInput_DDEF(TableData::AbstractVector)::Tuple{Vector{Dict{S
         for key in num_fields
             val = get(r, key, nothing)
             clean_val = FAST_SafeNum_DDEF(val)
-            
+
             # Warn on data loss/corruption
             if isnan(clean_val) && !isnothing(val) && val !== missing && string(val) != ""
                 push!(warnings, "Item '$row_name': Invalid input for '$key' ($val) coerced to 0.0")
@@ -367,7 +371,7 @@ function FAST_SanitiseInput_DDEF(TableData::AbstractVector)::Tuple{Vector{Dict{S
 
         return r
     end
-    
+
     !isempty(warnings) && FAST_Log_DDEF("FAST", "SANITY", "Rectified $(length(warnings)) data anomalies.", "WARN")
     return (sanitized, warnings)
 end
@@ -411,7 +415,7 @@ function FAST_SanitiseJson_DDEF(x::Any)::Any
         return [FAST_SanitiseJson_DDEF(x[i, :]) for i in 1:size(x, 1)]
     elseif x isa AbstractVector
         return map(FAST_SanitiseJson_DDEF, x)
-    elseif x isa Union{Tuple, NamedTuple, Pair}
+    elseif x isa Union{Tuple,NamedTuple,Pair}
         return FAST_SanitiseJson_DDEF(collect(x))
     else
         return x
@@ -588,7 +592,13 @@ function FAST_ReadConfig_DDEF(File::Union{String,Nothing})::Dict{String,Any}
         isnothing(idx) && return Dict{String,Any}()
 
         json_str = df[idx, :VALUE_JSON]
-        return JSON3.read(string(json_str), Dict{String,Any})
+        # Robustness: ensure we are not trying to parse a binary/PK stream as JSON
+        js_val = string(json_str)
+        if startswith(js_val, "PK")
+            FAST_Log_DDEF("FAST", "READ_CONFIG_WARN", "Binary signature detected in JSON field. Aborting parse.", "WARN")
+            return Dict{String,Any}()
+        end
+        return JSON3.read(js_val, Dict{String,Any})
     catch e
         FAST_Log_DDEF("FAST", "READ_CONFIG_FAIL", "Error reading config from $File: $e", "WARN")
         return Dict{String,Any}()
@@ -632,7 +642,7 @@ end
     FAST_GetThreadInfo_DDEF()::Tuple{Int, String, String}
 Audit check for CPU concurrency status. Returns (Count, Theme_Color, Status_Message).
 """
-function FAST_GetThreadInfo_DDEF()::Tuple{Int, String, String}
+function FAST_GetThreadInfo_DDEF()::Tuple{Int,String,String}
     n::Int = Threads.nthreads()
     # High-performance status reporting
     n > 1 ? (n, "success", "$n Threads [OPTIMAL]") : (n, "warning", "1 Thread [SUB-OPTIMAL]")
@@ -764,7 +774,7 @@ end
     FAST_ValidateDataFrame_DDEF(df, [RequiredCols]) -> (Bool, Vector{String})
 Pre-flight data quality validator checking for missing columns and NaNs.
 """
-function FAST_ValidateDataFrame_DDEF(df::DataFrame, RequiredCols::Vector{String}=String[])::Tuple{Bool, Vector{String}}
+function FAST_ValidateDataFrame_DDEF(df::DataFrame, RequiredCols::Vector{String}=String[])::Tuple{Bool,Vector{String}}
     issues = String[]
 
     isempty(df) && (push!(issues, "DataFrame is empty."); return (false, issues))

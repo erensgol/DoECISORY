@@ -42,5 +42,8 @@ RUN julia --project="." -e 'import Pkg; Pkg.precompile()'
 # Expose the port Hugging Face expects
 EXPOSE 7860
 
-# Launch the Application
-CMD ["julia", "--project=.", "--startup-file=no", "app.jl"]
+# Stability: Prevent runtime package downloads (uses Build cache only)
+ENV JULIA_PKG_OFFLINE=true
+
+# Launch the Application with Virtual Display support
+CMD ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 640x480x24", "julia", "--project=.", "--startup-file=no", "app.jl"]

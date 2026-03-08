@@ -275,16 +275,16 @@ end
     BASE_ActionButton_DDEF(id, label, icon; [color], [outline], [size], [class]) -> dbc_button
 Standardised sidebar action button.
 """
-function BASE_ActionButton_DDEF(id::String, label::String, icon::String; color="secondary", outline=true, size="sm", class="w-100 mb-2 fw-bold")
-    return dbc_button([html_i(className="$icon me-2"), label], id=id, n_clicks=0, color=color, outline=outline, size=size, className=class)
+function BASE_ActionButton_DDEF(id::String, label::String, icon::String; color="secondary", outline=true, size="sm", class="w-100 mb-2 fw-bold", kwargs...)
+    return dbc_button([html_i(className="$icon me-2"), label], id=id, n_clicks=0, color=color, outline=outline, size=size, className=class; kwargs...)
 end
 
 """
     BASE_NextButton_DDEF(id, label; [icon]) -> dbc_button
 Standardised primary action button for phase transitions or execution.
 """
-function BASE_NextButton_DDEF(id::String, label::String; icon::String="fas fa-play", class="w-100 fw-bold mb-2")
-    return dbc_row(dbc_col(dbc_button([html_i(className="$icon me-2"), label], id=id, n_clicks=0, color="primary", size="sm", className=class), xs=12))
+function BASE_NextButton_DDEF(id::String, label::String; icon::String="fas fa-play", class="w-100 fw-bold mb-2", kwargs...)
+    return dbc_row(dbc_col(dbc_button([html_i(className="$icon me-2"), label], id=id, n_clicks=0, color="primary", size="sm", className=class; kwargs...), xs=12))
 end
 
 """
@@ -335,9 +335,9 @@ function BASE_BuildIdRow_DDEF(i, row, visible, show_del=false)
 
     # Ensure delete button ID always exists in layout for callback stability
     del_btn = html_button("×", id="deck-del-$i", n_clicks=0,
-        style=Dict("display" => show_del ? "block" : "none", 
-                   "cursor" => "pointer", "color" => "#666666", "fontSize" => "1.1rem", "fontWeight" => "700",
-                   "lineHeight" => "1", "background" => "none", "border" => "none", "padding" => "0"))
+        style=Dict("display" => show_del ? "block" : "none",
+            "cursor" => "pointer", "color" => "#666666", "fontSize" => "1.1rem", "fontWeight" => "700",
+            "lineHeight" => "1", "background" => "none", "border" => "none", "padding" => "0"))
 
     # Automatic radioactive flag for UI (syncs with data logic)
     hl_v = Float64(get(row, "HalfLife", 0.0))
@@ -358,8 +358,8 @@ function BASE_BuildIdRow_DDEF(i, row, visible, show_del=false)
 
     row_children = Any[]
     # Always include TD for alignment & callback ID stability
-    push!(row_children, html_td(del_btn, 
-        style=merge(BASE_StyleCell_DDEC, Dict("textAlign" => "center", "width" => "30px", "display" => show_del ? "table-cell" : "none")), 
+    push!(row_children, html_td(del_btn,
+        style=merge(BASE_StyleCell_DDEC, Dict("textAlign" => "center", "width" => "30px", "display" => show_del ? "table-cell" : "none")),
         className="p-0"))
 
     # Name cell

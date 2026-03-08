@@ -52,9 +52,9 @@ function LENS_Layout_DDEF()
 
                                         # Exports Section
                                         BASE_SidebarHeader_DDEF("EXPORT", icon="fas fa-file-export"),
-                                        BASE_ActionButton_DDEF("lens-btn-export-plots", "Plots", "fas fa-camera-retro"),
-                                        BASE_ActionButton_DDEF("lens-btn-download-report", "Report", "fas fa-file-export"),
-                                        BASE_ActionButton_DDEF("lens-btn-export-excel", "Scientific (XLSX)", "fas fa-file-excel", class="w-100 fw-bold mb-3"),
+                                        BASE_ActionButton_DDEF("lens-btn-export-plots", "Plots", "fas fa-camera-retro", disabled=true),
+                                        BASE_ActionButton_DDEF("lens-btn-download-report", "Report", "fas fa-file-export", disabled=true),
+                                        BASE_ActionButton_DDEF("lens-btn-export-excel", "Scientific (XLSX)", "fas fa-file-excel", class="w-100 fw-bold mb-3", disabled=true),
                                         BASE_Separator_DDEF(),
 
                                         # Control Settings
@@ -81,7 +81,7 @@ function LENS_Layout_DDEF()
                                             BASE_ControlGroup_DDEF("Experimental Time",
                                                 dbc_input(id="lens-date-exp", type="datetime-local", className="mb-2 form-control-sm", style=Dict("fontSize" => "11px")), class="mb-2"),
                                             dbc_row(dbc_col([
-                                                    dbc_button([html_i(id="lens-icon-radio-correct", className="fas fa-check-circle me-2"), "Decay Correction"],
+                                                    dbc_button([html_i(id="lens-icon-radio-correct", className="fas fa-history me-2"), "Decay Correction"],
                                                         id="lens-btn-radio-correct", color="success", outline=false, size="sm", className="w-100 fw-bold")
                                                 ], xs=12)),
                                             BASE_Separator_DDEF(),
@@ -434,6 +434,9 @@ function LENS_RegisterCallbacks_DDEF(app)
         Output("sync-lens-analysis", "data"),
         Output("lens-leaders-text", "children"),
         Output("lens-radio-badge", "children"),
+        Output("lens-btn-export-plots", "disabled"),
+        Output("lens-btn-download-report", "disabled"),
+        Output("lens-btn-export-excel", "disabled"),
         Input("lens-btn-run", "n_clicks"),
         State("lens-dd-phase", "value"),
         State("lens-dd-model", "value"),
@@ -477,9 +480,9 @@ function LENS_RegisterCallbacks_DDEF(app)
                 ))
             end
         end
-        (n === nothing || n == 0) && return [], "", "", true, true, "", Dash.no_update(), Dash.no_update(), "", "" # Corrected: 10 outputs
+        (n === nothing || n == 0) && return [], "", "", true, true, "", Dash.no_update(), Dash.no_update(), "", "", true, true, true
         isnothing(base64_file) &&
-            return [], "", html_span("Please upload data first.", className="text-warning"), true, true, "", Dash.no_update(), Dash.no_update(), "", "" # Corrected: 10 outputs
+            return [], "", html_span("Please upload data first.", className="text-warning"), true, true, "", Dash.no_update(), Dash.no_update(), "", "", true, true, true
 
         # Race condition lock: reject concurrent analysis requests
         if !Sys_Fast.FAST_AcquireLock_DDEF("VISE_ANALYSIS")
@@ -487,7 +490,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 "Analysis already running. New request rejected.", "WARN")
             return Dash.no_update(), Dash.no_update(),
             html_span("⚠ An analysis is already in progress. Please wait.",
-                className="text-warning fw-bold"), true, true, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update() # Corrected: 10 outputs
+                className="text-warning fw-bold"), true, true, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), true, true, true
         end
 
         # Create temp file BEFORE try so finally can always clean it
@@ -510,7 +513,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             res = Lib_Vise.VISE_Execute_DDEF(path, phase_str, goals, model_str; Opts=opts)
 
             if res["Status"] != "OK"
-                return [], "", html_span("❌ Analysis Failed: $(res["Message"])", className="text-danger"), true, true, "", Dash.no_update(), Dash.no_update(), "", "" # Corrected: 10 outputs
+                return [], "", html_span("❌ Analysis Failed: $(res["Message"])", className="text-danger"), true, true, "", Dash.no_update(), Dash.no_update(), "", "", true, true, true
             end
 
             # Generate and capture Scientific Report
@@ -726,13 +729,13 @@ function LENS_RegisterCallbacks_DDEF(app)
                             html_span(" ($elapsed_str)", className="text-muted")
 
             return graphs, summary, html_span(["✅ Analysis Complete", elapsed_badge],
-                className="text-success fw-bold small"), false, false, sci_report, Sys_Fast.FAST_SanitiseJson_DDEF(res), updated_base64, leaders_html, rad_badge # Fixed: Results to store, Base64 to sync bus
+                className="text-success fw-bold small"), false, false, sci_report, Sys_Fast.FAST_SanitiseJson_DDEF(res), updated_base64, leaders_html, rad_badge, false, false, false
 
         catch e  # Surface analysis errors to UI
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "ANALYSIS_CRASH", bt, "FAIL")
             return [], "",
-            html_span("❌ Critical Error: $(first(string(e), 150))", className="text-danger fw-bold"), true, true, "", Dash.no_update(), Dash.no_update(), "", "" # Corrected: 10 outputs
+            html_span("❌ Critical Error: $(first(string(e), 150))", className="text-danger fw-bold"), true, true, "", Dash.no_update(), Dash.no_update(), "", "", true, true, true
         finally
             # Guaranteed temp file cleanup (prevents disk leak)
             Sys_Fast.FAST_CleanTransient_DDEF(path)
@@ -1018,8 +1021,8 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         # Support both "ID" and "EXP_ID" formats from MasterVault normalization
         row_sel = cand_data[sel_rows[1]+1]
-        sel_id = haskey(row_sel, "EXP_ID") ? string(row_sel["EXP_ID"]) : 
-                 haskey(row_sel, "ID") ? string(row_sel["ID"]) : 
+        sel_id = haskey(row_sel, "EXP_ID") ? string(row_sel["EXP_ID"]) :
+                 haskey(row_sel, "ID") ? string(row_sel["ID"]) :
                  haskey(row_sel, :EXP_ID) ? string(row_sel[:EXP_ID]) :
                  haskey(row_sel, :ID) ? string(row_sel[:ID]) : ""
         path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
@@ -1078,11 +1081,11 @@ function LENS_RegisterCallbacks_DDEF(app)
         conc = Float64(get_val_local(glb, "Concentration", 10.0))
 
         chem_rows = [Dict(
-            "Name" => string(get_val_local(c, "Name", "")), 
-            "Role" => string(get_val_local(c, "Role", "Variable")), 
-            "L1" => Float64(get_val_local(c, "Levels", [0.0, 0.0, 0.0])[1]), 
-            "L2" => Float64(get_val_local(c, "Levels", [0.0, 0.0, 0.0])[2]), 
-            "L3" => Float64(get_val_local(c, "Levels", [0.0, 0.0, 0.0])[3]), 
+            "Name" => string(get_val_local(c, "Name", "")),
+            "Role" => string(get_val_local(c, "Role", "Variable")),
+            "L1" => Float64(get_val_local(c, "Levels", [0.0, 0.0, 0.0])[1]),
+            "L2" => Float64(get_val_local(c, "Levels", [0.0, 0.0, 0.0])[2]),
+            "L3" => Float64(get_val_local(c, "Levels", [0.0, 0.0, 0.0])[3]),
             "MW" => Float64(get_val_local(c, "MW", 0.0))
         ) for c in conf]
 
@@ -1113,11 +1116,11 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         # Consistent ID extraction helper
         row_sel = cand_data[sel_rows[1]+1]
-        sel_id = haskey(row_sel, "EXP_ID") ? string(row_sel["EXP_ID"]) : 
-                 haskey(row_sel, "ID") ? string(row_sel["ID"]) : 
+        sel_id = haskey(row_sel, "EXP_ID") ? string(row_sel["EXP_ID"]) :
+                 haskey(row_sel, "ID") ? string(row_sel["ID"]) :
                  haskey(row_sel, :EXP_ID) ? string(row_sel[:EXP_ID]) :
                  haskey(row_sel, :ID) ? string(row_sel[:ID]) : ""
-                 
+
         zoom = get(proposal, "SelectedZoom", 0.5)
         meth = get(proposal, "SelectedMethod", "TL9")
 
@@ -1263,9 +1266,9 @@ function LENS_RegisterCallbacks_DDEF(app)
         prevent_initial_call=true
     ) do n, active_cont, current_state
         trig = BASE_GetTrigger_DDEF(callback_context())
-        
+
         new_state = current_state
-        
+
         if trig == "lens-btn-radio-correct"
             new_state = (current_state === nothing) ? true : !current_state
         elseif trig == "store-master-vault" && !isnothing(active_cont) && active_cont != ""

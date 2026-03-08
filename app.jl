@@ -6,6 +6,12 @@
 # Author: Ecz. Eren Selim GÖL
 # ======================================================================================
 
+# --- Headless & Stability Overrides ---
+# Must be set BEFORE loading any graphics libraries
+ENV["GKSwstype"] = "100"
+ENV["JULIA_WEBIO_NOT_AVAILABLE"] = "1"
+ENV["PLOTLY_KALEIDO_NO_SANDBOX"] = "1"
+
 # --- Core Dependencies ---
 using Dash
 using DashBootstrapComponents
@@ -22,7 +28,6 @@ catch
 end
 
 # --- Module Scope Fix ---
-# We force inclusion into Main to avoid scope issues in Dash subprocesses
 # We force inclusion into Main to avoid scope issues in Dash subprocesses
 if APP_HasRevise_DDEC && !haskey(ENV, "DASH_DEBUG")
     Revise.includet("src/Sys_Fast.jl")
@@ -409,7 +414,12 @@ Executes JIT pre-compilation on critical hot-paths within a background task to e
 """
 function APP_Warmup_DDEF()::Nothing
     t0::Float64 = time()
-    FAST_Log_DDEF("BOOT", "Warmup", "JIT pre-compilation starting (background)...", "WAIT")
+    FAST_Log_DDEF("BOOT", "Warmup", "JIT pre-compilation starting in [5s] (CPU Offset)...", "WAIT")
+
+    # Critical Delay: Allow Dash server to bind to port and pass HF Health Checks first
+    sleep(5)
+
+    FAST_Log_DDEF("BOOT", "Warmup", "Warmup Pulse: Initialising Sys_Fast...", "WAIT")
 
     # Development mode check: skip heavy warmup if DAISHO_DEV is set
     if haskey(ENV, "DAISHO_DEV") && ENV["DAISHO_DEV"] == "true"
@@ -424,7 +434,7 @@ function APP_Warmup_DDEF()::Nothing
         Sys_Fast.FAST_SafeNum_DDEF(42)
         Sys_Fast.FAST_SafeNum_DDEF(missing)
         Sys_Fast.FAST_SafeNum_DDEF(nothing)
-        
+
         dummy_rows::Vector{Dict{String,Any}} = [
             Dict{String,Any}("Name" => "A", "Role" => "Variable", "L1" => 1, "L2" => 2, "L3" => 3, "MW" => 100, "Unit" => "mg"),
             Dict{String,Any}("Name" => "B", "Role" => "Variable", "L1" => "4", "L2" => "5", "L3" => "6", "MW" => 200.0, "Unit" => "mM"),
@@ -432,6 +442,7 @@ function APP_Warmup_DDEF()::Nothing
         ]
         Sys_Fast.FAST_SanitiseInput_DDEF(dummy_rows)
 
+        FAST_Log_DDEF("BOOT", "Warmup", "Warmup Pulse: Lib_Mole...", "WAIT")
         # 2. Lib_Mole: Stoichiometry engine
         Lib_Mole.MOLE_ParseTable_DDEF(dummy_rows)
         Lib_Mole.MOLE_CalcMass_DDEF(
@@ -439,6 +450,7 @@ function APP_Warmup_DDEF()::Nothing
         )
         Lib_Mole.MOLE_ApproxEq_DDEF(1.0, 1.0 + 1e-12)
 
+        FAST_Log_DDEF("BOOT", "Warmup", "Warmup Pulse: Lib_Vise...", "WAIT")
         # 3. Lib_Vise: Regression + GridSearch (core hot path)
         X_dummy::Matrix{Float64} = Float64[1 2 3; 4 5 6; 7 8 9; 2 4 6; 3 6 9; 5 3 1; 8 2 4; 6 7 5;
             1 5 9; 4 8 2; 7 1 5; 3 9 6]
@@ -456,6 +468,7 @@ function APP_Warmup_DDEF()::Nothing
             Lib_Vise.VISE_GridSearch_DDEF([mod], goals, bounds; Steps=5)
         end
 
+        FAST_Log_DDEF("BOOT", "Warmup", "Warmup Pulse: Lib_Arts...", "WAIT")
         # 4. Lib_Arts: Rendering pipeline
         if mod["Status"] == "OK"
             try
