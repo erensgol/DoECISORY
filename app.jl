@@ -20,8 +20,12 @@ using DataFrames
 using PlotlyJS
 
 # --- HuggingFace Spaces Detection ---
-const APP_IsHfSpaces_DDEC = haskey(ENV, "SPACE_ID") || haskey(ENV, "PORT")
-const APP_Port_DDEC = parse(Int, get(ENV, "PORT", "7860"))
+const APP_IsHfSpaces_DDEC = haskey(ENV, "SPACE_ID")
+const APP_Port_DDEC = if APP_IsHfSpaces_DDEC
+    parse(Int, get(ENV, "PORT", "7860"))
+else
+    8060 # Local standard port
+end
 
 # --- Hot Reload Support (Strictly Local Only) ---
 const APP_HasRevise_DDEC = if APP_IsHfSpaces_DDEC
