@@ -177,9 +177,9 @@ const APP_Navbar_DDEC = html_div([
         html_div([
                 html_span([
                         html_i(className="fas fa-shield-alt me-1"),
-                        "Certificate"
+                        "System"
                     ], id="nav-btn-sci-audit", className="badge bg-secondary text-white small opacity-75 me-2", style=Dict("cursor" => "pointer")),
-                html_span("v1.0 In Dev.", className="badge bg-secondary text-white small opacity-75"),
+                html_span("In Dev.", className="badge bg-secondary text-white small opacity-75"),
             ], className="nav-actions", style=Dict("flex" => "1", "textAlign" => "right")),
     ], className="glass-navbar d-flex align-items-center justify-content-between")
 

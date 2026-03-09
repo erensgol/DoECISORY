@@ -54,7 +54,7 @@ function LENS_Layout_DDEF()
                                         BASE_SidebarHeader_DDEF("EXPORT", icon="fas fa-file-export"),
                                         BASE_ActionButton_DDEF("lens-btn-export-plots", "Plots", "fas fa-camera-retro", disabled=true),
                                         BASE_ActionButton_DDEF("lens-btn-download-report", "Report", "fas fa-file-export", disabled=true),
-                                        BASE_ActionButton_DDEF("lens-btn-export-excel", "Scientific (XLSX)", "fas fa-file-excel", class="w-100 fw-bold mb-3", disabled=true),
+                                        BASE_ActionButton_DDEF("lens-btn-export-excel", "(XLSX)", "fas fa-file-excel", class="w-100 fw-bold mb-3", disabled=true),
                                         BASE_Separator_DDEF(),
 
                                         # Control Settings
@@ -113,7 +113,7 @@ function LENS_Layout_DDEF()
                                                             BASE_TableHeader_DDEF("TARGET", width="15%"),
                                                             BASE_TableHeader_DDEF("UPPER", width="15%"),
                                                             BASE_TableHeader_DDEF("OBJECTIVE", width="20%"),
-                                                            BASE_TableHeader_DDEF("OVERALL IMPORTANCE", width="15%"),
+                                                            BASE_TableHeader_DDEF("VALUE", width="15%"),
                                                         ])),
                                                         html_tbody([BASE_BuildGoalRow_DDEF(i) for i in 1:3])
                                                     ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0")
