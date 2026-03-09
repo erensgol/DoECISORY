@@ -175,10 +175,6 @@ const APP_Navbar_DDEC = html_div([
                 html_a("Analyse", href="/analysis", className="nav-item"),
             ], className="nav-links d-flex justify-content-center"),
         html_div([
-                html_span([
-                        html_i(className="fas fa-shield-alt me-1"),
-                        "System"
-                    ], id="nav-btn-sci-audit", className="badge bg-secondary text-white small opacity-75 me-2", style=Dict("cursor" => "pointer")),
                 html_span("In Dev.", className="badge bg-secondary text-white small opacity-75"),
             ], className="nav-actions", style=Dict("flex" => "1", "textAlign" => "right")),
     ], className="glass-navbar d-flex align-items-center justify-content-between")
@@ -208,19 +204,21 @@ app.layout = html_div([
         style=Dict("position" => "fixed", "top" => 60, "right" => 20,
             "width" => 350, "zIndex" => 9999)),
 
-    # Scientific Integrity Modal
+    # Comprehensive Diagnostics Modal
     dbc_modal([
-            dbc_modalheader("Scientific Integrity Certificate"),
-            dbc_modalbody(dcc_markdown(id="modal-sci-audit-content")),
-            dbc_modalfooter(dbc_button("Close", id="btn-close-sci-audit", className="ms-auto", n_clicks=0))
-        ], id="modal-sci-audit", size="lg", is_open=false),
-
-    # System Status Modal
-    dbc_modal([
-            dbc_modalheader("Advanced System Diagnostics"),
-            dbc_modalbody(html_pre(id="modal-sys-audit-content", style=Dict("whiteSpace" => "pre-wrap"))),
-            dbc_modalfooter(dbc_button("Close", id="btn-close-sys-audit", className="ms-auto", n_clicks=0))
-        ], id="modal-sys-audit", size="lg", is_open=false),
+            dbc_modalheader("System Diagnostics & Scientific Integrity"),
+            dbc_modalbody([
+                dbc_tabs([
+                    dbc_tab([
+                        html_div(html_pre(id="modal-diagnostics-sys-content", style=Dict("whiteSpace" => "pre-wrap", "fontSize" => "0.85rem")), className="p-3")
+                    ], label="System Health", tab_id="tab-sys"),
+                    dbc_tab([
+                        html_div(dcc_markdown(id="modal-diagnostics-sci-content"), className="p-3")
+                    ], label="Scientific Integrity", tab_id="tab-sci"),
+                ], id="modal-diagnostics-tabs", active_tab="tab-sys")
+            ]),
+            dbc_modalfooter(dbc_button("Close", id="btn-close-diagnostics", className="ms-auto", n_clicks=0))
+        ], id="modal-diagnostics", size="lg", is_open=false),
 
     # System readiness overlay + polling
     dcc_interval(id="sys-ready-poll", interval=2000, max_intervals=-1),
@@ -347,54 +345,31 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
     return APP_RoutePage_DDEF(isnothing(pathname) ? "/" : pathname)
 end
 
-# 3-4. Audit Callbacks
-"""
-    APP_HandleAudit_DDEF(n_open, n_close, current_state, audit_fn::Function)
-Generic handler for scientific and system audit modals. 
-Broad types used for Dash-Julia interoperability.
-"""
-function APP_HandleAudit_DDEF(n_open::Any, n_close::Any, current_state::Any, audit_fn::Function)
-    ctx = callback_context()
-    if isnothing(ctx.triggered) || isempty(ctx.triggered)
-        return (current_state == true || current_state == 1), Dash.no_update()
-    end
-
-    trig::String = split(ctx.triggered[1].prop_id, ".")[1]
-    # Coerce current state to boolean safely
-    is_open::Bool = (current_state == true || current_state == 1)
-
-    if occursin("open", trig) || occursin("nav", trig)
-        # Check if the opening button was actually clicked
-        if !isnothing(n_open) && n_open > 0
-            return true, audit_fn()
-        end
-        return is_open, Dash.no_update()
-    else
-        # Close triggered
-        return false, Dash.no_update()
-    end
-end
-
 callback!(app,
-    Output("modal-sci-audit", "is_open"),
-    Output("modal-sci-audit-content", "children"),
-    Input("nav-btn-sci-audit", "n_clicks"),
-    Input("btn-close-sci-audit", "n_clicks"),
-    State("modal-sci-audit", "is_open"),
-    prevent_initial_call=true
-) do n_open, n_close, is_open
-    return APP_HandleAudit_DDEF(n_open, n_close, is_open, Sys_Fast.FAST_ScientificAudit_DDEF)
-end
-
-callback!(app,
-    Output("modal-sys-audit", "is_open"),
-    Output("modal-sys-audit-content", "children"),
+    Output("modal-diagnostics", "is_open"),
+    Output("modal-diagnostics-sys-content", "children"),
+    Output("modal-diagnostics-sci-content", "children"),
     Input("btn-open-sys-audit", "n_clicks"),
-    Input("btn-close-sys-audit", "n_clicks"),
-    State("modal-sys-audit", "is_open"),
+    Input("btn-close-diagnostics", "n_clicks"),
+    State("modal-diagnostics", "is_open"),
     prevent_initial_call=true
 ) do n_open, n_close, is_open
-    return APP_HandleAudit_DDEF(n_open, n_close, is_open, Sys_Fast.FAST_SystemAudit_DDEF)
+    ctx = callback_context()
+    if isempty(ctx.triggered)
+        return false, Dash.no_update(), Dash.no_update()
+    end
+    
+    trig = split(ctx.triggered[1].prop_id, ".")[1]
+    
+    if trig == "btn-open-sys-audit"
+        if !isnothing(n_open) && n_open > 0
+            return true, Sys_Fast.FAST_SystemAudit_DDEF(), Sys_Fast.FAST_ScientificAudit_DDEF()
+        end
+    elseif trig == "btn-close-diagnostics"
+        return false, Dash.no_update(), Dash.no_update()
+    end
+    
+    return is_open, Dash.no_update(), Dash.no_update()
 end
 
 # Loading overlay dismiss callback (polls until warmup completes)

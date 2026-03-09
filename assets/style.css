@@ -722,7 +722,7 @@ select:focus {
 }
 
 /* 14. RESPONSIVENESS (MOBILE STABILIZATION) */
-@media (max-width: 640px) {
+@media (max-width: 960px) {
 
     /* Layout & Navigation */
     .app-container {
