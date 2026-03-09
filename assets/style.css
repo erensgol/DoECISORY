@@ -2,39 +2,29 @@
    DAISHODOE - PROTOCOL THEME (2026)
    ====================================================================================== */
 
+/* --- 1. DESIGN TOKENS (:root) --- */
 :root {
-    /* --- PALETTE: DAISHO --- */
+    /* Palette: Daisho */
     --bg-body: #DCDCDC;
-    /* Brand Grey */
     --bg-surface: #FFFFFF;
-    /* Pure White Surface */
     --bg-panel: #FFFFFF;
-    /* Frosted Panel */
 
     --border-subtle: #E6E6E6;
     --border-highlight: #A6A6A6;
 
     --text-primary: #000000;
-    /* Dark Text */
     --text-secondary: #666666;
-    /* Slate Grey */
     --text-tertiary: #A6A6A6;
-    /* Muted Grey */
 
     /* Custom Accents */
     --accent-primary: #666666;
-    /* Professional Accent */
     --accent-gradient: linear-gradient(135deg, #666666 0%, #000000 100%);
     --accent-glow: 0 0 15px #E6E6E6;
 
     --success: #5EC962;
-    /* Emerald */
     --warning: #FDE725;
-    /* Amber */
     --danger: #FF0000;
-    /* Red */
     --info: #3B528B;
-    /* Blue */
 
     --glass-blur: blur(20px);
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -46,28 +36,21 @@
     --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-/* 1. GLOBAL RESET */
+/* --- 2. CORE STYLES --- */
 body {
     background-color: var(--bg-body);
     color: var(--text-primary);
     font-family: var(--font-sans);
     font-size: 0.9rem;
-    /* Slightly larger base size */
     line-height: 1.6;
     margin: 0;
     -webkit-font-smoothing: antialiased;
     letter-spacing: -0.01em;
     background-image: radial-gradient(circle at 50% 0%, #FFFFFF 0%, var(--bg-body) 60%);
-    /* Subtle top spotlight */
     background-attachment: fixed;
 }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
+h1, h2, h3, h4, h5, h6 {
     color: var(--text-primary);
     font-weight: 600;
     margin-bottom: 0.75rem;
@@ -84,14 +67,13 @@ a:hover {
     opacity: 0.8;
 }
 
-/* 2. LAYOUT & GRID */
+/* --- 3. LAYOUT SYSTEM --- */
 .app-container {
     max-width: 1200px;
     margin: 0 auto;
     padding: 1rem 1.5rem;
 }
 
-/* Top Navigation */
 .glass-navbar {
     height: 52px;
     border: 1px solid var(--border-subtle);
@@ -147,7 +129,7 @@ a:hover {
     box-shadow: 0 1px 2px #A6A6A6;
 }
 
-/* 3. PANELS (Cards) */
+/* --- 4. PANELS & CARDS --- */
 .glass-panel {
     background: var(--bg-surface);
     border: 1px solid var(--border-subtle);
@@ -163,7 +145,6 @@ a:hover {
     border-color: var(--border-highlight);
 }
 
-/* Subtle top highlight on panels */
 .glass-panel::before {
     content: '';
     position: absolute;
@@ -196,38 +177,10 @@ a:hover {
 
 .glass-content {
     padding: 0.85rem 1rem;
-    overflow: visible;
-}
-
-/* ======================================================================================
-   DATATABLE DROPDOWN FIX
-   ====================================================================================== */
-
-/* 1. Main table wrapper — overflow visible */
-.dash-table-container,
-.dash-table-container .dash-spreadsheet,
-.dash-table-container .dash-spreadsheet-container,
-.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner {
     overflow: visible !important;
 }
 
-/* 2. DataTable dropdown menu — react-select portal */
-.dash-dropdown-cell-dropdown {
-    z-index: 9999 !important;
-    position: absolute !important;
-}
-
-/* 3. Select menu - table dropdown list */
-.Select-menu-outer {
-    z-index: 9999 !important;
-    position: absolute !important;
-}
-
-.dash-table-container .Select-menu-outer {
-    width: 140px !important;
-}
-
-/* 4. Home Screen - command list */
+/* --- 5. DASHBOARD & COMMANDS --- */
 .glass-search-container {
     margin-bottom: 2rem;
     position: relative;
@@ -266,7 +219,6 @@ a:hover {
     align-items: center;
     justify-content: space-between;
     padding: 1rem 1.25rem;
-    /* Taller rows */
     background: #FFFFFF;
     border: 1px solid transparent;
     border-radius: var(--rad-sm);
@@ -277,10 +229,8 @@ a:hover {
 
 .glass-command-row:hover {
     background: #E6E6E6;
-    /* Selection highlight */
     border-left: 2px solid var(--accent-primary);
     padding-left: calc(1.25rem - 2px);
-    /* Adjust padding for border */
 }
 
 .glass-command-icon {
@@ -327,7 +277,7 @@ a:hover {
     color: var(--text-secondary);
 }
 
-/* 5. TYPE & INPUTS */
+/* --- 6. FORM ELEMENTS & INPUTS --- */
 .form-control,
 .form-select,
 input:not(.Select-input input),
@@ -352,15 +302,6 @@ select:focus {
     box-shadow: 0 0 0 2px #FF0000 !important;
 }
 
-/* React-Select internal input */
-.Select-input input {
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    padding: 0 !important;
-    color: var(--text-primary) !important;
-}
-
 .form-label {
     font-size: 0.8rem;
     font-weight: 500;
@@ -369,132 +310,15 @@ select:focus {
     display: block;
 }
 
-/* 6. BUTTONS */
-.btn {
-    border-radius: var(--rad-sm) !important;
-    font-size: 0.9rem !important;
-    font-weight: 600 !important;
-    padding: 0.5rem 1rem !important;
-    transition: all 0.2s var(--ease-spring) !important;
-    border: 1px solid transparent !important;
-    display: inline-flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 0.5rem !important;
-    letter-spacing: -0.01em !important;
-}
-
-/* Primary Action */
-.btn-primary,
-.btn-outline-primary {
-    background: #FFFFFF !important;
-    color: var(--text-primary) !important;
-    border: 1px solid var(--text-primary) !important;
-    box-shadow: 0 2px 4px #E6E6E6 !important;
-}
-
-.btn-primary:hover,
-.btn-outline-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px #E6E6E6 !important;
-    background: var(--text-primary) !important;
-    color: #FFFFFF !important;
-}
-
-.btn-primary:active,
-.btn-outline-primary:active {
-    transform: translateY(0);
-}
-
-/* Secondary Action */
-.btn-secondary,
-.btn-light,
-.btn-outline-secondary {
-    background: #FFFFFF !important;
-    color: var(--text-secondary) !important;
-    border: 1px solid var(--border-subtle) !important;
-}
-
-.btn-secondary:hover,
-.btn-light:hover,
-.btn-outline-secondary:hover {
-    background: var(--bg-body) !important;
-    border-color: var(--border-highlight) !important;
-    color: var(--text-primary) !important;
-}
-
-/* Success/Action */
-.btn-success {
-    background-color: #E6E6E6 !important;
-    /* Tint */
-    color: var(--success) !important;
-    border: 1px solid #5EC962 !important;
-}
-
-.btn-success:hover {
-    background-color: #5EC962 !important;
-    border-color: var(--success) !important;
-    box-shadow: 0 0 10px #5EC962 !important;
-}
-
-/* 7. TABLES */
-.dash-spreadsheet-container .dash-spreadsheet-inner th {
-    background-color: #FFFFFF !important;
-    color: var(--text-secondary) !important;
-    font-weight: 600 !important;
-    border-bottom: none !important;
-    border-right: none !important;
-    border-top: none !important;
-    border-left: none !important;
-    font-size: 0.8rem !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.05em !important;
-    padding: 10px !important;
-}
-
-.dash-spreadsheet-container .dash-spreadsheet-inner td {
-    background-color: var(--bg-body) !important;
-    color: var(--text-primary) !important;
-    border-bottom: none !important;
-    border-right: none !important;
-    border-top: none !important;
-    border-left: none !important;
-    font-family: 'JetBrains Mono', monospace !important;
-    padding: 10px !important;
-}
-
-.dash-spreadsheet-container .dash-spreadsheet-inner td:focus {
-    outline: 2px solid var(--accent-primary) !important;
-    outline-offset: -2px !important;
-}
-
-.dash-spreadsheet-container .dash-spreadsheet-inner input {
+/* React-Select (DCC Dropdown) Fixes */
+.Select-input input {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important;
-    border-radius: 0 !important;
-    outline: none !important;
-    height: 100% !important;
     color: var(--text-primary) !important;
 }
 
-/* 8. GENERAL TABLE OVERRIDES */
-.glass-content {
-    overflow: visible !important;
-}
-
-.glass-panel td input,
-.glass-panel td select,
-.glass-panel td .form-select,
-.glass-panel td .form-control,
-.deck-name-cell input {
-    font-size: 12px !important;
-    padding: 0.3rem 0.4rem !important;
-    height: auto !important;
-}
-
-/* 9. DCC_DROPDOWN (React-Select) */
 .Select-control {
     background-color: #FFFFFF !important;
     border: 1px solid var(--border-subtle) !important;
@@ -502,11 +326,10 @@ select:focus {
     color: var(--text-primary) !important;
     min-height: 28px !important;
     box-shadow: none !important;
-
     cursor: pointer !important;
 }
 
-.Select.is-focused>.Select-control {
+.Select.is-focused > .Select-control {
     border-color: var(--accent-primary) !important;
     box-shadow: 0 0 0 1px #FF0000 !important;
 }
@@ -525,7 +348,7 @@ select:focus {
     border-color: var(--text-secondary) transparent transparent !important;
 }
 
-.Select-arrow-zone:hover>.Select-arrow {
+.Select-arrow-zone:hover > .Select-arrow {
     border-top-color: var(--text-primary) !important;
 }
 
@@ -536,6 +359,10 @@ select:focus {
     box-shadow: 0 10px 25px -5px #666666 !important;
     z-index: 99999 !important;
     margin-top: 4px !important;
+}
+
+.dash-table-container .Select-menu-outer {
+    width: 140px !important;
 }
 
 .Select-option {
@@ -572,7 +399,139 @@ select:focus {
     color: var(--text-tertiary) !important;
 }
 
-/* 10. MODALS */
+/* --- 7. BUTTONS --- */
+.btn {
+    border-radius: var(--rad-sm) !important;
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    padding: 0.5rem 1rem !important;
+    transition: all 0.2s var(--ease-spring) !important;
+    border: 1px solid transparent !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 0.5rem !important;
+    letter-spacing: -0.01em !important;
+}
+
+.btn-primary,
+.btn-outline-primary {
+    background: #FFFFFF !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--text-primary) !important;
+    box-shadow: 0 2px 4px #E6E6E6 !important;
+}
+
+.btn-primary:hover,
+.btn-outline-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px #E6E6E6 !important;
+    background: var(--text-primary) !important;
+    color: #FFFFFF !important;
+}
+
+.btn-primary:active,
+.btn-outline-primary:active {
+    transform: translateY(0);
+}
+
+.btn-secondary,
+.btn-light,
+.btn-outline-secondary {
+    background: #FFFFFF !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border-subtle) !important;
+}
+
+.btn-secondary:hover,
+.btn-light:hover,
+.btn-outline-secondary:hover {
+    background: var(--bg-body) !important;
+    border-color: var(--border-highlight) !important;
+    color: var(--text-primary) !important;
+}
+
+.btn-success {
+    background-color: #E6E6E6 !important;
+    color: var(--success) !important;
+    border: 1px solid #5EC962 !important;
+}
+
+.btn-success:hover {
+    background-color: #5EC962 !important;
+    border-color: var(--success) !important;
+    box-shadow: 0 0 10px #5EC962 !important;
+}
+
+/* --- 8. TABLES & DATATABLES --- */
+.dash-table-container,
+.dash-table-container .dash-spreadsheet,
+.dash-table-container .dash-spreadsheet-container,
+.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner {
+    overflow: visible !important;
+}
+
+.dash-dropdown-cell-dropdown {
+    z-index: 9999 !important;
+    position: absolute !important;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner th {
+    background-color: #FFFFFF !important;
+    color: var(--text-secondary) !important;
+    font-weight: 600 !important;
+    border: none !important;
+    font-size: 0.8rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+    padding: 10px !important;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner td {
+    background-color: var(--bg-body) !important;
+    color: var(--text-primary) !important;
+    border: none !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    padding: 10px !important;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner td:focus {
+    outline: 2px solid var(--accent-primary) !important;
+    outline-offset: -2px !important;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner input {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    outline: none !important;
+    height: 100% !important;
+    color: var(--text-primary) !important;
+}
+
+.glass-panel td input,
+.glass-panel td select,
+.glass-panel td .form-select,
+.glass-panel td .form-control,
+.deck-name-cell input {
+    font-size: 12px !important;
+    padding: 0.3rem 0.4rem !important;
+    height: auto !important;
+}
+
+.deck-name-cell > div {
+    width: 100% !important;
+}
+
+.deck-name-cell input {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    display: block !important;
+}
+
+/* --- 9. MODALS --- */
 .modal-content {
     background-color: #FFFFFF !important;
     border: 1px solid var(--border-highlight) !important;
@@ -609,7 +568,7 @@ select:focus {
     color: var(--danger) !important;
 }
 
-/* 11. LOADING SPINNERS */
+/* --- 10. FEEDBACK & ANIMATIONS --- */
 .spinner-grow,
 .spinner-border {
     display: none !important;
@@ -652,12 +611,6 @@ select:focus {
     display: block !important;
 }
 
-@keyframes daisho-spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
-
 #lens-graph-main._dash-loading::after,
 #deck-run-output._dash-loading::after {
     width: 40px;
@@ -666,7 +619,11 @@ select:focus {
     margin: 100px auto;
 }
 
-/* Skeleton shimmer for analysis status text */
+@keyframes daisho-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Shimmer Effect */
 .glass-loading-status {
     background: linear-gradient(90deg,
             var(--bg-surface) 25%,
@@ -683,15 +640,11 @@ select:focus {
 }
 
 @keyframes daisho-shimmer {
-    0% {
-        background-position: 200% 0;
-    }
-
-    100% {
-        background-position: -200% 0;
-    }
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
 }
 
+/* Pulse Effect */
 .btn-primary:disabled {
     opacity: 0.7 !important;
     cursor: wait !important;
@@ -699,32 +652,12 @@ select:focus {
 }
 
 @keyframes daisho-pulse {
-
-    0%,
-    100% {
-        box-shadow: 0 0 0 0 #FF0000;
-    }
-
-    50% {
-        box-shadow: 0 0 0 6px #FF00001A;
-    }
+    0%, 100% { box-shadow: 0 0 0 0 #FF0000; }
+    50% { box-shadow: 0 0 0 6px #FF00001A; }
 }
 
-/* 12. DECK NAME CELL (forces dcc_input to fill table cell in table-layout: fixed) */
-.deck-name-cell>div {
-    width: 100% !important;
-}
-
-.deck-name-cell input {
-    width: 100% !important;
-    box-sizing: border-box !important;
-    display: block !important;
-}
-
-/* 14. RESPONSIVENESS (MOBILE STABILIZATION) */
+/* --- 11. RESPONSIVENESS --- */
 @media (max-width: 960px) {
-
-    /* Layout & Navigation */
     .app-container {
         padding: 0.5rem 0.75rem;
     }
@@ -745,7 +678,6 @@ select:focus {
         font-size: 0.75rem;
     }
 
-    /* Panels & Cards */
     .glass-panel {
         margin-bottom: 0.75rem;
     }
@@ -762,7 +694,6 @@ select:focus {
         padding: 0.6rem 0.75rem;
     }
 
-    /* Dashboard & Command Elements */
     .glass-command-row {
         padding: 0.75rem 1rem;
     }
