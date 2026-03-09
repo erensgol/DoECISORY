@@ -1022,11 +1022,20 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
 
         if !isempty(t_cal_str) && !isempty(t_exp_str)
             try
-                dt_cal = Dates.DateTime(t_cal_str, "yyyy-mm-dd\\THH:MM")
-                dt_exp = Dates.DateTime(t_exp_str, "yyyy-mm-dd\\THH:MM")
+                # Standard ISO format is yyyy-mm-ddTHH:MM, but sometimes browsers can vary or add seconds
+                parse_dt(s) = begin
+                    s_clean = replace(strip(s), " " => "T")
+                    for fmt in ["yyyy-mm-ddTHH:MM:SS", "yyyy-mm-ddTHH:MM"]
+                        try return Dates.DateTime(s_clean, fmt) catch; end
+                    end
+                    return Dates.DateTime(s_clean) # Fallback to default ISO
+                end
+
+                dt_cal = parse_dt(t_cal_str)
+                dt_exp = parse_dt(t_exp_str)
                 delta_t_hours = Dates.value(dt_exp - dt_cal) / (1000.0 * 60.0 * 60.0)
 
-                if delta_t_hours > 0
+                if abs(delta_t_hours) > 1e-4 # Apply if there is a measurable difference
                     config = Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
 
                     # Correct Inputs (X)
@@ -1041,7 +1050,8 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
                             end
 
                             # Log for Excel/Report
-                            lambda = log(2) / (hl * (hlu == "Days" ? 24.0 : (hlu == "Minutes" ? 1 / 60 : 1.0))) # simplified factor for audit
+                            conv = (hlu == "Days" ? 24.0 : (hlu == "Minutes" ? 1/60 : (hlu == "Seconds" ? 1/3600 : (hlu == "Years" ? 24*365.25 : 1.0))))
+                            lambda = log(2) / (hl * conv) # hl_hours based lambda for audit
                             push!(radio_correction_audit, Dict(
                                 "Name" => name, "IsCorrected" => true,
                                 "HalfLife" => hl, "Unit" => hlu, "DeltaT" => delta_t_hours,
@@ -1062,7 +1072,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
                                 for r in 1:N
                                     Y_Clean[r, ci] = Lib_Mole.MOLE_ApplyRadioDecay_DDEF(Y_Clean[r, ci], hl, hlu, delta_t_hours)
                                 end
-                                lambda = log(2) / (hl * (hlu == "Days" ? 24.0 : (hlu == "Minutes" ? 1 / 60 : 1.0)))
+                                lambda = log(2) / (hl * (hlu == "Days" ? 24.0 : (hlu == "Minutes" ? 1/60 : (hlu == "Seconds" ? 1/3600 : (hlu == "Years" ? 24*365.25 : 1.0)))))
                                 push!(radio_correction_audit, Dict(
                                     "Name" => name, "IsCorrected" => true,
                                     "HalfLife" => hl, "Unit" => hlu, "DeltaT" => delta_t_hours,

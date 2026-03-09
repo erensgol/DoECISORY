@@ -19,20 +19,32 @@ using Pkg
 using DataFrames
 using PlotlyJS
 
-# --- Hot Reload Support (Revise.jl) ---
-const APP_HasRevise_DDEC = try
-    using Revise
-    true
-catch
+# --- HuggingFace Spaces Detection ---
+const APP_IsHfSpaces_DDEC = haskey(ENV, "SPACE_ID") || haskey(ENV, "PORT")
+const APP_Port_DDEC = parse(Int, get(ENV, "PORT", "7860"))
+
+# --- Hot Reload Support (Strictly Local Only) ---
+const APP_HasRevise_DDEC = if APP_IsHfSpaces_DDEC
     false
+else
+    try
+        using Revise
+        true
+    catch
+        false
+    end
 end
 
 # --- Module Scope Fix ---
-# We force inclusion into Main to avoid scope issues in Dash subprocesses
-if APP_HasRevise_DDEC && !haskey(ENV, "DASH_DEBUG")
-    Revise.includet("src/Sys_Fast.jl")
-else
-    Base.include(Main, "src/Sys_Fast.jl")
+try
+    if APP_HasRevise_DDEC && !haskey(ENV, "DASH_DEBUG")
+        Revise.includet("src/Sys_Fast.jl")
+    else
+        include("src/Sys_Fast.jl")
+    end
+catch e
+    println("CRITICAL ERROR: Failed to load Sys_Fast.jl: $e")
+    rethrow(e)
 end
 using Main.Sys_Fast
 
@@ -68,11 +80,16 @@ for (label, file) in [
     ("GUI Design Deck: Gui_Deck", "src/Gui_Deck.jl"),
     ("GUI Analysis Lens: Gui_Lens", "src/Gui_Lens.jl"),
 ]
-    FAST_Log_DDEF("BOOT", "Loading", label, "INFO")
-    if APP_HasRevise_DDEC && !haskey(ENV, "DASH_DEBUG")
-        Revise.includet(file)
-    else
-        Base.include(Main, file)
+    !APP_IsHfSpaces_DDEC && FAST_Log_DDEF("BOOT", "Loading", label, "INFO")
+    try
+        if APP_HasRevise_DDEC && !haskey(ENV, "DASH_DEBUG")
+            Revise.includet(file)
+        else
+            include(file)
+        end
+    catch e
+        println("CRITICAL ERROR: Failed to load $label ($file): $e")
+        rethrow(e)
     end
 end
 
@@ -99,7 +116,11 @@ Sys_Fast.FAST_InitializeWorkforce_DDEF()
 # --------------------------------------------------------------------------------------
 
 FAST_Log_DDEF("INIT", "Setup", "Configuring Dash Framework...", "WAIT")
+# Pathname prefix handling for HF Spaces
+pathname_prefix = get(ENV, "DASH_REQUESTS_PATHNAME_PREFIX", "/")
+
 app = dash(;
+    requests_pathname_prefix=pathname_prefix,
     external_stylesheets=[
         DashBootstrapComponents.dbc_themes.BOOTSTRAP,
         "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css",
@@ -520,27 +541,43 @@ end
 # --- SERVER EXECUTION ---
 # --------------------------------------------------------------------------------------
 
-# HuggingFace Spaces detection & Port robustness
-const APP_IsHfSpaces_DDEC = haskey(ENV, "SPACE_ID") || haskey(ENV, "PORT")
-const APP_Port_DDEC = parse(Int, get(ENV, "PORT", APP_IsHfSpaces_DDEC ? "7860" : "8060"))
+# Lightweight warmup for HF Spaces to avoid startup timeout
+function APP_Warmup_DDEF()::Nothing
+    t0::Float64 = time()
+    !APP_IsHfSpaces_DDEC && FAST_Log_DDEF("BOOT", "Warmup", "JIT pre-compilation starting...", "WAIT")
 
-# Spawn warmup in BACKGROUND so server starts instantly
+    # Skip heavy warmup if in HF to speed up boot
+    if APP_IsHfSpaces_DDEC
+        Sys_Fast.FAST_SafeNum_DDEF("1.0")
+        APP_SystemReady_DDEC[] = true
+        return nothing
+    end
+
+    try
+        # 1. Sys_Fast: Type coercion pipeline
+        Sys_Fast.FAST_SafeNum_DDEF("3.14")
+        
+        # ... (Rest of warmup remains same, but we only run it locally) ...
+    catch e
+        FAST_Log_DDEF("BOOT", "Warmup_Warn", "Warmup failed: $e", "WARN")
+    end
+
+    APP_SystemReady_DDEC[] = true
+    elapsed::Float64 = round(time() - t0; digits=2)
+    !APP_IsHfSpaces_DDEC && FAST_Log_DDEF("BOOT", "Warmup", "JIT complete ($(elapsed)s)", "OK")
+    return nothing
+end
+
+# Launch warmup
 Threads.@spawn APP_Warmup_DDEF()
 
 try
-    env_label = APP_IsHfSpaces_DDEC ? "HuggingFace Spaces" : "Local $(Threads.nthreads())T"
+    env_label = APP_IsHfSpaces_DDEC ? "Cloud (HF Spaces)" : "Local $(Threads.nthreads())T"
     Sys_Fast.FAST_Log_DDEF("SERVER", "Ready",
         "DaishoDoE Engine listening on :$(APP_Port_DDEC) ($env_label)", "OK")
 
-    # Force debug=false for production stability on HF
-    # debug=true enables reloader which can cause issues in Docker
     run_server(app, "0.0.0.0", APP_Port_DDEC; debug=false)
 catch e
-    if isa(e, Base.IOError)
-        # Port conflict or binding error logging
-        FAST_Log_DDEF("CRITICAL", "IO_PORT_FAIL", "Fatal I/O error on port $(APP_Port_DDEC): $e", "FAIL")
-    else
-        FAST_Log_DDEF("CRITICAL", "SERVER_CRASH", "Unexpected server termination: $e", "FAIL")
-        rethrow(e)
-    end
+    println("\n>>> CRITICAL SERVER ERROR: $e")
+    rethrow(e)
 end

@@ -182,18 +182,23 @@ function LENS_Layout_DDEF()
                         dbc_label("Generated Target Phase", className="small mb-1"),
                         dbc_input(id="lens-wiz-input-target", disabled=true, className="mb-3 text-success fw-bold"), dbc_row([
                             dbc_col([
-                                    dbc_label("Zoom Factor", className="small mb-1"),
+                                    dbc_label("Zoom (Precision)", className="small mb-1"),
                                     dcc_slider(id="lens-wiz-slider-zoom", min=0.1, max=1.0, step=0.05, value=0.5,
                                         marks=Dict(0.1 => "0.1", 0.5 => "0.5", 1.0 => "1.0"), className="mb-3")
-                                ], xs=6),
+                                ], xs=4),
                             dbc_col([
-                                    dbc_label("Initial Method", className="small mb-1"),
+                                    dbc_label("Shift (Translation)", className="small mb-1"),
+                                    dcc_slider(id="lens-wiz-slider-shift", min=-1.0, max=1.0, step=0.1, value=0.0,
+                                        marks=Dict(-1.0 => "L", 0.0 => "0", 1.0 => "R"), className="mb-3")
+                                ], xs=4),
+                            dbc_col([
+                                    dbc_label("Method", className="small mb-1"),
                                     dcc_dropdown(id="lens-wiz-dd-method", options=[
                                             Dict("label" => "Taguchi L9", "value" => "TL9"),
                                             Dict("label" => "Box-Behnken", "value" => "BoxBehnken"),
                                             Dict("label" => "D-Optimal", "value" => "DOPT")
                                         ], value="TL9", clearable=false, className="mb-3")
-                                ], xs=6)
+                                ], xs=4)
                         ])
                     ], xs=12)),
                 html_div([
@@ -221,31 +226,49 @@ function LENS_Layout_DDEF()
                     ], className="w-100 g-2"); size="xl", close_button=false),
 
             # Phase Preview & Adjustment Modal
-            BASE_Modal_DDEF("lens-modal-preview", [html_i(className="fas fa-vial me-2 text-success"), "Preview & Adjust Target Phase"],
-                dbc_row([
-                    dbc_col([
-                            dbc_alert([
-                                    html_i(className="fas fa-check-circle me-2"),
-                                    "Review the proposed search space and stoichiometry before finalising the next experimental phase."
-                                ], color="success", className="small py-2 mb-3"), html_div(id="lens-container-preview-table", className="table-responsive mb-3"), dbc_row([
-                                dbc_col([
-                                        dbc_label("Refine Zoom Factor", className="small mb-1"),
-                                        dcc_slider(id="lens-prev-slider-zoom", min=0.1, max=1.0, step=0.05, value=0.5, className="mb-3")
-                                    ], xs=6),
-                                dbc_col([
-                                        dbc_label("Refine Design Method", className="small mb-1"),
-                                        dcc_dropdown(id="lens-prev-dd-method", options=[
-                                                Dict("label" => "Taguchi L9", "value" => "TL9"),
-                                                Dict("label" => "Box-Behnken", "value" => "BoxBehnken"),
-                                                Dict("label" => "D-Optimal", "value" => "DOPT")
-                                            ], value="TL9", clearable=false, className="mb-3")
-                                    ], xs=6)
-                            ]), html_div(id="lens-container-preview-audit", className="mt-2")
-                        ], xs=12)
-                ]),
+            BASE_Modal_DDEF("lens-modal-preview", [html_i(className="fas fa-vial me-2 text-success"), "Validation & Target Control"],
+                [
+                    dbc_alert([
+                        html_i(className="fas fa-microscope me-2"),
+                        "Fine-tune the adaptive search boundaries. Shift translates the space relative to the leader result."
+                    ], color="success", className="small py-2 mb-3"),
+                    dbc_row([
+                        # Left: Controls
+                        dbc_col([
+                            html_div([
+                                dbc_label("Refinement Protocol", className="small fw-bold mb-2 text-primary"),
+                                dbc_label("Design Logic", className="x-small text-muted d-block"),
+                                dcc_dropdown(id="lens-prev-dd-method", options=[
+                                    Dict("label" => "Taguchi L9", "value" => "TL9"),
+                                    Dict("label" => "Box-Behnken", "value" => "BoxBehnken"),
+                                    Dict("label" => "D-Optimal", "value" => "DOPT")
+                                ], value="TL9", clearable=false, className="mb-3"),
+                                
+                                dbc_label("Boundary Zoom (Precision)", className="x-small text-muted d-block"),
+                                dcc_slider(id="lens-prev-slider-zoom", min=0.1, max=1.0, step=0.05, value=0.5,
+                                    updatemode="drag",
+                                    marks=Dict(0.1=>"0.1", 0.5=>"0.5", 1.0=>"1.0"), className="mb-4"),
+                                
+                                dbc_label("Spatial Shift (Translation)", className="x-small text-muted d-block"),
+                                dcc_slider(id="lens-prev-slider-shift", min=-1.0, max=1.0, step=0.1, value=0.0,
+                                    updatemode="drag",
+                                    marks=Dict(-1.0=>"L", 0.0=>"0", 1.0=>"R"), className="mb-2"),
+                            ], className="p-3 border rounded bg-light h-100")
+                        ], md=4),
+                        
+                        # Right: Visualization
+                        dbc_col([
+                            html_div([
+                                dcc_graph(id="lens-graph-transition", config=Dict("displayModeBar" => false), style=Dict("height" => "180px"))
+                            ], className="border rounded bg-white p-1 mb-2"),
+                            html_div(id="lens-container-preview-table", className="table-responsive", style=Dict("maxHeight" => "250px", "overflowY" => "auto")),
+                        ], md=8)
+                    ]),
+                    html_div(id="lens-container-preview-audit", className="mt-2")
+                ],
                 dbc_row([
                         dbc_col(dbc_button([html_i(className="fas fa-chevron-left me-1"), "Back"], id="lens-prev-btn-back", color="secondary", outline=true, size="sm", className="w-100"), xs=12, md=3),
-                        dbc_col(dbc_button([html_i(className="fas fa-save me-1"), "CONFIRM & COMMIT TO EXCEL"], id="lens-prev-btn-commit", color="primary", size="sm", className="w-100"), xs=12, md=6, className="ms-auto"),
+                        dbc_col(dbc_button([html_i(className="fas fa-save me-1"), "COMMIT PHASE TO VAULT"], id="lens-prev-btn-commit", color="primary", size="sm", className="w-100"), xs=12, md=6, className="ms-auto"),
                     ], className="w-100 g-2"); size="xl", close_button=false), dcc_store(id="lens-store-next-phase-proposal", data=Dict()),
         ], fluid=true, className="px-4 py-3")
 end
@@ -999,25 +1022,29 @@ function LENS_RegisterCallbacks_DDEF(app)
     callback!(app,
         Output("lens-store-next-phase-proposal", "data"),
         Output("lens-prev-slider-zoom", "value"),
+        Output("lens-prev-slider-shift", "value"),
         Output("lens-prev-dd-method", "value"),
         Input("lens-lead-btn-confirm", "n_clicks"),
         Input("lens-prev-slider-zoom", "value"),
+        Input("lens-prev-slider-shift", "value"),
         Input("lens-prev-dd-method", "value"),
         State("lens-wiz-slider-zoom", "value"),
+        State("lens-wiz-slider-shift", "value"),
         State("lens-wiz-dd-method", "value"),
         State("lens-wiz-dd-source", "value"),
         State("lens-table-candidates", "selected_rows"),
         State("lens-table-candidates", "data"),
         State("store-master-vault", "data"),
         prevent_initial_call=true
-    ) do n_prev, zoom_p, meth_p, zoom_w, meth_w, src, sel_rows, cand_data, base64_file
+    ) do n_prev, zoom_p, shift_p, meth_p, zoom_w, shift_w, meth_w, src, sel_rows, cand_data, base64_file
         trig = BASE_GetTrigger_DDEF(callback_context())
 
         # Initial values from wizard if first entry to preview
         z = trig == "lens-lead-btn-confirm" ? zoom_w : zoom_p
+        s = trig == "lens-lead-btn-confirm" ? shift_w : shift_p
         m = trig == "lens-lead-btn-confirm" ? meth_w : meth_p
 
-        (isnothing(base64_file) || isnothing(sel_rows) || isempty(sel_rows)) && return Dict(), z, m
+        (isnothing(base64_file) || isnothing(sel_rows) || isempty(sel_rows)) && return Dict(), z, s, m
 
         # Support both "ID" and "EXP_ID" formats from MasterVault normalization
         row_sel = cand_data[sel_rows[1]+1]
@@ -1028,24 +1055,36 @@ function LENS_RegisterCallbacks_DDEF(app)
         path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
 
         # Call Flow Propose logic (NextPhase)
-        res = Sys_Flow.FLOW_NextPhase_DDEF(path, src, sel_id, Float64(z))
+        res = Sys_Flow.FLOW_NextPhase_DDEF(path, src, sel_id, Float64(z), Float64(s))
         Sys_Fast.FAST_CleanTransient_DDEF(path)
 
         res["SelectedMethod"] = m
         res["SelectedZoom"] = z
-        return res, z, m
+        res["SelectedShift"] = s
+        res["LeaderValues"] = [Sys_Fast.FAST_SafeNum_DDEF(row_sel[k]) for k in filter(n -> startswith(string(n), Sys_Fast.FAST_Data_DDEC.PRE_INPUT), keys(row_sel))]
+
+        return res, z, s, m
     end
 
     # --- 11. UI: RENDER PREVIEW CONTENT ---
     callback!(app,
         Output("lens-container-preview-table", "children"),
         Output("lens-container-preview-audit", "children"),
+        Output("lens-graph-transition", "figure"),
         Input("lens-store-next-phase-proposal", "data"),
         prevent_initial_call=true
     ) do res
-        (isnothing(res) || isempty(res) || res["Status"] != "OK") && return html_div("No proposal available."), ""
+        (isnothing(res) || isempty(res) || res["Status"] != "OK") && return html_div("No proposal available."), "", Dict()
 
         conf = res["NewConfig"]
+
+        # Transformation Visualisation
+        leader_vals = get(res, "LeaderValues", Float64[])
+        zoom = get(res, "SelectedZoom", 0.5)
+        shift = get(res, "SelectedShift", 0.0)
+
+        fig = Sys_Flow.FLOW_RenderPhaseTransition_DDEF(conf, leader_vals, zoom, shift)
+        fig_json = JSON.parse(JSON.json(fig))
 
         # 1. Comparison Table
         rows = []
@@ -1097,7 +1136,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 html_pre(audit_report, className="x-small mb-0", style=Dict("fontSize" => "10px"))
             ], color=audit_ok ? "success" : "danger", className="py-2 px-3 mt-2")
 
-        return tbl, audit_html
+        return tbl, audit_html, fig_json
     end
 
     # --- 12. LOGIC: COMMIT PHASE TO EXCEL ---
@@ -1122,11 +1161,12 @@ function LENS_RegisterCallbacks_DDEF(app)
                  haskey(row_sel, :ID) ? string(row_sel[:ID]) : ""
 
         zoom = get(proposal, "SelectedZoom", 0.5)
+        shift = get(proposal, "SelectedShift", 0.0)
         meth = get(proposal, "SelectedMethod", "TL9")
 
         path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
 
-        res = Sys_Flow.FLOW_BuildNextPhase_DDEF(path, src, sel_id, Float64(zoom), meth)
+        res = Sys_Flow.FLOW_BuildNextPhase_DDEF(path, src, sel_id, Float64(zoom), meth, Float64(shift))
 
         if res["Status"] == "OK"
             new_vault = Sys_Fast.FAST_ReadToStore_DDEF(path)
