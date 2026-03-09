@@ -721,20 +721,23 @@ select:focus {
     display: block !important;
 }
 
-/* 14. RESPONSIVENESS (480px STABILIZATION) */
-@media (max-width: 560px) {
+/* 14. RESPONSIVENESS (640px MOBILE STABILIZATION) */
+@media (max-width: 640px) {
+    /* Layout & Navigation */
+    .app-container { padding: 0.5rem 0.75rem; }
+    .glass-navbar { margin: 0.4rem 0.6rem; padding: 0 0.75rem; height: 48px; }
     .nav-brand span { display: none; }
-    .nav-links { gap: 2px; }
+    .nav-links { gap: 2px; padding: 2px; }
     .nav-item { padding: 0.3rem 0.6rem; font-size: 0.75rem; }
-    .glass-panel { margin-bottom: 0.75rem; }
-    .glass-content { padding: 0.6rem 0.75rem; }
-}
 
-@media (max-width: 480px) {
-    .app-container { padding: 0.5rem; }
-    .glass-navbar { margin: 0.4rem; padding: 0 0.75rem; }
+    /* Panels & Cards */
+    .glass-panel { margin-bottom: 0.75rem; }
+    .glass-header { padding: 0.5rem 0.75rem; }
     .glass-caption { font-size: 0.65rem; }
-    .glass-command-row { padding: 0.75rem 0.85rem; }
+    .glass-content { padding: 0.6rem 0.75rem; }
+
+    /* Dashboard & Command Elements */
+    .glass-command-row { padding: 0.75rem 1rem; }
     .glass-command-icon { margin-right: 0.75rem; width: 28px; height: 28px; font-size: 0.85rem; }
     .glass-command-title { font-size: 0.85rem; }
 }

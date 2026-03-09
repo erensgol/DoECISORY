@@ -353,63 +353,55 @@ end
     FLOW_RenderPhaseTransition_DDEF(Config, LeaderVals, Zoom, Shift) -> Plot
 Visualizes the adaptation of search space boundaries between experimental phases.
 """
-function FLOW_RenderPhaseTransition_DDEF(Config::Vector, LeaderVals::Vector{Float64}, Zoom::Float64, Shift::Float64)
+function FLOW_RenderPhaseTransition_DDEF(Config::AbstractVector, LeaderVals::AbstractVector{<:Real}, Zoom::Real, Shift::Real)
     C = Sys_Fast.FAST_Data_DDEC
-    # Mapping to Lib_Arts theme/base via shared constants
-    TH = (
-        Grid="#E5E7EB", 
-        Blue="#21918C", 
-        Red="#FF0000", 
-        Yellow="#FDE725", 
-        Text="#000000", 
-        Font="Inter, system-ui, sans-serif"
-    )
+    TH = (Grid="#F3F4F6", Blue="#21918C", Red="#E11D48", Yellow="#FBBF24", Text="#374151")
 
     vars = [(i, c) for (i, c) in enumerate(Config) if get(c, "Role", "Variable") == C.ROLE_VAR]
     n_vars = length(vars)
     traces = GenericTrace[]
     y_nms = [get(c, "Name", "Var$i") for (i, c) in vars]
 
-    # Calculate global range for stable axis
+    # Calculate boundaries for fixed axis scaling
     all_min = minimum([get(c, "Levels", [0.0,0.0,0.0])[1] for (i,c) in vars])
     all_max = maximum([get(c, "Levels", [0.0,0.0,0.0])[3] for (i,c) in vars])
-    pad = (all_max - all_min) * 0.1
-    
+    pad = (all_max - all_min) * 0.15
+
     for (j, (i, conf)) in enumerate(vars)
         L_Old = Float64.(get(conf, "Levels", [0.0, 0.0, 0.0]))
         Val = (j <= length(LeaderVals)) ? LeaderVals[j] : L_Old[2]
         L_New = FLOW_CalcAdaptiveRange_DDEF(Val, L_Old, Zoom, Shift)
 
-        # Background: Old Universe
-        push!(traces, scatter(; x=[L_Old[1], L_Old[3]], y=[j, j], mode="lines", name="Old Ref.",
-            line=attr(color=TH.Grid, width=12), showlegend=(j == 1), hoverinfo="skip"))
+        # 1. Background (Old Space) - A light-gray bar
+        push!(traces, scatter(; x=[L_Old[1], L_Old[3]], y=[j, j], mode="lines", 
+            name="Current Space", line=attr(color="#E5E7EB", width=12), 
+            showlegend=(j == 1), hoverinfo="skip"))
         
-        # Midground: New subspace 
-        push!(traces, scatter(; x=[L_New[1], L_New[3]], y=[j, j], mode="lines", name="New Space",
-            line=attr(color=TH.Blue, width=12), showlegend=(j == 1)))
+        # 2. Target Space (New Space) - A teal bar
+        push!(traces, scatter(; x=[L_New[1], L_New[3]], y=[j, j], mode="lines", 
+            name="Proposed Frontier", line=attr(color=TH.Blue, width=12), 
+            showlegend=(j == 1), hovertext="Target Boundary"))
         
-        # Leader to Center Dash (Visualising the Shift)
-        push!(traces, scatter(; x=[Val, L_New[2]], y=[j, j], mode="lines", name="Shift Path",
-            line=attr(color=TH.Yellow, width=2, dash="dot"), showlegend=(j == 1)))
-
-        # Foreground: Anchor (Leader)
-        push!(traces, scatter(; x=[Val], y=[j], mode="markers", name="Leader Point",
-            marker=attr(symbol="diamond", size=10, color=TH.Red, line=attr(color="#000", width=1)),
+        # 3. Leader Selection (The "Anchor")
+        push!(traces, scatter(; x=[Val], y=[j], mode="markers", name="Selected Leader",
+            marker=attr(symbol="diamond", size=10, color=TH.Red, line=attr(color="white", width=1)),
             showlegend=(j == 1)))
         
-        # Foreground: Target (Shifted Center)
+        # 4. Center indicator (The "Pulse")
         push!(traces, scatter(; x=[L_New[2]], y=[j], mode="markers", name="New Center",
-            marker=attr(symbol="line-ns", size=14, color=TH.Yellow, line=attr(width=3)),
+            marker=attr(symbol="line-ns", size=12, color=TH.Yellow, line=attr(width=3)),
             showlegend=(j == 1)))
     end
 
     layout = Layout(; 
-        title=attr(text="Space Transformation Details", font=attr(size=11, family=TH.Font)),
-        height=180, margin=attr(l=80, r=20, t=30, b=40), bgcolor="white",
-        xaxis=attr(title="Variable Value Space", showgrid=true, gridcolor=TH.Grid, zeroline=false,
-                  range=[all_min - pad, all_max + pad]),
-        yaxis=attr(tickvals=collect(1:n_vars), ticktext=y_nms, showgrid=false, zeroline=false),
-        legend=attr(orientation="h", y=-0.4, x=0.5, xanchor="center", font=attr(size=9)),
+        height=min(120 + n_vars*35, 250), 
+        margin=attr(l=120, r=30, t=10, b=40),
+        bgcolor="rgba(0,0,0,0)",
+        xaxis=attr(title=attr(text="Physical Value Range", font=attr(size=10)), 
+                  gridcolor="#F3F4F6", zeroline=false, range=[all_min-pad, all_max+pad]),
+        yaxis=attr(tickvals=collect(1:n_vars), ticktext=y_nms, showgrid=false, 
+                  zeroline=false, fixedrange=true, tickfont=attr(size=10)),
+        legend=attr(orientation="h", y=-0.5, x=0.5, xanchor="center", font=attr(size=9)),
         template="plotly_white"
     )
     return Plot(traces, layout)

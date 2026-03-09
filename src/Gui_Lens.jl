@@ -173,38 +173,45 @@ function LENS_Layout_DDEF()
                 html_pre(id="lens-report-content", className="bg-dark text-success p-3 rounded small", style=Dict("whiteSpace" => "pre-wrap", "fontFamily" => "monospace", "maxHeight" => "500px", "overflowY" => "auto")),
                 dbc_button("Download Report (TXT)", id="lens-btn-download-txt", color="success", className="w-100"); size="lg"),
             # Phase Wizard Modal
-            BASE_Modal_DDEF("lens-modal-wizard", "Phase Transition Wizard",
-                dbc_row(dbc_col([
-                        html_p("Configure initial settings for the new experimental phase.",
-                            className="text-muted small"),
-                        dbc_label("Source Phase", className="small mb-1"),
-                        dcc_dropdown(id="lens-wiz-dd-source", options=[], clearable=false, className="mb-3"),
-                        dbc_label("Generated Target Phase", className="small mb-1"),
-                        dbc_input(id="lens-wiz-input-target", disabled=true, className="mb-3 text-success fw-bold"), dbc_row([
-                            dbc_col([
-                                    dbc_label("Zoom (Precision)", className="small mb-1"),
+            BASE_Modal_DDEF("lens-modal-wizard", [html_i(className="fas fa-layer-group me-2 text-primary"), "Phase Evolution Configurator"],
+                [
+                    html_p("Define the genetic structure of the target experimental phase.", className="text-muted small mb-4"),
+                    dbc_row([
+                        dbc_col([
+                            dbc_label("Configuration Blueprint", className="x-small fw-bold text-uppercase text-muted mb-2"),
+                            dbc_label("Source Horizon", className="small mb-1"),
+                            dcc_dropdown(id="lens-wiz-dd-source", options=[], clearable=false, className="mb-3"),
+                            dbc_label("Target Designation", className="small mb-1"),
+                            dbc_input(id="lens-wiz-input-target", disabled=true, className="mb-3 fw-bold text-primary bg-light"),
+                        ], md=6),
+                        dbc_col([
+                            dbc_label("Optimization Bias", className="x-small fw-bold text-uppercase text-muted mb-2"),
+                            dbc_label("Refinement Logic", className="small mb-1"),
+                            dcc_dropdown(id="lens-wiz-dd-method", options=[
+                                Dict("label" => "Taguchi L9 (Robust)", "value" => "TL9"),
+                                Dict("label" => "Box-Behnken (Curvature)", "value" => "BoxBehnken"),
+                                Dict("label" => "D-Optimal (Constrained)", "value" => "DOPT")
+                            ], value="TL9", clearable=false, className="mb-3"),
+                            
+                            dbc_row([
+                                dbc_col([
+                                    dbc_label("Zoom Factor", className="small mb-1"),
                                     dcc_slider(id="lens-wiz-slider-zoom", min=0.1, max=1.0, step=0.05, value=0.5,
-                                        marks=Dict(0.1 => "0.1", 0.5 => "0.5", 1.0 => "1.0"), className="mb-3")
-                                ], xs=4),
-                            dbc_col([
-                                    dbc_label("Shift (Translation)", className="small mb-1"),
+                                        marks=Dict(0.1=>"0.1", 0.5=>"0.5", 1.0=>"1.0"), className="mb-2"),
+                                ], xs=12),
+                                dbc_col([
+                                    dbc_label("Translation Shift", className="small mb-1"),
                                     dcc_slider(id="lens-wiz-slider-shift", min=-1.0, max=1.0, step=0.1, value=0.0,
-                                        marks=Dict(-1.0 => "L", 0.0 => "0", 1.0 => "R"), className="mb-3")
-                                ], xs=4),
-                            dbc_col([
-                                    dbc_label("Method", className="small mb-1"),
-                                    dcc_dropdown(id="lens-wiz-dd-method", options=[
-                                            Dict("label" => "Taguchi L9", "value" => "TL9"),
-                                            Dict("label" => "Box-Behnken", "value" => "BoxBehnken"),
-                                            Dict("label" => "D-Optimal", "value" => "DOPT")
-                                        ], value="TL9", clearable=false, className="mb-3")
-                                ], xs=4)
-                        ])
-                    ], xs=12)),
+                                        marks=Dict(-1.0=>"L", 0.0=>"0", 1.0=>"R"), className="mb-2"),
+                                ], xs=12)
+                            ])
+                        ], md=6)
+                    ])
+                ],
                 html_div([
                     dbc_button("Cancel", id="lens-wiz-btn-cancel", color="secondary", outline=true, className="me-2"),
-                    dbc_button("Next: Select Leader", id="lens-wiz-btn-next", color="primary"),
-                ]); close_button=false),
+                    dbc_button("Select Leader Result", id="lens-wiz-btn-next", color="primary"),
+                ], className="d-flex justify-content-end"); size="lg", close_button=false),
 
             # Leader Selection Modal
             BASE_Modal_DDEF("lens-modal-leader", [html_i(className="fas fa-magic me-2 text-primary"), "Select Leader Experiment"],
@@ -226,50 +233,51 @@ function LENS_Layout_DDEF()
                     ], className="w-100 g-2"); size="xl", close_button=false),
 
             # Phase Preview & Adjustment Modal
-            BASE_Modal_DDEF("lens-modal-preview", [html_i(className="fas fa-vial me-2 text-success"), "Validation & Target Control"],
+            BASE_Modal_DDEF("lens-modal-preview", [html_i(className="fas fa-microscope me-2 text-success"), "Phase Refinement & Validation"],
                 [
-                    dbc_alert([
-                        html_i(className="fas fa-microscope me-2"),
-                        "Fine-tune the adaptive search boundaries. Shift translates the space relative to the leader result."
-                    ], color="success", className="small py-2 mb-3"),
                     dbc_row([
-                        # Left: Controls
+                        # Left: Precision Tuning Panel
                         dbc_col([
                             html_div([
-                                dbc_label("Refinement Protocol", className="small fw-bold mb-2 text-primary"),
-                                dbc_label("Design Logic", className="x-small text-muted d-block"),
+                                dbc_label("Engine Directives", className="x-small fw-bold text-uppercase text-muted mb-3 d-block"),
+                                
+                                dbc_label("Design Protocol", className="small mb-1"),
                                 dcc_dropdown(id="lens-prev-dd-method", options=[
-                                    Dict("label" => "Taguchi L9", "value" => "TL9"),
+                                    Dict("label" => "Taguchi L9 (Robust)", "value" => "TL9"),
                                     Dict("label" => "Box-Behnken", "value" => "BoxBehnken"),
                                     Dict("label" => "D-Optimal", "value" => "DOPT")
                                 ], value="TL9", clearable=false, className="mb-3"),
                                 
-                                dbc_label("Boundary Zoom (Precision)", className="x-small text-muted d-block"),
-                                dcc_slider(id="lens-prev-slider-zoom", min=0.1, max=1.0, step=0.05, value=0.5,
-                                    updatemode="drag",
-                                    marks=Dict(0.1=>"0.1", 0.5=>"0.5", 1.0=>"1.0"), className="mb-4"),
+                                html_hr(className="my-3"),
                                 
-                                dbc_label("Spatial Shift (Translation)", className="x-small text-muted d-block"),
+                                dbc_label("Zoom Factor (Search Shrink)", className="small mb-1"),
+                                dcc_slider(id="lens-prev-slider-zoom", min=0.1, max=1.0, step=0.05, value=0.5,
+                                    updatemode="drag", marks=Dict(0.1=>"0.1", 0.5=>"0.5", 1.0=>"1.0"), className="mb-4"),
+                                
+                                dbc_label("Shift Axis (Leader Centering)", className="small mb-2"),
                                 dcc_slider(id="lens-prev-slider-shift", min=-1.0, max=1.0, step=0.1, value=0.0,
-                                    updatemode="drag",
-                                    marks=Dict(-1.0=>"L", 0.0=>"0", 1.0=>"R"), className="mb-2"),
-                            ], className="p-3 border rounded bg-light h-100")
+                                    updatemode="drag", marks=Dict(-1.0=>"L", 0.0=>"0", 1.0=>"R"), className="mb-2"),
+                                
+                            ], className="p-4 border rounded bg-light h-100 shadow-sm")
                         ], md=4),
                         
-                        # Right: Visualization
+                        # Right: Analysis & Feedback
                         dbc_col([
                             html_div([
-                                dcc_graph(id="lens-graph-transition", config=Dict("displayModeBar" => false), style=Dict("height" => "180px"))
-                            ], className="border rounded bg-white p-1 mb-2"),
-                            html_div(id="lens-container-preview-table", className="table-responsive", style=Dict("maxHeight" => "250px", "overflowY" => "auto")),
+                                dcc_graph(id="lens-graph-transition", config=Dict("displayModeBar" => false))
+                            ], className="border rounded bg-white p-2 mb-3 shadow-sm"),
+                            dbc_card([
+                                dbc_cardheader([html_i(className="fas fa-list-ul me-2"), "Proposed Physical Boundaries"], className="small fw-bold"),
+                                html_div(id="lens-container-preview-table", className="table-responsive", style=Dict("maxHeight" => "200px", "overflowY" => "auto")),
+                            ], className="shadow-sm"),
                         ], md=8)
                     ]),
-                    html_div(id="lens-container-preview-audit", className="mt-2")
+                    html_div(id="lens-container-preview-audit", className="mt-3")
                 ],
                 dbc_row([
                         dbc_col(dbc_button([html_i(className="fas fa-chevron-left me-1"), "Back"], id="lens-prev-btn-back", color="secondary", outline=true, size="sm", className="w-100"), xs=12, md=3),
-                        dbc_col(dbc_button([html_i(className="fas fa-save me-1"), "COMMIT PHASE TO VAULT"], id="lens-prev-btn-commit", color="primary", size="sm", className="w-100"), xs=12, md=6, className="ms-auto"),
-                    ], className="w-100 g-2"); size="xl", close_button=false), dcc_store(id="lens-store-next-phase-proposal", data=Dict()),
+                        dbc_col(dbc_button([html_i(className="fas fa-check-double me-1"), "Commit to Project Vault"], id="lens-prev-btn-commit", color="primary", size="sm", className="w-100"), xs=12, md=6, className="ms-auto"),
+                    ], className="w-100 g-2"); size="lg", close_button=false), dcc_store(id="lens-store-next-phase-proposal", data=Dict()),
         ], fluid=true, className="px-4 py-3")
 end
 
@@ -1080,8 +1088,8 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         # Transformation Visualisation
         leader_vals = get(res, "LeaderValues", Float64[])
-        zoom = get(res, "SelectedZoom", 0.5)
-        shift = get(res, "SelectedShift", 0.0)
+        zoom = Float64(get(res, "SelectedZoom", 0.5))
+        shift = Float64(get(res, "SelectedShift", 0.0))
 
         fig = Sys_Flow.FLOW_RenderPhaseTransition_DDEF(conf, leader_vals, zoom, shift)
         fig_json = JSON.parse(JSON.json(fig))
