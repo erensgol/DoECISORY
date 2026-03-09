@@ -176,15 +176,18 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
     for m in 1:NumModels
         m_type = lowercase(get(Models[m], "ModelType", ""))
         if m_type == "kriging" || m_type == "rbf"
-            closures[m] = Main.Lib_Vise.VISE_BuildSurrogateClosure_DDEF(Models[m])
+            c = Main.Lib_Vise.VISE_BuildSurrogateClosure_DDEF(Models[m])
+            # Safety: VISE_BuildSurrogateClosure_DDEF should return a fallback lambda if build fails, but we double-check.
+            closures[m] = isnothing(c) ? ((x) -> mean(get(Models[m], "Y_Train", [0.0]))) : c
         else
             # For Linear/Quadratic GLM models
             beta = Models[m]["Coefs"]::Vector{Float64}
+            mod_type = Models[m]["ModelType"]
             closures[m] = (x_tup) -> begin
                 # Single point expansion
                 x_vec = collect(x_tup)
                 X_mat = reshape(x_vec, 1, Dim)
-                Xd = Main.Lib_Vise.VISE_ExpandDesign_DDEF(X_mat, Models[m]["ModelType"])
+                Xd = Main.Lib_Vise.VISE_ExpandDesign_DDEF(X_mat, mod_type)
                 return (Xd*beta)[1]
             end
         end

@@ -50,7 +50,12 @@ body {
     background-attachment: fixed;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
     color: var(--text-primary);
     font-weight: 600;
     margin-bottom: 0.75rem;
@@ -329,7 +334,7 @@ select:focus {
     cursor: pointer !important;
 }
 
-.Select.is-focused > .Select-control {
+.Select.is-focused>.Select-control {
     border-color: var(--accent-primary) !important;
     box-shadow: 0 0 0 1px #FF0000 !important;
 }
@@ -348,7 +353,7 @@ select:focus {
     border-color: var(--text-secondary) transparent transparent !important;
 }
 
-.Select-arrow-zone:hover > .Select-arrow {
+.Select-arrow-zone:hover>.Select-arrow {
     border-top-color: var(--text-primary) !important;
 }
 
@@ -521,7 +526,7 @@ select:focus {
     height: auto !important;
 }
 
-.deck-name-cell > div {
+.deck-name-cell>div {
     width: 100% !important;
 }
 
@@ -620,7 +625,9 @@ select:focus {
 }
 
 @keyframes daisho-spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* Shimmer Effect */
@@ -640,8 +647,13 @@ select:focus {
 }
 
 @keyframes daisho-shimmer {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
 }
 
 /* Pulse Effect */
@@ -652,12 +664,19 @@ select:focus {
 }
 
 @keyframes daisho-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 #FF0000; }
-    50% { box-shadow: 0 0 0 6px #FF00001A; }
+
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 #FF0000;
+    }
+
+    50% {
+        box-shadow: 0 0 0 6px #FF00001A;
+    }
 }
 
 /* --- 11. RESPONSIVENESS --- */
-@media (max-width: 960px) {
+@media (max-width: 640px) {
     .app-container {
         padding: 0.5rem 0.75rem;
     }

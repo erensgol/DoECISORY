@@ -370,14 +370,18 @@ function LENS_RegisterCallbacks_DDEF(app)
             method = get(get(config, "Global", Dict()), "Method", "")
 
             if method == "TL09" || method == "DOPT09"
-                model_opts = [Dict("label" => "Linear (Design Constraint)", "value" => "Linear")]
+                model_opts = [Dict("label" => "Linear", "value" => "Linear")]
                 model_val = "Linear"
             elseif method == "BB15" || method == "DOPT15"
-                model_opts = [Dict("label" => "Quadratic (Standard)", "value" => "Quadratic"), Dict("label" => "Linear", "value" => "Linear")]
+                model_opts = [
+                    Dict("label" => "Quadratic", "value" => "Quadratic"),
+                    Dict("label" => "Kriging (Surrogate)", "value" => "kriging"),
+                    Dict("label" => "RBF (Surrogate)", "value" => "rbf")
+                ]
                 model_val = "Quadratic"
             else
                 model_opts = [
-                    Dict("label" => "Automatic (Auto)", "value" => "Auto"),
+                    Dict("label" => "Automatic", "value" => "Auto"),
                     Dict("label" => "Linear", "value" => "Linear"),
                     Dict("label" => "Quadratic", "value" => "Quadratic"),
                     Dict("label" => "Kriging (Surrogate)", "value" => "kriging"),
