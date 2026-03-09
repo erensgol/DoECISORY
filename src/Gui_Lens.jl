@@ -172,112 +172,99 @@ function LENS_Layout_DDEF()
             BASE_Modal_DDEF("lens-modal-report", "DaishoDoE Scientific Intelligence Report",
                 html_pre(id="lens-report-content", className="bg-dark text-success p-3 rounded small", style=Dict("whiteSpace" => "pre-wrap", "fontFamily" => "monospace", "maxHeight" => "500px", "overflowY" => "auto")),
                 dbc_button("Download Report (TXT)", id="lens-btn-download-txt", color="success", className="w-100"); size="lg"),
-            # Phase Wizard Modal
-            BASE_Modal_DDEF("lens-modal-wizard", [html_i(className="fas fa-layer-group me-2 text-primary"), "Phase Evolution Configurator"],
+            # PHASE WIZARD STEP 1: Phase Designation
+            BASE_Modal_DDEF("lens-modal-wizard", [html_i(className="fas fa-layer-group me-2 text-primary"), "Phase Evolution - Step 1/3"],
                 [
-                    html_p("Define the genetic structure of the target experimental phase.", className="text-muted small mb-4"),
-                    dbc_row([
-                        dbc_col([
-                            dbc_label("Configuration Blueprint", className="x-small fw-bold text-uppercase text-muted mb-2"),
-                            dbc_label("Source Horizon", className="small mb-1"),
-                            dcc_dropdown(id="lens-wiz-dd-source", options=[], clearable=false, className="mb-3"),
-                            dbc_label("Target Designation", className="small mb-1"),
-                            dbc_input(id="lens-wiz-input-target", disabled=true, className="mb-3 fw-bold text-primary bg-light"),
-                        ], md=6),
-                        dbc_col([
-                            dbc_label("Optimization Bias", className="x-small fw-bold text-uppercase text-muted mb-2"),
-                            dbc_label("Refinement Logic", className="small mb-1"),
-                            dcc_dropdown(id="lens-wiz-dd-method", options=[
-                                Dict("label" => "Taguchi L9 (Robust)", "value" => "TL9"),
-                                Dict("label" => "Box-Behnken (Curvature)", "value" => "BoxBehnken"),
-                                Dict("label" => "D-Optimal (Constrained)", "value" => "DOPT")
-                            ], value="TL9", clearable=false, className="mb-3"),
-                            
+                    html_div([
+                            html_p("Define the experimental horizon for the next phase sequence.", className="text-muted small mb-4"),
                             dbc_row([
                                 dbc_col([
-                                    dbc_label("Zoom Factor", className="small mb-1"),
-                                    dcc_slider(id="lens-wiz-slider-zoom", min=0.1, max=1.0, step=0.05, value=0.5,
-                                        marks=Dict(0.1=>"0.1", 0.5=>"0.5", 1.0=>"1.0"), className="mb-2"),
-                                ], xs=12),
+                                        dbc_label("Source Phase (Where we are)", className="x-small fw-bold text-uppercase text-muted mb-2"),
+                                        dcc_dropdown(id="lens-wiz-dd-source", options=[], clearable=false, className="mb-3"),
+                                    ], md=6),
                                 dbc_col([
-                                    dbc_label("Translation Shift", className="small mb-1"),
-                                    dcc_slider(id="lens-wiz-slider-shift", min=-1.0, max=1.0, step=0.1, value=0.0,
-                                        marks=Dict(-1.0=>"L", 0.0=>"0", 1.0=>"R"), className="mb-2"),
-                                ], xs=12)
-                            ])
-                        ], md=6)
-                    ])
+                                        dbc_label("Target Designation", className="x-small fw-bold text-uppercase text-muted mb-2"),
+                                        dbc_input(id="lens-wiz-input-target", disabled=true, className="mb-3 fw-bold text-primary bg-light"),
+                                    ], md=6),
+                            ]),
+                        ], className="p-2")
                 ],
                 html_div([
-                    dbc_button("Cancel", id="lens-wiz-btn-cancel", color="secondary", outline=true, className="me-2"),
-                    dbc_button("Select Leader Result", id="lens-wiz-btn-next", color="primary"),
-                ], className="d-flex justify-content-end"); size="lg", close_button=false),
+                        dbc_button("Cancel", id="lens-wiz-btn-cancel", color="secondary", outline=true, className="me-2"),
+                        dbc_button(["Next: Select Leader ", html_i(className="fas fa-chevron-right ms-2")], id="lens-wiz-btn-next", color="primary"),
+                    ], className="d-flex justify-content-end"); size="md", close_button=false),
 
-            # Leader Selection Modal
-            BASE_Modal_DDEF("lens-modal-leader", [html_i(className="fas fa-magic me-2 text-primary"), "Select Leader Experiment"],
+            # PHASE WIZARD STEP 2: Leader Selection
+            BASE_Modal_DDEF("lens-modal-leader", [html_i(className="fas fa-magic me-2 text-primary"), "Phase Evolution - Step 2/3"],
                 dbc_row(dbc_col([
                         dbc_alert([
                                 html_i(className="fas fa-info-circle me-2"),
-                                "The system has algorithmically identified potential leaders based on your optimisation objectives. ",
-                                "Please select the most promising run to serve as the reference centre for the next phase."
-                            ], color="info", className="small py-2 mb-3"),
+                                "Select the most promising leader run to serve as the reference centre for the next phase."
+                            ], color="info", className="small py-2 mb-3 border-0 shadow-sm"),
                         html_div(BASE_DataTable_DDEF("lens-table-candidates", [
                                     Dict("name" => "ID", "id" => "ID"),
                                     Dict("name" => "Score", "id" => "Score")
                                 ], []; row_selectable="single", selected_rows=[]), id="lens-container-candidates", className="table-responsive"),
                     ], xs=12)),
                 dbc_row([
-                        dbc_col(dbc_button([html_i(className="fas fa-chevron-left me-1"), "Back"], id="lens-lead-btn-back", color="secondary", outline=true, size="sm", className="w-100 mb-2 mb-md-0"), xs=12, md=3),
-                        dbc_col(dbc_button([html_i(className="fas fa-times me-1"), "Cancel"], id="lens-lead-btn-cancel", color="secondary", outline=true, size="sm", className="w-100 mb-2 mb-md-0"), xs=12, md=3, className="ms-md-auto"),
-                        dbc_col(dbc_button([html_i(className="fas fa-eye me-1"), "NEXT: PREVIEW & ADJUST"], id="lens-lead-btn-confirm", color="primary", disabled=true, size="sm", className="w-100"), xs=12, md=5),
+                        dbc_col(dbc_button([html_i(className="fas fa-chevron-left me-2"), "Back"], id="lens-lead-btn-back", color="secondary", outline=true, size="sm", className="w-100"), xs=12, md=3),
+                        dbc_col(dbc_button([html_i(className="fas fa-times me-2"), "Cancel"], id="lens-lead-btn-cancel", color="secondary", outline=true, size="sm", className="w-100"), xs=12, md=3, className="ms-md-auto"),
+                        dbc_col(dbc_button(["Next: Adjust Design ", html_i(className="fas fa-chevron-right ms-2")], id="lens-lead-btn-confirm", color="primary", disabled=true, size="sm", className="w-100"), xs=12, md=5),
                     ], className="w-100 g-2"); size="xl", close_button=false),
 
-            # Phase Preview & Adjustment Modal
-            BASE_Modal_DDEF("lens-modal-preview", [html_i(className="fas fa-microscope me-2 text-success"), "Phase Refinement & Validation"],
+            # PHASE WIZARD STEP 3: Preview & Adjustment
+            BASE_Modal_DDEF("lens-modal-preview", [html_i(className="fas fa-microscope me-2 text-success"), "Phase Evolution - Step 3/3"],
                 [
                     dbc_row([
                         # Left: Precision Tuning Panel
                         dbc_col([
-                            html_div([
-                                dbc_label("Engine Directives", className="x-small fw-bold text-uppercase text-muted mb-3 d-block"),
-                                
-                                dbc_label("Design Protocol", className="small mb-1"),
-                                dcc_dropdown(id="lens-prev-dd-method", options=[
-                                    Dict("label" => "Taguchi L9 (Robust)", "value" => "TL9"),
-                                    Dict("label" => "Box-Behnken", "value" => "BoxBehnken"),
-                                    Dict("label" => "D-Optimal", "value" => "DOPT")
-                                ], value="TL9", clearable=false, className="mb-3"),
-                                
-                                html_hr(className="my-3"),
-                                
-                                dbc_label("Zoom Factor (Search Shrink)", className="small mb-1"),
-                                dcc_slider(id="lens-prev-slider-zoom", min=0.1, max=1.0, step=0.05, value=0.5,
-                                    updatemode="drag", marks=Dict(0.1=>"0.1", 0.5=>"0.5", 1.0=>"1.0"), className="mb-4"),
-                                
-                                dbc_label("Shift Axis (Leader Centering)", className="small mb-2"),
-                                dcc_slider(id="lens-prev-slider-shift", min=-1.0, max=1.0, step=0.1, value=0.0,
-                                    updatemode="drag", marks=Dict(-1.0=>"L", 0.0=>"0", 1.0=>"R"), className="mb-2"),
-                                
-                            ], className="p-4 border rounded bg-light h-100 shadow-sm")
-                        ], md=4),
-                        
+                                html_div([
+                                        dbc_label("Design Control", className="x-small fw-bold text-uppercase text-muted mb-3 d-block"),
+                                        dbc_label("Matrix Protocol", className="small mb-1"),
+                                        dcc_dropdown(id="lens-prev-dd-method", options=[
+                                                Dict("label" => "Box-Behnken (15 Runs, Quadratic)", "value" => "BB15"),
+                                                Dict("label" => "D-Optimal (15 Runs, Quadratic)", "value" => "DOPT15"),
+                                                Dict("label" => "Taguchi L9 (9 Runs, Linear)", "value" => "TL09"),
+                                                Dict("label" => "D-Optimal (9 Runs, Linear)", "value" => "DOPT09"),
+                                            ], value="TL09", clearable=false, className="mb-3"),
+                                        html_hr(className="my-3"),
+                                        dbc_label("Zoom Factor", className="small mb-1 d-flex justify-content-between", children=[
+                                            html_span("Wide-Scan (1.0)"), html_span("Fine-Scan (0.1)")
+                                        ]),
+                                        html_div(dcc_slider(id="lens-prev-slider-zoom",
+                                                min=1, max=5, step=nothing, value=1,
+                                                updatemode="drag",
+                                                marks=Dict(
+                                                    1 => Dict("label" => "1.0", "style" => Dict("color" => "#000", "fontWeight" => "bold")),
+                                                    2 => "0.75",
+                                                    3 => "0.5",
+                                                    4 => "0.25",
+                                                    5 => "0.1"
+                                                )),
+                                            className="px-2 mb-4"),
+                                        html_div(id="lens-prev-slider-shift", style=Dict("display" => "none")),
+                                    ], className="p-4 border-0 rounded bg-white h-100 shadow-sm")
+                            ], md=4),
+
                         # Right: Analysis & Feedback
                         dbc_col([
-                            html_div([
-                                dcc_graph(id="lens-graph-transition", config=Dict("displayModeBar" => false))
-                            ], className="border rounded bg-white p-2 mb-3 shadow-sm"),
-                            dbc_card([
-                                dbc_cardheader([html_i(className="fas fa-list-ul me-2"), "Proposed Physical Boundaries"], className="small fw-bold"),
-                                html_div(id="lens-container-preview-table", className="table-responsive", style=Dict("maxHeight" => "200px", "overflowY" => "auto")),
-                            ], className="shadow-sm"),
-                        ], md=8)
+                                html_div([
+                                        html_h6("Matrix Shift Visualization", className="x-small fw-bold text-uppercase text-muted mb-2"),
+                                        dcc_graph(id="lens-graph-transition", config=Dict("displayModeBar" => false), style=Dict("height" => "250px"))
+                                    ], className="border-0 rounded bg-white p-3 mb-3 shadow-sm"),
+                                dbc_card([
+                                        dbc_cardheader([html_i(className="fas fa-th-list me-2"), "Calculated Boundaries"], className="small fw-bold border-0 bg-transparent"),
+                                        html_div(id="lens-container-preview-table", className="table-responsive p-2", style=Dict("maxHeight" => "200px", "overflowY" => "auto")),
+                                    ], className="shadow-sm border-0"),
+                            ], md=8)
                     ]),
                     html_div(id="lens-container-preview-audit", className="mt-3")
                 ],
                 dbc_row([
-                        dbc_col(dbc_button([html_i(className="fas fa-chevron-left me-1"), "Back"], id="lens-prev-btn-back", color="secondary", outline=true, size="sm", className="w-100"), xs=12, md=3),
-                        dbc_col(dbc_button([html_i(className="fas fa-check-double me-1"), "Commit to Project Vault"], id="lens-prev-btn-commit", color="primary", size="sm", className="w-100"), xs=12, md=6, className="ms-auto"),
-                    ], className="w-100 g-2"); size="lg", close_button=false), dcc_store(id="lens-store-next-phase-proposal", data=Dict()),
+                        dbc_col(dbc_button([html_i(className="fas fa-chevron-left me-2"), "Back"], id="lens-prev-btn-back", color="secondary", outline=true, size="sm", className="w-100"), xs=12, md=3),
+                        dbc_col(dbc_button([html_i(className="fas fa-check-circle me-2"), "Commit to Project Vault"], id="lens-prev-btn-commit", color="success", size="sm", className="w-100"), xs=12, md=7, className="ms-auto"),
+                    ], className="w-100 g-2"); size="lg", close_button=false),
+            dcc_store(id="lens-store-next-phase-proposal", data=Dict()),
         ], fluid=true, className="px-4 py-3")
 end
 
@@ -344,8 +331,15 @@ function LENS_RegisterCallbacks_DDEF(app)
                 return [], html_span("❌ No Valid Data Sheet", className="text-danger small"), nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", "", ""
             end
 
-            phases = map(unique(skipmissing(df[:, Symbol(C.COL_PHASE)]))) do p
-                Dict("label" => string(p), "value" => string(p))
+            col_phase = Symbol(C.COL_PHASE)
+            phases = []
+            if hasproperty(df, col_phase)
+                phases = map(unique(skipmissing(df[:, col_phase]))) do p
+                    Dict("label" => string(p), "value" => string(p))
+                end
+            else
+                # Fallback: if no phase column, treat as single phase
+                phases = [Dict("label" => "Default", "value" => "Default")]
             end
 
             out_cols = filter(c -> startswith(c, C.PRE_RESULT), names(df))
@@ -375,11 +369,11 @@ function LENS_RegisterCallbacks_DDEF(app)
             config = Sys_Fast.FAST_ReadConfig_DDEF(path)
             method = get(get(config, "Global", Dict()), "Method", "")
 
-            if method == "Taguchi_L9"
-                model_opts = [Dict("label" => "Linear (Taguchi Constraint)", "value" => "Linear")]
+            if method == "TL09" || method == "DOPT09"
+                model_opts = [Dict("label" => "Linear (Design Constraint)", "value" => "Linear")]
                 model_val = "Linear"
-            elseif method == "BoxBehnken"
-                model_opts = [Dict("label" => "Quadratic (Standard BB)", "value" => "Quadratic"), Dict("label" => "Linear", "value" => "Linear")]
+            elseif method == "BB15" || method == "DOPT15"
+                model_opts = [Dict("label" => "Quadratic (Standard)", "value" => "Quadratic"), Dict("label" => "Linear", "value" => "Linear")]
                 model_val = "Quadratic"
             else
                 model_opts = [
@@ -544,6 +538,8 @@ function LENS_RegisterCallbacks_DDEF(app)
             res = Lib_Vise.VISE_Execute_DDEF(path, phase_str, goals, model_str; Opts=opts)
 
             if res["Status"] != "OK"
+                # Updated to match the expected number of return values (13)
+                # Output order: graphs, summary, status_msg, btn_next_dis, btn_view_dis, report_store, results_store, sync_store, leaders_html, rad_badge, export_btn_dis, download_btn_dis, excel_btn_dis
                 return [], "", html_span("❌ Analysis Failed: $(res["Message"])", className="text-danger"), true, true, "", Dash.no_update(), Dash.no_update(), "", "", true, true, true
             end
 
@@ -863,130 +859,57 @@ function LENS_RegisterCallbacks_DDEF(app)
         return g[idx]["figure"], g[idx]["title"], "/ $(length(g))", info_html
     end
 
-    # --- 5. PIPELINE: WIZARD ENTRANCE ---
+    # --- 7. UI: MODAL SEQUENTIAL SWITCHING (3-STEP WIZARD) ---
     callback!(app,
         Output("lens-modal-wizard", "is_open"),
-        Output("lens-wiz-dd-source", "options"),
-        Output("lens-wiz-dd-source", "value"),
-        Output("lens-wiz-input-target", "value"),
-        Input("lens-btn-next-phase", "n_clicks"),
-        Input("lens-lead-btn-back", "n_clicks"),
-        Input("lens-wiz-btn-cancel", "n_clicks"),
-        Input("lens-wiz-btn-next", "n_clicks"),
-        State("lens-dd-phase", "value"),
-        prevent_initial_call=true
-    ) do n, b, c, n_nxt, ph
-        trig = BASE_GetTrigger_DDEF(callback_context())
-        trig == "lens-wiz-btn-cancel" && return false, [], "", ""
-        trig == "lens-wiz-btn-next" && return false, Dash.no_update(), Dash.no_update(), Dash.no_update()
-
-        src_phase = isnothing(ph) ? "Phase1" : ph
-        digit_match = match(r"\d+", src_phase)
-        next_val = isnothing(digit_match) ? 2 : parse(Int, digit_match.match) + 1
-
-        Sys_Fast.FAST_Log_DDEF("LENS", "Wizard",
-            "Initiating phase transition: $src_phase -> Phase$next_val", "INFO")
-
-        return true, [Dict("label" => src_phase, "value" => src_phase)], src_phase, "Phase$next_val"
-    end
-
-    # --- 6. UI: CANDIDATE DATA LOADER ---
-    callback!(app,
-        Output("lens-table-candidates", "data"),
-        Output("lens-table-candidates", "columns"),
-        Input("lens-modal-leader", "is_open"),
-        State("lens-wiz-dd-source", "value"),
-        State("store-master-vault", "data"),
-        prevent_initial_call=true
-    ) do is_open, src, base64_file
-        # Guard: only load candidates when the leader modal is opening
-        !is_open && return Dash.no_update(), Dash.no_update()
-        isnothing(base64_file) && return [], []
-
-        path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
-        data = Sys_Flow.FLOW_GetCandidates_DDEF(path, src)
-        Sys_Fast.FAST_CleanTransient_DDEF(path)
-
-        if isempty(data)
-            return [], []
-        end
-
-        # --- DYNAMIC COLUMN GENERATION ---
-        # Identify all keys in the first candidate (collect to avoid KeySet iteration bug)
-        all_keys = collect(keys(data[1]))
-
-        # Filter and prioritize columns
-        # Priority: ID, then VARIA_, then PRED_, then SCORE (last)
-        cols_to_show = String[]
-
-        # Find ID column key
-        h_id_idx = findfirst(k -> occursin("ID", uppercase(string(k))), all_keys)
-        !isnothing(h_id_idx) && push!(cols_to_show, string(all_keys[h_id_idx]))
-
-        # Add Input Variables
-        v_cols = sort(filter(k -> startswith(uppercase(string(k)), "VARIA_"), collect(all_keys)))
-        append!(cols_to_show, string.(v_cols))
-
-        # Add Predictions
-        p_cols = sort(filter(k -> startswith(uppercase(string(k)), "PRED_"), collect(all_keys)))
-        append!(cols_to_show, string.(p_cols))
-
-        # Score at the END
-        h_score_idx = findfirst(k -> uppercase(string(k)) == "SCORE", all_keys)
-        !isnothing(h_score_idx) && push!(cols_to_show, string(all_keys[h_score_idx]))
-
-        columns = [Dict{String,Any}("name" => replace(c, r"^(VARIA_|PRED_)" => ""), "id" => c) for c in cols_to_show]
-
-        # Add formatting for Score
-        for col in columns
-            if col["id"] == "Score" || col["id"] == "SCORE"
-                col["type"] = "numeric"
-                col["format"] = Dict("specifier" => ".4f")
-            end
-        end
-
-        return data, columns
-    end
-
-
-    # --- 7. UI: MODAL SEQUENTIAL SWITCHING ---
-    callback!(app,
         Output("lens-modal-leader", "is_open"),
         Output("lens-modal-preview", "is_open"),
+        Input("lens-btn-next-phase", "n_clicks"),
         Input("lens-wiz-btn-next", "n_clicks"),
+        Input("lens-wiz-btn-cancel", "n_clicks"),
         Input("lens-lead-btn-back", "n_clicks"),
         Input("lens-lead-btn-confirm", "n_clicks"),
+        Input("lens-lead-btn-cancel", "n_clicks"),
         Input("lens-prev-btn-back", "n_clicks"),
         Input("lens-signal-process", "data"),
+        State("lens-modal-wizard", "is_open"),
+        State("lens-modal-leader", "is_open"),
+        State("lens-modal-preview", "is_open"),
         prevent_initial_call=true
-    ) do n_nxt, n_bck_lead, n_nxt_prev, n_bck_prev, sig
+    ) do n_open, n_w2L, n_w_can, n_L2w, n_L2p, n_L_can, n_p2L, sig, w_open, L_open, p_open
         trig = BASE_GetTrigger_DDEF(callback_context())
 
-        # Leader Modal
+        # Reset states
+        if trig == "lens-wiz-btn-cancel" || trig == "lens-lead-btn-cancel" || (trig == "lens-signal-process" && get(sig, "success", false))
+            return false, false, false
+        end
+
+        # Entry from main page
+        if trig == "lens-btn-next-phase"
+            return true, false, false
+        end
+
+        # Step 1 -> Step 2
         if trig == "lens-wiz-btn-next"
-            return true, false
+            return false, true, false
         end
+
+        # Step 2 -> Step 1
         if trig == "lens-lead-btn-back"
-            return false, false
+            return true, false, false
         end
-        if trig == "lens-lead-btn-confirm"
-            return false, true
-        end # Moving to preview
 
-        # Preview Modal
+        # Step 2 -> Step 3
         if trig == "lens-lead-btn-confirm"
-            return false, true
+            return false, false, true
         end
+
+        # Step 3 -> Step 2
         if trig == "lens-prev-btn-back"
-            return true, false
-        end # Back to leader
-
-        # Success signal
-        if trig == "lens-signal-process" && get(sig, "success", false)
-            return false, false
+            return false, true, false
         end
 
-        return Dash.no_update(), Dash.no_update()
+        return Dash.no_update(), Dash.no_update(), Dash.no_update()
     end
 
     # --- 8. UI: REPORT MODAL CONTROL ---
@@ -1026,7 +949,96 @@ function LENS_RegisterCallbacks_DDEF(app)
         return isnothing(s) || isempty(s)
     end
 
-    # --- 10. LOGIC: PHASE PROPOSAL GENERATOR (PREVIEW) ---
+    # --- 5. UI: PHASE WIZARD DATA INITIALIZATION ---
+    callback!(app,
+        Output("lens-wiz-dd-source", "options"),
+        Output("lens-wiz-dd-source", "value"),
+        Output("lens-wiz-input-target", "value"),
+        Input("lens-btn-next-phase", "n_clicks"),
+        State("lens-dd-phase", "value"),
+        prevent_initial_call=true
+    ) do n, ph
+        src_phase = isnothing(ph) ? "Phase1" : ph
+        digit_match = match(r"\d+", src_phase)
+        next_val = isnothing(digit_match) ? 2 : parse(Int, digit_match.match) + 1
+
+        Sys_Fast.FAST_Log_DDEF("LENS", "Wizard",
+            "Targeting: $src_phase -> Phase$next_val", "INFO")
+
+        return [Dict("label" => src_phase, "value" => src_phase)], src_phase, "Phase$next_val"
+    end
+
+    # --- 6. UI: CANDIDATE DATA LOADER (FOR STEP 2) ---
+    callback!(app,
+        Output("lens-table-candidates", "data"),
+        Output("lens-table-candidates", "columns"),
+        Input("lens-modal-leader", "is_open"),
+        State("lens-wiz-dd-source", "value"),
+        State("store-master-vault", "data"),
+        prevent_initial_call=true
+    ) do is_open, src, base64_file
+        !is_open && return Dash.no_update(), Dash.no_update()
+        isnothing(base64_file) && return [], []
+
+        path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
+        # Load Config to ensure strict ordering
+        C = Sys_Fast.FAST_Data_DDEC
+        config_full = Sys_Fast.FAST_ReadConfig_DDEF(path)
+        data = Sys_Flow.FLOW_GetCandidates_DDEF(path, src)
+        Sys_Fast.FAST_CleanTransient_DDEF(path)
+
+        isempty(data) && return [], []
+
+        # Identify columns based on Config order
+        cols_to_show = String[]
+
+        # 1. ID first
+        all_keys = collect(keys(data[1]))
+        h_id_idx = findfirst(k -> occursin("ID", uppercase(string(k))), all_keys)
+        !isnothing(h_id_idx) && push!(cols_to_show, string(all_keys[h_id_idx]))
+
+        # 2. Variables in Config Order
+        ingredients = get(config_full, "Ingredients", [])
+        for c in ingredients
+            name = get(c, "Name", "")
+            if get(c, "Role", "") == C.ROLE_VAR
+                v_key = "$(C.PRE_INPUT)$name"
+                if any(k -> string(k) == v_key, all_keys)
+                    push!(cols_to_show, v_key)
+                elseif any(k -> string(k) == name, all_keys)
+                    push!(cols_to_show, name)
+                end
+            end
+        end
+
+        # 3. Predictions in Config Order
+        outputs = get(config_full, "Outputs", [])
+        for o in outputs
+            name = get(o, "Name", "")
+            p_key = "$(C.PRE_PRED)$name"
+            if any(k -> string(k) == p_key, all_keys)
+                push!(cols_to_show, p_key)
+            elseif any(k -> string(k) == name, all_keys)
+                push!(cols_to_show, name)
+            end
+        end
+
+        # 4. Score at the end
+        h_score_idx = findfirst(k -> uppercase(string(k)) == "SCORE", all_keys)
+        !isnothing(h_score_idx) && push!(cols_to_show, string(all_keys[h_score_idx]))
+
+        columns = [Dict{String,Any}("name" => replace(c, r"^(VARIA_|PRED_)" => ""), "id" => c) for c in cols_to_show]
+        for col in columns
+            if col["id"] == "Score" || col["id"] == "SCORE"
+                col["type"] = "numeric"
+                col["format"] = Dict("specifier" => ".4f")
+            end
+        end
+
+        return data, columns
+    end
+
+    # --- 10. LOGIC: PHASE PROPOSAL GENERATOR (FOR STEP 3) ---
     callback!(app,
         Output("lens-store-next-phase-proposal", "data"),
         Output("lens-prev-slider-zoom", "value"),
@@ -1036,42 +1048,69 @@ function LENS_RegisterCallbacks_DDEF(app)
         Input("lens-prev-slider-zoom", "value"),
         Input("lens-prev-slider-shift", "value"),
         Input("lens-prev-dd-method", "value"),
-        State("lens-wiz-slider-zoom", "value"),
-        State("lens-wiz-slider-shift", "value"),
-        State("lens-wiz-dd-method", "value"),
         State("lens-wiz-dd-source", "value"),
         State("lens-table-candidates", "selected_rows"),
         State("lens-table-candidates", "data"),
         State("store-master-vault", "data"),
         prevent_initial_call=true
-    ) do n_prev, zoom_p, shift_p, meth_p, zoom_w, shift_w, meth_w, src, sel_rows, cand_data, base64_file
+    ) do n_prev, zoom_p, shift_p, meth_p, src, sel_rows, cand_data, base64_file
         trig = BASE_GetTrigger_DDEF(callback_context())
 
-        # Initial values from wizard if first entry to preview
-        z = trig == "lens-lead-btn-confirm" ? zoom_w : zoom_p
-        s = trig == "lens-lead-btn-confirm" ? shift_w : shift_p
-        m = trig == "lens-lead-btn-confirm" ? meth_w : meth_p
+        # Correct initialization logic: 
+        # When coming from Step 2, use defaults. When adjusting in Step 3, use slider values.
+        # Slider value 1-5 maps to [1.0, 0.75, 0.5, 0.25, 0.1]
 
-        (isnothing(base64_file) || isnothing(sel_rows) || isempty(sel_rows)) && return Dict(), z, s, m
+        # Slider value 1-5 maps to [1.0, 0.75, 0.5, 0.25, 0.1]
+        zoom_map = Float64[1.0, 0.75, 0.5, 0.25, 0.1]
+        z_idx = isnothing(zoom_p) ? 1 : clamp(round(Int, zoom_p), 1, 5)
 
-        # Support both "ID" and "EXP_ID" formats from MasterVault normalization
+        z = (trig == "lens-lead-btn-confirm") ? 1.0 : zoom_map[z_idx]
+        ret_idx = (trig == "lens-lead-btn-confirm") ? 1 : z_idx
+
+        s = 0.0 # Shift is now always 0/centered as requested
+        m = (trig == "lens-lead-btn-confirm") ? "TL09" : meth_p
+
+        (isnothing(base64_file) || isnothing(sel_rows) || isempty(sel_rows)) && return Dict(), ret_idx, s, m
+
         row_sel = cand_data[sel_rows[1]+1]
         sel_id = haskey(row_sel, "EXP_ID") ? string(row_sel["EXP_ID"]) :
                  haskey(row_sel, "ID") ? string(row_sel["ID"]) :
                  haskey(row_sel, :EXP_ID) ? string(row_sel[:EXP_ID]) :
                  haskey(row_sel, :ID) ? string(row_sel[:ID]) : ""
-        path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
 
-        # Call Flow Propose logic (NextPhase)
+        # Load Config to ensure strict variable ordering
+        C = Sys_Fast.FAST_Data_DDEC
+        path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
+        config_full = Sys_Fast.FAST_ReadConfig_DDEF(path)
+
+        # Robustly extract ingredients list
+        ingredients_raw = get(config_full, "Ingredients", [])
+        ingredients = if ingredients_raw isa Dict
+            [Dict{String,Any}(string(k) => v for (k, v) in pairs(val)) for val in values(ingredients_raw)]
+        else
+            [Dict{String,Any}(string(k) => v for (k, v) in pairs(val)) for val in ingredients_raw]
+        end
+        vars_config = filter(c -> get(c, "Role", "") == C.ROLE_VAR, ingredients)
+
+        # Call Flow Propose logic (NextPhase) - Purely for preview calculation
         res = Sys_Flow.FLOW_NextPhase_DDEF(path, src, sel_id, Float64(z), Float64(s))
         Sys_Fast.FAST_CleanTransient_DDEF(path)
 
-        res["SelectedMethod"] = m
         res["SelectedZoom"] = z
         res["SelectedShift"] = s
-        res["LeaderValues"] = [Sys_Fast.FAST_SafeNum_DDEF(row_sel[k]) for k in filter(n -> startswith(string(n), Sys_Fast.FAST_Data_DDEC.PRE_INPUT), keys(row_sel))]
+        res["SelectedMethod"] = m
 
-        return res, z, s, m
+        # STRICT LEADER VALUES ORDERING: Follow the config variable order
+        lead_vals = Float64[]
+        for v_conf in vars_config
+            v_name = get(v_conf, "Name", "")
+            v_key = "$(C.PRE_INPUT)$v_name"
+            val = get(row_sel, v_key, get(row_sel, v_name, 0.0))
+            push!(lead_vals, Sys_Fast.FAST_SafeNum_DDEF(val))
+        end
+        res["LeaderValues"] = lead_vals
+
+        return res, ret_idx, s, m
     end
 
     # --- 11. UI: RENDER PREVIEW CONTENT ---
@@ -1088,11 +1127,11 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         # Transformation Visualisation
         leader_vals = get(res, "LeaderValues", Float64[])
-        zoom = Float64(get(res, "SelectedZoom", 0.5))
+        zoom = Float64(get(res, "SelectedZoom", 1.0))
         shift = Float64(get(res, "SelectedShift", 0.0))
 
+        # FLOW_RenderPhaseTransition_DDEF now returns a Dict, so we pass it directly
         fig = Sys_Flow.FLOW_RenderPhaseTransition_DDEF(conf, leader_vals, zoom, shift)
-        fig_json = JSON.parse(JSON.json(fig))
 
         # 1. Comparison Table
         rows = []
@@ -1139,12 +1178,19 @@ function LENS_RegisterCallbacks_DDEF(app)
         # Use safe vol/conc and handle cases where audit might fail due to "no stoichiometry configured"
         audit_ok, audit_report, _, t_mass, _ = Main.Lib_Mole.MOLE_QuickAudit_DDEF(chem_rows, vol, conc)
 
-        audit_html = dbc_alert([
-                html_h6(["Stochiometry Audit (Proposed Phase): ", audit_ok ? "✅ PASS" : "❌ FAIL"], className="small fw-bold"),
-                html_pre(audit_report, className="x-small mb-0", style=Dict("fontSize" => "10px"))
-            ], color=audit_ok ? "success" : "danger", className="py-2 px-3 mt-2")
+        audit_html = if audit_ok
+            dbc_alert([
+                    html_h5([html_i(className="fas fa-check-circle me-2"), "Stochiometry Audit (Proposed Phase): PASS"], className="alert-heading small fw-bold"),
+                    html_hr(),
+                    html_pre(audit_report, className="mb-0 x-small", style=Dict("fontFamily" => "monospace"))
+                ], color="success", className="shadow-sm border-0 py-3")
+        else
+            dbc_alert([
+                    html_h6([html_i(className="fas fa-exclamation-triangle me-2"), "No stoichiometry configuration found for this system or composition is out of limits."], className="mb-0 small fw-bold")
+                ], color="danger", className="shadow-sm border-0 py-3")
+        end
 
-        return tbl, audit_html, fig_json
+        return tbl, audit_html, fig
     end
 
     # --- 12. LOGIC: COMMIT PHASE TO EXCEL ---
@@ -1170,7 +1216,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         zoom = get(proposal, "SelectedZoom", 0.5)
         shift = get(proposal, "SelectedShift", 0.0)
-        meth = get(proposal, "SelectedMethod", "TL9")
+        meth = get(proposal, "SelectedMethod", "TL09")
 
         path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
 

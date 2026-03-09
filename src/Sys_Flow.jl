@@ -9,7 +9,7 @@ module Sys_Flow
 
 using JSON3
 using DataFrames
-using PlotlyJS: Plot, GenericTrace, scatter, attr, Layout
+using PlotlyJS
 using Main.Sys_Fast
 using Main.Lib_Arts
 
@@ -44,32 +44,31 @@ end
     FLOW_NextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedLeaderID::String="", ZoomFactor::Float64=0.5)::Dict{String, Any}
 Orchestrates transition to the next experimental phase based on selected leader performance.
 """
-function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Union{String,Nothing}, SelectedLeaderID::Union{String,Nothing}="", ZoomFactor::Float64=0.5, ShiftFactor::Float64=0.0)::Dict{String, Any}
+function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Union{String,Nothing}, SelectedLeaderID::Union{String,Nothing}="", ZoomFactor::Float64=0.5, ShiftFactor::Float64=0.0)::Dict{String,Any}
     (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict("Status" => "FAIL", "Message" => "Invalid master file path provided.")
     (isnothing(CurrentPhase) || isempty(CurrentPhase)) && return Dict("Status" => "FAIL", "Message" => "Current phase not specified.")
-    # 1. Extract performance leader
-    Leader = Main.Lib_Core.CORE_ExtractLeader_DDEF(MasterFile, CurrentPhase, SelectedLeaderID)
-    isempty(Leader) && return Dict("Status" => "FAIL", "Message" => "Leader extraction failed for $CurrentPhase.")
-
-    # 2. Reconstruct session state from MasterVault
+    # 1. Reconstruct session state from MasterVault FIRST to get correct variable order
     C = Sys_Fast.FAST_Data_DDEC
     df_config = Sys_Fast.FAST_ReadExcel_DDEF(MasterFile, C.SHEET_CONFIG)
-    
-    OldConfig = Dict{String, Any}[]
-    Outputs = Dict{String, Any}[]
-    GlobalInfo = Dict{String, Any}()
+
+    OldConfig = Dict{String,Any}[]
+    Outputs = Dict{String,Any}[]
+    GlobalInfo = Dict{String,Any}()
+    InNames = String[]
 
     if !isempty(df_config)
         # Idiomatic search for JSON payload column
         json_col = findfirst(c -> occursin("JSON", uppercase(c)), names(df_config))
         if !isnothing(json_col)
             try
-                RawConf = JSON3.read(df_config[1, json_col], Dict{String, Any})
-                
+                RawConf = JSON3.read(df_config[1, json_col], Dict{String,Any})
+
                 # Functional restoration of ingredients
                 if haskey(RawConf, "Ingredients")
-                    OldConfig = map(RawConf["Ingredients"]) do item
-                        d = Dict{String, Any}(string(k) => v for (k, v) in pairs(item))
+                    raw_ing = RawConf["Ingredients"]
+                    iter_ing = raw_ing isa Dict ? values(raw_ing) : raw_ing
+                    OldConfig = map(iter_ing) do item
+                        d = Dict{String,Any}(string(k) => v for (k, v) in pairs(item))
                         # Unified level restoration
                         d["Levels"] = if haskey(d, "Levels")
                             Float64[isnothing(x) ? NaN : Float64(x) for x in d["Levels"]]
@@ -78,14 +77,19 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
                         else
                             Float64[0.0, 0.0, 0.0]
                         end
+
+                        # Collect names of variables to ensure extraction order
+                        if get(d, "Role", "") == C.ROLE_VAR
+                            push!(InNames, get(d, "Name", ""))
+                        end
                         d
                     end
                 end
 
                 # Carry forward session metadata
-                Outputs = [Dict{String, Any}(string(k) => v for (k, v) in pairs(o)) for o in get(RawConf, "Outputs", [])]
-                GlobalInfo = Dict{String, Any}(string(k) => v for (k, v) in pairs(get(RawConf, "Global", Dict())))
-                
+                Outputs = [Dict{String,Any}(string(k) => v for (k, v) in pairs(o)) for o in get(RawConf, "Outputs", [])]
+                GlobalInfo = Dict{String,Any}(string(k) => v for (k, v) in pairs(get(RawConf, "Global", Dict())))
+
             catch e
                 Sys_Fast.FAST_Log_DDEF("FLOW", "STATE_RESTORE", "JSON configuration sync failed: $e", "FAIL")
             end
@@ -93,6 +97,10 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
     end
 
     isempty(OldConfig) && return Dict("Status" => "FAIL", "Message" => "Configuration state loss detected.")
+
+    # 2. Now extract leader using the strict InNames order
+    Leader = Main.Lib_Core.CORE_ExtractLeader_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, InNames)
+    isempty(Leader) && return Dict("Status" => "FAIL", "Message" => "Leader extraction failed for $CurrentPhase.")
 
     # 3. Calculate Adaptive Search Space
     Leader["OldConfig"] = OldConfig
@@ -117,22 +125,57 @@ end
     FLOW_GetCandidates_DDEF(MasterFile::String, CurrentPhase::String)::Vector{Dict{String, Any}}
 Extracts potential leaders for the specified phase, sorted by scientific score.
 """
-function FLOW_GetCandidates_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Union{String,Nothing})::Vector{Dict{String, Any}}
-    (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict{String, Any}[]
-    (isnothing(CurrentPhase) || isempty(CurrentPhase)) && return Dict{String, Any}[]
+function FLOW_GetCandidates_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Union{String,Nothing})::Vector{Dict{String,Any}}
+    (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict{String,Any}[]
+    (isnothing(CurrentPhase) || isempty(CurrentPhase)) && return Dict{String,Any}[]
     C = Sys_Fast.FAST_Data_DDEC
     df = Sys_Fast.FAST_ReadExcel_DDEF(MasterFile, C.PREFIX_LEADERS * CurrentPhase)
-    isempty(df) && return Dict{String, Any}[]
- 
+    isempty(df) && return Dict{String,Any}[]
+
     # Functional extraction and numeric coercion
     candidates = map(eachrow(df)) do row
-        d = Dict{String, Any}(string(k) => v for (k, v) in pairs(row))
+        d = Dict{String,Any}(string(k) => v for (k, v) in pairs(row))
         d["Score"] = Sys_Fast.FAST_SafeNum_DDEF(get(d, "SCORE", 0.0))
         d
     end
- 
+
     # Idiomatic reverse sort by score
     return sort!(candidates; by=x -> x["Score"], rev=true)
+end
+
+"""
+    FLOW_CalcAdaptiveRange_DDEF(Val, L_Old, Zoom, Shift) -> Vector{Float64}
+Internal helper for search space adaptation logic.
+"""
+function FLOW_CalcAdaptiveRange_DDEF(Val::Float64, L_Old::Vector{Float64}, Zoom::Real, Shift::Real)
+    Range = L_Old[3] - L_Old[1]
+
+    # Automatic shift logic for boundary leaders
+    Tol = Range * 0.05
+    at_limit = abs(Val - L_Old[1]) < Tol || abs(Val - L_Old[3]) < Tol
+
+    New_Range = at_limit ? Range : Range * Zoom
+
+    # Manual Shift applied relative to half of the NEW range
+    ShiftVal = Shift * (New_Range * 0.5)
+    New_Mid = Val + ShiftVal
+
+    New_Min = New_Mid - New_Range / 2
+    New_Max = New_Mid + New_Range / 2
+
+    # Boundary clamping with conservation of range
+    if New_Min < 0.0
+        overshoot = -New_Min
+        New_Min = 0.0
+        New_Max += overshoot
+    end
+
+    org_max = L_Old[3] + Range * 0.1
+    if New_Max > org_max && org_max > 0.0
+        New_Max = org_max
+    end
+
+    return Float64[New_Min, New_Mid, New_Max]
 end
 
 # --------------------------------------------------------------------------------------
@@ -140,10 +183,10 @@ end
 # --------------------------------------------------------------------------------------
 
 """
-    FLOW_BuildNextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedLeaderID::String="", ZoomFactor::Float64=0.5, Method::String="TL9")::Dict{String, Any}
+    FLOW_BuildNextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedLeaderID::String="", ZoomFactor::Float64=0.5, Method::String="TL09")::Dict{String, Any}
 Constructs the next experimental phase by mapping adaptive ranges to a coded design matrix.
 """
-function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Union{String,Nothing}, SelectedLeaderID::Union{String,Nothing}="", ZoomFactor::Float64=0.5, Method::String="TL9", ShiftFactor::Float64=0.0)::Dict{String, Any}
+function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Union{String,Nothing}, SelectedLeaderID::Union{String,Nothing}="", ZoomFactor::Float64=0.5, Method::String="TL09", ShiftFactor::Float64=0.0)::Dict{String,Any}
     (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict("Status" => "FAIL", "Message" => "Invalid master file path provided.")
     C = Sys_Fast.FAST_Data_DDEC
     Log = Sys_Fast.FAST_Log_DDEF
@@ -167,8 +210,8 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
     # Declarative audit row generation
     audit_rows = map(NewConfig) do c
         lvls = _get(c, "Levels", [0.0, 0.0, 0.0])
-        Dict("Name" => string(_get(c, "Name", "Unknown")), "Role" => string(_get(c, "Role", "Variable")), 
-             "L1" => Float64(lvls[1]), "L2" => Float64(lvls[2]), "L3" => Float64(lvls[3]), "MW" => Float64(_get(c, "MW", 0.0)))
+        Dict("Name" => string(_get(c, "Name", "Unknown")), "Role" => string(_get(c, "Role", "Variable")),
+            "L1" => Float64(lvls[1]), "L2" => Float64(lvls[2]), "L3" => Float64(lvls[3]), "MW" => Float64(_get(c, "MW", 0.0)))
     end
 
     audit_ok, audit_report, _, t_mass, _ = Main.Lib_Mole.MOLE_QuickAudit_DDEF(audit_rows, vol, conc)
@@ -185,14 +228,14 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
 
     design_coded = Main.Lib_Core.CORE_GenDesign_DDEF(Method, 3)
     N_Runs = size(design_coded, 1)
-    
+
     # 3. Level Mapping
     configs = [Dict("Levels" => get(NewConfig[i], "Levels", [0.0, 0.0, 0.0])) for i in var_indices]
     real_matrix = Main.Lib_Core.CORE_MapLevels_DDEF(design_coded, configs)
 
     # 4. Canonical DataFrame Construction
     p_num = something(tryparse(Int, replace(TargetPhase, "Phase" => "")), 2)
-    
+
     df = DataFrame(
         C.COL_EXP_ID => ["EXP_P$(p_num)_$(lpad(i, 2, '0'))" for i in 1:N_Runs],
         C.COL_PHASE => fill(TargetPhase, N_Runs),
@@ -202,16 +245,16 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
 
     # Vectorized column insertion
     for (k, idx) in enumerate(var_indices)
-        df[!, C.PRE_INPUT * get(NewConfig[idx], "Name", "Var$k")] = round.(real_matrix[:, k]; digits=3)
+        df[!, C.PRE_INPUT*get(NewConfig[idx], "Name", "Var$k")] = round.(real_matrix[:, k]; digits=3)
     end
 
     foreach(NewConfig) do c
         role, name = get(c, "Role", ""), get(c, "Name", "")
         if role == C.ROLE_FIX
             lvls = get(c, "Levels", [0.0, 0.0, 0.0])
-            df[!, C.PRE_FIXED * name] = fill(length(lvls) >= 2 ? lvls[2] : 0.0, N_Runs)
+            df[!, C.PRE_FIXED*name] = fill(length(lvls) >= 2 ? lvls[2] : 0.0, N_Runs)
         elseif role == C.ROLE_FILL
-            df[!, C.PRE_FILL * name] = fill(0.0, N_Runs)
+            df[!, C.PRE_FILL*name] = fill(0.0, N_Runs)
         end
     end
 
@@ -220,23 +263,23 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
         for o in res["Outputs"]
             n = string(get(o, "Name", ""))
             isempty(n) && continue
-            df[!, C.PRE_RESULT * n] = Vector{Union{Missing, Float64}}(missing, N_Runs)
-            df[!, C.PRE_PRED * n] = Vector{Union{Missing, Float64}}(missing, N_Runs)
+            df[!, C.PRE_RESULT*n] = Vector{Union{Missing,Float64}}(missing, N_Runs)
+            df[!, C.PRE_PRED*n] = Vector{Union{Missing,Float64}}(missing, N_Runs)
         end
     end
-    df[!, C.COL_SCORE] = Vector{Union{Missing, Float64}}(missing, N_Runs)
+    df[!, C.COL_SCORE] = Vector{Union{Missing,Float64}}(missing, N_Runs)
 
     # 5. MasterVault Finalization
     current_config = Sys_Fast.FAST_ReadConfig_DDEF(MasterFile)
-    current_config["Ingredients"] = [Dict{String, Any}(string(k) => v for (k, v) in pairs(c)) for c in NewConfig]
-    
-    g_info = get(current_config, "Global", Dict{String, Any}())
+    current_config["Ingredients"] = [Dict{String,Any}(string(k) => v for (k, v) in pairs(c)) for c in NewConfig]
+
+    g_info = get(current_config, "Global", Dict{String,Any}())
     g_info["Method"] = Method
     current_config["Global"] = g_info
 
     out_names = [string(get(o, "Name", "")) for o in get(res, "Outputs", []) if !isempty(get(o, "Name", ""))]
     in_names = [get(c, "Name", "") for c in NewConfig]
-    
+
     success = Sys_Fast.FAST_InitMaster_DDEF(MasterFile, in_names, out_names, df, current_config)
     !success && return Dict("Status" => "FAIL", "Message" => "Excel commit failed for $TargetPhase.")
 
@@ -272,14 +315,14 @@ function FLOW_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5, Shif
         # Automatic shift logic for boundary leaders
         Tol = Range * 0.05
         at_limit = abs(Val - L_Old[1]) < Tol || abs(Val - L_Old[3]) < Tol
-        
+
         New_Range = at_limit ? Range : Range * ZoomFactor
-        
+
         # Manual Shift applied relative to half of the NEW range
         # ShiftFactor = 1 means leader becomes Min, ShiftFactor = -1 means leader becomes Max
         ShiftVal = ShiftFactor * (New_Range * 0.5)
         New_Mid = Val + ShiftVal
-        
+
         action = at_limit ? "SHIFT (AUTO)" : (abs(ShiftFactor) > 0.05 ? "SHIFT (MANUAL)" : "ZOOM")
         Sys_Fast.FAST_Log_DDEF("FLOW", action,
             "Var $i -> $(action)", "LIST")
@@ -308,26 +351,7 @@ function FLOW_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5, Shif
     return NewConf
 end
 
-"""
-    FLOW_CalcAdaptiveRange_DDEF(Val, Range, Zoom, Shift) -> (Min, Mid, Max)
-Pure functional range calculator for visualization.
-"""
-function FLOW_CalcAdaptiveRange_DDEF(Val::Float64, OldRange::Vector{Float64}, Zoom::Float64, Shift::Float64)
-    R = OldRange[3] - OldRange[1]
-    New_Range = R * Zoom
-    ShiftVal = Shift * (New_Range * 0.5)
-    Mid = Val + ShiftVal
-    Mn = Mid - New_Range / 2
-    Mx = Mid + New_Range / 2
-    
-    # Simple conservation clamp for preview
-    if Mn < 0.0
-        Mx += (-Mn)
-        Mn = 0.0
-    end
-    
-    return [Mn, Mid, Mx]
-end
+
 
 """
     FLOW_WriteLeaders_DDEF(File, Phase, LeadersDF) -> Bool
@@ -353,58 +377,85 @@ end
     FLOW_RenderPhaseTransition_DDEF(Config, LeaderVals, Zoom, Shift) -> Plot
 Visualizes the adaptation of search space boundaries between experimental phases.
 """
-function FLOW_RenderPhaseTransition_DDEF(Config::AbstractVector, LeaderVals::AbstractVector{<:Real}, Zoom::Real, Shift::Real)
+function FLOW_RenderPhaseTransition_DDEF(Config::AbstractVector, LeaderVals::AbstractVector, Zoom::Real, Shift::Real)
     C = Sys_Fast.FAST_Data_DDEC
-    TH = (Grid="#F3F4F6", Blue="#21918C", Red="#E11D48", Yellow="#FBBF24", Text="#374151")
+    # Premium Palette - More visible "Current" grey
+    TH = (Grid="#F1F5F9", Blue="#0EA5E9", Red="#F43F5E", Amber="#F59E0B", Slate="#475569", Current="#94A3B8")
 
     vars = [(i, c) for (i, c) in enumerate(Config) if get(c, "Role", "Variable") == C.ROLE_VAR]
     n_vars = length(vars)
+    if n_vars == 0
+        return Plot([], Layout(title="No variables detected."))
+    end
+
     traces = GenericTrace[]
     y_nms = [get(c, "Name", "Var$i") for (i, c) in vars]
 
-    # Calculate boundaries for fixed axis scaling
-    all_min = minimum([get(c, "Levels", [0.0,0.0,0.0])[1] for (i,c) in vars])
-    all_max = maximum([get(c, "Levels", [0.0,0.0,0.0])[3] for (i,c) in vars])
-    pad = (all_max - all_min) * 0.15
-
     for (j, (i, conf)) in enumerate(vars)
         L_Old = Float64.(get(conf, "Levels", [0.0, 0.0, 0.0]))
-        Val = (j <= length(LeaderVals)) ? LeaderVals[j] : L_Old[2]
+        # Ensure we are using the correct leader value for the correct variable
+        Val = (j <= length(LeaderVals)) ? Float64(LeaderVals[j]) : L_Old[2]
         L_New = FLOW_CalcAdaptiveRange_DDEF(Val, L_Old, Zoom, Shift)
 
-        # 1. Background (Old Space) - A light-gray bar
-        push!(traces, scatter(; x=[L_Old[1], L_Old[3]], y=[j, j], mode="lines", 
-            name="Current Space", line=attr(color="#E5E7EB", width=12), 
+        # NORMALIZATION: Map the current range [Min, Max] to [0, 100] for visual comparison
+        # This allows variables with different scales (e.g. 0-10 and 0-6000) to be seen together
+        base_min = L_Old[1]
+        base_span = L_Old[3] - L_Old[1]
+
+        # Avoid division by zero
+        s = base_span == 0 ? 1.0 : base_span
+        norm(v) = (v - base_min) / s * 100.0
+
+        # 1. Current (Old Space) - Darker grey for visibility
+        push!(traces, scatter(; x=[norm(L_Old[1]), norm(L_Old[3])], y=[j, j], mode="lines",
+            name="Current", line=attr(color=TH.Current, width=18),
             showlegend=(j == 1), hoverinfo="skip"))
-        
-        # 2. Target Space (New Space) - A teal bar
-        push!(traces, scatter(; x=[L_New[1], L_New[3]], y=[j, j], mode="lines", 
-            name="Proposed Frontier", line=attr(color=TH.Blue, width=12), 
-            showlegend=(j == 1), hovertext="Target Boundary"))
-        
-        # 3. Leader Selection (The "Anchor")
-        push!(traces, scatter(; x=[Val], y=[j], mode="markers", name="Selected Leader",
-            marker=attr(symbol="diamond", size=10, color=TH.Red, line=attr(color="white", width=1)),
+
+        # 2. Target (New Space)
+        push!(traces, scatter(; x=[norm(L_New[1]), norm(L_New[3])], y=[j, j], mode="lines",
+            name="Target", line=attr(color=TH.Blue, width=18),
+            showlegend=(j == 1), hovertext="New Bounds: $(round(L_New[1], digits=2)) to $(round(L_New[3], digits=2))"))
+
+        # 3. Leader Point
+        push!(traces, scatter(; x=[norm(Val)], y=[j], mode="markers", name="Leader",
+            marker=attr(symbol="circle", size=12, color=TH.Red,
+                line=attr(color="white", width=2)),
             showlegend=(j == 1)))
-        
-        # 4. Center indicator (The "Pulse")
-        push!(traces, scatter(; x=[L_New[2]], y=[j], mode="markers", name="New Center",
-            marker=attr(symbol="line-ns", size=12, color=TH.Yellow, line=attr(width=3)),
-            showlegend=(j == 1)))
+
+        # 4. Midpoint
+        pmid = L_New[2]
+        if !isnan(pmid) && !isnan(norm(pmid))
+            push!(traces, scatter(; x=[norm(pmid)], y=[j], mode="markers", name="Midpoint",
+                marker=attr(symbol="line-ns", size=16, color=TH.Amber, line=attr(width=3)),
+                showlegend=(j == 1)))
+        end
     end
 
-    layout = Layout(; 
-        height=min(120 + n_vars*35, 250), 
-        margin=attr(l=120, r=30, t=10, b=40),
-        bgcolor="rgba(0,0,0,0)",
-        xaxis=attr(title=attr(text="Physical Value Range", font=attr(size=10)), 
-                  gridcolor="#F3F4F6", zeroline=false, range=[all_min-pad, all_max+pad]),
-        yaxis=attr(tickvals=collect(1:n_vars), ticktext=y_nms, showgrid=false, 
-                  zeroline=false, fixedrange=true, tickfont=attr(size=10)),
-        legend=attr(orientation="h", y=-0.5, x=0.5, xanchor="center", font=attr(size=9)),
-        template="plotly_white"
+    layout = Layout(;
+        height=min(120 + n_vars * 50, 280),
+        margin=attr(l=100, r=40, t=10, b=40),
+        plot_bgcolor="white",
+        paper_bgcolor="rgba(0,0,0,0)",
+        xaxis=attr(title=attr(text="Normalized Shift (%)", font=attr(size=10, color=TH.Slate)),
+            gridcolor=TH.Grid, zeroline=false, range=[-10, 110],
+            tickvals=[0, 25, 50, 75, 100], ticktext=["Min", "", "Mid", "", "Max"],
+            tickfont=attr(size=9)),
+        yaxis=attr(tickvals=collect(1:n_vars), ticktext=y_nms, showgrid=false,
+            zeroline=false, fixedrange=true, tickfont=attr(size=10, color=TH.Slate, weight="bold")),
+        legend=attr(orientation="h", y=-0.4, x=0.5, xanchor="center", font=attr(size=9)),
     )
-    return Plot(traces, layout)
+
+    # Final check: if no traces (all NaN?), add placeholder
+    if isempty(traces)
+        push!(traces, scatter(x=[50], y=[1], text=["Invalid Data"], mode="text"))
+    end
+
+    p = Plot(traces, layout)
+    # Robust serialization for Dash
+    return Dict(
+        "data" => p.data,
+        "layout" => p.layout
+    )
 end
 
 end # module Sys_Flow

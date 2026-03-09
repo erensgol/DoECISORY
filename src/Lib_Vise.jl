@@ -834,14 +834,20 @@ function VISE_GenerateScientificReport_DDEF(Res::Dict)
     write(io, "---\n\n")
 
     # --- Section: Global Design Vitals ---
-    if haskey(Res, "Vitals")
+    if haskey(Res, "Vitals") && !isnothing(Res["Vitals"])
         v = Res["Vitals"]
         write(io, "### I. Experimental Design Vitals\n")
         write(io, "Rigorous mathematical audit of the underlying design matrix topology.\n\n")
-        @printf(io, "- **D-Efficiency**: %.2f%% (Goal: >60%% for industrial robustness)\n", v["D"] * 100)
-        @printf(io, "- **Condition Number**: %.2e (Goal: <1e4 for numerical stability)\n", v["Condition"])
-        @printf(io, "- **Lack-of-Fit (P)**: %.4f ", v["LOF"])
-        if v["LOF"] < 0.05
+        
+        d_val = get(v, "D", 0.0)
+        c_val = get(v, "Condition", Inf)
+        lof_val = get(v, "LOF", 1.0)
+
+        @printf(io, "- **D-Efficiency**: %.2f%% (Goal: >60%% for industrial robustness)\n", d_val * 100)
+        @printf(io, "- **Condition Number**: %.2e (Goal: <1e4 for numerical stability)\n", c_val)
+        @printf(io, "- **Lack-of-Fit (P)**: %.4f ", lof_val)
+        
+        if lof_val < 0.05
             write(io, "(`SIGNIFICANT` - Potential systematic bias or missing higher-order terms)\n")
         else
             write(io, "(`NON-SIGNIFICANT` - Model captures the underlying phenomenon accurately)\n")
@@ -979,6 +985,10 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     Sys_Fast.FAST_NormaliseCols_DDEF!(df_raw)
 
     col_phase = Symbol(C.COL_PHASE)
+    if !hasproperty(df_raw, col_phase)
+        Log("VISE", "PHASE_ERROR", "Required column '$col_phase' not found in dataset.", "FAIL")
+        return Dict("Status" => "FAIL", "Message" => "Required column '$col_phase' not found in dataset. Please ensure the data sheet is properly formatted.")
+    end
     df_train = hasproperty(df_raw, col_phase) ?
                filter(r -> string(r[col_phase]) == Phase, df_raw) :
                copy(df_raw)
@@ -1321,9 +1331,11 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
                 push!(row_idx_in_raw, idx)
             end
         end
-    else
-        # Fallback if PHASE column is missing (hazardous but maintains existing behavior)
-        row_idx_in_raw = collect(1:nrow(df_raw))
+    end
+
+    if isempty(row_idx_in_raw)
+        Log("VISE", "PHASE_EMPTY", "No records found for phase '$Phase'.", "FAIL")
+        return Dict("Status" => "FAIL", "Message" => "No records found matching phase '$Phase'. Execution halted.")
     end
 
 

@@ -33,10 +33,7 @@ const DECK_RoleOptions_DDEC = [
     Dict("label" => "Filler", "value" => "Filler"),
 ]
 
-const DECK_RoleColours_DDEC = Dict(
-    "Variable" => "#440154",
-    "Fixed" => "#FDE725",
-)
+# --- DECK_RoleColours_DDEC REMOVED per user feedback (Dash styling limitations) ---
 
 
 """
@@ -66,8 +63,8 @@ end
 Renders a row for the response metrics table.
 """
 function DECK_BuildOutRow_DDEF(i, def_name, def_unit)
-    # Indicator dot for decay correction status
-    out_dot = BASE_StatusIcon_DDEF("●", "deck-out-dot-$i", color=get(DECK_RoleColours_DDEC, "Output", "#666666"))
+    # Indicator dot for decay correction status (Fixed color as per user request)
+    out_dot = BASE_StatusIcon_DDEF("●", "deck-out-dot-$i", color="#666666")
 
     prop_btn = BASE_IconButton_DDEF("btn-out-prop-$i", "fas fa-cog")
 
@@ -369,11 +366,12 @@ function DECK_Layout_DDEF()
                                     BASE_ControlGroup_DDEF("Design Method",
                                         dcc_dropdown(id="deck-dd-method",
                                             options=[
-                                                Dict("label" => "Box-Behnken (15 Runs, Quadratic)", "value" => "BoxBehnken"),
-                                                Dict("label" => "Taguchi L9 (9 Runs, Linear)", "value" => "Taguchi_L9"),
-                                                Dict("label" => "D-Optimal (15 Runs, Quadratic)", "value" => "DOptimal"),
+                                                Dict("label" => "Box-Behnken (15 Runs, Quadratic)", "value" => "BB15"),
+                                                Dict("label" => "D-Optimal (15 Runs, Quadratic)", "value" => "DOPT15"),
+                                                Dict("label" => "Taguchi L9 (9 Runs, Linear)", "value" => "TL09"),
+                                                Dict("label" => "D-Optimal (9 Runs, Linear)", "value" => "DOPT09"),
                                             ],
-                                            value="BoxBehnken", clearable=false, className="mb-3")),
+                                            value="BB15", clearable=false, className="mb-3")),
                                     BASE_Separator_DDEF(),
                                     # Stoichiometry Settings Button
                                     BASE_ActionButton_DDEF("deck-btn-stoch-settings", "Stoichiometry Settings", "fas fa-flask", class="w-100 mb-2"),
@@ -782,14 +780,19 @@ function DECK_RegisterCallbacks_DDEF(app)
         prevent_initial_call=false
     ) do args...
         try  # Global error guard for main orchestrator callback
-            # UNPACKING ARCHITECTURE (Args Array Mapping)
-            # 1..33: Inputs (9 single + 24 del buttons)
-            # 34: deck-store-factors (STATE)
-            # 35: deck-upload (STATE)
-            # 36..251: Factor Table Row States (9 blocks of 24)
-            # 252..253: Vol/Conc States (hidden, kept for compatibility)
-            # 254..259: Property Modal States (TargetID, IsRadio, HL, HLUnit, IsFiller, MW)
-            # 260: deck-store-stoch-settings (STATE)
+            # --- ARGUMENT MAPPING (LEGACY INDEXING) ---
+            # 1..11: Core Action Triggers (Buttons, Stores, Uploads)
+            # 12..35: Delete Button Triggers (ndels)
+            # 36: Factor Store (store_data)
+            # 37: Upload Filename (fname)
+            # 38..253: Row States (9 parameters * 24 rows)
+            # 254..255: Global Vol/Conc States
+            # 256..259: Property Modal States (Target, IsRadio, HL, MW)
+            # 260: Stoichiometry Settings Store
+            # 261..266: Response Table Values (Names/Units)
+            # 267: Response Store
+            # 268..271: Stoichiometry Modal Inputs
+            # 272..273: Project/Phase States
 
             n_add, n_clear, up_memo, n_temp, n_save, session, up_cont = args[1:7]
             save_prop_trig = args[8]
@@ -943,7 +946,7 @@ function DECK_RegisterCallbacks_DDEF(app)
 
             NO = Dash.no_update()
             count = isnothing(store_data) ? 1 : DECK_GetSafeKey_DDEF(store_data, "count", 1)
-            
+
             DECK_SafeNumZero_DDEF(x) = (v = Sys_Fast.FAST_SafeNum_DDEF(x); isnan(v) ? 0.0 : v)
             max_idx = min(count, length(all_names), length(all_roles), length(all_l1s), length(all_l2s), length(all_l3s), length(all_mins), length(all_maxs), length(all_mws), length(all_units))
             # Robust Data Capture Logic: trust DOM but sync with Store for properties
@@ -956,7 +959,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     hl_val = 0.0
                     hl_unit = "Hours"
                     is_fill = false
-                    prev_mw = 0.0 
+                    prev_mw = 0.0
 
                     if !isnothing(store_data) && (haskey(store_data, "rows") || haskey(store_data, :rows))
                         r_list = DECK_GetSafeKey_DDEF(store_data, "rows", [])
@@ -1132,7 +1135,7 @@ function DECK_RegisterCallbacks_DDEF(app)
 
                     json_str = JSON3.write(Dict("Inputs" => DECK_SnapRows_DDEF(), "Outputs" => out_d, "Global" => g_dict))
                     b64 = base64encode(json_str)
-                    
+
                     # Correctly capture Project and Phase for smart naming in JSON export
                     proj_v = string(args[271])
                     phase_v = string(args[272])
@@ -1257,15 +1260,15 @@ function DECK_RegisterCallbacks_DDEF(app)
             println("\e[31m[CRITICAL] DECK ORCHESTRATOR ERROR: $e\e[0m")
             println(bt)
             Sys_Fast.FAST_Log_DDEF("DECK", "CALLBACK_CRASH", "Exception: $(first(string(e), 200))", "FAIL")
-            
+
             err_msg = html_div([
-                html_i(className="fas fa-exclamation-triangle me-2"),
-                html_span("System Error: $(first(string(e), 50))", className="fw-bold")
-            ], className="badge bg-danger text-white w-100 p-2 shadow-sm", style=Dict("fontSize" => "0.75rem"))
-            
-            return (Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), 
-                    Dash.no_update(), Dash.no_update(), err_msg, Dash.no_update(), Dash.no_update(), 
-                    Dash.no_update(), ntuple(_ -> Dash.no_update(), 6)..., Dash.no_update())
+                    html_i(className="fas fa-exclamation-triangle me-2"),
+                    html_span("Design Orchestrator Error: $(first(string(e), 60))", className="fw-bold")
+                ], className="badge bg-danger text-white w-100 p-2 shadow-sm", style=Dict("fontSize" => "0.75rem"))
+
+            return (Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(),
+                Dash.no_update(), Dash.no_update(), err_msg, Dash.no_update(), Dash.no_update(),
+                Dash.no_update(), ntuple(_ -> Dash.no_update(), 6)..., Dash.no_update())
         end
     end
 

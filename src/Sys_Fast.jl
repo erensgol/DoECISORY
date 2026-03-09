@@ -91,9 +91,10 @@ Base.@kwdef struct FAST_Constants_DDES
     ROLE_FIX::String = "Fixed"
 
     # --- Design Methods ---
-    METHOD_BB::String = "BoxBehnken"
-    METHOD_TL9::String = "Taguchi_L9"
-    METHOD_DOPT::String = "DOptimal"
+    METHOD_BB15::String = "BB15"
+    METHOD_TL09::String = "TL09"
+    METHOD_DOPT15::String = "DOPT15"
+    METHOD_DOPT09::String = "DOPT09"
 
 end
 

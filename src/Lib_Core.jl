@@ -25,14 +25,14 @@ export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF,
     CORE_D_Efficiency_DDEF, CORE_CalcDesignMetrics_DDEF
 
 # Pre-allocated immutable design matrices (coded format)
-const CORE_BbDesign_DDEC = Int8[
+const CORE_Bb15Design_DDEC = Int8[
     -1 -1 0; -1 1 0; 1 -1 0; 1 1 0;
     -1 0 -1; -1 0 1; 1 0 -1; 1 0 1;
     0 -1 -1; 0 -1 1; 0 1 -1; 0 1 1;
     0 0 0; 0 0 0; 0 0 0
 ]
 
-const CORE_Tl9Design_DDEC = Int8[
+const CORE_Tl09Design_DDEC = Int8[
     -1 -1 -1; -1 0 0; -1 1 1;
     0 -1 0; 0 0 1; 0 1 -1;
     1 -1 1; 1 0 -1; 1 1 0
@@ -46,12 +46,14 @@ function CORE_GenDesign_DDEF(Method::String, FactorCount::Int=3)
     C = Sys_Fast.FAST_Data_DDEC
     Sys_Fast.FAST_Log_DDEF("CORE", "DESIGN_GEN", "Generating matrix for $Method (Strict 3-Var Mode)", "WAIT")
 
-    design = if Method == C.METHOD_BB || Method == "BB"
-        copy(CORE_BbDesign_DDEC)
-    elseif Method == C.METHOD_TL9 || Method == "TL9"
-        copy(CORE_Tl9Design_DDEC)
-    elseif Method == C.METHOD_DOPT || Method == "DOPT"
+    design = if Method == C.METHOD_BB15 || Method == "BB15"
+        copy(CORE_Bb15Design_DDEC)
+    elseif Method == C.METHOD_TL09 || Method == "TL09"
+        copy(CORE_Tl09Design_DDEC)
+    elseif Method == C.METHOD_DOPT15 || Method == "DOPT15"
         CORE_GenerateOptimalDesign_DDEF(FactorCount, 15)
+    elseif Method == C.METHOD_DOPT09 || Method == "DOPT09"
+        CORE_GenerateOptimalDesign_DDEF(FactorCount, 9)
     else
         Sys_Fast.FAST_Log_DDEF("CORE", "METHOD_ERROR", "Undefined Method: $Method", "FAIL")
         Int8[;;]
@@ -237,10 +239,11 @@ end
 # --------------------------------------------------------------------------------------
 
 """
-    CORE_ExtractLeader_DDEF(FilePath, PhaseCode, [SelectedID]) -> Dict
+    CORE_ExtractLeader_DDEF(FilePath, PhaseCode, [SelectedID], [VarNames]) -> Dict
 Retrieves experiment data for the optimal (leader) run from a previous phase record.
+Ensures variable ordering matches 'VarNames' if provided.
 """
-function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID::String="")
+function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID::String="", VarNames::Vector{String}=String[])
     C = Sys_Fast.FAST_Data_DDEC
     sheet = C.PREFIX_LEADERS * PhaseCode
 
@@ -272,8 +275,20 @@ function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID
     end
 
     row = df[idx, :]
-    input_cols = filter(n -> startswith(n, C.PRE_INPUT), cols)
-    vals = Sys_Fast.FAST_SafeNum_DDEF.(values(row[input_cols]))
+
+    # Ordered value extraction
+    vals = Float64[]
+    if !isempty(VarNames)
+        for v_name in VarNames
+            # Try with prefix and without
+            v_key = startswith(v_name, C.PRE_INPUT) ? v_name : "$(C.PRE_INPUT)$v_name"
+            val = get(row, Symbol(v_key), get(row, Symbol(v_name), 0.0))
+            push!(vals, Sys_Fast.FAST_SafeNum_DDEF(val))
+        end
+    else
+        input_cols = filter(n -> startswith(n, C.PRE_INPUT), cols)
+        vals = Sys_Fast.FAST_SafeNum_DDEF.(values(row[input_cols]))
+    end
 
     id_str = isnothing(col_id) ? "N/A" : string(row[col_id])
     Sys_Fast.FAST_Log_DDEF("CORE", "LEADER_DATA",
@@ -283,7 +298,7 @@ function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID
         "ID" => id_str,
         "Score" => row[col_score],
         "Vals" => collect(vals),
-        "InputNames" => input_cols,
+        "InputNames" => isempty(VarNames) ? filter(n -> startswith(n, C.PRE_INPUT), cols) : VarNames,
         "OldConfig" => Any[],
     )
 end

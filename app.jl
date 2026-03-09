@@ -209,13 +209,13 @@ app.layout = html_div([
             dbc_modalheader("System Diagnostics & Scientific Integrity"),
             dbc_modalbody([
                 dbc_tabs([
-                    dbc_tab([
-                        html_div(html_pre(id="modal-diagnostics-sys-content", style=Dict("whiteSpace" => "pre-wrap", "fontSize" => "0.85rem")), className="p-3")
-                    ], label="System Health", tab_id="tab-sys"),
-                    dbc_tab([
-                        html_div(dcc_markdown(id="modal-diagnostics-sci-content"), className="p-3")
-                    ], label="Scientific Integrity", tab_id="tab-sci"),
-                ], id="modal-diagnostics-tabs", active_tab="tab-sys")
+                        dbc_tab([
+                                html_div(html_pre(id="modal-diagnostics-sys-content", style=Dict("whiteSpace" => "pre-wrap", "fontSize" => "0.85rem")), className="p-3")
+                            ], label="System Health", tab_id="tab-sys"),
+                        dbc_tab([
+                                html_div(dcc_markdown(id="modal-diagnostics-sci-content"), className="p-3")
+                            ], label="Scientific Integrity", tab_id="tab-sci"),
+                    ], id="modal-diagnostics-tabs", active_tab="tab-sys")
             ]),
             dbc_modalfooter(dbc_button("Close", id="btn-close-diagnostics", className="ms-auto", n_clicks=0))
         ], id="modal-diagnostics", size="lg", is_open=false),
@@ -358,9 +358,9 @@ callback!(app,
     if isempty(ctx.triggered)
         return false, Dash.no_update(), Dash.no_update()
     end
-    
+
     trig = split(ctx.triggered[1].prop_id, ".")[1]
-    
+
     if trig == "btn-open-sys-audit"
         if !isnothing(n_open) && n_open > 0
             return true, Sys_Fast.FAST_SystemAudit_DDEF(), Sys_Fast.FAST_ScientificAudit_DDEF()
@@ -368,7 +368,7 @@ callback!(app,
     elseif trig == "btn-close-diagnostics"
         return false, Dash.no_update(), Dash.no_update()
     end
-    
+
     return is_open, Dash.no_update(), Dash.no_update()
 end
 
@@ -408,142 +408,59 @@ LENS_RegisterCallbacks_DDEF(app)
 # --- JIT WARMUP ROUTINE ---
 # --------------------------------------------------------------------------------------
 
-"""
-    APP_Warmup_DDEF() -> Nothing
-Executes JIT pre-compilation on critical hot-paths within a background task to ensure zero-latency UI interaction.
-"""
-function APP_Warmup_DDEF()::Nothing
-    t0::Float64 = time()
-    FAST_Log_DDEF("BOOT", "Warmup", "JIT pre-compilation starting in [5s] (CPU Offset)...", "WAIT")
-
-    # Critical Delay: Allow Dash server to bind to port and pass HF Health Checks first
-    sleep(5)
-
-    FAST_Log_DDEF("BOOT", "Warmup", "Warmup Pulse: Initialising Sys_Fast...", "WAIT")
-
-    # Development mode check: skip heavy warmup if DAISHO_DEV is set
-    if haskey(ENV, "DAISHO_DEV") && ENV["DAISHO_DEV"] == "true"
-        FAST_Log_DDEF("BOOT", "Warmup", "Development Mode: Skipping JIT warmup for speed.", "INFO")
-        APP_SystemReady_DDEC[] = true
-        return nothing
-    end
-
-    try
-        # 1. Sys_Fast: Type coercion pipeline
-        Sys_Fast.FAST_SafeNum_DDEF("3.14")
-        Sys_Fast.FAST_SafeNum_DDEF(42)
-        Sys_Fast.FAST_SafeNum_DDEF(missing)
-        Sys_Fast.FAST_SafeNum_DDEF(nothing)
-
-        dummy_rows::Vector{Dict{String,Any}} = [
-            Dict{String,Any}("Name" => "A", "Role" => "Variable", "L1" => 1, "L2" => 2, "L3" => 3, "MW" => 100, "Unit" => "mg"),
-            Dict{String,Any}("Name" => "B", "Role" => "Variable", "L1" => "4", "L2" => "5", "L3" => "6", "MW" => 200.0, "Unit" => "mM"),
-            Dict{String,Any}("Name" => "C", "Role" => "Filler", "L1" => 0, "L2" => 0, "L3" => 0, "MW" => 300, "Unit" => "MR"),
-        ]
-        Sys_Fast.FAST_SanitiseInput_DDEF(dummy_rows)
-
-        FAST_Log_DDEF("BOOT", "Warmup", "Warmup Pulse: Lib_Mole...", "WAIT")
-        # 2. Lib_Mole: Stoichiometry engine
-        Lib_Mole.MOLE_ParseTable_DDEF(dummy_rows)
-        Lib_Mole.MOLE_CalcMass_DDEF(
-            String["A", "B", "C"], Float64[100.0, 200.0, 300.0], Float64[30.0, 30.0, 40.0], 5.0, 10.0
-        )
-        Lib_Mole.MOLE_ApproxEq_DDEF(1.0, 1.0 + 1e-12)
-
-        FAST_Log_DDEF("BOOT", "Warmup", "Warmup Pulse: Lib_Vise...", "WAIT")
-        # 3. Lib_Vise: Regression + GridSearch (core hot path)
-        X_dummy::Matrix{Float64} = Float64[1 2 3; 4 5 6; 7 8 9; 2 4 6; 3 6 9; 5 3 1; 8 2 4; 6 7 5;
-            1 5 9; 4 8 2; 7 1 5; 3 9 6]
-        Y_dummy::Vector{Float64} = Float64[10, 20, 30, 15, 25, 12, 28, 22, 18, 24, 14, 26]
-
-        mod::Dict{String,Any} = Lib_Vise.VISE_Regress_DDEF(X_dummy, Y_dummy, "quadratic";
-            InNames=String["Var1", "Var2", "Var3"])
-        Lib_Vise.VISE_CrossValidate_DDEF(X_dummy, Y_dummy, "quadratic")
-        Lib_Vise.VISE_ClampIndex_DDEF(5, 10)
-
-        if mod["Status"] == "OK"
-            bounds::Matrix{Float64} = hcat([1.0, 2.0, 1.0], [8.0, 9.0, 9.0])
-            goals::Vector{Dict{String,Any}} = [Dict{String,Any}("Type" => "Nominal", "Min" => 10.0, "Max" => 30.0, "Target" => 20.0)]
-            mod["Goal"] = goals[1]
-            Lib_Vise.VISE_GridSearch_DDEF([mod], goals, bounds; Steps=5)
-        end
-
-        FAST_Log_DDEF("BOOT", "Warmup", "Warmup Pulse: Lib_Arts...", "WAIT")
-        # 4. Lib_Arts: Rendering pipeline
-        if mod["Status"] == "OK"
-            try
-                Lib_Arts.ARTS_RenderPareto_DDEF(mod, "Warmup_Out", 0.95, 0.90)
-                Y_pred::Vector{Float64} = Lib_Vise.VISE_Predict_DDEF(mod, X_dummy)
-                Lib_Arts.ARTS_RenderFit_DDEF(Y_dummy, Y_pred, "Warmup_Out")
-                Lib_Arts.ARTS_CalcDesirability_DDEF(20.0,
-                    Dict{String,Any}("Type" => "Nominal", "Min" => 10.0, "Max" => 30.0, "Target" => 20.0))
-                Lib_Arts.ARTS_RenderOptimalZone_DDEF([mod], goals, X_dummy[1:3, :], String["V1", "V2", "V3"])
-            catch e
-                FAST_Log_DDEF("BOOT", "Warmup_Arts", "Visualisation pre-compilation skipped: $e", "WARN")
-            end
-        end
-
-        # New: Model Tournament & Report Warmup
-        if mod["Status"] == "OK"
-            try
-                Lib_Vise.VISE_SelectBestModel_DDEF(X_dummy[1:10, 1:1], Y_dummy[1:10], String["V1"])
-                Lib_Vise.VISE_SensitivityAnalysis_DDEF(mod, X_dummy[1, :])
-                r_dummy::Dict{String,Any} = Dict{String,Any}("OutNames" => String["W"], "Models" => [mod], "R2_Adj" => Float64[0.9], "R2_Pred" => Float64[0.8])
-                Lib_Vise.VISE_GenerateScientificReport_DDEF(r_dummy)
-            catch e
-                FAST_Log_DDEF("BOOT", "Warmup_Vise", "Analytics pre-compilation skipped: $e", "WARN")
-            end
-        end
-
-        # 5. Subsystem warm-up
-        try
-            Sys_Fast.FAST_CacheWrite_DDEF("_warmup_test", DataFrames.DataFrame(x=[1, 2, 3]))
-            Sys_Fast.FAST_CacheRead_DDEF("_warmup_test")
-            Sys_Fast.FAST_CacheEvict_DDEF("_warmup_test")
-            Sys_Fast.FAST_AcquireLock_DDEF("_warmup")
-            Sys_Fast.FAST_ReleaseLock_DDEF("_warmup")
-        catch e
-            FAST_Log_DDEF("BOOT", "Warmup_Sys", "Subsystem pre-compilation skipped: $e", "WARN")
-        end
-
-    catch e
-        FAST_Log_DDEF("BOOT", "Warmup_Warn", "Critical warmup block failed: $e", "WARN")
-    end
-
-    APP_SystemReady_DDEC[] = true  # Signal the loading overlay to dismiss
-    elapsed::Float64 = round(time() - t0; digits=2)
-    FAST_Log_DDEF("BOOT", "Warmup", "JIT pre-compilation complete ($(elapsed)s) — System READY", "OK")
-    return nothing
-end
-
 # --------------------------------------------------------------------------------------
-# --- SERVER EXECUTION ---
+# --- SERVER EXECUTION & WARMUP ---
 # --------------------------------------------------------------------------------------
 
 # Lightweight warmup for HF Spaces to avoid startup timeout
+"""
+    APP_Warmup_DDEF() -> Nothing
+Orchestrates JIT pre-compilation. Skips heavy lifting in Local Dev mode.
+"""
 function APP_Warmup_DDEF()::Nothing
-    t0::Float64 = time()
-    !APP_IsHfSpaces_DDEC && FAST_Log_DDEF("BOOT", "Warmup", "JIT pre-compilation starting...", "WAIT")
+    t0 = time()
+    is_dev = get(ENV, "DAISHO_DEV", "false") == "true"
 
-    # Skip heavy warmup if in HF to speed up boot
-    if APP_IsHfSpaces_DDEC
+    # HF Spaces or non-dev environments need thorough warmup for production stability
+    if APP_IsHfSpaces_DDEC && !is_dev
+        FAST_Log_DDEF("BOOT", "Warmup", "Production Environment Detected (HF Spaces).", "WAIT")
+        # HF Specific delay for health checks
+        sleep(2)
+    elseif is_dev
+        FAST_Log_DDEF("BOOT", "Warmup", "Development Mode: Fast Boot triggered.", "INFO")
         Sys_Fast.FAST_SafeNum_DDEF("1.0")
         APP_SystemReady_DDEC[] = true
         return nothing
     end
 
+    FAST_Log_DDEF("BOOT", "Warmup", "Initiating Scientific JIT Pulse...", "WAIT")
+
     try
-        # 1. Sys_Fast: Type coercion pipeline
+        # 1. Type system & IO
         Sys_Fast.FAST_SafeNum_DDEF("3.14")
-        
-        # ... (Rest of warmup remains same, but we only run it locally) ...
+        dummy_rows = [Dict{String,Any}("Name" => "A", "Role" => "Variable", "L1" => 1, "L2" => 2, "L3" => 3, "MW" => 100, "Unit" => "mg")]
+        Sys_Fast.FAST_SanitiseInput_DDEF(dummy_rows)
+
+        # 2. Physics & Chemistry
+        Lib_Mole.MOLE_ParseTable_DDEF(dummy_rows)
+        Lib_Mole.MOLE_CalcMass_DDEF(String["A"], Float64[100.0], Float64[100.0], 5.0, 10.0)
+
+        # 3. Analytics & Modelling
+        X_dummy = Float64[1 2 3; 4 5 6; 7 8 9; 2 4 6; 3 6 9; 5 3 1; 8 2 4; 6 7 5; 1 5 9; 4 8 2]
+        Y_dummy = Float64[10, 20, 30, 15, 25, 12, 28, 22, 18, 24]
+        mod = Lib_Vise.VISE_Regress_DDEF(X_dummy, Y_dummy, "quadratic")
+
+        if mod["Status"] == "OK"
+            Lib_Vise.VISE_Predict_DDEF(mod, X_dummy[1:1, :])
+            Lib_Arts.ARTS_RenderPareto_DDEF(mod, "Warmup", 0.95, 0.90)
+        end
     catch e
-        FAST_Log_DDEF("BOOT", "Warmup_Warn", "Warmup failed: $e", "WARN")
+        FAST_Log_DDEF("BOOT", "Warmup_Warn", "Lightweight JIT pulse encountered warnings: $e", "WARN")
     end
 
     APP_SystemReady_DDEC[] = true
-    elapsed::Float64 = round(time() - t0; digits=2)
-    !APP_IsHfSpaces_DDEC && FAST_Log_DDEF("BOOT", "Warmup", "JIT complete ($(elapsed)s)", "OK")
+    elapsed = round(time() - t0; digits=2)
+    FAST_Log_DDEF("BOOT", "Warmup", "JIT complete ($(elapsed)s) — System Ready.", "OK")
     return nothing
 end
 
