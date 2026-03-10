@@ -3,8 +3,7 @@ module Lib_Mole
 # ======================================================================================
 # DAISHODOE - LIB MOLE (STOICHIOMETRY & CHEMICAL ENGINE)
 # ======================================================================================
-# Purpose: Handling chemical compositions, gravimetric calculations (m=n*MW),
-#          and balancing filler components.
+# Purpose: Stoichiometry, unit-aware mass calculations, and chemical auditing.
 # Module Tag: MOLE
 # ======================================================================================
 
@@ -356,7 +355,7 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
 
     masses = Vector{Float64}(undef, R)
     for i in 1:R
-        # Full ratio vector (100% basis)
+        # Initialise full ratio vector for the current run
         ratios_full = zeros(length(D["Names"]))
         for (j, v_idx) in enumerate(idx_var)
             ratios_full[v_idx] = Design[i, j]

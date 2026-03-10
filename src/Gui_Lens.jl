@@ -3,7 +3,7 @@ module Gui_Lens
 # ======================================================================================
 # DAISHODOE - GUI LENS (STATISTICAL ANALYSIS ENGINE)
 # ======================================================================================
-# Purpose: Data analysis, model fitting (GLM), and high-fidelity visualization.
+# Purpose: Data analysis, model fitting (GLM), and high-fidelity visualisation.
 # Module Tag: LENS
 # ======================================================================================
 
@@ -47,7 +47,7 @@ function LENS_Layout_DDEF()
                                         # Data Ingestion
                                         BASE_SidebarHeader_DDEF("DATA ACQUISITION", icon="fas fa-database"),
                                         BASE_Upload_DDEF("lens-upload-data", "Import Dataset", "fas fa-file-import"),
-                                        BASE_Loading_DDEF("lens-upload-status", "No Data Source"),
+                                        BASE_Loading_DDEF("lens-upload-status", "No Data Source"; class="glass-loading-status mb-2"),
                                         BASE_Separator_DDEF(),
 
                                         # Exports Section
@@ -99,7 +99,7 @@ function LENS_Layout_DDEF()
                                         BASE_Loading_DDEF("lens-export-plots-status", ""),
                                         BASE_Loading_DDEF("lens-export-excel-status", ""),
                                     ]; right_node=html_i(className="fas fa-sliders-h text-secondary"), overflow="visible"), xs=12)),
-                        ]; xs=12, lg=3, className="mb-3 mb-lg-0"),
+                        ]; xs=12, md=3, className="mb-3 mb-md-0"),
 
                     # --- RIGHT COLUMN ---
                     dbc_col([
@@ -116,7 +116,7 @@ function LENS_Layout_DDEF()
                                                             BASE_TableHeader_DDEF("VALUE", width="15%"),
                                                         ])),
                                                         html_tbody([BASE_BuildGoalRow_DDEF(i) for i in 1:3])
-                                                    ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0")
+                                                    ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "var(--colour-val5-purbla)", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0")
                                         ], xs=12)),
                                 ]; panel_class="mb-3", content_class="glass-content p-2"),
 
@@ -152,7 +152,7 @@ function LENS_Layout_DDEF()
                             dbc_row(dbc_col(html_div([
                                         dbc_button(html_i(className="fas fa-chevron-left"),
                                             id="lens-btn-prev", color="secondary", outline=true, size="sm", className="me-1 px-2 py-1"),
-                                        dcc_input(id="lens-graph-input", type="number", min=1, step=1, value=1, className="form-control form-control-sm mx-1 text-center bg-transparent border-secondary", style=Dict("width" => "60px", "height" => "28px", "fontSize" => "12px", "color" => "#000000")),
+                                        dcc_input(id="lens-graph-input", type="number", min=1, step=1, value=1, className="form-control form-control-sm mx-1 text-center bg-transparent border-secondary", style=Dict("width" => "60px", "height" => "28px", "fontSize" => "12px", "color" => "var(--colour-val5-purbla)")),
                                         html_span(id="lens-graph-counter", className="text-secondary small mx-1"),
                                         dbc_button(html_i(className="fas fa-chevron-right"),
                                             id="lens-btn-next", color="secondary", outline=true, size="sm", className="ms-1 px-2 py-1"),
@@ -165,7 +165,7 @@ function LENS_Layout_DDEF()
                             dcc_store(id="lens-store-results", data=Dict()),
                             dcc_store(id="lens-store-radio-correct", data=true),
                             dcc_store(id="lens-signal-process", data=Dict("ts" => 0, "success" => false)),
-                        ]; xs=12, lg=9),
+                        ]; xs=12, md=9),
                 ], className="g-3"),
 
             # Modal Dialogs
@@ -181,18 +181,18 @@ function LENS_Layout_DDEF()
                                 dbc_col([
                                         dbc_label("Source Phase (Where we are)", className="x-small fw-bold text-uppercase text-muted mb-2"),
                                         dcc_dropdown(id="lens-wiz-dd-source", options=[], clearable=false, className="mb-3"),
-                                    ], md=6),
+                                    ], xs=12, md=6),
                                 dbc_col([
                                         dbc_label("Target Designation", className="x-small fw-bold text-uppercase text-muted mb-2"),
                                         dbc_input(id="lens-wiz-input-target", disabled=true, className="mb-3 fw-bold text-primary bg-light"),
-                                    ], md=6),
+                                    ], xs=12, md=6),
                             ]),
                         ], className="p-2")
                 ],
                 html_div([
                         dbc_button("Cancel", id="lens-wiz-btn-cancel", color="secondary", outline=true, className="me-2"),
                         dbc_button(["Next: Select Leader ", html_i(className="fas fa-chevron-right ms-2")], id="lens-wiz-btn-next", color="primary"),
-                    ], className="d-flex justify-content-end"); size="md", close_button=false),
+                    ], className="d-flex justify-content-end"); size="lg", close_button=false),
 
             # PHASE WIZARD STEP 2: Leader Selection
             BASE_Modal_DDEF("lens-modal-leader", [html_i(className="fas fa-magic me-2 text-primary"), "Phase Evolution - Step 2/3"],
@@ -235,35 +235,35 @@ function LENS_Layout_DDEF()
                                                 min=1, max=5, step=nothing, value=1,
                                                 updatemode="drag",
                                                 marks=Dict(
-                                                    1 => Dict("label" => "1.0", "style" => Dict("color" => "#000", "fontWeight" => "bold")),
-                                                    2 => "0.75",
-                                                    3 => "0.5",
-                                                    4 => "0.25",
-                                                    5 => "0.1"
+                                                    1 => Dict("label" => "1.0", "style" => Dict("color" => "#000", "fontWeight" => "bold", "fontSize" => "10px")),
+                                                    2 => Dict("label" => "0.75", "style" => Dict("fontSize" => "10px")),
+                                                    3 => Dict("label" => "0.5", "style" => Dict("fontSize" => "10px")),
+                                                    4 => Dict("label" => "0.25", "style" => Dict("fontSize" => "10px")),
+                                                    5 => Dict("label" => "0.1", "style" => Dict("fontSize" => "10px"))
                                                 )),
                                             className="px-2 mb-4"),
                                         html_div(id="lens-prev-slider-shift", style=Dict("display" => "none")),
                                     ], className="p-4 border-0 rounded bg-white h-100 shadow-sm")
-                            ], md=4),
+                            ], xs=12, md=4),
 
                         # Right: Analysis & Feedback
                         dbc_col([
                                 html_div([
-                                        html_h6("Matrix Shift Visualization", className="x-small fw-bold text-uppercase text-muted mb-2"),
+                                        html_h6("Matrix Shift Visualisation", className="x-small fw-bold text-uppercase text-muted mb-2"),
                                         dcc_graph(id="lens-graph-transition", config=Dict("displayModeBar" => false), style=Dict("height" => "250px"))
                                     ], className="border-0 rounded bg-white p-3 mb-3 shadow-sm"),
                                 dbc_card([
                                         dbc_cardheader([html_i(className="fas fa-th-list me-2"), "Calculated Boundaries"], className="small fw-bold border-0 bg-transparent"),
                                         html_div(id="lens-container-preview-table", className="table-responsive p-2", style=Dict("maxHeight" => "200px", "overflowY" => "auto")),
                                     ], className="shadow-sm border-0"),
-                            ], md=8)
+                            ], xs=12, md=8)
                     ]),
                     html_div(id="lens-container-preview-audit", className="mt-3")
                 ],
                 dbc_row([
                         dbc_col(dbc_button([html_i(className="fas fa-chevron-left me-2"), "Back"], id="lens-prev-btn-back", color="secondary", outline=true, size="sm", className="w-100"), xs=12, md=3),
                         dbc_col(dbc_button([html_i(className="fas fa-check-circle me-2"), "Commit to Project Vault"], id="lens-prev-btn-commit", color="success", size="sm", className="w-100"), xs=12, md=7, className="ms-auto"),
-                    ], className="w-100 g-2"); size="lg", close_button=false),
+                    ], className="w-100 g-2"); size="xl", close_button=false),
             dcc_store(id="lens-store-next-phase-proposal", data=Dict()),
         ], fluid=true, className="px-4 py-3")
 end
@@ -315,7 +315,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             (isnothing(active_cont) || active_cont == "") &&
                 return [], "No Data Source", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", "", ""
 
-            Sys_Fast.FAST_Log_DDEF("LENS", "Sync", "Synchronizing from Master Vault...", "INFO")
+            Sys_Fast.FAST_Log_DDEF("LENS", "Sync", "Synchronising from Master Vault...", "INFO")
             path = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
 
             ext = lowercase(splitext(path)[2])
@@ -416,7 +416,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 
             # --- RADIO OPTS OVERRIDES ---
             saved_radio = get(config, "RadioOpts", Dict())
-            rad_apply = get(saved_radio, "Apply", false) # Default to false for button
+            rad_apply = get(saved_radio, "Apply", false)
             rad_t_cal = string(get(saved_radio, "CalibrationTime", ""))
             rad_t_exp = string(get(saved_radio, "ExperimentalTime", ""))
 
@@ -556,7 +556,6 @@ function LENS_RegisterCallbacks_DDEF(app)
                 for g in res["Graphs"]
             ]
 
-            # Build Model Summary View
             summary_rows = [
                 html_tr([
                         html_td(n, style=Dict("textAlign" => "center", "padding" => "6px"), className="fw-bold"),
@@ -566,23 +565,23 @@ function LENS_RegisterCallbacks_DDEF(app)
                             (haskey(res["Models"][i], "P_Value") && !isnan(res["Models"][i]["P_Value"])) ?
                             @sprintf("%.5f", res["Models"][i]["P_Value"]) : "N/A", style=Dict("textAlign" => "center", "padding" => "6px")
                         ),
-                    ], style=Dict("borderBottom" => "1px solid #DCDCDC")) for (i, n) in enumerate(res["OutNames"])
+                    ], style=Dict("borderBottom" => "1px solid var(--colour-val2-liglow)")) for (i, n) in enumerate(res["OutNames"])
             ]
 
             summary = html_div([
                 html_table([
                         html_thead(html_tr([
-                            html_th("Output", style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC", "padding" => "8px")),
-                            html_th("R² (Adj)", style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC", "padding" => "8px")),
-                            html_th("Q² (Pred)", style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC", "padding" => "8px")),
-                            html_th("P-Value", style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC", "padding" => "8px"))
+                            html_th("Output", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px")),
+                            html_th("R² (Adj)", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px")),
+                            html_th("Q² (Pred)", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px")),
+                            html_th("P-Value", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px"))
                         ])),
-                        html_tbody(summary_rows, style=Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC")),
+                        html_tbody(summary_rows, style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)")),
                     ], className="table table-sm table-borderless caption-top mb-1 mx-auto", style=Dict("width" => "95%", "marginTop" => "5px")),
 
                 # --- NEW: SCIENTIFIC VITALS TABLE ---
                 (haskey(res, "Vitals") ? html_div([
-                    html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px dashed #DCDCDC", "margin" => "10px 0")),
+                    html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px dashed var(--colour-val1-lighig)", "margin" => "10px 0")),
                     html_div([
                             html_div([
                                     html_span("D-Efficiency: ", className="text-secondary"),
@@ -607,8 +606,8 @@ function LENS_RegisterCallbacks_DDEF(app)
 
                 # --- SENSITIVITY ANALYSIS TABLE ---
                 (haskey(res, "Sensitivities") && !isempty(res["Sensitivities"]) ? html_div([
-                    html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px dashed #DCDCDC", "margin" => "10px 0")),
-                    html_h6("Factor Sensitivity (at Optimum)", className="fw-bold small text-center mb-2", style=Dict("color" => "#21918C")),
+                    html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px dashed var(--colour-val1-lighig)", "margin" => "10px 0")),
+                    html_h6("Factor Sensitivity (at Optimum)", className="fw-bold small text-center mb-2", style=Dict("color" => "var(--colour-chr3-toncya)")),
                     html_table([
                             html_thead(html_tr([
                                 html_th("Factor", style=Dict("textAlign" => "left", "padding" => "4px")),
@@ -619,7 +618,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                                     html_td(res["InNames"][fi], className="fw-bold", style=Dict("padding" => "4px")),
                                     [html_td(@sprintf("%.1f%%", res["Sensitivities"][mi][fi] * 100),
                                         style=Dict("textAlign" => "center", "padding" => "4px",
-                                            "color" => res["Sensitivities"][mi][fi] > 0.5 ? "#FF0000" : "#000000"))
+                                            "color" => res["Sensitivities"][mi][fi] > 0.5 ? "var(--colour-chr0-huered)" : "var(--colour-val5-purbla)"))
                                      for mi in 1:length(res["OutNames"])]...
                                 ]) for fi in 1:length(res["InNames"])
                             ])
@@ -628,12 +627,12 @@ function LENS_RegisterCallbacks_DDEF(app)
 
                 # --- ACADEMIC ANOVA & COEFFICIENTS TIER ---
                 html_div([
-                        html_hr(style=Dict("height" => "2px", "border" => "none", "borderTop" => "2px solid #21918C", "margin" => "15px 0")),
-                        html_h6("ACADEMIC DIAGNOSTICS", className="fw-bold text-center mb-3", style=Dict("color" => "#21918C", "letterSpacing" => "1px")),
+                        html_hr(style=Dict("height" => "2px", "border" => "none", "borderTop" => "2px solid var(--colour-chr3-toncya)", "margin" => "15px 0")),
+                        html_h6("ACADEMIC DIAGNOSTICS", className="fw-bold text-center mb-3", style=Dict("color" => "var(--colour-chr3-toncya)", "letterSpacing" => "1px")),
 
                         # Loop through each output for detailed ANOVA
                         [html_div([
-                            html_div("Analysis of Variance (ANOVA): $out_name", className="small fw-bold mb-1", style=Dict("color" => "#444")),
+                            html_div("Analysis of Variance (ANOVA): $out_name", className="small fw-bold mb-1", style=Dict("color" => "var(--colour-val4-darhig)")),
                             # ANOVA Table
                             let df_ano = res["ANOVA"][i]
                                 html_table([
@@ -656,7 +655,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                                             ]) for r in eachrow(df_ano)
                                         ])
                                     ], className="table table-sm table-hover small mb-3 border")
-                            end, html_div("Term Significance (Coefficients): $out_name", className="small fw-bold mb-1", style=Dict("color" => "#444")),
+                            end, html_div("Term Significance (Coefficients): $out_name", className="small fw-bold mb-1", style=Dict("color" => "var(--colour-val4-darhig)")),
                             # Coefficients Table
                             let m = res["Models"][i]
                                 html_table([
@@ -731,7 +730,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                     push!(display_names, "Score")
                 end
 
-                th_style = Dict("textAlign" => "center", "borderBottom" => "2px solid #DCDCDC", "padding" => "4px 6px", "fontSize" => "10px", "whiteSpace" => "nowrap")
+                th_style = Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "4px 6px", "fontSize" => "10px", "whiteSpace" => "nowrap")
                 td_style = Dict("textAlign" => "center", "padding" => "3px 6px", "fontSize" => "10px")
 
                 header_row = html_tr([html_th(n, style=th_style) for n in display_names])
@@ -740,9 +739,9 @@ function LENS_RegisterCallbacks_DDEF(app)
                             let v = ldf[r, Symbol(c)]
                                 ismissing(v) ? "-" : (v isa Number ? @sprintf("%.3f", v) : string(v))
                             end,
-                            style=merge(td_style, c == C.COL_SCORE ? Dict("fontWeight" => "bold", "color" => "#21918C") : Dict())
+                            style=merge(td_style, c == C.COL_SCORE ? Dict("fontWeight" => "bold", "color" => "var(--colour-chr3-toncya)") : Dict())
                         ) for c in display_cols
-                    ], style=Dict("borderBottom" => "1px solid #E6E6E6")) for r in 1:nrow(ldf)]
+                    ], style=Dict("borderBottom" => "1px solid var(--colour-val1-lighig)")) for r in 1:nrow(ldf)]
 
                 leaders_html = html_table([
                         html_thead(header_row),
@@ -775,7 +774,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # --- 3. UI: VISUALIZATION SLIDE NAVIGATION ---
+    # --- 3. UI: VISUALISATION SLIDE NAVIGATION ---
     callback!(app,
         Output("lens-store-index", "data"),
         Output("lens-graph-input", "value"),
@@ -818,7 +817,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         Input("lens-store-index", "data"),
         State("lens-store-graphs", "data")
     ) do i, g
-        (isnothing(g) || isempty(g)) && return Dict(), "No Visualization Data", "/ 0", ""
+        (isnothing(g) || isempty(g)) && return Dict(), "No Visualisation Data", "/ 0", ""
         idx = (i % length(g)) + 1
 
         counts = Dict{String,Int}()
@@ -849,7 +848,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                         "padding" => "4px 0",
                         "fontSize" => "11px",
                         "fontWeight" => "600",
-                        "color" => "#2C3E50"
+                        "color" => "var(--colour-val5-purbla)"
                     )) for item in items
                 ], style=Dict("display" => "flex", "width" => "100%", "justifyContent" => "space-around"))
         end
@@ -1129,13 +1128,15 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         conf = res["NewConfig"]
 
-        # Transformation Visualisation
+        # Transformation Visualisation — use OldConfig (original boundaries) so the chart
+        # performs a single zoom/shift, matching the NewConfig values shown in the table.
+        old_conf = get(res, "OldConfig", conf)
         leader_vals = get(res, "LeaderValues", Float64[])
         zoom = Float64(get(res, "SelectedZoom", 1.0))
         shift = Float64(get(res, "SelectedShift", 0.0))
 
         # FLOW_RenderPhaseTransition_DDEF now returns a Dict, so we pass it directly
-        fig = Sys_Flow.FLOW_RenderPhaseTransition_DDEF(conf, leader_vals, zoom, shift)
+        fig = Sys_Flow.FLOW_RenderPhaseTransition_DDEF(old_conf, leader_vals, zoom, shift)
 
         # 1. Comparison Table
         rows = []

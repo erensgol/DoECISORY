@@ -113,7 +113,7 @@ FAST_Log_DDEF("BOOT", "Complete", "Core Libraries Integrated", "OK")
 # --------------------------------------------------------------------------------------
 # --- TRANSIENT HOUSEKEEPING ---
 # --------------------------------------------------------------------------------------
-Sys_Fast.FAST_InitializeWorkforce_DDEF()
+Sys_Fast.FAST_InitialiseWorkforce_DDEF()
 
 # --------------------------------------------------------------------------------------
 # --- APP CONFIGURATION ---
@@ -175,7 +175,7 @@ const APP_Navbar_DDEC = html_div([
                 html_a("Analyse", href="/analysis", className="nav-item"),
             ], className="nav-links d-flex justify-content-center"),
         html_div([
-                html_span("v1.0 In Dev.", className="badge bg-secondary text-white small opacity-75"),
+                html_span("v1.0 In Dev.", className="badge opacity-75", style=Dict("backgroundColor" => "var(--colour-val3-darlow)", "color" => "var(--colour-val0-purwhi)")),
             ], className="nav-actions", style=Dict("flex" => "1", "textAlign" => "right")),
     ], className="glass-navbar d-flex align-items-center justify-content-between")
 
@@ -218,22 +218,22 @@ app.layout = html_div([
                     ], id="modal-diagnostics-tabs", active_tab="tab-sys")
             ]),
             dbc_modalfooter(dbc_button("Close", id="btn-close-diagnostics", className="ms-auto", n_clicks=0))
-        ], id="modal-diagnostics", size="lg", is_open=false),
+        ], id="modal-diagnostics", size="xl", is_open=false),
 
     # System readiness overlay + polling
     dcc_interval(id="sys-ready-poll", interval=2000, max_intervals=-1),
     html_div(id="sys-loading-overlay", children=[
             html_div([
                     html_div(className="spinner-border text-primary mb-3", style=Dict("width" => "3rem", "height" => "3rem")),
-                    html_h4("DaishoDoE", className="fw-bold mb-2", style=Dict("color" => "#000000")),
-                    html_p("Synchronising scientific modules...", className="text-secondary", id="sys-loading-msg"),
+                    html_h4("DaishoDoE", className="fw-bold mb-2", style=Dict("color" => "var(--colour-val5-purbla)")),
+                    html_p("Synchronising scientific modules...", style=Dict("color" => "var(--colour-val3-darlow)"), id="sys-loading-msg"),
                 ], style=Dict(
                     "display" => "flex", "flexDirection" => "column", "alignItems" => "center",
                     "justifyContent" => "center", "height" => "100vh",
                 )),
         ], style=Dict(
             "position" => "fixed", "top" => "0", "left" => "0", "width" => "100vw", "height" => "100vh",
-            "backgroundColor" => "#DCDCDC", "zIndex" => "99999", "display" => "flex",
+            "backgroundColor" => "var(--colour-val2-liglow)", "zIndex" => "99999", "display" => "flex",
             "alignItems" => "center", "justifyContent" => "center",
         )),
 ])
@@ -288,7 +288,7 @@ function APP_RoutePage_DDEF(pathname::String)
             # Hero Section
             dbc_container([
                     dbc_row(dbc_col([
-                            html_h1("DaishoDoE", className="fw-bold display-4 mb-3", style=Dict("letterSpacing" => "-0.04em", "color" => "#000000")),
+                            html_h1("DaishoDoE", className="fw-bold display-4 mb-3", style=Dict("letterSpacing" => "-0.04em", "color" => "var(--colour-val5-purbla)")),
                             html_p("A Decision-Adaptive, Interactive, and Sequential Hybrid Optimisation Environment for Design of Experiments (DoE) Processes",
                                 className="lead text-secondary mb-5", style=Dict("maxWidth" => "800px", "margin" => "0 auto")),
                         ], xs=12, className="text-center mt-5 pt-4")),
@@ -300,10 +300,10 @@ function APP_RoutePage_DDEF(pathname::String)
                                     dcc_link(html_div([
                                                 html_div(html_i(className="fas fa-flask text-white"),
                                                     style=Dict("width" => "50px", "height" => "50px", "borderRadius" => "12px",
-                                                        "background" => "linear-gradient(135deg, #FF0000 0%, #FDE725 100%)",
+                                                        "background" => "linear-gradient(135deg, var(--colour-chr0-huered) 0%, var(--colour-chr5-hueyel) 100%)",
                                                         "display" => "flex", "alignItems" => "center", "justifyContent" => "center",
-                                                        "fontSize" => "1.5rem", "marginBottom" => "1.5rem", "boxShadow" => "0 10px 20px -5px #DCDCDC")),
-                                                html_h3("Experimental Design", className="fw-bold mb-2", style=Dict("color" => "#000000")),
+                                                        "fontSize" => "1.5rem", "marginBottom" => "1.5rem", "boxShadow" => "0 10px 20px -5px var(--colour-val2-liglow)")),
+                                                html_h3("Experimental Design", className="fw-bold mb-2", style=Dict("color" => "var(--colour-val5-purbla)")),
                                                 html_p("Synthesise robust test matrices utilising Box-Behnken and Taguchi methodologies. Automatically generate protocol workspaces for 3-factor experimental architectures.",
                                                     className="text-secondary small mb-0", style=Dict("lineHeight" => "1.6")),
                                             ], className="glass-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")); href="/design", style=Dict("textDecoration" => "none")),
@@ -314,10 +314,10 @@ function APP_RoutePage_DDEF(pathname::String)
                                     dcc_link(html_div([
                                                 html_div(html_i(className="fas fa-chart-line text-white"),
                                                     style=Dict("width" => "50px", "height" => "50px", "borderRadius" => "12px",
-                                                        "background" => "linear-gradient(135deg, #3B528B 0%, #21918C 100%)",
+                                                        "background" => "linear-gradient(135deg, var(--colour-chr3-toncya) 0%, var(--colour-chr3-toncya) 100%)",
                                                         "display" => "flex", "alignItems" => "center", "justifyContent" => "center",
-                                                        "fontSize" => "1.5rem", "marginBottom" => "1.5rem", "boxShadow" => "0 10px 20px -5px #DCDCDC")),
-                                                html_h3("Statistical Analysis", className="fw-bold mb-2", style=Dict("color" => "#000000")),
+                                                        "fontSize" => "1.5rem", "marginBottom" => "1.5rem", "boxShadow" => "0 10px 20px -5px var(--colour-val2-liglow)")),
+                                                html_h3("Statistical Analysis", className="fw-bold mb-2", style=Dict("color" => "var(--colour-val5-purbla)")),
                                                 html_p("Execute rigorous data analysis via GLM regression, dynamically visualise desirability functions, and determine optimal formulations through mathematical modelling.",
                                                     className="text-secondary small mb-0", style=Dict("lineHeight" => "1.6")),
                                             ], className="glass-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")); href="/analysis", style=Dict("textDecoration" => "none")),
@@ -327,15 +327,15 @@ function APP_RoutePage_DDEF(pathname::String)
                     # System Diagnostics Footer
                     dbc_row(dbc_col(html_div([
                                     html_div([
-                                            html_div([html_i(className="fas fa-server text-success me-2"), html_span("System Online", className="text-secondary fw-bold")], className="d-flex align-items-center me-4"),
-                                            html_div([html_i(className="fas fa-microchip text-$tstyle me-2"), html_span(tmsg, className="text-secondary fw-bold")], className="d-flex align-items-center me-4"),
+                                            html_div([html_i(className="fas fa-server me-2", style=Dict("color" => "var(--colour-chr4-tongre)")), html_span("System Online", className="fw-bold", style=Dict("color" => "var(--colour-val3-darlow)"))], className="d-flex align-items-center me-4"),
+                                            html_div([html_i(className="fas fa-microchip me-2", style=Dict("color" => "var(--colour-chr3-toncya)")), html_span(tmsg, className="fw-bold", style=Dict("color" => "var(--colour-val3-darlow)"))], className="d-flex align-items-center me-4"),
                                             html_div([
                                                     html_span([html_i(className="fas fa-cog me-1"), "Diagnostics"],
-                                                        id="btn-open-sys-audit", className="badge bg-light text-dark border",
-                                                        style=Dict("cursor" => "pointer"))
+                                                        id="btn-open-sys-audit", className="badge border",
+                                                        style=Dict("cursor" => "pointer", "backgroundColor" => "var(--colour-val1-lighig)", "color" => "var(--colour-val5-purbla)"))
                                                 ], className="d-flex align-items-center"),
                                         ], className="d-flex justify-content-center align-items-center p-3 rounded-pill",
-                                        style=Dict("background" => "#FFFFFF", "border" => "1px solid #DCDCDC", "boxShadow" => "0 4px 6px -1px #E6E6E6", "display" => "inline-flex", "margin" => "0 auto"))
+                                        style=Dict("background" => "var(--colour-val0-purwhi)", "border" => "1px solid var(--colour-val2-liglow)", "boxShadow" => "0 4px 6px -1px var(--colour-val1-lighig)", "display" => "inline-flex", "margin" => "0 auto"))
                                 ], className="text-center"), xs=12), style=Dict("maxWidth" => "900px", "margin" => "0 auto")),], fluid=true, className="pb-5 mt-2")
         ])
     end

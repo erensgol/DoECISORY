@@ -3,8 +3,7 @@ module Lib_Vise
 # ======================================================================================
 # DAISHODOE - LIB VISE (STATISTICAL ANALYSIS ENGINE)
 # ======================================================================================
-# Purpose: Advanced regression (OLS), cross-validation (Q²), and
-#          multithreaded search for optimal experimental coordinates.
+# Purpose: Statistical modelling (GLM), sensitivity analysis, and multi-objective optimisation.
 # Module Tag: VISE
 # ======================================================================================
 
@@ -210,7 +209,7 @@ function VISE_BuildSurrogateClosure_DDEF(Model::Dict)
             return RadialBasis(x_final, y_final, lb, ub)
         end
     catch e
-        Sys_Fast.FAST_Log_DDEF("VISE", "SURR_BUILD_FAIL", "Failed to build surrogate: $e", "FAIL")
+        Sys_Fast.FAST_Log_DDEF("VISE", "MODELING", "Failed to build surrogate: $e", "FAIL")
         return (x) -> mean(Y_vec)
     end
 end
@@ -320,7 +319,7 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
                 end
             end
         catch
-            Sys_Fast.FAST_Log_DDEF("VISE", "ANOVA_WARN", "Failed to compute exact p-values", "WARN")
+            Sys_Fast.FAST_Log_DDEF("VISE", "MODELING", "Failed to compute exact p-values during model fitting.", "WARN")
         end
 
         vifs = VISE_CalcVIF_DDEF(X_Design)
@@ -338,7 +337,7 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
             "Status" => "OK",
         )
     catch e
-        Sys_Fast.FAST_Log_DDEF("VISE", "REGRESS_ERROR", sprint(showerror, e, catch_backtrace()), "FAIL")
+        Sys_Fast.FAST_Log_DDEF("VISE", "MODELING", sprint(showerror, e, catch_backtrace()), "FAIL")
         return Dict("Status" => "FAIL", "Error" => string(e))
     end
 end
@@ -809,7 +808,7 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
     while eff_steps^Dim > max_pts && eff_steps > 3
         eff_steps -= 2
     end
-    Sys_Fast.FAST_Log_DDEF("VISE", "GRID_CONFIG",
+    Sys_Fast.FAST_Log_DDEF("VISE", "OPTIMIZATION",
         "Grid: $(eff_steps)^$Dim = $(eff_steps^Dim) pts | Compute threads: $compute_threads", "INFO")
 
     # Generate coordinate ranges
@@ -1045,7 +1044,7 @@ function VISE_GenerateScientificReport_DDEF(Res::Dict)
                 end
             end
         else
-             write(io, "\n#### III. Optimization Strategy\n")
+             write(io, "\n#### III. Optimisation Strategy\n")
              write(io, "- **Surrogate Topology**: Model is based on a non-parametric kernel approach; traditional OLS diagnostics (VIF/t-stats) are not applicable. Sensitivity is calculated via local gradients.\n")
         end
         write(io, "\n")
@@ -1084,7 +1083,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     C = Sys_Fast.FAST_Data_DDEC
     Log = Sys_Fast.FAST_Log_DDEF
 
-    Log("VISE", "EXECUTION_START", "Analyzing Phase: $Phase", "WAIT")
+    Log("VISE", "INITIALIZATION", "Analyzing Phase: $Phase", "WAIT")
     t0 = time()
     boundary_warnings = String[]
 
@@ -1095,7 +1094,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     # Pre-flight data quality validation (Sys_Fast -> Lib_Vise bridge)
     valid, issues = Sys_Fast.FAST_ValidateDataFrame_DDEF(df_raw, [C.COL_PHASE])
     if !valid
-        Log("VISE", "DATA_QUALITY", "Pre-flight issues: $(join(issues, " | "))", "WARN")
+        Log("VISE", "INITIALIZATION", "Pre-flight issues: $(join(issues, " | "))", "WARN")
     end
 
     # Apply standardisation to the raw data
@@ -1103,7 +1102,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
 
     col_phase = Symbol(C.COL_PHASE)
     if !hasproperty(df_raw, col_phase)
-        Log("VISE", "PHASE_ERROR", "Required column '$col_phase' not found in dataset.", "FAIL")
+        Log("VISE", "INITIALIZATION", "Required column '$col_phase' not found in dataset.", "FAIL")
         return Dict("Status" => "FAIL", "Message" => "Required column '$col_phase' not found in dataset. Please ensure the data sheet is properly formatted.")
     end
     df_train = hasproperty(df_raw, col_phase) ?

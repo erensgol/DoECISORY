@@ -3,7 +3,7 @@ module Sys_Fast
 # ======================================================================================
 # DAISHODOE - SYSTEM FAST (IO & UTILS)
 # ======================================================================================
-# Purpose: Excel I/O, Logging, Constants, and System-wide Utilities.
+# Purpose: High-speed I/O (Excel/XLSX), system-wide logging, and transient data orchestration.
 # Module Tag: FAST
 # ======================================================================================
 
@@ -16,7 +16,7 @@ using Base64
 
 export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
     FAST_Constants_DDES, FAST_SafeNum_DDEF, FAST_GetLabDefaults_DDEF,
-    FAST_InitMaster_DDEF, FAST_NormaliseCols_DDEF!,
+    FAST_InitialiseMaster_DDEF, FAST_NormaliseCols_DDEF!,
     FAST_SanitiseJson_DDEF, FAST_PrepareDownload_DDEF,
     FAST_GenerateSmartName_DDEF, FAST_GetTransientPath_DDEF, FAST_ReadToStore_DDEF,
     FAST_ReadConfig_DDEF, FAST_UpdateConfig_DDEF, FAST_GetThreadInfo_DDEF,
@@ -28,7 +28,7 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
     FAST_FormatDuration_DDEF, FAST_ValidateDataFrame_DDEF,
     FAST_SystemAudit_DDEF, FAST_GetSystemQuote_DDEF,
     FAST_ScientificAudit_DDEF, FAST_RoundCols_DDEF!,
-    FAST_InitializeWorkforce_DDEF, FAST_CleanWorkforce_DDEF,
+    FAST_InitialiseWorkforce_DDEF, FAST_CleanWorkforce_DDEF,
     FAST_Data_DDEC
 
 # --------------------------------------------------------------------------------------
@@ -41,24 +41,18 @@ System-wide configuration and metadata structure.
 """
 Base.@kwdef struct FAST_Constants_DDES
     VERSION::String = "v1.0 In Dev."
-
-    # --- Standard Base Colours ---
-    COLOUR_RED::String = "#FF0000"
-    COLOUR_WHITE::String = "#FFFFFF"
-    COLOUR_BLACK::String = "#000000"
-
-    # --- Standard Grey Colours ---
-    COLOUR_GREY_D::String = "#666666"
-    COLOUR_GREY_M::String = "#A6A6A6"
-    COLOUR_GREY_L::String = "#E6E6E6"  # Light Grey / Grid
-    COLOUR_GREY_G::String = "#DCDCDC"  # Glass Overlay / Background
-
-    # --- Standard Viridis Colours ---
-    COLOUR_YELLOW::String = "#FDE725"  # Viridis 1.00
-    COLOUR_GREEN::String = "#5EC962"   # Viridis 0.75
-    COLOUR_CYAN::String = "#21918C"    # Viridis 0.50
-    COLOUR_BLUE::String = "#3B528B"    # Viridis 0.25
-    COLOUR_MAGENTA::String = "#440154" # Viridis 0.00
+    COLOUR_PURWHI::String = "#FFFFFF"
+    COLOUR_LIGHIG::String = "#E6E6E6"
+    COLOUR_LIGLOW::String = "#DCDCDC"
+    COLOUR_DARLOW::String = "#A6A6A6"
+    COLOUR_DARHIG::String = "#666666"
+    COLOUR_PURBLA::String = "#000000"
+    COLOUR_HUERED::String = "#FF0000"
+    COLOUR_SHAMAG::String = "#440154"
+    COLOUR_SHABLU::String = "#3B528B"
+    COLOUR_TONCYA::String = "#21918C"
+    COLOUR_TONGRE::String = "#5EC962"
+    COLOUR_HUEYEL::String = "#FDE725"
 
     # --- Aesthetic Constants ---
     FONT_DEFAULT::String = "Inter, sans-serif"
@@ -111,21 +105,21 @@ Dedicated directory for all DaishoDoE transient operations to prevent AppData sc
 const FAST_TempRoot_DDEC = joinpath(tempdir(), "DaishoDoE_Workforce")
 
 """
-    FAST_InitializeWorkforce_DDEF()
-Ensures the transient directory exists and performs an initial cleanse of old files.
+    FAST_InitialiseWorkforce_DDEF()
+Initialises global transient directories and purges legacy temporary files.
 """
-function FAST_InitializeWorkforce_DDEF()
+function FAST_InitialiseWorkforce_DDEF()
+    FAST_Log_DDEF("SYS", "Initialise", "Synchronising workforce directories...", "INFO")
     try
         if !isdir(FAST_TempRoot_DDEC)
             mkpath(FAST_TempRoot_DDEC)
             FAST_Log_DDEF("FAST", "WORKFORCE", "Created transient bunker: $FAST_TempRoot_DDEC", "OK")
         else
-            # Clean up files in our dedicated workforce folder
             FAST_CleanWorkforce_DDEF()
             FAST_Log_DDEF("FAST", "WORKFORCE", "Transient bunker scavenged and ready.", "OK")
         end
     catch e
-        FAST_Log_DDEF("FAST", "WORKFORCE_FAIL", "Could not initialize temp directory: $e", "FAIL")
+        FAST_Log_DDEF("FAST", "WORKFORCE_FAIL", "Could not initialise temp directory: $e", "FAIL")
     end
 end
 
@@ -137,7 +131,6 @@ function FAST_CleanWorkforce_DDEF(all::Bool=false)::Nothing
     !isdir(FAST_TempRoot_DDEC) && return nothing
 
     try
-        # Use broadcasting and filtering for idiomatic file removal
         targets = filter(isfile, readdir(FAST_TempRoot_DDEC; join=true))
         foreach(f -> rm(f; force=true), targets)
 
@@ -170,7 +163,7 @@ Standardised console logging with ANSI colour support and timestamps.
 """
 function FAST_Log_DDEF(Source::String, Event::String, Detail::Any="", Type::String="INFO")
     c = get(FAST_LogColours_DDEC, Symbol(Type), FAST_LogColourDefault_DDEC)
-    ts = Dates.format(now(), "HH:MM:SS.sss") # Added milliseconds for boot diagnostics
+    ts = Dates.format(now(), "HH:MM:SS.sss")
     det_str = isnothing(Detail) ? "null" : string(Detail)
     @printf("\e[34m[%s]%s \e[32m%-12s%s: %s%-15s%s %s%s%s\n",
         ts, FAST_LogReset_DDEC, Source, FAST_LogReset_DDEC, c, Event, FAST_LogReset_DDEC, c, det_str, FAST_LogReset_DDEC)
@@ -188,7 +181,6 @@ Mutates the DataFrame in-place for performance.
 """
 function FAST_NormaliseCols_DDEF!(df::DataFrame; force_upper::Bool=false)::DataFrame
     isempty(df) && return df
-    # Robust renaming approach: only uppercase if explicitly requested
     if force_upper
         mapping = [n => Symbol(uppercase(strip(string(n)))) for n in names(df)]
     else
@@ -200,13 +192,12 @@ end
 
 """
     FAST_ReadExcel_DDEF(FilePath::String, SheetName::String)::DataFrame
-Reads an Excel sheet into a DataFrame with normalized column names.
+Reads an Excel sheet into a DataFrame with normalised column names.
 Returns an empty DataFrame if the file doesn't exist.
 """
 function FAST_ReadExcel_DDEF(FilePath::Union{String,Nothing}, SheetName::String)::DataFrame
     (isnothing(FilePath) || isempty(FilePath) || !isfile(FilePath)) && return DataFrame()
 
-    # 1. Broad Validation: File extension check
     ext = lowercase(splitext(FilePath)[2])
     if ext != ".xlsx" && ext != ".xlsm"
         FAST_Log_DDEF("FAST", "IO_ERROR", "Selected file [$ext] is not a valid Excel (.xlsx/.xlsm) document.", "FAIL")
@@ -214,7 +205,6 @@ function FAST_ReadExcel_DDEF(FilePath::Union{String,Nothing}, SheetName::String)
     end
 
     try
-        # 2. Structure Validation: Does it have the required sheet?
         xf = XLSX.readxlsx(FilePath)
         sheet_exists = SheetName ∈ XLSX.sheetnames(xf)
 
@@ -241,7 +231,6 @@ function FAST_SafeExcelWrite_DDEF(File::Union{String,Nothing}, Updates::Dict{Str
     all_data = Dict{String,DataFrame}()
     sheet_order = String[]
 
-    # 1. Map existing structure
     if isfile(File)
         try
             xf = XLSX.readxlsx(File)
@@ -254,17 +243,15 @@ function FAST_SafeExcelWrite_DDEF(File::Union{String,Nothing}, Updates::Dict{Str
                 end
             end
         catch e
-            FAST_Log_DDEF("FAST", "SAFE_WRITE", "Reference file inaccessible. Initializing fresh.", "WARN")
+            FAST_Log_DDEF("FAST", "SAFE_WRITE", "Reference file inaccessible. Initialising fresh.", "WARN")
         end
     end
 
-    # 2. Declarative merge of updates
     foreach(keys(Updates)) do k
         k ∉ sheet_order && push!(sheet_order, k)
         all_data[k] = Updates[k]
     end
 
-    # 3. Guard against empty writes
     valid_pairs = [sn => all_data[sn] for sn in sheet_order if !isempty(all_data[sn]) || sn == "CONFIG"]
 
     if !isempty(valid_pairs)
@@ -279,7 +266,6 @@ Rounds float columns to academic standard (3 decimal places).
 Mutates input for memory efficiency.
 """
 function FAST_RoundCols_DDEF!(df::DataFrame)::DataFrame
-    # Idiomatic mapcols! for high-performance in-place rounding
     mapcols!(df) do col
         if eltype(col) <: Union{Missing,AbstractFloat}
             return passmissing(x -> round(x; digits=3)).(col)
@@ -311,15 +297,12 @@ end
 Type-safe numeric conversion. Handles missing, nothing, and localised string formats.
 """
 function FAST_SafeNum_DDEF(Input::Any)::Float64
-    # 1. Immediate exit for null types
     (Input === missing || Input === nothing) && return NaN
 
-    # 2. Direct numeric bypass
     Input isa AbstractFloat && return Float64(Input)
     Input isa Integer && return Float64(Input)
     Input isa Bool && return Input ? 1.0 : 0.0
 
-    # 3. Robust string parsing
     s::String = strip(string(Input))
     (isempty(s) || s == "-" || lowercase(s) == "nan") && return NaN
 
@@ -341,7 +324,7 @@ function FAST_SanitiseInput_DDEF(TableData::AbstractVector)::Tuple{Vector{Dict{S
         # Idiomatic key conversion
         r = Dict{String,Any}(string(k) => v for (k, v) in raw)
 
-        # 1. Structural Normalization
+        # 1. Structural Normalisation
         row_name = string(get(r, "Name", "Unnamed_Item_$(idx)"))
         r["Name"] = row_name
         r["Role"] = string(get(r, "Role", "Variable"))
@@ -641,7 +624,7 @@ end
 
 """
     FAST_GetThreadInfo_DDEF()::Tuple{Int, String, String}
-Audit check for CPU concurrency status. Returns (Count, Theme_Color, Status_Message).
+Audit check for CPU concurrency status. Returns (Count, Theme_Colour, Status_Message).
 """
 function FAST_GetThreadInfo_DDEF()::Tuple{Int,String,String}
     n::Int = Threads.nthreads()

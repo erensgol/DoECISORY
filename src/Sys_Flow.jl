@@ -3,7 +3,7 @@ module Sys_Flow
 # ======================================================================================
 # DAISHODOE - SYSTEM FLOW (PROCESS & STATE)
 # ======================================================================================
-# Purpose: Experimental Phase Transitions and Process Logic.
+# Purpose: Experimental phase management, transition logic, and state synchronisation bus.
 # Module Tag: FLOW
 # ======================================================================================
 
@@ -115,6 +115,7 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
         "SourcePhase" => CurrentPhase,
         "TargetPhase" => target_phase,
         "NewConfig" => NewConfig,
+        "OldConfig" => OldConfig,
         "LeaderScore" => get(Leader, "Score", 0.0),
         "Outputs" => Outputs,
         "Global" => GlobalInfo,
@@ -133,6 +134,7 @@ function FLOW_GetCandidates_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase
     isempty(df) && return Dict{String,Any}[]
 
     # Functional extraction and numeric coercion
+    ranges = Dict{String,Tuple{Float64,Float64}}()
     candidates = map(eachrow(df)) do row
         d = Dict{String,Any}(string(k) => v for (k, v) in pairs(row))
         d["Score"] = Sys_Fast.FAST_SafeNum_DDEF(get(d, "SCORE", 0.0))
@@ -378,55 +380,120 @@ end
 Visualizes the adaptation of search space boundaries between experimental phases.
 """
 function FLOW_RenderPhaseTransition_DDEF(Config::AbstractVector, LeaderVals::AbstractVector, Zoom::Real, Shift::Real)
-    C = Sys_Fast.FAST_Data_DDEC
-    # Premium Palette - More visible "Current" grey
-    TH = (Grid="#F1F5F9", Blue="#0EA5E9", Red="#F43F5E", Amber="#F59E0B", Slate="#475569", Current="#94A3B8")
+    # Premium Palette - Strict binding to Sys_Fast standard constants
+    FD = Sys_Fast.FAST_Data_DDEC
 
-    vars = [(i, c) for (i, c) in enumerate(Config) if get(c, "Role", "Variable") == C.ROLE_VAR]
+    vars = [(i, c) for (i, c) in enumerate(Config) if get(c, "Role", "Variable") == FD.ROLE_VAR]
     n_vars = length(vars)
     if n_vars == 0
         return Plot([], Layout(title="No variables detected."))
     end
 
-    traces = GenericTrace[]
-    y_nms = [get(c, "Name", "Var$i") for (i, c) in vars]
+    # --- Fixed axis bounds (prevents cross-variable squishing) ---
+    AXIS_LO = -25.0
+    AXIS_HI = 125.0
+    CLIP_LO = AXIS_LO + 3.0   # visual clip margin
+    CLIP_HI = AXIS_HI - 3.0
+
+    traces      = GenericTrace[]
+    annotations = Dict{String,Any}[]
+    y_nms       = [get(c, "Name", "Var$i") for (i, c) in vars]
 
     for (j, (i, conf)) in enumerate(vars)
         L_Old = Float64.(get(conf, "Levels", [0.0, 0.0, 0.0]))
-        # Ensure we are using the correct leader value for the correct variable
-        Val = (j <= length(LeaderVals)) ? Float64(LeaderVals[j]) : L_Old[2]
+        Val   = (j <= length(LeaderVals)) ? Float64(LeaderVals[j]) : L_Old[2]
         L_New = FLOW_CalcAdaptiveRange_DDEF(Val, L_Old, Zoom, Shift)
 
-        # NORMALIZATION: Map the current range [Min, Max] to [0, 100] for visual comparison
-        # This allows variables with different scales (e.g. 0-10 and 0-6000) to be seen together
-        base_min = L_Old[1]
+        # NORMALISATION: Map [L_Old_Min, L_Old_Max] → [0, 100]
+        base_min  = L_Old[1]
         base_span = L_Old[3] - L_Old[1]
+        s         = base_span == 0 ? 1.0 : base_span
+        norm(v)   = (v - base_min) / s * 100.0
 
-        # Avoid division by zero
-        s = base_span == 0 ? 1.0 : base_span
-        norm(v) = (v - base_min) / s * 100.0
+        n_new_min = norm(L_New[1])
+        n_new_max = norm(L_New[3])
+        n_leader  = norm(Val)
+        n_mid     = norm(L_New[2])
 
-        # 1. Current (Old Space) - Darker grey for visibility
-        push!(traces, scatter(; x=[norm(L_Old[1]), norm(L_Old[3])], y=[j, j], mode="lines",
-            name="Current", line=attr(color=TH.Current, width=18),
+        # 1. Current (Old Space) — always [0, 100]
+        push!(traces, scatter(; x=[0.0, 100.0], y=[j, j], mode="lines",
+            name="Current", line=attr(color=FD.COLOUR_DARLOW, width=18),
             showlegend=(j == 1), hoverinfo="skip"))
 
-        # 2. Target (New Space)
-        push!(traces, scatter(; x=[norm(L_New[1]), norm(L_New[3])], y=[j, j], mode="lines",
-            name="Target", line=attr(color=TH.Blue, width=18),
-            showlegend=(j == 1), hovertext="New Bounds: $(round(L_New[1], digits=2)) to $(round(L_New[3], digits=2))"))
+        # --- Smart Clipping for Target bar ---
+        vis_min = clamp(n_new_min, CLIP_LO, CLIP_HI)
+        vis_max = clamp(n_new_max, CLIP_LO, CLIP_HI)
+        overflows_left  = n_new_min < CLIP_LO
+        overflows_right = n_new_max > CLIP_HI
 
-        # 3. Leader Point
-        push!(traces, scatter(; x=[norm(Val)], y=[j], mode="markers", name="Leader",
-            marker=attr(symbol="circle", size=12, color=TH.Red,
-                line=attr(color="white", width=2)),
-            showlegend=(j == 1)))
+        # 2. Target (New Space) — clipped to visible range
+        if vis_max > vis_min  # only draw if there's visible width
+            push!(traces, scatter(; x=[vis_min, vis_max], y=[j, j], mode="lines",
+                name="Target", line=attr(color=FD.COLOUR_HUEYEL, width=18),
+                showlegend=(j == 1),
+                hovertext="New: $(round(L_New[1]; digits=2)) → $(round(L_New[3]; digits=2))"))
+        end
 
-        # 4. Midpoint
-        pmid = L_New[2]
-        if !isnan(pmid) && !isnan(norm(pmid))
-            push!(traces, scatter(; x=[norm(pmid)], y=[j], mode="markers", name="Midpoint",
-                marker=attr(symbol="line-ns", size=16, color=TH.Amber, line=attr(width=3)),
+        # --- Overflow indicators (◄/►) at clipped edges ---
+        y_ann = j - 0.32
+
+        if overflows_left
+            # Left overflow triangle + real value
+            push!(traces, scatter(; x=[CLIP_LO], y=[j], mode="markers",
+                marker=attr(symbol="triangle-left", size=10, color=FD.COLOUR_HUEYEL,
+                    line=attr(color=FD.COLOUR_DARHIG, width=1)),
+                showlegend=false, hoverinfo="skip"))
+            push!(annotations, Dict(
+                "x" => CLIP_LO + 2, "y" => y_ann, "xref" => "x", "yref" => "y",
+                "text" => "◄ $(round(L_New[1]; digits=1))",
+                "showarrow" => false, "xanchor" => "left",
+                "font" => Dict("size" => 8, "color" => FD.COLOUR_DARHIG, "weight" => "bold"),
+            ))
+        else
+            # Normal left annotation (no overflow)
+            push!(annotations, Dict(
+                "x" => n_new_min, "y" => y_ann, "xref" => "x", "yref" => "y",
+                "text" => string(round(L_New[1]; digits=1)),
+                "showarrow" => false, "xanchor" => "center",
+                "font" => Dict("size" => 8, "color" => FD.COLOUR_DARHIG),
+            ))
+        end
+
+        if overflows_right
+            # Right overflow triangle + real value
+            push!(traces, scatter(; x=[CLIP_HI], y=[j], mode="markers",
+                marker=attr(symbol="triangle-right", size=10, color=FD.COLOUR_HUEYEL,
+                    line=attr(color=FD.COLOUR_DARHIG, width=1)),
+                showlegend=false, hoverinfo="skip"))
+            push!(annotations, Dict(
+                "x" => CLIP_HI - 2, "y" => y_ann, "xref" => "x", "yref" => "y",
+                "text" => "$(round(L_New[3]; digits=1)) ►",
+                "showarrow" => false, "xanchor" => "right",
+                "font" => Dict("size" => 8, "color" => FD.COLOUR_DARHIG, "weight" => "bold"),
+            ))
+        else
+            # Normal right annotation (no overflow)
+            push!(annotations, Dict(
+                "x" => n_new_max, "y" => y_ann, "xref" => "x", "yref" => "y",
+                "text" => string(round(L_New[3]; digits=1)),
+                "showarrow" => false, "xanchor" => "center",
+                "font" => Dict("size" => 8, "color" => FD.COLOUR_DARHIG),
+            ))
+        end
+
+        # 3. Leader Point — clamp to visible range
+        vis_leader = clamp(n_leader, CLIP_LO, CLIP_HI)
+        push!(traces, scatter(; x=[vis_leader], y=[j], mode="markers", name="Leader",
+            marker=attr(symbol="circle", size=12, color=FD.COLOUR_HUERED,
+                line=attr(color=FD.COLOUR_PURWHI, width=2)),
+            showlegend=(j == 1),
+            hovertext="Leader: $(round(Val; digits=2))"))
+
+        # 4. Midpoint — clamp to visible range
+        if !isnan(n_mid)
+            vis_mid = clamp(n_mid, CLIP_LO, CLIP_HI)
+            push!(traces, scatter(; x=[vis_mid], y=[j], mode="markers", name="Midpoint",
+                marker=attr(symbol="line-ns", size=16, color=FD.COLOUR_TONCYA, line=attr(width=3)),
                 showlegend=(j == 1)))
         end
     end
@@ -434,26 +501,26 @@ function FLOW_RenderPhaseTransition_DDEF(Config::AbstractVector, LeaderVals::Abs
     layout = Layout(;
         height=min(120 + n_vars * 50, 280),
         margin=attr(l=100, r=40, t=10, b=40),
-        plot_bgcolor="white",
+        plot_bgcolor=FD.COLOUR_PURWHI,
         paper_bgcolor="rgba(0,0,0,0)",
-        xaxis=attr(title=attr(text="Normalized Shift (%)", font=attr(size=10, color=TH.Slate)),
-            gridcolor=TH.Grid, zeroline=false, range=[-10, 110],
+        xaxis=attr(title=attr(text="Normalised Shift (%)", font=attr(size=10, color=FD.COLOUR_DARHIG)),
+            gridcolor=FD.COLOUR_LIGHIG, zeroline=false,
+            range=[AXIS_LO, AXIS_HI],
             tickvals=[0, 25, 50, 75, 100], ticktext=["Min", "", "Mid", "", "Max"],
             tickfont=attr(size=9)),
         yaxis=attr(tickvals=collect(1:n_vars), ticktext=y_nms, showgrid=false,
-            zeroline=false, fixedrange=true, tickfont=attr(size=10, color=TH.Slate, weight="bold")),
+            zeroline=false, fixedrange=true, tickfont=attr(size=10, color=FD.COLOUR_DARHIG, weight="bold")),
         legend=attr(orientation="h", y=-0.4, x=0.5, xanchor="center", font=attr(size=9)),
+        annotations=annotations,
     )
 
-    # Final check: if no traces (all NaN?), add placeholder
     if isempty(traces)
         push!(traces, scatter(x=[50], y=[1], text=["Invalid Data"], mode="text"))
     end
 
     p = Plot(traces, layout)
-    # Robust serialization for Dash
     return Dict(
-        "data" => p.data,
+        "data"   => p.data,
         "layout" => p.layout
     )
 end

@@ -3,12 +3,13 @@ module Gui_Base
 # ======================================================================================
 # DAISHODOE - GUI BASE (SHARED COMPONENTS)
 # ======================================================================================
-# Purpose: Foundational UI definitions, shared styles, and common helper functions.
+# Purpose: Reusable Dash-Bootstrap components and high-fidelity styling tokens.
 # Module Tag: BASE
 # ======================================================================================
 
 using Dash
 using DashBootstrapComponents
+using Main.Sys_Fast
 
 export BASE_StyleCell_DDEC, BASE_StyleInput_DDEC, BASE_StyleInputCentre_DDEC
 export BASE_StyleHeader_DDEC, BASE_StyleDatatableCell_DDEC, BASE_StyleInlineHeader_DDEC, BASE_StyleHr_DDEC, BASE_EmptyFigure_DDEC
@@ -24,8 +25,8 @@ export BASE_BuildIdRow_DDEF, BASE_BuildLevelRow_DDEF, BASE_BuildLimitsRow_DDEF, 
 # --------------------------------------------------------------------------------------
 
 const BASE_StyleCell_DDEC = Dict(
-    "backgroundColor" => "#FFFFFF",
-    "border" => "1px solid #DCDCDC",
+    "backgroundColor" => "var(--colour-val0-purwhi)",
+    "border" => "1px solid var(--colour-val1-lighig)",
     "verticalAlign" => "middle",
     "padding" => "0px",
 )
@@ -33,32 +34,32 @@ const BASE_StyleCell_DDEC = Dict(
 const BASE_StyleInput_DDEC = Dict(
     "backgroundColor" => "transparent",
     "border" => "none",
-    "color" => "#000000",
+    "color" => "var(--colour-val5-purbla)",
     "fontSize" => "10px",
     "width" => "100%",
     "outline" => "none",
-    "fontFamily" => "Inter",
+    "fontFamily" => "var(--font-sans)",
 )
 
 const BASE_StyleInputCentre_DDEC = merge(BASE_StyleInput_DDEC, Dict("textAlign" => "center"))
 
 const BASE_StyleHeader_DDEC = Dict(
-    "backgroundColor" => "#FFFFFF", "color" => "#666666",
-    "borderBottom" => "2px solid #DCDCDC",
+    "backgroundColor" => "var(--colour-val0-purwhi)", "color" => "var(--colour-val4-darhig)",
+    "borderBottom" => "2px solid var(--colour-val1-lighig)",
     "fontSize" => "0.70rem", "padding" => "6px 5px",
     "fontWeight" => "600",
 )
 
 const BASE_StyleDatatableCell_DDEC = Dict(
-    "backgroundColor" => "#FFFFFF", "color" => "#000000",
+    "backgroundColor" => "var(--colour-val0-purwhi)", "color" => "var(--colour-val5-purbla)",
     "border" => "none",
     "borderBottom" => "none",
-    "fontFamily" => "Inter", "fontSize" => "10px", "padding" => "6px 5px",
+    "fontFamily" => "var(--font-sans)", "fontSize" => "10px", "padding" => "6px 5px",
 )
 
 const BASE_StyleInlineHeader_DDEC = Dict(
-    "backgroundColor" => "#FFFFFF",
-    "color" => "#666666",
+    "backgroundColor" => "var(--colour-val0-purwhi)",
+    "color" => "var(--colour-val4-darhig)",
     "fontWeight" => "600",
     "fontSize" => "0.65rem",
     "letterSpacing" => "0.05em",
@@ -66,13 +67,13 @@ const BASE_StyleInlineHeader_DDEC = Dict(
     "borderBottom" => "none",
 )
 
-const BASE_StyleHr_DDEC = Dict("borderColor" => "#DCDCDC", "margin" => "6px 0")
+const BASE_StyleHr_DDEC = Dict("borderColor" => "var(--colour-val1-lighig)", "margin" => "6px 0")
 
 const BASE_EmptyFigure_DDEC = Dict(
     "data" => [],
     "layout" => Dict(
-        "paper_bgcolor" => "#FFFFFF",
-        "plot_bgcolor" => "#DCDCDC",
+        "paper_bgcolor" => "var(--colour-val0-purwhi)",
+        "plot_bgcolor" => "var(--colour-val2-liglow)",
         "xaxis" => Dict("visible" => false, "showgrid" => false, "zeroline" => false),
         "yaxis" => Dict("visible" => false, "showgrid" => false, "zeroline" => false),
         "margin" => Dict("l" => 0, "r" => 0, "t" => 0, "b" => 0),
@@ -80,7 +81,7 @@ const BASE_EmptyFigure_DDEC = Dict(
             "text" => "<b>No Visualisation Data</b><br><span style='font-size:12px'>Run analysis to generate plots</span>",
             "showarrow" => false,
             "xref" => "paper", "yref" => "paper", "x" => 0.5, "y" => 0.5,
-            "font" => Dict("color" => "#666666", "size" => 16, "family" => "Inter"),
+            "font" => Dict("color" => "var(--colour-val4-darhig)", "size" => 16, "family" => "var(--font-sans)"),
         )],
     ),
 )
@@ -175,29 +176,30 @@ Mutates a PlotlyJS figure object into a standardised white theme for academic re
 """
 function BASE_ConvertThemePlotlyWhite!_DDEF(fig_dict)
     if haskey(fig_dict, "layout")
+        C = Sys_Fast.FAST_Data_DDEC
         lay = fig_dict["layout"]
         lay["template"] = "plotly_white"
-        lay["paper_bgcolor"] = "#FFFFFF"
-        lay["plot_bgcolor"] = "#FFFFFF"
-        lay["font"] = Dict("color" => "#000000", "family" => "Arial", "size" => 16)
+        lay["paper_bgcolor"] = C.COLOUR_PURWHI
+        lay["plot_bgcolor"] = C.COLOUR_PURWHI
+        lay["font"] = Dict("color" => C.COLOUR_PURBLA, "family" => "Arial", "size" => 16)
 
         if haskey(lay, "scene")
-            lay["scene"]["bgcolor"] = "#FFFFFF"
+            lay["scene"]["bgcolor"] = C.COLOUR_PURWHI
             for ax in ("xaxis", "yaxis", "zaxis")
                 if haskey(lay["scene"], ax)
-                    lay["scene"][ax]["color"] = "#000000"
-                    lay["scene"][ax]["gridcolor"] = "#E6E6E6"
-                    lay["scene"][ax]["zerolinecolor"] = "#E6E6E6"
-                    lay["scene"][ax]["backgroundcolor"] = "#FFFFFF"
+                    lay["scene"][ax]["color"] = C.COLOUR_PURBLA
+                    lay["scene"][ax]["gridcolor"] = C.COLOUR_LIGHIG
+                    lay["scene"][ax]["zerolinecolor"] = C.COLOUR_LIGHIG
+                    lay["scene"][ax]["backgroundcolor"] = C.COLOUR_PURWHI
                 end
             end
         end
 
         for ax in ("xaxis", "yaxis")
             if haskey(lay, ax)
-                lay[ax]["color"] = "#000000"
-                lay[ax]["gridcolor"] = "#E6E6E6"
-                lay[ax]["zerolinecolor"] = "#E6E6E6"
+                lay[ax]["color"] = C.COLOUR_PURBLA
+                lay[ax]["gridcolor"] = C.COLOUR_LIGHIG
+                lay[ax]["zerolinecolor"] = C.COLOUR_LIGHIG
             end
         end
     end
@@ -219,7 +221,7 @@ end
     BASE_Loading_DDEF(id, content; [color]) -> dcc_loading
 Standardised loading spinner with consistent theme colors.
 """
-function BASE_Loading_DDEF(id::String, content; color::String="#21918C", class="mt-2 small")
+function BASE_Loading_DDEF(id::String, content; color::String="var(--colour-chr3-toncya)", class="mt-2 small")
     return dbc_row(dbc_col(dcc_loading(html_div(content, id=id, className=class), type="default", color=color), xs=12))
 end
 
@@ -227,7 +229,7 @@ end
     BASE_StatusIcon_DDEF(symbol, id; [color], [size], [tip]) -> html_span
 Small status indicator used for matrix properties (radioactivity, filler, etc).
 """
-function BASE_StatusIcon_DDEF(symbol::String, id::String; color::String="#2C2C2C", size::String="0.45rem", tip=nothing)
+function BASE_StatusIcon_DDEF(symbol::String, id::String; color::String="var(--colour-val4-darhig)", size::String="0.45rem", tip=nothing)
     icon = html_span(symbol, id=id, style=Dict("color" => color, "fontSize" => size, "marginRight" => "1px"))
     isnothing(tip) && return icon
     return dbc_tooltip(tip, target=id, placement="top")
@@ -237,7 +239,7 @@ end
     BASE_IconButton_DDEF(id, icon_class; [color], [size], [tip]) -> html_button
 Compact button containing only a FontAwesome icon, primarily for grid property cogs.
 """
-function BASE_IconButton_DDEF(id::String, icon_class::String; color="#A6A6A6", size="0.80rem", tip=nothing)
+function BASE_IconButton_DDEF(id::String, icon_class::String; color="var(--colour-val3-darlow)", size="0.80rem", tip=nothing)
     btn = html_button(html_i(className=icon_class, style=Dict("fontSize" => size, "color" => color)),
         id=id, n_clicks=0,
         style=Dict("cursor" => "pointer", "background" => "none", "border" => "none", "padding" => "2px"))
@@ -331,12 +333,12 @@ function BASE_BuildIdRow_DDEF(i, row, visible, show_del=false)
     is_filler = get(row, "IsFiller", false)
 
     name_input_style = Dict{String,Any}()
-    is_filler && (name_input_style["borderLeft"] = "3px solid #F39C12")
+    is_filler && (name_input_style["borderLeft"] = "3px solid var(--colour-chr5-hueyel)")
 
     # Ensure delete button ID always exists in layout for callback stability
     del_btn = html_button("×", id="deck-del-$i", n_clicks=0,
         style=Dict("display" => show_del ? "block" : "none",
-            "cursor" => "pointer", "color" => "#666666", "fontSize" => "1.1rem", "fontWeight" => "700",
+            "cursor" => "pointer", "color" => "var(--colour-val4-darhig)", "fontSize" => "1.1rem", "fontWeight" => "700",
             "lineHeight" => "1", "background" => "none", "border" => "none", "padding" => "0"))
 
     # Automatic radioactive flag for UI (syncs with data logic)
@@ -344,17 +346,17 @@ function BASE_BuildIdRow_DDEF(i, row, visible, show_del=false)
     is_radio = (get(row, "IsRadioactive", false) == true) || (hl_v > 0.0)
 
     mw_v = Float64(get(row, "MW", 0.0))
-    dot1_colour = mw_v > 0.0 ? "#5EC962" : "#2C2C2C"
-    dot2_colour = hl_v > 0.0 ? "#5EC962" : "#2C2C2C"
+    dot1_colour = mw_v > 0.0 ? "var(--colour-chr4-tongre)" : "var(--colour-val4-darhig)"
+    dot2_colour = hl_v > 0.0 ? "var(--colour-chr4-tongre)" : "var(--colour-val4-darhig)"
 
     dots = html_span([
             is_radio ? html_i(className="fas fa-radiation text-danger me-1", style=Dict("fontSize" => "0.7rem")) : nothing,
             is_filler ? html_i(className="fas fa-fill-drip text-warning me-1", style=Dict("fontSize" => "0.7rem")) : nothing,
-            BASE_StatusIcon_DDEF("●", "deck-dot1-$i", color=dot1_colour),
-            BASE_StatusIcon_DDEF("●", "deck-dot2-$i", color=dot2_colour),
+            BASE_StatusIcon_DDEF("●", "deck-dot1-$i", color=mw_v > 0.0 ? "var(--colour-chr4-tongre)" : "var(--colour-val4-darhig)"),
+            BASE_StatusIcon_DDEF("●", "deck-dot2-$i", color=hl_v > 0.0 ? "var(--colour-chr4-tongre)" : "var(--colour-val4-darhig)"),
         ], style=Dict("display" => "inline-flex", "alignItems" => "center"))
 
-    prop_btn = BASE_IconButton_DDEF("btn-prop-$i", "fas fa-cog", color=is_filler ? "#F39C12" : "#A6A6A6")
+    prop_btn = BASE_IconButton_DDEF("btn-prop-$i", "fas fa-cog", color=is_filler ? "var(--colour-chr5-hueyel)" : "var(--colour-val3-darlow)")
 
     row_children = Any[]
     # Always include TD for alignment & callback ID stability
@@ -426,7 +428,7 @@ Constructs a single goal-specification row for the optimisation objectives table
 """
 function BASE_BuildGoalRow_DDEF(i)
     return html_tr([
-        html_td(dcc_input(id="lens-goal-name-$i", type="text", value="", style=merge(BASE_StyleInputCentre_DDEC, Dict("fontSize" => "10px")), className="px-1 py-0", disabled=true), style=merge(BASE_StyleCell_DDEC, Dict("width" => "20%", "backgroundColor" => "#FFFFFF", "borderBottom" => "none")), className="p-0"),
+        html_td(dcc_input(id="lens-goal-name-$i", type="text", value="", style=merge(BASE_StyleInputCentre_DDEC, Dict("fontSize" => "10px")), className="px-1 py-0", disabled=true), style=merge(BASE_StyleCell_DDEC, Dict("width" => "20%", "backgroundColor" => "var(--colour-val0-purwhi)", "borderBottom" => "none")), className="p-0"),
         html_td(dcc_input(id="lens-goal-min-$i", type="number", value=nothing, style=merge(BASE_StyleInputCentre_DDEC, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_StyleCell_DDEC, Dict("width" => "15%", "borderBottom" => "none")), className="p-0"),
         html_td(dcc_input(id="lens-goal-target-$i", type="number", value=nothing, style=merge(BASE_StyleInputCentre_DDEC, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_StyleCell_DDEC, Dict("width" => "15%", "borderBottom" => "none")), className="p-0"),
         html_td(dcc_input(id="lens-goal-max-$i", type="number", value=nothing, style=merge(BASE_StyleInputCentre_DDEC, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_StyleCell_DDEC, Dict("width" => "15%", "borderBottom" => "none")), className="p-0"),
@@ -434,14 +436,14 @@ function BASE_BuildGoalRow_DDEF(i)
                     Dict("label" => "Nominal", "value" => "Nominal"),
                     Dict("label" => "Maximise", "value" => "Maximise"),
                     Dict("label" => "Minimise", "value" => "Minimise"),
-                ], value="Nominal", className="form-select form-select-sm border-0 py-0", style=Dict("width" => "100%", "fontSize" => "10px", "backgroundColor" => "transparent", "color" => "#000000", "boxShadow" => "none")), style=merge(BASE_StyleCell_DDEC, Dict("width" => "20%")), className="p-1"),
+                ], value="Nominal", className="form-select form-select-sm border-0 py-0", style=Dict("width" => "100%", "fontSize" => "10px", "backgroundColor" => "transparent", "color" => "var(--colour-val5-purbla)", "boxShadow" => "none")), style=merge(BASE_StyleCell_DDEC, Dict("width" => "20%")), className="p-1"),
         html_td(dbc_select(id="lens-goal-weight-$i", options=[
                     Dict("label" => "★☆☆☆☆", "value" => "0.25"),
                     Dict("label" => "★★☆☆☆", "value" => "0.50"),
                     Dict("label" => "★★★☆☆", "value" => "1.00"),
                     Dict("label" => "★★★★☆", "value" => "2.50"),
                     Dict("label" => "★★★★★", "value" => "5.00"),
-                ], value="1.00", className="form-select form-select-sm border-0 py-0 text-center", style=Dict("width" => "100%", "fontSize" => "12px", "backgroundColor" => "transparent", "color" => "#B8860B", "boxShadow" => "none")), style=merge(BASE_StyleCell_DDEC, Dict("width" => "15%", "borderBottom" => "none")), className="p-1")
+                ], value="1.00", className="form-select form-select-sm border-0 py-0 text-center", style=Dict("width" => "100%", "fontSize" => "12px", "backgroundColor" => "transparent", "color" => "var(--colour-val4-darhig)", "boxShadow" => "none")), style=merge(BASE_StyleCell_DDEC, Dict("width" => "15%", "borderBottom" => "none")), className="p-1")
     ])
 end
 

@@ -3,7 +3,7 @@ module Gui_Deck
 # ======================================================================================
 # DAISHODOE - GUI DECK (EXPERIMENTAL DESIGN)
 # ======================================================================================
-# Purpose: Factor configuration, design method selection, and protocol generation.
+# Purpose: Experimental design workspace, matrix generation, and protocol export.
 # Module Tag: DECK
 # ======================================================================================
 
@@ -32,8 +32,6 @@ const DECK_RoleOptions_DDEC = [
     Dict("label" => "Fixed", "value" => "Fixed"),
     Dict("label" => "Filler", "value" => "Filler"),
 ]
-
-# --- DECK_RoleColours_DDEC REMOVED per user feedback (Dash styling limitations) ---
 
 
 """
@@ -64,7 +62,7 @@ Renders a row for the response metrics table.
 """
 function DECK_BuildOutRow_DDEF(i, def_name, def_unit)
     # Indicator dot for decay correction status (Fixed color as per user request)
-    out_dot = BASE_StatusIcon_DDEF("●", "deck-out-dot-$i", color="#666666")
+    out_dot = BASE_StatusIcon_DDEF("●", "deck-out-dot-$i", color="var(--colour-val4-darhig)")
 
     prop_btn = BASE_IconButton_DDEF("btn-out-prop-$i", "fas fa-cog")
 
@@ -92,22 +90,22 @@ function DECK_ModalChemical_DDEF()
                     ], className="mb-2 border-bottom pb-2"),
                 html_div("Radioactivity & Decay", className="small fw-bold text-muted mb-2"),
                 dbc_row([
-                    dbc_col(dbc_label("Half-Life (T½)", className="small mb-1"), xs=6),
-                    dbc_col(dbc_label("Unit", className="small mb-1"), xs=6),
-                    dbc_col(dbc_input(id="deck-prop-hl", type="number", min=0, step="any", placeholder="e.g. 6.0", size="sm", className="mb-3"), xs=6),
+                    dbc_col(dbc_label("Half-Life (T½)", className="small mb-1"), xs=12, sm=6),
+                    dbc_col(dbc_label("Unit", className="small mb-1"), xs=12, sm=6),
+                    dbc_col(dbc_input(id="deck-prop-hl", type="number", min=0, step="any", placeholder="e.g. 6.0", size="sm", className="mb-3"), xs=12, sm=6),
                     dbc_col(dbc_select(id="deck-prop-hl-unit", options=[
                                 Dict("label" => "Minutes", "value" => "Minutes"),
                                 Dict("label" => "Hours", "value" => "Hours"),
                                 Dict("label" => "Days", "value" => "Days"),
                                 Dict("label" => "Years", "value" => "Years")
-                            ], value="Hours", size="sm", className="mb-3"), xs=6)
+                            ], value="Hours", size="sm", className="mb-3"), xs=12, sm=6)
                 ])
             ]),
             dbc_modalfooter([
                 dbc_button("Cancel", id="btn-prop-cancel", className="ms-auto", color="secondary", outline=true, size="sm"),
                 dbc_button("Save Properties", id="btn-prop-save", color="primary", size="sm")
             ])
-        ], id="deck-modal-prop", is_open=false, centered=true, backdrop="static")
+        ], id="deck-modal-prop", is_open=false, centered=true, size="md", backdrop="static")
 end
 
 function DECK_ModalResponse_DDEF()
@@ -131,7 +129,7 @@ function DECK_ModalResponse_DDEF()
                 dbc_button("Cancel", id="btn-out-prop-cancel", className="ms-auto", color="secondary", outline=true, size="sm"),
                 dbc_button("Save Properties", id="btn-out-prop-save", color="primary", size="sm")
             ])
-        ], id="deck-modal-out-prop", is_open=false, centered=true, backdrop="static")
+        ], id="deck-modal-out-prop", is_open=false, centered=true, size="md", backdrop="static")
 end
 
 function DECK_ModalStoch_DDEF()
@@ -159,22 +157,22 @@ function DECK_ModalStoch_DDEF()
                         dbc_col([
                                 dbc_label("Filler Name", className="small mb-1"),
                                 dbc_input(id="deck-stoch-filler-name", type="text", placeholder="", size="sm", className="mb-2"),
-                            ], xs=6),
+                            ], xs=12, sm=6),
                         dbc_col([
                                 dbc_label("Filler MW (g/mol)", className="small mb-1"),
                                 dbc_input(id="deck-stoch-filler-mw", type="number", min=0, step="any", placeholder="e.g. 734.05", size="sm", className="mb-2"),
-                            ], xs=6),
+                            ], xs=12, sm=6),
                     ], className="mb-2 border-bottom pb-2"),
                 html_div("Environment Parameters", className="small fw-bold text-muted mb-2"),
                 dbc_row([
                     dbc_col([
                             dbc_label("Volume (mL)", className="small mb-1"),
                             dbc_input(id="deck-stoch-vol", type="number", min=0, step="any", placeholder="e.g. 5.0", size="sm", className="mb-2"),
-                        ], xs=6),
+                        ], xs=12, sm=6),
                     dbc_col([
                             dbc_label("Concentration (mM)", className="small mb-1"),
                             dbc_input(id="deck-stoch-conc", type="number", min=0, step="any", placeholder="e.g. 20.0", size="sm", className="mb-2"),
-                        ], xs=6),
+                        ], xs=12, sm=6),
                 ]),
                 html_div([
                         dcc_input(id="deck-input-vol", type="number", value=0.0, style=Dict("display" => "none")),
@@ -185,7 +183,7 @@ function DECK_ModalStoch_DDEF()
                 dbc_button("Cancel", id="deck-btn-stoch-cancel", className="ms-auto", color="secondary", outline=true, size="sm"),
                 dbc_button("Save Settings", id="deck-btn-stoch-save", color="warning", size="sm")
             ])
-        ], id="deck-modal-stoch-settings", is_open=false, centered=true, backdrop="static")
+        ], id="deck-modal-stoch-settings", is_open=false, centered=true, size="lg", backdrop="static")
 end
 
 function DECK_ModalAudit_DDEF()
@@ -194,7 +192,7 @@ function DECK_ModalAudit_DDEF()
             dbc_row(dbc_col(html_div(id="deck-audit-output"), xs=12)),
             dbc_button("Close", id="deck-btn-audit-close", className="ms-auto")),
         BASE_Modal_DDEF("deck-modal-sci-audit", [html_i(className="fas fa-certificate me-2 text-info"), "Detailed Scientific Audit"],
-            dbc_row(dbc_col(dcc_loading(html_div(id="deck-sci-audit-output"), type="default", color="#21918C"), xs=12)),
+            dbc_row(dbc_col(dcc_loading(html_div(id="deck-sci-audit-output"), type="default", color="var(--colour-chr3-toncya)"), xs=12)),
             dbc_button("Close", id="deck-btn-sci-audit-close", className="ms-auto", color="secondary", outline=true))
     ])
 end
@@ -219,7 +217,7 @@ function DECK_BuildIdTable_DDEF(rows_range, initial_rows, active_count, show_del
                 BASE_BuildIdRow_DDEF(i, initial_rows[i], i <= active_count, show_del)
                 for i in rows_range
             ]),
-        ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
+        ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "var(--colour-val5-purbla)", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
 end
 
 """
@@ -237,7 +235,7 @@ function DECK_BuildLevelTable_DDEF(rows_range, initial_rows, active_count)
                 BASE_BuildLevelRow_DDEF(i, initial_rows[i], i <= active_count)
                 for i in rows_range
             ]),
-        ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
+        ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "var(--colour-val5-purbla)", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
 end
 
 """
@@ -255,7 +253,7 @@ function DECK_BuildLimitsTable_DDEF(rows_range, initial_rows, active_count)
                 BASE_BuildLimitsRow_DDEF(i, initial_rows[i], i <= active_count)
                 for i in rows_range
             ]),
-        ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
+        ]; style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "var(--colour-val5-purbla)", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
 end
 
 """
@@ -314,16 +312,16 @@ function DECK_Layout_DDEF()
                         dbc_col([
                                 # Variable Windows
                                 dbc_row(dbc_col(BASE_GlassPanel_DDEF([html_i(className="fas fa-layer-group me-2"), "INDEPENDENT VARIABLES", html_span(" — Define analysis boundaries and corresponding levels for a 3-factor system.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
-                                                    dbc_col(DECK_BuildIdTable_DDEF(1:3, initial_rows, active_count, false), lg=4, className="pe-lg-1"),
-                                                    dbc_col(DECK_BuildLimitsTable_DDEF(1:3, initial_rows, active_count), lg=4, className="px-lg-1"),
-                                                    dbc_col(DECK_BuildLevelTable_DDEF(1:3, initial_rows, active_count), lg=4, className="ps-lg-1")
+                                                    dbc_col(DECK_BuildIdTable_DDEF(1:3, initial_rows, active_count, false), md=4, className="pe-md-1"),
+                                                    dbc_col(DECK_BuildLimitsTable_DDEF(1:3, initial_rows, active_count), md=4, className="px-md-1"),
+                                                    dbc_col(DECK_BuildLevelTable_DDEF(1:3, initial_rows, active_count), md=4, className="ps-md-1")
                                                 ], className="g-0"); panel_class="mb-4 h-100", content_class="p-2"), xs=12), className="mb-3"),
 
                                 # Constant Windows
                                 dbc_row(dbc_col(BASE_GlassPanel_DDEF([html_i(className="fas fa-thumbtack me-2"), "CONSTANT PARAMETERS", html_span(" — Static background components strictly maintained throughout the entire analysis.", className="ms-2 text-muted fw-normal", style=Dict("fontSize" => "0.65rem", "textTransform" => "none", "letterSpacing" => "0"))], dbc_row([
-                                                    dbc_col(DECK_BuildIdTable_DDEF(5:DECK_MaxRows_DDEC, initial_rows, active_count, true), lg=4, className="pe-lg-1"),
-                                                    dbc_col(DECK_BuildLimitsTable_DDEF(5:DECK_MaxRows_DDEC, initial_rows, active_count), lg=4, className="px-lg-1"),
-                                                    dbc_col(DECK_BuildLevelTable_DDEF(5:DECK_MaxRows_DDEC, initial_rows, active_count), lg=4, className="ps-lg-1")
+                                                    dbc_col(DECK_BuildIdTable_DDEF(5:DECK_MaxRows_DDEC, initial_rows, active_count, true), md=4, className="pe-md-1"),
+                                                    dbc_col(DECK_BuildLimitsTable_DDEF(5:DECK_MaxRows_DDEC, initial_rows, active_count), md=4, className="px-md-1"),
+                                                    dbc_col(DECK_BuildLevelTable_DDEF(5:DECK_MaxRows_DDEC, initial_rows, active_count), md=4, className="ps-md-1")
                                                 ], className="g-0"); right_node=dbc_button([html_i(className="fas fa-plus me-1"), "Add Row"], id="deck-btn-add-row", n_clicks=0, color="secondary", outline=true, size="sm", className="px-2 py-1 fw-bold"), panel_class="mb-4 h-100", content_class="p-2"), xs=12), className="mb-3"),
 
                                 # Row 2: Response Metrics
@@ -336,10 +334,10 @@ function DECK_Layout_DDEF()
                                                                 BASE_TableHeader_DDEF("", width="20%")
                                                             ])),
                                                             html_tbody([DECK_BuildOutRow_DDEF(i, "", "-") for i in 1:3])
-                                                        ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "#000000", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0 p-2");
-                                                content_class="glass-content p-0", panel_class="h-100 mb-0"), lg=12),
+                                                        ], style=Dict("width" => "100%", "borderCollapse" => "collapse", "color" => "var(--colour-val5-purbla)", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0 p-2");
+                                                content_class="glass-content p-0", panel_class="h-100 mb-0"), md=12),
                                     ], className="g-3 mb-3 d-flex align-items-stretch"),
-                            ], xs=12, lg=9, className="mb-3 mb-lg-0"),
+                            ], xs=12, md=9, className="mb-3 mb-md-0"),
 
                         # --- RIGHT COLUMN ---
                         dbc_col(
@@ -380,7 +378,7 @@ function DECK_Layout_DDEF()
                                     BASE_Loading_DDEF("deck-run-output", ""),
                                     BASE_NextButton_DDEF("deck-btn-run", "Generate Protocol"),
                                 ]; right_node=html_i(className="fas fa-sliders-h text-secondary"), panel_class="mb-3 h-auto"),
-                            xs=12, lg=3),
+                            xs=12, md=3),
                     ], className="g-3"),
 
                 # Download components
@@ -681,13 +679,13 @@ function DECK_RegisterCallbacks_DDEF(app)
         # Indicator dot colours: green when MW/HL > 0
         dot1_styles = [Dict("color" => (
                 let r = (i <= length(rows) ? rows[i] : Dict())
-                    Float64(get(r, "MW", get(r, :MW, 0.0))) > 0.0 ? "#5EC962" : "#2C2C2C"
+                    Float64(get(r, "MW", get(r, :MW, 0.0))) > 0.0 ? "var(--colour-chr4-tongre)" : "var(--colour-val4-darhig)"
                 end
             ),
             "fontSize" => "0.45rem", "marginRight" => "1px") for i in 1:DECK_MaxRows_DDEC]
         dot2_styles = [Dict("color" => (
                 let r = (i <= length(rows) ? rows[i] : Dict())
-                    Float64(get(r, "HalfLife", get(r, :HalfLife, 0.0))) > 0.0 ? "#5EC962" : "#2C2C2C"
+                    Float64(get(r, "HalfLife", get(r, :HalfLife, 0.0))) > 0.0 ? "var(--colour-chr4-tongre)" : "var(--colour-val4-darhig)"
                 end
             ),
             "fontSize" => "0.45rem", "marginRight" => "2px") for i in 1:DECK_MaxRows_DDEC]
@@ -703,11 +701,11 @@ function DECK_RegisterCallbacks_DDEF(app)
                         ok_m, _, _ = Lib_Mole.MOLE_ValidatePhysicalUnit_DDEF(u, "Mass")
                         ok_c, _, _ = Lib_Mole.MOLE_ValidatePhysicalUnit_DDEF(u, "Concentration")
                         if !ok_m && !ok_c
-                            s["color"] = "#FF0000"
+                            s["color"] = "var(--colour-chr3-toncya)"
                             s["fontWeight"] = "bold"
-                            s["border"] = "1px solid #FF0000"
+                            s["border"] = "1px solid var(--colour-chr3-toncya)"
                         else
-                            s["color"] = "#21918C"
+                            s["color"] = "var(--colour-chr3-toncya)"
                         end
                     end
                 end
@@ -813,11 +811,10 @@ function DECK_RegisterCallbacks_DDEF(app)
             all_mws = collect(args[offset+7DECK_MaxRows_DDEC:offset+8DECK_MaxRows_DDEC-1])
             all_units = collect(args[offset+8DECK_MaxRows_DDEC:offset+9DECK_MaxRows_DDEC-1])
 
-            # RECENT FIX: Ensure Dash.callback_context() is used explicitly for stability
+            # Explicitly utilise Dash.callback_context() for state stability.
             ctx = Dash.callback_context()
             trig = ""
             if isempty(ctx.triggered)
-                # Initialization check: Permit cross-page hydration if session has transition directives
                 if !isnothing(session) && session != ""
                     try
                         res = JSON3.read(session)
@@ -927,7 +924,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                         end
                         if has_filler && string(get(new_r, "Name", "")) == filler_name
                             new_r["IsFiller"] = true
-                            new_r["MW"] = filler_mw
+                            nr["MW"] = filler_mw
                             new_r["Unit"] = "%M"
                         end
                         push!(new_rows, new_r)
@@ -1093,7 +1090,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     Dict("Name" => "DOTA", "Role" => "Fixed", "L1" => 0.0, "L2" => 1.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 3184.84, "Unit" => "%M", "IsRadioactive" => false, "HalfLife" => 0.0, "HalfLifeUnit" => "Hours", "IsFiller" => false),
                 ]
                 lbl = html_div([html_i(className="fas fa-book-medical me-2"), "Template Applied"],
-                    className="badge bg-primary text-white p-2 w-100", style=Dict("fontSize" => "0.85rem", "boxShadow" => "0 2px 5px #A6A6A6"))
+                    className="badge bg-primary text-white p-2 w-100", style=Dict("fontSize" => "0.85rem", "boxShadow" => "0 2px 5px var(--colour-val3-darlow)"))
                 sample_stoch = Dict("FillerName" => "DPPC", "FillerMW" => 734.05, "Volume" => 5.0, "Conc" => 20.0)
                 nc = min(length(loaded_rows), DECK_MaxRows_DDEC)
                 def_outs = Sys_Fast.FAST_GetLabDefaults_DDEF()["Outputs"]
@@ -1144,7 +1141,7 @@ function DECK_RegisterCallbacks_DDEF(app)
 
                     dl_dict = Dict("filename" => fname, "content" => b64, "base64" => true)
                     lbl = html_div([html_i(className="fas fa-check-circle me-2"), "Workspace Exported"],
-                        className="badge bg-success text-white p-2 w-100", style=Dict("fontSize" => "0.85rem", "boxShadow" => "0 2px 5px #A6A6A6"))
+                        className="badge bg-success text-white p-2 w-100", style=Dict("fontSize" => "0.85rem", "boxShadow" => "0 2px 5px var(--colour-val3-darlow)"))
                     return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, lbl, dl_dict, NO, NO, fill(NO, 6), NO)
                 catch e
                     err_lbl = html_div("❌ Save Error: " * string(e), className="badge bg-danger text-white w-100 p-2", style=Dict("fontSize" => "0.6rem"))
@@ -1168,7 +1165,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     "Conc" => isnothing(s_conc_modal) ? 0.0 : DECK_SafeNumZero_DDEF(s_conc_modal),
                 )
 
-                # Apply Unit Auto-Logic and Filler Sync to the factor store
+                # Apply Unit Auto-Logic and Filler Synchronisation to the factor store
                 new_store = NO
                 if !isnothing(store_data)
                     f_name = new_stoch["FillerName"]
@@ -1186,7 +1183,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                         if t_unit != NO && Float64(get(nr, "MW", 0.0)) > 0.0
                             nr["Unit"] = t_unit
                         end
-                        # Strict Filler Synchronization
+                        # Strict Filler Synchronisation
                         if has_f && string(get(nr, "Name", "")) == f_name
                             nr["IsFiller"] = true
                             nr["MW"] = f_mw
@@ -1376,10 +1373,10 @@ function DECK_RegisterCallbacks_DDEF(app)
                         html_span(@sprintf("%.4f mg", mass), className="fw-bold"),
                     ], className="mb-3"),
                 html_div(html_pre(res_text, style=Dict(
-                        "backgroundColor" => "#FFFFFF", "color" => "#000000", "padding" => "15px",
+                        "backgroundColor" => "var(--colour-val0-purwhi)", "color" => "var(--colour-val5-purbla)", "padding" => "15px",
                         "borderRadius" => "6px", "fontSize" => "0.8rem",
                         "fontFamily" => "SFMono-Regular, Consolas, monospace",
-                        "border" => "1px solid #DCDCDC", "maxHeight" => "400px", "overflowY" => "auto",
+                        "border" => "1px solid var(--colour-val2-liglow)", "maxHeight" => "400px", "overflowY" => "auto",
                     )), className="mb-3"),
                 html_div(msg, className="small text-info fw-bold border-top pt-2"),
             ]), true
@@ -1851,7 +1848,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         isnothing(store_out) && return (ntuple(_ -> Dash.no_update(), 3)...,)
         rows = get(store_out, "rows", get(store_out, :rows, []))
         return Tuple(
-            Dict("color" => (i <= length(rows) && get(rows[i], "IsCorr", get(rows[i], :IsCorr, false)) ? "#5EC962" : "#2C2C2C"),
+            Dict("color" => (i <= length(rows) && get(rows[i], "IsCorr", get(rows[i], :IsCorr, false)) ? "var(--colour-chr4-tongre)" : "var(--colour-val4-darhig)"),
                 "fontSize" => "0.45rem", "marginRight" => "2px", "verticalAlign" => "middle")
             for i in 1:3
         )

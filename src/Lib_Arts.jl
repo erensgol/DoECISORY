@@ -3,8 +3,7 @@ module Lib_Arts
 # ======================================================================================
 # DAISHODOE - LIB ARTS (VISUALISATION & GRAPHICS MOTOR)
 # ======================================================================================
-# Purpose: High-fidelity PlotlyJS rendering, light-theme configuration,
-#          response surface mapping (RSM), and desirability calculations.
+# Purpose: Visualisation and graphics logic for DaishoDoE.
 # Module Tag: ARTS
 # ======================================================================================
 
@@ -32,21 +31,32 @@ export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
 # Theme as a module-level const for zero-alloc access
 # Theme linked to Sys_Fast constants for single-source-of-truth
 const ARTS_Theme_DDEC = let C = Sys_Fast.FAST_Data_DDEC
-    # Mapping to British English Constants
     (
-        Magenta=C.COLOUR_MAGENTA,
-        Yellow=C.COLOUR_YELLOW,
-        Green=C.COLOUR_GREEN,
-        Cyan=C.COLOUR_CYAN,
-        Red=C.COLOUR_RED,
-        Blue=C.COLOUR_BLUE,
-        Purple=C.COLOUR_MAGENTA,
-        Text=C.COLOUR_GREY_D,
-        TextBright=C.COLOUR_BLACK,
-        Grid=C.COLOUR_GREY_L,
-        Bg=C.COLOUR_WHITE,
-        Font=C.FONT_DEFAULT,
+        PURWHI = C.COLOUR_PURWHI,
+        LIGHIG = C.COLOUR_LIGHIG,
+        LIGLOW = C.COLOUR_LIGLOW,
+        DARLOW = C.COLOUR_DARLOW,
+        DARHIG = C.COLOUR_DARHIG,
+        PURBLA = C.COLOUR_PURBLA,
+        HUERED = C.COLOUR_HUERED,
+        SHAMAG = C.COLOUR_SHAMAG,
+        SHABLU = C.COLOUR_SHABLU,
+        TONCYA = C.COLOUR_TONCYA,
+        TONGRE = C.COLOUR_TONGRE,
+        HUEYEL = C.COLOUR_HUEYEL,
+        FONT   = C.FONT_DEFAULT
     )
+end
+
+# High-fidelity Viridis colour mapping for surfaces and heatmaps
+const ARTS_ViridisScale_DDEC = let C = Sys_Fast.FAST_Data_DDEC
+    [
+        [0.0, C.COLOUR_SHAMAG],
+        [0.25, C.COLOUR_SHABLU],
+        [0.5, C.COLOUR_TONCYA],
+        [0.75, C.COLOUR_TONGRE],
+        [1.0, C.COLOUR_HUEYEL],
+    ]
 end
 
 # --- GRAPHICAL STANDARD SCALES ---
@@ -59,44 +69,34 @@ const ARTS_SceneHeight_DDEC = 500
 Generates a standardised PlotlyJS layout with light theme support.
 """
 function ARTS_BaseLayout_DDEF(title::String; height=ARTS_StandardHeight_DDEC)
-    TH = ARTS_Theme_DDEC
     return Layout(;
         title=attr(
             text=title,
-            font=attr(size=12, family=TH.Font, color=TH.TextBright),
+            font=attr(size=12, family=ARTS_Theme_DDEC.FONT, color=ARTS_Theme_DDEC.PURBLA),
             x=0.02, y=0.98,
         ),
-        paper_bgcolor=TH.Bg,
-        plot_bgcolor=TH.Bg,
-        font=attr(family=TH.Font, color=TH.Text, size=10),
+        paper_bgcolor=ARTS_Theme_DDEC.PURWHI,
+        plot_bgcolor=ARTS_Theme_DDEC.PURWHI,
+        font=attr(family=ARTS_Theme_DDEC.FONT, color=ARTS_Theme_DDEC.DARHIG, size=10),
         margin=attr(l=70, r=40, t=70, b=80),
         height=height,
         xaxis=attr(
             showline=true, showgrid=true,
-            gridcolor=TH.Grid, gridwidth=1, griddash="dash",
-            zeroline=false, linecolor=TH.Grid, linewidth=1, mirror=true, ticks="outside",
+            gridcolor=ARTS_Theme_DDEC.LIGHIG, gridwidth=1, griddash="dash",
+            zeroline=false, linecolor=ARTS_Theme_DDEC.LIGHIG, linewidth=1, mirror=true, ticks="outside",
         ),
         yaxis=attr(
             showline=true, showgrid=true,
-            gridcolor=TH.Grid, gridwidth=1, griddash="dash",
-            zeroline=false, linecolor=TH.Grid, linewidth=1, mirror=true, ticks="outside",
+            gridcolor=ARTS_Theme_DDEC.LIGHIG, gridwidth=1, griddash="dash",
+            zeroline=false, linecolor=ARTS_Theme_DDEC.LIGHIG, linewidth=1, mirror=true, ticks="outside",
         ),
-        colorway=[TH.Blue, TH.Magenta, TH.Green, TH.Yellow, TH.Cyan],
+        colorway=[ARTS_Theme_DDEC.SHABLU, ARTS_Theme_DDEC.SHAMAG, ARTS_Theme_DDEC.TONGRE, ARTS_Theme_DDEC.HUEYEL, ARTS_Theme_DDEC.TONCYA],
         hovermode="closest",
         template="plotly_white",
     )
 end
 
 # High-fidelity Viridis colour mapping for surfaces and heatmaps
-const ARTS_ViridisScale_DDEC = let C = Sys_Fast.FAST_Data_DDEC
-    [
-        [0.0, C.COLOUR_MAGENTA],
-        [0.25, C.COLOUR_BLUE],
-        [0.5, C.COLOUR_CYAN],
-        [0.75, C.COLOUR_GREEN],
-        [1.0, C.COLOUR_YELLOW],
-    ]
-end
 
 # --- SMART DOWNSAMPLING & GRID LIMITER ---
 
@@ -210,7 +210,6 @@ end
 Renders a horizontal bar chart showing standardised effects of factors.
 """
 function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R2_Pred::Float64)
-    TH = ARTS_Theme_DDEC
     Coefs = Model["Coefs"]
     Names = get(Model, "TermNames", ["T$i" for i in eachindex(Coefs)])
     t_Stats = get(Model, "t_Stats", Coefs) # Fallback to coefs if missing
@@ -237,7 +236,7 @@ function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R
             y=sorted_nms[neg_idx],
             orientation="h",
             name="Negative Effect",
-            marker=attr(color=TH.Purple, line=attr(width=0)),
+            marker=attr(color=ARTS_Theme_DDEC.SHAMAG, line=attr(width=0)),
             text=[@sprintf("%.2f", m) for m in sorted_mag[neg_idx]],
             textposition="auto",
         ))
@@ -251,7 +250,7 @@ function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R
             y=sorted_nms[pos_idx],
             orientation="h",
             name="Positive Effect",
-            marker=attr(color=TH.Yellow, line=attr(width=0)),
+            marker=attr(color=ARTS_Theme_DDEC.HUEYEL, line=attr(width=0)),
             text=[@sprintf("%.2f", m) for m in sorted_mag[pos_idx]],
             textposition="auto",
         ))
@@ -273,7 +272,7 @@ function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R
 
     limit_shape = attr(
         type="line", x0=t_crit, x1=t_crit, y0=0, y1=1,
-        yref="paper", line=attr(color=TH.Red, width=2, dash="dash")
+        yref="paper", line=attr(color=ARTS_Theme_DDEC.HUERED, width=2, dash="dash")
     )
     layout[:shapes] = [limit_shape]
 
@@ -285,16 +284,15 @@ end
 Compares experimental results with model predictions via scatter plot.
 """
 function ARTS_RenderFit_DDEF(Y_Real::Vector{Float64}, Y_Pred::Vector{Float64}, OutName::String)
-    TH = ARTS_Theme_DDEC
     mn = min(minimum(Y_Real), minimum(Y_Pred))
     mx = max(maximum(Y_Real), maximum(Y_Pred))
     margin = (mx - mn) * 0.05
 
     t_data = scatter(; x=Y_Real, y=Y_Pred, mode="markers",
-        marker=attr(size=8, color=TH.Green, line=attr(width=1, color=TH.TextBright)), name="Data")
+        marker=attr(size=8, color=ARTS_Theme_DDEC.TONGRE, line=attr(width=1, color=ARTS_Theme_DDEC.PURBLA)), name="Data")
 
     t_ideal = scatter(; x=[mn - margin, mx + margin], y=[mn - margin, mx + margin],
-        mode="lines", line=attr(color=TH.Text, dash="dash", width=1), name="Ideal")
+        mode="lines", line=attr(color=ARTS_Theme_DDEC.DARHIG, dash="dash", width=1), name="Ideal")
 
     layout = ARTS_BaseLayout_DDEF("Prediction Accuracy: $OutName")
     layout[:xaxis][:title] = "Experimental (Recorded)"
@@ -448,7 +446,6 @@ Renders interaction slices for two variables (Min/Mean/Max levels).
 """
 function ARTS_RenderSlice_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int},
     Lbls::Vector{String}, OutName::String)
-    TH = ARTS_Theme_DDEC
     ix, iy = Idx[1], Idx[2]
     K = 3 # Fixed 3-variable system
 
@@ -456,7 +453,7 @@ function ARTS_RenderSlice_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int}
     y_vals = (minimum(view(X, :, iy)), mean(view(X, :, iy)), maximum(view(X, :, iy)))
     y_names = ("Min", "Mean", "Max")
     styles = ("solid", "dash", "solid")
-    colours = (TH.Magenta, TH.Cyan, TH.Yellow)
+    colours = (ARTS_Theme_DDEC.SHAMAG, ARTS_Theme_DDEC.TONCYA, ARTS_Theme_DDEC.HUEYEL)
 
     col_means = vec(mean(X; dims=1))
     traces = GenericTrace[]
@@ -484,7 +481,6 @@ Renders main effect trend line with experimental scatter points.
 """
 function ARTS_RenderTrend_DDEF(Model::Dict, X::Matrix{Float64}, Y_Real::Vector{Float64},
     Idx::Vector{Int}, Lbls::Vector{String}, OutName::String)
-    TH = ARTS_Theme_DDEC
     ix = Idx[1]
     N = 100
 
@@ -495,10 +491,10 @@ function ARTS_RenderTrend_DDEF(Model::Dict, X::Matrix{Float64}, Y_Real::Vector{F
     y_trend = ARTS_Predict_DDEF(Model, Grid)
 
     t_line = scatter(; x=xr, y=y_trend, mode="lines", name="Model Trend",
-        line=attr(color=TH.Text, dash="dash"))
+        line=attr(color=ARTS_Theme_DDEC.DARHIG, dash="dash"))
 
     t_data = scatter(; x=X[:, ix], y=Y_Real, mode="markers", name="Experimental",
-        marker=attr(color=TH.Green, size=8, line=attr(width=1, color=TH.TextBright)))
+        marker=attr(color=ARTS_Theme_DDEC.TONGRE, size=8, line=attr(width=1, color=ARTS_Theme_DDEC.PURBLA)))
 
     layout = ARTS_BaseLayout_DDEF("Main Effect: $(Lbls[1]) -> $OutName")
     layout[:xaxis][:title] = Lbls[1]
@@ -712,7 +708,7 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
             bz = iz > 0 ? Leaders_DF[r, Symbol(in_cols[iz])] : 0.0
 
             # Colour coding: Red (Global), White (Input Diversity), Black (Output Diversity)
-            marker_colour = marker_type == "TOP" ? th.Red : (marker_type == "INP" ? th.Bg : th.TextBright)
+            marker_colour = marker_type == "TOP" ? th.TONCYA : (marker_type == "INP" ? th.PURWHI : th.PURBLA)
             marker_name = marker_type == "TOP" ? "Global Leader ($id_val)" :
                           (marker_type == "INP" ? "Input-Based Leader ($id_val)" : "Output-Based Leader ($id_val)")
 
@@ -720,7 +716,7 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
                 x=[bx], y=[by], z=[bz],
                 mode="markers",
                 marker=attr(size=2, color=marker_colour, symbol="diamond",
-                    line=attr(color=th.TextBright, width=1)),
+                    line=attr(color=th.PURBLA, width=1)),
                 showlegend=false,
                 name=marker_name,
                 hovertext=["$marker_name<br>Score: $(round(Leaders_DF[r, score_col], digits=3))"],
@@ -749,7 +745,6 @@ end
 Renders a 3D isometric volume of the 'Optimal Zone' (Top 10% Desirability).
 """
 function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames::Vector{String})
-    TH = ARTS_Theme_DDEC
     N = 50 # High-fidelity grid for volume stability (50^3 = 125,000 pts)
     ranges = [range(minimum(view(X, :, i)), maximum(view(X, :, i)); length=N) for i in 1:3]
     Grid = Matrix{Float64}(undef, N^3, 3)
@@ -820,7 +815,6 @@ end
 Renders a Heatmap matrix illustrating factor interaction strengths (synergy/antagonism).
 """
 function ARTS_RenderInteractionMatrix_DDEF(Model::Dict, InNames::Vector{String}, OutName::String)
-    TH = ARTS_Theme_DDEC
     K = 3 # Fixed 3rd dimension
     M = zeros(K, K)
 
@@ -835,7 +829,7 @@ function ARTS_RenderInteractionMatrix_DDEF(Model::Dict, InNames::Vector{String},
         M[2, 3] = M[3, 2] = Beta[7]
     end
 
-    trace = heatmap(z=M, x=InNames, y=InNames, colorscale=[[0, TH.Purple], [0.5, TH.Bg], [1, TH.Yellow]], zmid=0)
+    trace = heatmap(z=M, x=InNames, y=InNames, colorscale=[[0, ARTS_Theme_DDEC.SHAMAG], [0.5, ARTS_Theme_DDEC.PURWHI], [1, ARTS_Theme_DDEC.HUEYEL]], zmid=0)
     layout = ARTS_BaseLayout_DDEF("Interaction Landscape: $OutName")
     return Plot(trace, layout)
 end
@@ -845,7 +839,6 @@ end
 Renders a Q-Q Plot (Normal Probability Plot) for residual diagnostic analysis.
 """
 function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::String)
-    TH = ARTS_Theme_DDEC
     n = length(Residuals)
     sorted_res = sort(Residuals)
 
@@ -858,7 +851,7 @@ function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::Str
 
     trace_pts = scatter(
         x=theoretical, y=z_res, mode="markers",
-        marker=attr(color=TH.Purple, size=8, opacity=0.7, line=attr(width=1, color="#FFFFFF")),
+        marker=attr(color=ARTS_Theme_DDEC.SHAMAG, size=8, opacity=0.7, line=attr(width=1, color=ARTS_Theme_DDEC.PURWHI)),
         name="Residuals"
     )
 
@@ -866,7 +859,7 @@ function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::Str
     lims = [minimum([theoretical; z_res]), maximum([theoretical; z_res])]
     trace_line = scatter(
         x=lims, y=lims, mode="lines",
-        line=attr(color=TH.Yellow, width=2, dash="dash"),
+        line=attr(color=ARTS_Theme_DDEC.HUEYEL, width=2, dash="dash"),
         name="Normal Dist"
     )
 
@@ -882,18 +875,17 @@ end
 Renders Residuals vs. Predicted plot to check for homoscedasticity.
 """
 function ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residuals::AbstractVector{Float64}, OutName::String)
-    TH = ARTS_Theme_DDEC
 
     trace_pts = scatter(
         x=Y_Pred, y=Residuals, mode="markers",
-        marker=attr(color=TH.Purple, size=9, opacity=0.7, line=attr(width=1, color="#FFFFFF")),
+        marker=attr(color=ARTS_Theme_DDEC.SHAMAG, size=9, opacity=0.7, line=attr(width=1, color=ARTS_Theme_DDEC.PURWHI)),
         name="Residuals"
     )
 
     # zero line
     trace_zero = scatter(
         x=[minimum(Y_Pred), maximum(Y_Pred)], y=[0, 0], mode="lines",
-        line=attr(color=TH.Yellow, width=2, dash="solid"),
+        line=attr(color=ARTS_Theme_DDEC.HUEYEL, width=2, dash="solid"),
         showlegend=false
     )
 
@@ -909,13 +901,12 @@ end
 Renders localized factor sensitivity percentage contribution at the optimal point.
 """
 function ARTS_RenderSensitivityPlot_DDEF(Sens::AbstractVector{Float64}, InNames::Vector{String}, OutName::String)
-    TH = ARTS_Theme_DDEC
 
     trace = bar(
         x=InNames, y=Sens .* 100.0,
         marker=attr(
-            color=[TH.Purple, TH.Bg, TH.Yellow], # High-fidelity palette
-            line=attr(width=1.5, color="#FFFFFF")
+            color=[ARTS_Theme_DDEC.SHAMAG, ARTS_Theme_DDEC.PURWHI, ARTS_Theme_DDEC.HUEYEL], # High-fidelity palette
+            line=attr(width=1.5, color=ARTS_Theme_DDEC.PURWHI)
         ),
         textposition="auto",
         text=[@sprintf("%.1f%%", s * 100) for s in Sens]

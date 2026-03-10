@@ -4,27 +4,24 @@
 
 /* --- 1. DESIGN TOKENS (:root) --- */
 :root {
-    /* Palette: Daisho */
-    --bg-body: #DCDCDC;
-    --bg-surface: #FFFFFF;
-    --bg-panel: #FFFFFF;
+    /* Palette: Daisho (Sys_Fast.jl - FAST_Constants_DDES) */
 
-    --border-subtle: #E6E6E6;
-    --border-highlight: #A6A6A6;
+    --colour-val0-purwhi: #FFFFFF;
+    --colour-val1-lighig: #E6E6E6;
+    --colour-val2-liglow: #DCDCDC;
+    --colour-val3-darlow: #A6A6A6;
+    --colour-val4-darhig: #666666;
+    --colour-val5-purbla: #000000;
+    --colour-chr0-huered: #FF0000;
+    --colour-chr1-shamag: #440154;
+    --colour-chr2-shablu: #3B528B;
+    --colour-chr3-toncya: #21918C;
+    --colour-chr4-tongre: #5EC962;
+    --colour-chr5-hueyel: #FDE725;
 
-    --text-primary: #000000;
-    --text-secondary: #666666;
-    --text-tertiary: #A6A6A6;
-
-    /* Custom Accents */
-    --accent-primary: #666666;
-    --accent-gradient: linear-gradient(135deg, #666666 0%, #000000 100%);
-    --accent-glow: 0 0 15px #E6E6E6;
-
-    --success: #5EC962;
-    --warning: #FDE725;
-    --danger: #FF0000;
-    --info: #3B528B;
+    /* Effects & Gradients */
+    --colour-accent-gradient: linear-gradient(135deg, var(--colour-val4-darhig) 0%, var(--colour-val5-purbla) 100%);
+    --colour-accent-glow: 0 0 15px var(--colour-val1-lighig);
 
     --glass-blur: blur(20px);
     --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -38,15 +35,15 @@
 
 /* --- 2. CORE STYLES --- */
 body {
-    background-color: var(--bg-body);
-    color: var(--text-primary);
+    background-color: var(--colour-val2-liglow);
+    color: var(--colour-val5-purbla);
     font-family: var(--font-sans);
     font-size: 0.9rem;
     line-height: 1.6;
     margin: 0;
     -webkit-font-smoothing: antialiased;
     letter-spacing: -0.01em;
-    background-image: radial-gradient(circle at 50% 0%, #FFFFFF 0%, var(--bg-body) 60%);
+    background-image: radial-gradient(circle at 50% 0%, var(--colour-val0-purwhi) 0%, var(--colour-val2-liglow) 60%);
     background-attachment: fixed;
 }
 
@@ -56,14 +53,29 @@ h3,
 h4,
 h5,
 h6 {
-    color: var(--text-primary);
+    color: var(--colour-val5-purbla);
     font-weight: 600;
     margin-bottom: 0.75rem;
     letter-spacing: -0.025em;
 }
 
+/* --- RESPONSIVENESS (BREAKPOINT: LG - 992px) --- */
+/* Widening modals in the side-by-side transition zone to prevent content crowding */
+@media (max-width: 992px) {
+    .modal-xl, .modal-lg {
+        max-width: 90vw !important;
+    }
+}
+
+/* Global Fix for Slider Mark Overlaps (Scientific Precision) */
+.rc-slider-mark-text {
+    white-space: nowrap;
+    font-size: 9px !important;
+}
+
+
 a {
-    color: var(--text-primary);
+    color: var(--colour-val5-purbla);
     text-decoration: none;
     transition: opacity 0.2s ease;
 }
@@ -81,24 +93,24 @@ a:hover {
 
 .glass-navbar {
     height: 52px;
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--colour-val1-lighig);
     border-radius: var(--rad-md);
     margin: 0.6rem 1rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 1.25rem;
-    background: #FFFFFF;
+    background: var(--colour-val0-purwhi);
     backdrop-filter: var(--glass-blur);
     position: relative;
     z-index: 100;
-    box-shadow: 0 8px 32px #A6A6A6;
+    box-shadow: 0 8px 32px var(--colour-val3-darlow);
 }
 
 .nav-brand {
     font-weight: 700;
     font-size: 1rem;
-    color: var(--text-primary);
+    color: var(--colour-val5-purbla);
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -108,38 +120,38 @@ a:hover {
 .nav-links {
     display: flex;
     gap: 0.5rem;
-    background: #FFFFFF;
+    background: var(--colour-val0-purwhi);
     padding: 4px;
     border-radius: var(--rad-md);
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--colour-val1-lighig);
 }
 
 .nav-item {
     padding: 0.4rem 1rem;
     border-radius: var(--rad-sm);
-    color: var(--text-secondary);
+    color: var(--colour-val4-darhig);
     font-size: 0.85rem;
     font-weight: 500;
     transition: all 0.2s ease;
 }
 
 .nav-item:hover {
-    background: #E6E6E6;
-    color: var(--text-primary);
+    background: var(--colour-val1-lighig);
+    color: var(--colour-val5-purbla);
 }
 
 .nav-item.active {
-    background: #DCDCDC;
-    color: var(--text-primary);
-    box-shadow: 0 1px 2px #A6A6A6;
+    background: var(--colour-val2-liglow);
+    color: var(--colour-val5-purbla);
+    box-shadow: 0 1px 2px var(--colour-val3-darlow);
 }
 
 /* --- 4. PANELS & CARDS --- */
 .glass-panel {
-    background: var(--bg-surface);
-    border: 1px solid var(--border-subtle);
+    background: var(--colour-val0-purwhi);
+    border: 1px solid var(--colour-val1-lighig);
     border-radius: var(--rad-md);
-    box-shadow: 0 4px 6px -1px #E6E6E6, 0 2px 4px -1px #E6E6E6;
+    box-shadow: 0 4px 6px -1px var(--colour-val1-lighig), 0 2px 4px -1px var(--colour-val1-lighig);
     transition: transform 0.2s var(--ease-spring), box-shadow 0.2s ease, border-color 0.2s ease;
     margin-bottom: 1rem;
     position: relative;
@@ -147,7 +159,7 @@ a:hover {
 }
 
 .glass-panel:hover {
-    border-color: var(--border-highlight);
+    border-color: var(--colour-val3-darlow);
 }
 
 .glass-panel::before {
@@ -157,17 +169,17 @@ a:hover {
     left: 0;
     right: 0;
     height: 1px;
-    background: linear-gradient(90deg, transparent, #E6E6E6, transparent);
+    background: linear-gradient(90deg, transparent, var(--colour-val1-lighig), transparent);
     opacity: 0.5;
 }
 
 .glass-header {
     padding: 0.6rem 1rem;
-    border-bottom: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--colour-val1-lighig);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #FFFFFF;
+    background: var(--colour-val0-purwhi);
     border-radius: var(--rad-md) var(--rad-md) 0 0;
 }
 
@@ -176,7 +188,7 @@ a:hover {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: var(--text-tertiary);
+    color: var(--colour-val3-darlow);
     margin: 0;
 }
 
@@ -195,9 +207,9 @@ a:hover {
     width: 100%;
     background: transparent;
     border: none;
-    border-bottom: 2px solid var(--border-subtle);
+    border-bottom: 2px solid var(--colour-val1-lighig);
     font-size: 1.5rem;
-    color: var(--text-primary);
+    color: var(--colour-val5-purbla);
     padding: 1rem 0;
     font-weight: 500;
     outline: none;
@@ -205,11 +217,11 @@ a:hover {
 }
 
 .glass-search-input:focus {
-    border-color: var(--accent-primary);
+    border-color: var(--colour-val4-darhig);
 }
 
 .glass-search-input::placeholder {
-    color: var(--text-tertiary);
+    color: var(--colour-val3-darlow);
     opacity: 0.5;
 }
 
@@ -224,7 +236,7 @@ a:hover {
     align-items: center;
     justify-content: space-between;
     padding: 1rem 1.25rem;
-    background: #FFFFFF;
+    background: var(--colour-val0-purwhi);
     border: 1px solid transparent;
     border-radius: var(--rad-sm);
     cursor: pointer;
@@ -233,8 +245,8 @@ a:hover {
 }
 
 .glass-command-row:hover {
-    background: #E6E6E6;
-    border-left: 2px solid var(--accent-primary);
+    background: var(--colour-val1-lighig);
+    border-left: 2px solid var(--colour-val4-darhig);
     padding-left: calc(1.25rem - 2px);
 }
 
@@ -245,15 +257,15 @@ a:hover {
     align-items: center;
     justify-content: center;
     border-radius: 6px;
-    background: #E6E6E6;
-    color: var(--text-secondary);
+    background: var(--colour-val1-lighig);
+    color: var(--colour-val4-darhig);
     font-size: 1rem;
     margin-right: 1rem;
 }
 
 .glass-command-row:hover .glass-command-icon {
-    background: var(--text-primary);
-    color: var(--bg-body);
+    background: var(--colour-val5-purbla);
+    color: var(--colour-val2-liglow);
 }
 
 .glass-command-main {
@@ -262,24 +274,24 @@ a:hover {
 
 .glass-command-title {
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--colour-val5-purbla);
     display: block;
     margin-bottom: 0.1rem;
 }
 
 .glass-command-desc {
     font-size: 0.8rem;
-    color: var(--text-tertiary);
+    color: var(--colour-val3-darlow);
     display: block;
 }
 
 .glass-shortcut {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.75rem;
-    background: #E6E6E6;
+    background: var(--colour-val1-lighig);
     padding: 2px 6px;
     border-radius: 4px;
-    color: var(--text-secondary);
+    color: var(--colour-val4-darhig);
 }
 
 /* --- 6. FORM ELEMENTS & INPUTS --- */
@@ -287,30 +299,30 @@ a:hover {
 .form-select,
 input:not(.Select-input input),
 select {
-    background: #FFFFFF !important;
-    border: 1px solid var(--border-subtle) !important;
-    color: var(--text-primary) !important;
+    background: var(--colour-val0-purwhi) !important;
+    border: 1px solid var(--colour-val1-lighig) !important;
+    color: var(--colour-val5-purbla) !important;
     border-radius: var(--rad-sm) !important;
     font-size: 0.9rem !important;
     padding: 0.6rem 0.8rem !important;
     transition: all 0.2s ease !important;
-    box-shadow: inset 0 1px 2px #A6A6A6 !important;
+    box-shadow: inset 0 1px 2px var(--colour-val3-darlow) !important;
 }
 
 .form-control:focus,
 .form-select:focus,
 input:not(.Select-input input):focus,
 select:focus {
-    border-color: var(--accent-primary) !important;
-    background: #FFFFFF !important;
+    border-color: var(--colour-val4-darhig) !important;
+    background: var(--colour-val0-purwhi) !important;
     outline: none !important;
-    box-shadow: 0 0 0 2px #FF0000 !important;
+    box-shadow: 0 0 0 2px var(--colour-chr3-toncya) !important;
 }
 
 .form-label {
     font-size: 0.8rem;
     font-weight: 500;
-    color: var(--text-tertiary);
+    color: var(--colour-val3-darlow);
     margin-bottom: 0.4rem;
     display: block;
 }
@@ -321,47 +333,47 @@ select:focus {
     border: none !important;
     box-shadow: none !important;
     padding: 0 !important;
-    color: var(--text-primary) !important;
+    color: var(--colour-val5-purbla) !important;
 }
 
 .Select-control {
-    background-color: #FFFFFF !important;
-    border: 1px solid var(--border-subtle) !important;
+    background-color: var(--colour-val0-purwhi) !important;
+    border: 1px solid var(--colour-val1-lighig) !important;
     border-radius: var(--rad-sm) !important;
-    color: var(--text-primary) !important;
+    color: var(--colour-val5-purbla) !important;
     min-height: 28px !important;
     box-shadow: none !important;
     cursor: pointer !important;
 }
 
 .Select.is-focused>.Select-control {
-    border-color: var(--accent-primary) !important;
-    box-shadow: 0 0 0 1px #FF0000 !important;
+    border-color: var(--colour-val4-darhig) !important;
+    box-shadow: 0 0 0 1px var(--colour-chr3-toncya) !important;
 }
 
 .Select-value-label {
-    color: var(--text-primary) !important;
+    color: var(--colour-val5-purbla) !important;
     font-size: 0.9rem !important;
 }
 
 .Select-placeholder {
-    color: var(--text-tertiary) !important;
+    color: var(--colour-val3-darlow) !important;
     font-size: 0.9rem !important;
 }
 
 .Select-arrow {
-    border-color: var(--text-secondary) transparent transparent !important;
+    border-color: var(--colour-val4-darhig) transparent transparent !important;
 }
 
 .Select-arrow-zone:hover>.Select-arrow {
-    border-top-color: var(--text-primary) !important;
+    border-top-color: var(--colour-val5-purbla) !important;
 }
 
 .Select-menu-outer {
-    background-color: #FFFFFF !important;
-    border: 1px solid var(--border-highlight) !important;
+    background-color: var(--colour-val0-purwhi) !important;
+    border: 1px solid var(--colour-val3-darlow) !important;
     border-radius: var(--rad-sm) !important;
-    box-shadow: 0 10px 25px -5px #666666 !important;
+    box-shadow: 0 10px 25px -5px var(--colour-val4-darhig) !important;
     z-index: 99999 !important;
     margin-top: 4px !important;
 }
@@ -371,8 +383,8 @@ select:focus {
 }
 
 .Select-option {
-    background-color: #FFFFFF !important;
-    color: var(--text-secondary) !important;
+    background-color: var(--colour-val0-purwhi) !important;
+    color: var(--colour-val4-darhig) !important;
     padding: 10px 12px !important;
     font-size: 0.9rem !important;
     cursor: pointer !important;
@@ -381,27 +393,27 @@ select:focus {
 
 .Select-option.is-focused,
 .Select-option:hover {
-    background-color: var(--bg-body) !important;
-    color: var(--text-primary) !important;
-    border-left: 2px solid var(--accent-primary);
+    background-color: var(--colour-val2-liglow) !important;
+    color: var(--colour-val5-purbla) !important;
+    border-left: 2px solid var(--colour-val4-darhig);
 }
 
 .Select-option.is-selected {
-    background-color: #DCDCDC !important;
-    color: var(--accent-primary) !important;
+    background-color: var(--colour-val2-liglow) !important;
+    color: var(--colour-val4-darhig) !important;
 }
 
 .Select-clear-zone {
-    color: var(--text-tertiary) !important;
+    color: var(--colour-val3-darlow) !important;
 }
 
 .Select-clear-zone:hover {
-    color: var(--danger) !important;
+    color: var(--colour-chr0-huered) !important;
 }
 
 .Select-noresults {
-    background-color: #FFFFFF !important;
-    color: var(--text-tertiary) !important;
+    background-color: var(--colour-val0-purwhi) !important;
+    color: var(--colour-val3-darlow) !important;
 }
 
 /* --- 7. BUTTONS --- */
@@ -421,18 +433,18 @@ select:focus {
 
 .btn-primary,
 .btn-outline-primary {
-    background: #FFFFFF !important;
-    color: var(--text-primary) !important;
-    border: 1px solid var(--text-primary) !important;
-    box-shadow: 0 2px 4px #E6E6E6 !important;
+    background: var(--colour-val0-purwhi) !important;
+    color: var(--colour-val5-purbla) !important;
+    border: 1px solid var(--colour-val5-purbla) !important;
+    box-shadow: 0 2px 4px var(--colour-val1-lighig) !important;
 }
 
 .btn-primary:hover,
 .btn-outline-primary:hover {
     transform: translateY(-1px);
-    box-shadow: 0 4px 8px #E6E6E6 !important;
-    background: var(--text-primary) !important;
-    color: #FFFFFF !important;
+    box-shadow: 0 4px 8px var(--colour-val1-lighig) !important;
+    background: var(--colour-val5-purbla) !important;
+    color: var(--colour-val0-purwhi) !important;
 }
 
 .btn-primary:active,
@@ -443,29 +455,30 @@ select:focus {
 .btn-secondary,
 .btn-light,
 .btn-outline-secondary {
-    background: #FFFFFF !important;
-    color: var(--text-secondary) !important;
-    border: 1px solid var(--border-subtle) !important;
+    background: var(--colour-val0-purwhi) !important;
+    color: var(--colour-val4-darhig) !important;
+    border: 1px solid var(--colour-val1-lighig) !important;
 }
 
 .btn-secondary:hover,
 .btn-light:hover,
 .btn-outline-secondary:hover {
-    background: var(--bg-body) !important;
-    border-color: var(--border-highlight) !important;
-    color: var(--text-primary) !important;
+    background: var(--colour-val2-liglow) !important;
+    border-color: var(--colour-val3-darlow) !important;
+    color: var(--colour-val5-purbla) !important;
 }
 
 .btn-success {
-    background-color: #E6E6E6 !important;
-    color: var(--success) !important;
-    border: 1px solid #5EC962 !important;
+    background-color: var(--colour-val1-lighig) !important;
+    color: var(--colour-chr4-tongre) !important;
+    border: 1px solid var(--colour-chr4-tongre) !important;
 }
 
 .btn-success:hover {
-    background-color: #5EC962 !important;
-    border-color: var(--success) !important;
-    box-shadow: 0 0 10px #5EC962 !important;
+    background-color: var(--colour-chr4-tongre) !important;
+    border-color: var(--colour-chr4-tongre) !important;
+    box-shadow: 0 0 10px var(--colour-chr4-tongre) !important;
+    color: var(--colour-val0-purwhi) !important;
 }
 
 /* --- 8. TABLES & DATATABLES --- */
@@ -482,8 +495,8 @@ select:focus {
 }
 
 .dash-spreadsheet-container .dash-spreadsheet-inner th {
-    background-color: #FFFFFF !important;
-    color: var(--text-secondary) !important;
+    background-color: var(--colour-val0-purwhi) !important;
+    color: var(--colour-val4-darhig) !important;
     font-weight: 600 !important;
     border: none !important;
     font-size: 0.8rem !important;
@@ -493,15 +506,15 @@ select:focus {
 }
 
 .dash-spreadsheet-container .dash-spreadsheet-inner td {
-    background-color: var(--bg-body) !important;
-    color: var(--text-primary) !important;
+    background-color: var(--colour-val2-liglow) !important;
+    color: var(--colour-val5-purbla) !important;
     border: none !important;
     font-family: 'JetBrains Mono', monospace !important;
     padding: 10px !important;
 }
 
 .dash-spreadsheet-container .dash-spreadsheet-inner td:focus {
-    outline: 2px solid var(--accent-primary) !important;
+    outline: 2px solid var(--colour-chr3-toncya) !important;
     outline-offset: -2px !important;
 }
 
@@ -513,7 +526,7 @@ select:focus {
     border-radius: 0 !important;
     outline: none !important;
     height: 100% !important;
-    color: var(--text-primary) !important;
+    color: var(--colour-val5-purbla) !important;
 }
 
 .glass-panel td input,
@@ -538,39 +551,39 @@ select:focus {
 
 /* --- 9. MODALS --- */
 .modal-content {
-    background-color: #FFFFFF !important;
-    border: 1px solid var(--border-highlight) !important;
+    background-color: var(--colour-val0-purwhi) !important;
+    border: 1px solid var(--colour-val3-darlow) !important;
     border-radius: var(--rad-lg) !important;
-    box-shadow: 0 50px 100px -20px #666666 !important;
+    box-shadow: 0 50px 100px -20px var(--colour-val4-darhig) !important;
 }
 
 .modal-header {
-    border-bottom: 1px solid var(--border-subtle) !important;
+    border-bottom: 1px solid var(--colour-val1-lighig) !important;
     padding: 1.25rem 1.5rem !important;
-    background: #FFFFFF !important;
+    background: var(--colour-val0-purwhi) !important;
 }
 
 .modal-footer {
-    border-top: 1px solid var(--border-subtle) !important;
+    border-top: 1px solid var(--colour-val1-lighig) !important;
     padding: 1.25rem 1.5rem !important;
-    background-color: #A6A6A6 !important;
+    background-color: var(--colour-val3-darlow) !important;
 }
 
 .modal-title {
-    color: var(--text-primary) !important;
+    color: var(--colour-val5-purbla) !important;
     font-size: 1.1rem !important;
     font-weight: 600 !important;
 }
 
 .close {
-    color: var(--text-secondary) !important;
+    color: var(--colour-val4-darhig) !important;
     opacity: 0.7 !important;
     text-shadow: none !important;
 }
 
 .close:hover {
     opacity: 1 !important;
-    color: var(--danger) !important;
+    color: var(--colour-chr0-huered) !important;
 }
 
 /* --- 10. FEEDBACK & ANIMATIONS --- */
@@ -591,12 +604,12 @@ select:focus {
     content: '';
     width: 24px;
     height: 24px;
-    border: 2px solid var(--border-subtle);
-    border-top-color: var(--accent-primary);
+    border: 2px solid var(--colour-val1-lighig);
+    border-top-color: var(--colour-chr5-hueyel);
     border-radius: 50%;
     animation: daisho-spin 0.6s linear infinite;
     display: block;
-    box-shadow: 0 0 10px #E6E6E6;
+    box-shadow: 0 0 10px var(--colour-val1-lighig);
 }
 
 .dash-spinner * {
@@ -607,11 +620,11 @@ select:focus {
     width: 28px !important;
     height: 28px !important;
     margin: auto !important;
-    border: 2px solid var(--border-subtle) !important;
-    border-top-color: var(--accent-primary) !important;
+    border: 2px solid var(--colour-val1-lighig) !important;
+    border-top-color: var(--colour-chr5-hueyel) !important;
     border-radius: 50% !important;
     animation: daisho-spin 0.6s linear infinite !important;
-    box-shadow: 0 0 10px #E6E6E6 !important;
+    box-shadow: 0 0 10px var(--colour-val1-lighig) !important;
     background: transparent !important;
     display: block !important;
 }
@@ -633,17 +646,17 @@ select:focus {
 /* Shimmer Effect */
 .glass-loading-status {
     background: linear-gradient(90deg,
-            var(--bg-surface) 25%,
-            #E6E6E6 50%,
-            var(--bg-surface) 75%);
+            var(--colour-val0-purwhi) 25%,
+            var(--colour-val1-lighig) 50%,
+            var(--colour-val0-purwhi) 75%);
     background-size: 200% 100%;
     animation: daisho-shimmer 2s ease-in-out 4 forwards;
     border-radius: var(--rad-sm);
     padding: 0.6rem 1.2rem;
-    color: var(--text-secondary);
+    color: var(--colour-val4-darhig);
     font-size: 0.8rem;
     text-align: center;
-    border: 1px solid var(--border-subtle);
+    border: 1px solid var(--colour-val1-lighig);
 }
 
 @keyframes daisho-shimmer {
@@ -667,38 +680,38 @@ select:focus {
 
     0%,
     100% {
-        box-shadow: 0 0 0 0 #FF0000;
+        box-shadow: 0 0 0 0 var(--colour-chr3-toncya);
     }
 
     50% {
-        box-shadow: 0 0 0 6px #FF00001A;
+        box-shadow: 0 0 0 6px rgba(33, 145, 140, 0.1);
     }
 }
 
 /* --- 11. RESPONSIVENESS --- */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
     .app-container {
-        padding: 0.5rem 0.75rem;
+        padding: 0.75rem 1rem;
     }
 
     .glass-navbar {
-        margin: 0.4rem 0.6rem;
-        padding: 0 0.75rem;
-        height: 48px;
+        margin: 0.5rem 0.75rem;
+        padding: 0 1rem;
+        height: 50px;
     }
 
     .nav-links {
-        gap: 2px;
-        padding: 2px;
+        gap: 4px;
+        padding: 3px;
     }
 
     .nav-item {
-        padding: 0.3rem 0.6rem;
-        font-size: 0.75rem;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.8rem;
     }
 
     .glass-panel {
-        margin-bottom: 0.75rem;
+        margin-bottom: 0.85rem;
     }
 
     .glass-header {
@@ -706,25 +719,32 @@ select:focus {
     }
 
     .glass-caption {
-        font-size: 0.65rem;
+        font-size: 0.7rem;
     }
 
     .glass-content {
-        padding: 0.6rem 0.75rem;
+        padding: 0.75rem 0.85rem;
     }
 
     .glass-command-row {
-        padding: 0.75rem 1rem;
+        padding: 0.85rem 1rem;
     }
 
     .glass-command-icon {
         margin-right: 0.75rem;
-        width: 28px;
-        height: 28px;
-        font-size: 0.85rem;
+        width: 30px;
+        height: 30px;
+        font-size: 0.9rem;
     }
 
     .glass-command-title {
-        font-size: 0.85rem;
+        font-size: 0.9rem;
+    }
+
+    /* Expand modals on tablets to prevent clipping */
+    .modal-xl,
+    .modal-lg {
+        max-width: 90vw !important;
+        margin: 0.5rem auto !important;
     }
 }
