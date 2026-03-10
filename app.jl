@@ -424,7 +424,6 @@ function APP_Warmup_DDEF()::Nothing
     # HF Spaces or non-dev environments need thorough warmup for production stability
     if APP_IsHfSpaces_DDEC && !is_dev
         FAST_Log_DDEF("BOOT", "Warmup", "Production Environment Detected (HF Spaces).", "WAIT")
-        # HF Specific delay for health checks
         sleep(2)
     elseif is_dev
         FAST_Log_DDEF("BOOT", "Warmup", "Development Mode: Fast Boot triggered.", "INFO")
@@ -436,26 +435,23 @@ function APP_Warmup_DDEF()::Nothing
     FAST_Log_DDEF("BOOT", "Warmup", "Initiating Scientific JIT Pulse...", "WAIT")
 
     try
-        # 1. Type system & IO
-        Sys_Fast.FAST_SafeNum_DDEF("3.14")
+        # 1. Type system & Core Logic
+        Sys_Fast.FAST_SafeNum_DDEF("42.0")
         dummy_rows = [Dict{String,Any}("Name" => "A", "Role" => "Variable", "L1" => 1, "L2" => 2, "L3" => 3, "MW" => 100, "Unit" => "mg")]
-        Sys_Fast.FAST_SanitiseInput_DDEF(dummy_rows)
-
+        
         # 2. Physics & Chemistry
         Lib_Mole.MOLE_ParseTable_DDEF(dummy_rows)
         Lib_Mole.MOLE_CalcMass_DDEF(String["A"], Float64[100.0], Float64[100.0], 5.0, 10.0)
 
-        # 3. Analytics & Modelling
-        X_dummy = Float64[1 2 3; 4 5 6; 7 8 9; 2 4 6; 3 6 9; 5 3 1; 8 2 4; 6 7 5; 1 5 9; 4 8 2]
-        Y_dummy = Float64[10, 20, 30, 15, 25, 12, 28, 22, 18, 24]
-        mod = Lib_Vise.VISE_Regress_DDEF(X_dummy, Y_dummy, "quadratic")
-
-        if mod["Status"] == "OK"
-            Lib_Vise.VISE_Predict_DDEF(mod, X_dummy[1:1, :])
-            Lib_Arts.ARTS_RenderPareto_DDEF(mod, "Warmup", 0.95, 0.90)
-        end
+        # 3. Analytics (Basic Regress only, no plotting/heavy rendering)
+        X_dummy = Float64[1 2; 3 4; 5 6; 7 8]
+        Y_dummy = Float64[10, 20, 30, 40]
+        Lib_Vise.VISE_Regress_DDEF(X_dummy, Y_dummy, "linear")
+        
+        # Memory Housekeeping
+        GC.gc()
     catch e
-        FAST_Log_DDEF("BOOT", "Warmup_Warn", "Lightweight JIT pulse encountered warnings: $e", "WARN")
+        FAST_Log_DDEF("BOOT", "Warmup_Warn", "JIT pulse encountered warnings: $e", "WARN")
     end
 
     APP_SystemReady_DDEC[] = true
