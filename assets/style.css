@@ -59,14 +59,6 @@ h6 {
     letter-spacing: -0.025em;
 }
 
-/* --- RESPONSIVENESS (BREAKPOINT: LG - 992px) --- */
-/* Widening modals in the side-by-side transition zone to prevent content crowding */
-@media (max-width: 992px) {
-    .modal-xl, .modal-lg {
-        max-width: 90vw !important;
-    }
-}
-
 /* Global Fix for Slider Mark Overlaps (Scientific Precision) */
 .rc-slider-mark-text {
     white-space: nowrap;
@@ -688,8 +680,27 @@ select:focus {
     }
 }
 
-/* --- 11. RESPONSIVENESS --- */
-@media (max-width: 768px) {
+/* --- 11. UNIFIED RESPONSIVENESS --- */
+
+/* Step Correction: Prevent modal from shrinking too early between 957px and 1264px */
+@media (min-width: 957px) and (max-width: 1264px) {
+
+    .modal-xl,
+    .modal-lg {
+        max-width: 92vw !important;
+    }
+}
+
+@media (max-width: 957px) {
+
+    /* CSS GRID HIJACK: Force Bootstrap columns to stack at 957px regardless of class (md/lg) */
+    .row>[class*="col-md-"],
+    .row>[class*="col-lg-"] {
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+
     .app-container {
         padding: 0.75rem 1rem;
     }
@@ -741,7 +752,7 @@ select:focus {
         font-size: 0.9rem;
     }
 
-    /* Expand modals on tablets to prevent clipping */
+    /* Expand modals on tablets/mobile to prevent clipping */
     .modal-xl,
     .modal-lg {
         max-width: 90vw !important;
