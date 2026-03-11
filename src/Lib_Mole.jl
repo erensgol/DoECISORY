@@ -46,7 +46,7 @@ function MOLE_ApplyRadioDecay_DDEF(RawValue::Float64, HalfLife::Float64, HalfLif
 
     # Normalise Half-Life to Hours
     unit_upper = uppercase(strip(HalfLifeUnit))
-    hl_hours = HalfLife
+    hl_hours   = HalfLife
     if occursin("SEC", unit_upper)
         hl_hours = HalfLife / 3600.0
     elseif occursin("MIN", unit_upper)
@@ -59,7 +59,7 @@ function MOLE_ApplyRadioDecay_DDEF(RawValue::Float64, HalfLife::Float64, HalfLif
 
     hl_hours <= 0.0 && return RawValue
 
-    lambda = log(2) / hl_hours
+    lambda       = log(2) / hl_hours
     decay_factor = exp(-lambda * DeltaTHours)
 
     # Avoid extreme inflation
@@ -91,31 +91,38 @@ function MOLE_ParseTable_DDEF(TableData::AbstractVector)
     clean_data, input_warnings = Sys_Fast.FAST_SanitiseInput_DDEF(TableData)
 
     safe_num = Sys_Fast.FAST_SafeNum_DDEF
-    C = Sys_Fast.FAST_Data_DDEC
+    C        = Sys_Fast.FAST_Data_DDEC
 
     names_vec = string.(get.(clean_data, "Name", "Unknown"))
-    roles = string.(get.(clean_data, "Role", "Fixed"))
-    mins = Float64.(get.(clean_data, "L1", 0.0))
-    mids = Float64.(get.(clean_data, "L2", 0.0))
-    maxs = Float64.(get.(clean_data, "L3", 0.0))
-    mws = Float64.(get.(clean_data, "MW", 0.0))
+    roles     = string.(get.(clean_data, "Role", "Fixed"))
+    mins      = Float64.(get.(clean_data, "L1", 0.0))
+    mids      = Float64.(get.(clean_data, "L2", 0.0))
+    maxs      = Float64.(get.(clean_data, "L3", 0.0))
+    mws       = Float64.(get.(clean_data, "MW", 0.0))
 
     roles_lower = lowercase.(roles)
-    tag_var = lowercase(C.ROLE_VAR)
-    tag_fill = lowercase(C.ROLE_FILL)
+    tag_var     = lowercase(C.ROLE_VAR)
+    tag_fill    = lowercase(C.ROLE_FILL)
 
-    idx_var = findall(==(tag_var), roles_lower)
+    idx_var  = findall(==(tag_var), roles_lower)
     idx_fill = findall(==(tag_fill), roles_lower)
-    idx_fix = findall(r -> r ∉ (tag_var, tag_fill), roles_lower)
+    idx_fix  = findall(r -> r ∉ (tag_var, tag_fill), roles_lower)
     idx_chem = findall(>(0), mws)
 
     return Dict(
-        "Names" => names_vec, "Roles" => roles,
-        "Mins" => mins, "Mids" => mids, "Maxs" => maxs, "MWs" => mws,
-        "Idx_Var" => idx_var, "Idx_Fix" => idx_fix,
-        "Idx_Fill" => idx_fill, "Idx_Chem" => idx_chem,
-        "Rows" => clean_data, "RawTable" => clean_data,
-        "InputWarnings" => input_warnings,
+        "Names"         => names_vec, 
+        "Roles"         => roles,
+        "Mins"          => mins, 
+        "Mids"          => mids, 
+        "Maxs"          => maxs, 
+        "MWs"           => mws,
+        "Idx_Var"       => idx_var, 
+        "Idx_Fix"       => idx_fix,
+        "Idx_Fill"      => idx_fill, 
+        "Idx_Chem"      => idx_chem,
+        "Rows"          => clean_data, 
+        "RawTable"      => clean_data,
+        "InputWarnings" => input_warnings
     )
 end
 
@@ -137,20 +144,20 @@ function MOLE_ValidatePhysicalUnit_DDEF(ValueStr::String, ExpectedType::String)
     try
         exp_val = uparse(parse_str)
 
-        tgt_unit = nothing
+        tgt_unit      = nothing
         expected_name = ""
 
         if ExpectedType == "Volume"
-            tgt_unit = u"L"
+            tgt_unit      = u"L"
             expected_name = "Volume (e.g., mL, L)"
         elseif ExpectedType == "Concentration"
-            tgt_unit = u"mol/L"
+            tgt_unit      = u"mol/L"
             expected_name = "Concentration (e.g., mM, mol/L)"
         elseif ExpectedType == "Mass"
-            tgt_unit = u"g"
+            tgt_unit      = u"g"
             expected_name = "Mass (e.g., mg, g, kg)"
         elseif ExpectedType == "Time"
-            tgt_unit = u"hr"
+            tgt_unit      = u"hr"
             expected_name = "Time (e.g., s, min, hr)"
         else
             return (false, 0.0, "Unknown physical dimension requested: $ExpectedType")
@@ -291,18 +298,18 @@ function MOLE_CalcMass_DDEF(Names::AbstractVector{String}, MWs::AbstractVector{F
     Scale::Float64=1.0)
     total_parts = sum(Ratios)
     # Tolerant zero-check instead of exact <= 0.0
-    total_parts = MOLE_ApproxEq_DDEF(total_parts, 0.0) ? 1.0 : total_parts
+    total_parts   = MOLE_ApproxEq_DDEF(total_parts, 0.0) ? 1.0 : total_parts
     mol_fractions = Ratios ./ total_parts
 
     total_moles_mmol = (Tgt_Vol / 1000.0) * (Tgt_Conc * Scale)
-    comp_moles_mmol = total_moles_mmol .* mol_fractions
+    comp_moles_mmol  = total_moles_mmol .* mol_fractions
 
     return DataFrame(
-        :Component => Names,
-        :Molar_Ratio => Ratios,
+        :Component      => Names,
+        :Molar_Ratio    => Ratios,
         :Molar_Fraction => mol_fractions,
-        :Moles_mmol => comp_moles_mmol,
-        :TARGET_MASS_mg => comp_moles_mmol .* MWs,
+        :Moles_mmol     => comp_moles_mmol,
+        :TARGET_MASS_mg => comp_moles_mmol .* MWs
     )
 end
 
@@ -312,7 +319,7 @@ Calculates total mass required for each run (detection of 'Impossible Runs').
 """
 function MOLE_AuditMatrix_DDEF(Design::AbstractMatrix, Names::AbstractVector,
     MWs::AbstractVector, Vol::Float64, Conc::Float64)
-    R, C = size(Design)
+    R, C         = size(Design)
     total_masses = Vector{Float64}(undef, R)
 
     # Note: Design MUST correspond exactly to Names/MWs columns here
@@ -321,10 +328,11 @@ function MOLE_AuditMatrix_DDEF(Design::AbstractMatrix, Names::AbstractVector,
     end
 
     for i in 1:R
-        ratios = Design[i, :]
-        df = MOLE_CalcMass_DDEF(Names, MWs, ratios, Vol, Conc)
+        ratios          = Design[i, :]
+        df              = MOLE_CalcMass_DDEF(Names, MWs, ratios, Vol, Conc)
         total_masses[i] = sum(df.TARGET_MASS_mg)
     end
+    
     return total_masses
 end
 
@@ -334,7 +342,7 @@ Performs high-level feasibility audit on a proposed experimental batch.
 """
 function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
     Vol::Float64, Conc::Float64)
-    D = MOLE_ParseTable_DDEF(TableData)
+    D       = MOLE_ParseTable_DDEF(TableData)
     idx_var = D["Idx_Var"]
     idx_chem = D["Idx_Chem"]
 
@@ -344,13 +352,16 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
     if C != length(idx_var)
         return Dict(
             "IsFeasible" => true,
-            "AvgMass_mg" => 0.0, "MaxMass_mg" => 0.0, "MinMass_mg" => 0.0, "StdDev_mg" => 0.0,
-            "RunMasses" => zeros(R)
+            "AvgMass_mg" => 0.0, 
+            "MaxMass_mg" => 0.0, 
+            "MinMass_mg" => 0.0, 
+            "StdDev_mg"  => 0.0,
+            "RunMasses"  => zeros(R)
         )
     end
 
     # Mapping variables, fixed values and auto-balancing filler
-    idx_fix = D["Idx_Fix"]
+    idx_fix  = D["Idx_Fix"]
     idx_fill = D["Idx_Fill"]
 
     masses = Vector{Float64}(undef, R)
@@ -366,7 +377,7 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
 
         # Filler balancing (H2O, Solvent etc.)
         if !isempty(idx_fill)
-            other_sum = sum(ratios_full) # Currently filler is 0.0
+            other_sum                = sum(ratios_full) # Currently filler is 0.0
             ratios_full[idx_fill[1]] = max(0.0, 100.0 - other_sum)
         end
 
@@ -378,7 +389,7 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
         if isempty(idx_chem)
             masses[i] = 0.0
         else
-            df = MOLE_CalcMass_DDEF(n_chem, w_chem, r_chem, Vol, Conc)
+            df        = MOLE_CalcMass_DDEF(n_chem, w_chem, r_chem, Vol, Conc)
             masses[i] = sum(df.TARGET_MASS_mg)
         end
     end
@@ -396,8 +407,8 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
         "AvgMass_mg" => avg_mass,
         "MaxMass_mg" => max_mass,
         "MinMass_mg" => min_mass,
-        "StdDev_mg" => std_mass,
-        "RunMasses" => masses
+        "StdDev_mg"  => std_mass,
+        "RunMasses"  => masses
     )
 end
 
@@ -406,14 +417,14 @@ end
 Advanced stoichiometric feasibility check for design matrices.
 """
 function MOLE_ValidateDesignFeasibility_DDEF(DesignMatrix::AbstractMatrix, InMeta::AbstractVector)
-    R, C = size(DesignMatrix)
-    chems = [m for m in InMeta if get(m, "Role", "") != "Result"]
-    names = [string(get(m, "Name", "Unknown")) for m in chems]
-    mws = [Float64(get(m, "MW", 0.0)) for m in chems]
+    R, C   = size(DesignMatrix)
+    chems  = [m for m in InMeta if get(m, "Role", "") != "Result"]
+    names  = [string(get(m, "Name", "Unknown")) for m in chems]
+    mws    = [Float64(get(m, "MW", 0.0)) for m in chems]
 
     # Identify indices of Variable ingredients in the InMeta list
-    var_indices = findall(m -> get(m, "Role", "") == "Variable", chems)
-    fill_index = findfirst(m -> get(m, "Role", "") == "Filler", chems)
+    var_indices   = findall(m -> get(m, "Role", "") == "Variable", chems)
+    fill_index    = findfirst(m -> get(m, "Role", "") == "Filler", chems)
     fixed_indices = findall(m -> get(m, "Role", "") == "Fixed", chems)
 
     issues = String[]
@@ -431,7 +442,11 @@ function MOLE_ValidateDesignFeasibility_DDEF(DesignMatrix::AbstractMatrix, InMet
 
         # Auto-balance filler if present
         if !isnothing(fill_index)
-            other_sum = sum(deleteat!(copy(ratios), fill_index))
+            # Safe deletion for sum calculation
+            temp_ratios = copy(ratios)
+            deleteat!(temp_ratios, fill_index)
+            other_sum = sum(temp_ratios)
+            
             if other_sum > 100.0 + 1e-4
                 push!(issues, "Run $i: Chemical sum exceeds 100% ($(round(other_sum; digits=2))%) before filler.")
             else
@@ -446,7 +461,7 @@ function MOLE_ValidateDesignFeasibility_DDEF(DesignMatrix::AbstractMatrix, InMet
     end
 
     valid = isempty(issues)
-    msg = valid ? "Stoichiometric feasibility confirmed for all runs." : join(unique(issues), " | ")
+    msg   = valid ? "Stoichiometric feasibility confirmed for all runs." : join(unique(issues), " | ")
 
     return (valid, msg)
 end

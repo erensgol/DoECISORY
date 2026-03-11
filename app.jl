@@ -8,7 +8,7 @@
 
 # --- Headless & Stability Overrides ---
 # Must be set BEFORE loading any graphics libraries
-ENV["GKSwstype"] = "100"
+ENV["GKSwstype"]               = "100"
 ENV["JULIA_WEBIO_NOT_AVAILABLE"] = "1"
 ENV["PLOTLY_KALEIDO_NO_SANDBOX"] = "1"
 
@@ -21,7 +21,7 @@ using PlotlyJS
 
 # --- HuggingFace Spaces Detection ---
 const APP_IsHfSpaces_DDEC = haskey(ENV, "SPACE_ID")
-const APP_Port_DDEC = if APP_IsHfSpaces_DDEC
+const APP_Port_DDEC       = if APP_IsHfSpaces_DDEC
     parse(Int, get(ENV, "PORT", "7860"))
 else
     8060 # Local standard port
@@ -66,8 +66,7 @@ println("\e[1m|__/                   |")
 let (n_threads, _, _) = Sys_Fast.FAST_GetThreadInfo_DDEF()
     status = n_threads > 1 ? "[OPTIMAL]" : "\e[31m[LIMITED]\e[0m"
     println("\n\e[1m  Computing Core: \e[0m\e[32m$n_threads Threads\e[0m $status")
-    println("\e[1m  System Wisdom:  \e[0m\e[36m\"$(Sys_Fast.FAST_GetSystemQuote_DDEF())\"\e[0m")
-    println()
+    println("\e[1m  System Wisdom:  \e[0m\e[36m\"$(Sys_Fast.FAST_GetSystemQuote_DDEF())\"\e[0m\n")
 end
 
 # --------------------------------------------------------------------------------------
@@ -75,14 +74,14 @@ end
 # --------------------------------------------------------------------------------------
 
 for (label, file) in [
-    ("Molecule Engine: Lib_Mole", "src/Lib_Mole.jl"),
-    ("Visual Engine: Lib_Arts", "src/Lib_Arts.jl"),
-    ("Algorithm Core: Lib_Core", "src/Lib_Core.jl"),
-    ("System Flow Bus: Sys_Flow", "src/Sys_Flow.jl"),
-    ("Analysis Suite: Lib_Vise", "src/Lib_Vise.jl"),
+    ("Molecule Engine: Lib_Mole",   "src/Lib_Mole.jl"),
+    ("Visual Engine: Lib_Arts",     "src/Lib_Arts.jl"),
+    ("Algorithm Core: Lib_Core",     "src/Lib_Core.jl"),
+    ("System Flow Bus: Sys_Flow",     "src/Sys_Flow.jl"),
+    ("Analysis Suite: Lib_Vise",      "src/Lib_Vise.jl"),
     ("GUI Base Component: Gui_Base", "src/Gui_Base.jl"),
-    ("GUI Design Deck: Gui_Deck", "src/Gui_Deck.jl"),
-    ("GUI Analysis Lens: Gui_Lens", "src/Gui_Lens.jl"),
+    ("GUI Design Deck: Gui_Deck",    "src/Gui_Deck.jl"),
+    ("GUI Analysis Lens: Gui_Lens",  "src/Gui_Lens.jl"),
 ]
     !APP_IsHfSpaces_DDEC && FAST_Log_DDEF("BOOT", "Loading", label, "INFO")
     try
@@ -124,13 +123,13 @@ FAST_Log_DDEF("INIT", "Setup", "Configuring Dash Framework...", "WAIT")
 pathname_prefix = get(ENV, "DASH_REQUESTS_PATHNAME_PREFIX", "/")
 
 app = dash(;
-    requests_pathname_prefix=pathname_prefix,
-    external_stylesheets=[
+    requests_pathname_prefix     = pathname_prefix,
+    external_stylesheets         = [
         DashBootstrapComponents.dbc_themes.BOOTSTRAP,
         "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css",
         "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap",
     ],
-    suppress_callback_exceptions=true,
+    suppress_callback_exceptions = true,
 )
 
 app.title = "DaishoDoE"
@@ -164,20 +163,25 @@ app.index_string = """
 
 # 1. Navigation Controller (Constant UI)
 const APP_Navbar_DDEC = html_div([
-        html_div([
-                dcc_link(html_div([
-                            html_img(src="/assets/favicon.ico", style=Dict("height" => "32px", "marginRight" => "10px", "borderRadius" => "4px")),
-                            html_span("DaishoDoE", className="text-dark fw-bold tracking-tight"),
-                        ], className="nav-brand"), href="/", style=Dict("textDecoration" => "none")),
-            ], style=Dict("flex" => "1")),
-        html_div([
-                html_a("Design", href="/design", className="nav-item"),
-                html_a("Analyse", href="/analysis", className="nav-item"),
-            ], className="nav-links d-flex justify-content-center"),
-        html_div([
-                html_span("v1.0 In Dev.", className="badge opacity-75", style=Dict("backgroundColor" => "var(--colour-val3-darlow)", "color" => "var(--colour-val0-purwhi)")),
-            ], className="nav-actions", style=Dict("flex" => "1", "textAlign" => "right")),
-    ], className="glass-navbar d-flex align-items-center justify-content-between")
+    html_div([
+        dcc_link(html_div([
+            html_img(src="/assets/favicon.ico", style=Dict("height" => "32px", "marginRight" => "10px", "borderRadius" => "4px")),
+            html_span("DaishoDoE", className="fw-bold tracking-tight", style=Dict("color" => "var(--colour-val5-purbla)")),
+        ], className="nav-brand"), href="/", style=Dict("textDecoration" => "none")),
+    ], style=Dict("flex" => "1")),
+
+    html_div([
+        html_a("Design",  href="/design",   className="nav-item"),
+        html_a("Analyse", href="/analysis", className="nav-item"),
+    ], className="nav-links d-flex justify-content-center"),
+
+    html_div([
+        html_span("v1.0 In Dev.", 
+            className="badge opacity-75", 
+            style=Dict("backgroundColor" => "var(--colour-val3-darlow)", "color" => "var(--colour-val0-purwhi)")
+        ),
+    ], className="nav-actions", style=Dict("flex" => "1", "textAlign" => "right")),
+], className="glass-navbar d-flex align-items-center justify-content-between")
 
 # 2. Page Content Render Area (Constant UI)
 const APP_Content_DDEC = html_div(id="page-content", className="app-container")
@@ -192,50 +196,66 @@ app.layout = html_div([
 
     # Global State Architecture
     dcc_store(id="store-session-config", storage_type="session"),
-    dcc_store(id="store-master-vault", storage_type="session"),
+    dcc_store(id="store-master-vault",   storage_type="session"),
 
     # Master Sync Bus
-    dcc_store(id="sync-deck-content", storage_type="memory"),
-    dcc_store(id="sync-lens-content", storage_type="memory"),
+    dcc_store(id="sync-deck-content",  storage_type="memory"),
+    dcc_store(id="sync-lens-content",  storage_type="memory"),
     dcc_store(id="sync-lens-analysis", storage_type="memory"),
+
     dbc_toast(id="global-toast",
         header="System Notification", is_open=false, dismissable=true,
         duration=4000, icon="danger",
-        style=Dict("position" => "fixed", "top" => 60, "right" => 20,
-            "width" => 350, "zIndex" => 9999)),
+        style=Dict(
+            "position" => "fixed", "top" => 60, "right" => 20,
+            "width"    => 350, "zIndex" => 9999
+        )
+    ),
 
     # Comprehensive Diagnostics Modal
     dbc_modal([
-            dbc_modalheader("System Diagnostics & Scientific Integrity"),
-            dbc_modalbody([
-                dbc_tabs([
-                        dbc_tab([
-                                html_div(html_pre(id="modal-diagnostics-sys-content", style=Dict("whiteSpace" => "pre-wrap", "fontSize" => "0.85rem")), className="p-3")
-                            ], label="System Health", tab_id="tab-sys"),
-                        dbc_tab([
-                                html_div(dcc_markdown(id="modal-diagnostics-sci-content"), className="p-3")
-                            ], label="Scientific Integrity", tab_id="tab-sci"),
-                    ], id="modal-diagnostics-tabs", active_tab="tab-sys")
-            ]),
-            dbc_modalfooter(dbc_button("Close", id="btn-close-diagnostics", className="ms-auto", n_clicks=0))
-        ], id="modal-diagnostics", size="xl", is_open=false),
+        dbc_modalheader("System Diagnostics & Scientific Integrity"),
+        dbc_modalbody([
+            dbc_tabs([
+                dbc_tab([
+                    html_div(html_pre(id="modal-diagnostics-sys-content", 
+                        style=Dict("whiteSpace" => "pre-wrap", "fontSize" => "0.85rem")), className="p-3")
+                ], label="System Health", tab_id="tab-sys"),
+                dbc_tab([
+                    html_div(dcc_markdown(id="modal-diagnostics-sci-content"), className="p-3")
+                ], label="Scientific Integrity", tab_id="tab-sci"),
+            ], id="modal-diagnostics-tabs", active_tab="tab-sys")
+        ]),
+        dbc_modalfooter(dbc_button("Close", id="btn-close-diagnostics", className="ms-auto colourgl-c0hr", n_clicks=0, outline=false))
+    ], id="modal-diagnostics", size="xl", is_open=false),
 
     # System readiness overlay + polling
     dcc_interval(id="sys-ready-poll", interval=2000, max_intervals=-1),
     html_div(id="sys-loading-overlay", children=[
-            html_div([
-                    html_div(className="spinner-border text-primary mb-3", style=Dict("width" => "3rem", "height" => "3rem")),
-                    html_h4("DaishoDoE", className="fw-bold mb-2", style=Dict("color" => "var(--colour-val5-purbla)")),
-                    html_p("Synchronising scientific modules...", style=Dict("color" => "var(--colour-val3-darlow)"), id="sys-loading-msg"),
-                ], style=Dict(
-                    "display" => "flex", "flexDirection" => "column", "alignItems" => "center",
-                    "justifyContent" => "center", "height" => "100vh",
-                )),
+        html_div([
+            html_div(className="sys-spinner"),
+            html_h4("DaishoDoE", className="fw-bold mb-2 text-center", style=Dict("color" => "var(--colour-val5-purbla)")),
+            html_p("Synchronising scientific modules...", className="text-center",
+                style=Dict("color" => "var(--colour-val3-darlow)", "margin" => "0"), id="sys-loading-msg"),
         ], style=Dict(
-            "position" => "fixed", "top" => "0", "left" => "0", "width" => "100vw", "height" => "100vh",
-            "backgroundColor" => "var(--colour-val2-liglow)", "zIndex" => "99999", "display" => "flex",
-            "alignItems" => "center", "justifyContent" => "center",
+            "position"      => "relative",
+            "display"       => "flex", 
+            "flexDirection" => "column", 
+            "alignItems"    => "center",
+            "justifyContent"=> "center", 
         )),
+    ], style=Dict(
+        "position"        => "fixed", 
+        "top"             => "0", 
+        "left"            => "0", 
+        "width"           => "100vw", 
+        "height"          => "100vh",
+        "backgroundColor" => "var(--colour-val2-liglow)", 
+        "zIndex"          => "99999", 
+        "display"         => "flex",
+        "alignItems"      => "center", 
+        "justifyContent"  => "center",
+    )),
 ])
 
 # --------------------------------------------------------------------------------------
@@ -250,6 +270,7 @@ Orchestrates the synchronisation of data between UI components and the session s
 function APP_SyncVault_DDEF(deck::Any, lens::Any, lens_analysis::Any)
     ctx = callback_context()
     isempty(ctx.triggered) && return Dash.no_update()
+    
     trig::String = split(ctx.triggered[1].prop_id, ".")[1]
 
     if trig == "sync-deck-content"
@@ -262,11 +283,11 @@ function APP_SyncVault_DDEF(deck::Any, lens::Any, lens_analysis::Any)
 end
 
 callback!(app,
-    Output("store-master-vault", "data"),
-    Input("sync-deck-content", "data"),
-    Input("sync-lens-content", "data"),
-    Input("sync-lens-analysis", "data"),
-    prevent_initial_call=true
+    Output("store-master-vault",  "data"),
+    Input("sync-deck-content",    "data"),
+    Input("sync-lens-content",    "data"),
+    Input("sync-lens-analysis",   "data"),
+    prevent_initial_call = true
 ) do deck, lens, lens_analysis
     return APP_SyncVault_DDEF(deck, lens, lens_analysis)
 end
@@ -284,59 +305,86 @@ function APP_RoutePage_DDEF(pathname::String)
     else
         # --- PORTAL DASHBOARD ---
         nt::Int, tstyle::String, tmsg::String = Sys_Fast.FAST_GetThreadInfo_DDEF()
+        
         return html_div([
             # Hero Section
             dbc_container([
-                    dbc_row(dbc_col([
-                            html_h1("DaishoDoE", className="fw-bold display-4 mb-3", style=Dict("letterSpacing" => "-0.04em", "color" => "var(--colour-val5-purbla)")),
-                            html_p("A Decision-Adaptive, Interactive, and Sequential Hybrid Optimisation Environment for Design of Experiments (DoE) Processes",
-                                className="lead text-secondary mb-5", style=Dict("maxWidth" => "800px", "margin" => "0 auto")),
-                        ], xs=12, className="text-center mt-5 pt-4")),
+                dbc_row(dbc_col([
+                    html_h1("DaishoDoE", 
+                        className = "fw-bold display-4 mb-3", 
+                        style     = Dict("letterSpacing" => "-0.04em", "color" => "var(--colour-val5-purbla)")
+                    ),
+                    html_p("A Decision-Adaptive, Interactive, and Sequential Hybrid Optimisation Environment for Design of Experiments (DoE) Processes",
+                        className = "lead mb-5", 
+                        style     = Dict("color" => "var(--colour-val4-darhig)", "maxWidth" => "800px", "margin" => "0 auto")
+                    ),
+                ], xs=12, className="text-center mt-5 pt-4")),
 
-                    # Action Cards
-                    dbc_row([
-                            # Design Card
-                            dbc_col([
-                                    dcc_link(html_div([
-                                                html_div(html_i(className="fas fa-flask text-white"),
-                                                    style=Dict("width" => "50px", "height" => "50px", "borderRadius" => "12px",
-                                                        "background" => "linear-gradient(135deg, var(--colour-chr0-huered) 0%, var(--colour-chr5-hueyel) 100%)",
-                                                        "display" => "flex", "alignItems" => "center", "justifyContent" => "center",
-                                                        "fontSize" => "1.5rem", "marginBottom" => "1.5rem", "boxShadow" => "0 10px 20px -5px var(--colour-val2-liglow)")),
-                                                html_h3("Experimental Design", className="fw-bold mb-2", style=Dict("color" => "var(--colour-val5-purbla)")),
-                                                html_p("Synthesise robust test matrices utilising Box-Behnken and Taguchi methodologies. Automatically generate protocol workspaces for 3-factor experimental architectures.",
-                                                    className="text-secondary small mb-0", style=Dict("lineHeight" => "1.6")),
-                                            ], className="glass-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")); href="/design", style=Dict("textDecoration" => "none")),
-                                ], xs=12, md=6, className="mb-4"),
+                # Action Cards
+                dbc_row([
+                    # Design Card
+                    dbc_col([
+                        dcc_link(html_div([
+                            html_div(html_i(className="fas fa-flask", style=Dict("color" => "var(--colour-val0-purwhi)")),
+                                style=Dict(
+                                    "width"        => "50px", "height" => "50px", "borderRadius" => "12px",
+                                    "background"   => "linear-gradient(135deg, var(--colour-chr0-huered) 0%, var(--colour-chr5-hueyel) 100%)",
+                                    "display"      => "flex", "alignItems" => "center", "justifyContent" => "center",
+                                    "fontSize"     => "1.5rem", "marginBottom" => "1.5rem", 
+                                    "boxShadow"    => "0 10px 20px -5px var(--colour-val2-liglow)"
+                                )
+                            ),
+                            html_h3("Experimental Design", className="fw-bold mb-2", style=Dict("color" => "var(--colour-val5-purbla)")),
+                            html_p("Synthesise robust test matrices utilising Box-Behnken and Taguchi methodologies. Automatically generate protocol workspaces for 3-factor experimental architectures.",
+                                className="small mb-0", style=Dict("color" => "var(--colour-val4-darhig)", "lineHeight" => "1.6")),
+                        ], className="glass-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")), href="/design", style=Dict("textDecoration" => "none")),
+                    ], xs=12, md=6, className="mb-4"),
 
-                            # Analysis Card
-                            dbc_col([
-                                    dcc_link(html_div([
-                                                html_div(html_i(className="fas fa-chart-line text-white"),
-                                                    style=Dict("width" => "50px", "height" => "50px", "borderRadius" => "12px",
-                                                        "background" => "linear-gradient(135deg, var(--colour-chr3-toncya) 0%, var(--colour-chr3-toncya) 100%)",
-                                                        "display" => "flex", "alignItems" => "center", "justifyContent" => "center",
-                                                        "fontSize" => "1.5rem", "marginBottom" => "1.5rem", "boxShadow" => "0 10px 20px -5px var(--colour-val2-liglow)")),
-                                                html_h3("Statistical Analysis", className="fw-bold mb-2", style=Dict("color" => "var(--colour-val5-purbla)")),
-                                                html_p("Execute rigorous data analysis via GLM regression, dynamically visualise desirability functions, and determine optimal formulations through mathematical modelling.",
-                                                    className="text-secondary small mb-0", style=Dict("lineHeight" => "1.6")),
-                                            ], className="glass-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")); href="/analysis", style=Dict("textDecoration" => "none")),
-                                ], xs=12, md=6, className="mb-4"),
-                        ], className="g-4 mb-5", style=Dict("maxWidth" => "900px", "margin" => "0 auto")),
+                    # Analysis Card
+                    dbc_col([
+                        dcc_link(html_div([
+                            html_div(html_i(className="fas fa-chart-line", style=Dict("color" => "var(--colour-val0-purwhi)")),
+                                style=Dict(
+                                    "width"        => "50px", "height" => "50px", "borderRadius" => "12px",
+                                    "background"   => "linear-gradient(135deg, var(--colour-chr1-shamag) 0%, var(--colour-val4-darhig) 100%)",
+                                    "display"      => "flex", "alignItems" => "center", "justifyContent" => "center",
+                                    "fontSize"     => "1.5rem", "marginBottom" => "1.5rem", 
+                                    "boxShadow"    => "0 10px 20px -5px var(--colour-val3-darlow)"
+                                )
+                            ),
+                            html_h3("Statistical Analysis", className="fw-bold mb-2", style=Dict("color" => "var(--colour-val5-purbla)")),
+                            html_p("Execute rigorous data analysis via GLM regression, dynamically visualise desirability functions, and determine optimal formulations through mathematical modelling.",
+                                className="small mb-0", style=Dict("color" => "var(--colour-val4-darhig)", "lineHeight" => "1.6")),
+                        ], className="glass-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")), href="/analysis", style=Dict("textDecoration" => "none")),
+                    ], xs=12, md=6, className="mb-4"),
+                ], className="g-4 mb-5", style=Dict("maxWidth" => "900px", "margin" => "0 auto")),
 
-                    # System Diagnostics Footer
-                    dbc_row(dbc_col(html_div([
-                                    html_div([
-                                            html_div([html_i(className="fas fa-server me-2", style=Dict("color" => "var(--colour-chr4-tongre)")), html_span("System Online", className="fw-bold", style=Dict("color" => "var(--colour-val3-darlow)"))], className="d-flex align-items-center me-4"),
-                                            html_div([html_i(className="fas fa-microchip me-2", style=Dict("color" => "var(--colour-chr3-toncya)")), html_span(tmsg, className="fw-bold", style=Dict("color" => "var(--colour-val3-darlow)"))], className="d-flex align-items-center me-4"),
-                                            html_div([
-                                                    html_span([html_i(className="fas fa-cog me-1"), "Diagnostics"],
-                                                        id="btn-open-sys-audit", className="badge border",
-                                                        style=Dict("cursor" => "pointer", "backgroundColor" => "var(--colour-val1-lighig)", "color" => "var(--colour-val5-purbla)"))
-                                                ], className="d-flex align-items-center"),
-                                        ], className="d-flex justify-content-center align-items-center p-3 rounded-pill",
-                                        style=Dict("background" => "var(--colour-val0-purwhi)", "border" => "1px solid var(--colour-val2-liglow)", "boxShadow" => "0 4px 6px -1px var(--colour-val1-lighig)", "display" => "inline-flex", "margin" => "0 auto"))
-                                ], className="text-center"), xs=12), style=Dict("maxWidth" => "900px", "margin" => "0 auto")),], fluid=true, className="pb-5 mt-2")
+                # System Diagnostics Footer
+                dbc_row(dbc_col(html_div([
+                    html_div([
+                        html_div([
+                            html_i(className="fas fa-server me-2", style=Dict("color" => "var(--colour-chr1-shamag)")), 
+                            html_span("System Online", className="fw-bold", style=Dict("color" => "var(--colour-val3-darlow)"))
+                        ], className="d-flex align-items-center me-4"),
+                        html_div([
+                            html_i(className="fas fa-microchip me-2", style=Dict("color" => "var(--colour-chr4-tongre)")), 
+                            html_span(tmsg, className="fw-bold", style=Dict("color" => "var(--colour-val3-darlow)"))
+                        ], className="d-flex align-items-center me-4"),
+                        html_div([
+                            html_span([html_i(className="fas fa-cog me-1"), "Diagnostics"],
+                                id="btn-open-sys-audit", className="badge border",
+                                style=Dict("cursor" => "pointer", "backgroundColor" => "var(--colour-val1-lighig)", "color" => "var(--colour-val5-purbla)"))
+                        ], className="d-flex align-items-center"),
+                    ], className="d-flex justify-content-center align-items-center p-3 rounded-pill",
+                    style=Dict(
+                        "background" => "var(--colour-val0-purwhi)", 
+                        "border"     => "1px solid var(--colour-val2-liglow)", 
+                        "boxShadow"  => "0 4px 6px -1px var(--colour-val1-lighig)", 
+                        "display"    => "inline-flex", 
+                        "margin"     => "0 auto"
+                    ))
+                ], className="text-center"), xs=12), style=Dict("maxWidth" => "900px", "margin" => "0 auto")),
+            ], fluid=true, className="pb-5 mt-2")
         ])
     end
 end
@@ -346,18 +394,16 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
 end
 
 callback!(app,
-    Output("modal-diagnostics", "is_open"),
+    Output("modal-diagnostics",             "is_open"),
     Output("modal-diagnostics-sys-content", "children"),
     Output("modal-diagnostics-sci-content", "children"),
-    Input("btn-open-sys-audit", "n_clicks"),
-    Input("btn-close-diagnostics", "n_clicks"),
-    State("modal-diagnostics", "is_open"),
-    prevent_initial_call=true
+    Input("btn-open-sys-audit",             "n_clicks"),
+    Input("btn-close-diagnostics",          "n_clicks"),
+    State("modal-diagnostics",              "is_open"),
+    prevent_initial_call = true
 ) do n_open, n_close, is_open
     ctx = callback_context()
-    if isempty(ctx.triggered)
-        return false, Dash.no_update(), Dash.no_update()
-    end
+    isempty(ctx.triggered) && return false, Dash.no_update(), Dash.no_update()
 
     trig = split(ctx.triggered[1].prop_id, ".")[1]
 
@@ -379,7 +425,7 @@ Manages the visibility of the initial loading screen based on background JIT war
 """
 function APP_HandleLoadingOverlay_DDEF(n::Any)
     ready::Bool = APP_SystemReady_DDEC[]
-    n_val::Int = isnothing(n) ? 0 : Int(n)
+    n_val::Int  = isnothing(n) ? 0 : Int(n)
 
     # Only log status if NOT ready, reduce frequency to ~1 min
     if !ready && n_val % 30 == 0
@@ -389,13 +435,14 @@ function APP_HandleLoadingOverlay_DDEF(n::Any)
     if ready
         return Dict("display" => "none"), true
     end
+    
     return Dash.no_update(), false
 end
 
 callback!(app,
     Output("sys-loading-overlay", "style"),
-    Output("sys-ready-poll", "disabled"),
-    Input("sys-ready-poll", "n_intervals")
+    Output("sys-ready-poll",      "disabled"),
+    Input("sys-ready-poll",       "n_intervals")
 ) do n
     return APP_HandleLoadingOverlay_DDEF(n)
 end
@@ -418,7 +465,7 @@ LENS_RegisterCallbacks_DDEF(app)
 Orchestrates JIT pre-compilation. Skips heavy lifting in Local Dev mode.
 """
 function APP_Warmup_DDEF()::Nothing
-    t0 = time()
+    t0     = time()
     is_dev = get(ENV, "DAISHO_DEV", "false") == "true"
 
     # HF Spaces or non-dev environments need thorough warmup for production stability
@@ -455,7 +502,8 @@ function APP_Warmup_DDEF()::Nothing
     end
 
     APP_SystemReady_DDEC[] = true
-    elapsed = round(time() - t0; digits=2)
+    elapsed                = round(time() - t0; digits=2)
+    
     FAST_Log_DDEF("BOOT", "Warmup", "JIT complete ($(elapsed)s) — System Ready.", "OK")
     return nothing
 end
@@ -465,8 +513,8 @@ Threads.@spawn APP_Warmup_DDEF()
 
 try
     env_label = APP_IsHfSpaces_DDEC ? "Cloud (HF Spaces)" : "Local $(Threads.nthreads())T"
-    Sys_Fast.FAST_Log_DDEF("SERVER", "Ready",
-        "DaishoDoE Engine listening on :$(APP_Port_DDEC) ($env_label)", "OK")
+    
+    Sys_Fast.FAST_Log_DDEF("SERVER", "Ready", "DaishoDoE Engine listening on :$(APP_Port_DDEC) ($env_label)", "OK")
 
     run_server(app, "0.0.0.0", APP_Port_DDEC; debug=false)
 catch e

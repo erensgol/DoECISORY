@@ -2,10 +2,9 @@
    DAISHODOE - PROTOCOL THEME (2026)
    ====================================================================================== */
 
-/* --- 1. DESIGN TOKENS (:root) --- */
+/* --- 0. DESIGN TOKENS (:root) --- */
 :root {
-    /* Palette: Daisho (Sys_Fast.jl - FAST_Constants_DDES) */
-
+    /* Daisho Palette (Sys_Fast.jl - FAST_Constants_DDES) */
     --colour-val0-purwhi: #FFFFFF;
     --colour-val1-lighig: #E6E6E6;
     --colour-val2-liglow: #DCDCDC;
@@ -33,6 +32,63 @@
     --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
+/* --- 1. COLOR MAPPING UTILITIES (Daisho Palette) --- */
+
+/* Group A: Standard Backgrounds */
+.colourbg-v0pw { background-color: var(--colour-val0-purwhi); }
+.colourbg-v1lh { background-color: var(--colour-val1-lighig); }
+.colourbg-v2ll { background-color: var(--colour-val2-liglow); }
+.colourbg-v3dl { background-color: var(--colour-val3-darlow); }
+.colourbg-v4dh { background-color: var(--colour-val4-darhig); }
+.colourbg-v5pb { background-color: var(--colour-val5-purbla); }
+
+/* Group B: Standard Text */
+.colourtx-v0pw, .btn.colourtx-v0pw { color: var(--colour-val0-purwhi); }
+.colourtx-v1lh, .btn.colourtx-v1lh { color: var(--colour-val1-lighig); }
+.colourtx-v2ll, .btn.colourtx-v2ll { color: var(--colour-val2-liglow); }
+.colourtx-v3dl, .btn.colourtx-v3dl { color: var(--colour-val3-darlow); }
+.colourtx-v4dh, .btn.colourtx-v4dh { color: var(--colour-val4-darhig); }
+.colourtx-v5pb, .btn.colourtx-v5pb { color: var(--colour-val5-purbla); }
+
+.colourtx-c0hr, .btn.colourtx-c0hr { color: var(--colour-chr0-huered); }
+.colourtx-c1sm, .btn.colourtx-c1sm { color: var(--colour-chr1-shamag); }
+.colourtx-c2sb, .btn.colourtx-c2sb { color: var(--colour-chr2-shablu); }
+.colourtx-c3tc, .btn.colourtx-c3tc { color: var(--colour-chr3-toncya); }
+.colourtx-c4tg, .btn.colourtx-c4tg { color: var(--colour-chr4-tongre); }
+.colourtx-c5hy, .btn.colourtx-c5hy { color: var(--colour-chr5-hueyel); }
+
+/* Group C: Glassmorphic Effects (Neutral Outline by default for buttons) */
+.colourgl-neut { background: transparent !important; border: 1px solid var(--colour-val3-darlow) !important; color: var(--colour-val5-purbla) !important; }
+.colourgl-c0hr { background: rgba(255, 0, 0, 0.15); border: 1px solid var(--colour-chr0-huered) !important; color: var(--colour-val5-purbla) !important; }
+.colourgl-c1sm { background: rgba(68, 1, 84, 0.15); border: 1px solid var(--colour-chr1-shamag) !important; color: var(--colour-val5-purbla) !important; }
+.colourgl-c2sb { background: rgba(59, 82, 139, 0.15); border: 1px solid var(--colour-chr2-shablu) !important; color: var(--colour-val5-purbla) !important; }
+.colourgl-c3tc { background: rgba(33, 145, 140, 0.15); border: 1px solid var(--colour-chr3-toncya) !important; color: var(--colour-val5-purbla) !important; }
+.colourgl-c4tg { background: rgba(94, 201, 98, 0.15); border: 1px solid var(--colour-chr4-tongre) !important; color: var(--colour-val5-purbla) !important; }
+.colourgl-c5hy { background: rgba(253, 231, 37, 0.15); border: 1px solid var(--colour-chr5-hueyel) !important; color: var(--colour-val5-purbla) !important; }
+
+.btn[class*="colourgl-"] { background: transparent !important; transition: all 0.2s ease-in-out !important; }
+
+/* Group D: Hover Effects (Solid Fill on Hover) */
+.btn.colourgl-neut:hover { background: var(--colour-val3-darlow) !important; color: var(--colour-val0-purwhi) !important; transform: translateY(-1px); }
+.btn.colourgl-c0hr:hover { background: var(--colour-chr0-huered) !important; color: var(--colour-val0-purwhi) !important; transform: translateY(-1px); }
+.btn.colourgl-c1sm:hover { background: var(--colour-chr1-shamag) !important; color: var(--colour-val0-purwhi) !important; transform: translateY(-1px); }
+.btn.colourgl-c2sb:hover { background: var(--colour-chr2-shablu) !important; color: var(--colour-val0-purwhi) !important; transform: translateY(-1px); }
+.btn.colourgl-c3tc:hover { background: var(--colour-chr3-toncya) !important; color: var(--colour-val0-purwhi) !important; transform: translateY(-1px); }
+.btn.colourgl-c4tg:hover { background: var(--colour-chr4-tongre) !important; color: var(--colour-val0-purwhi) !important; transform: translateY(-1px); }
+.btn.colourgl-c5hy:hover { background: var(--colour-chr5-hueyel) !important; color: var(--colour-val5-purbla) !important; transform: translateY(-1px); }
+
+/* Group E: Specialized Utility Classes */
+.btn-white-bg { background: var(--colour-val0-purwhi) !important; border: 1px solid var(--colour-val3-darlow) !important; color: var(--colour-val5-purbla) !important; box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important; }
+.btn-white-bg:hover { background: var(--colour-val1-lighig) !important; color: var(--colour-val5-purbla) !important; border-color: var(--colour-val4-darhig) !important; transform: translateY(-1px); }
+
+.academic-report {
+    background-color: var(--colour-val1-lighig) !important;
+    color: var(--colour-val5-purbla) !important;
+    border: 1px solid var(--colour-val3-darlow) !important;
+    font-family: 'JetBrains Mono', 'Courier New', monospace !important;
+    box-shadow: inset 0 2px 10px rgba(0,0,0,0.05) !important;
+}
+
 /* --- 2. CORE STYLES --- */
 body {
     background-color: var(--colour-val2-liglow);
@@ -47,24 +103,18 @@ body {
     background-attachment: fixed;
 }
 
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
+h1, h2, h3, h4, h5, h6 {
     color: var(--colour-val5-purbla);
     font-weight: 600;
     margin-bottom: 0.75rem;
     letter-spacing: -0.025em;
 }
 
-/* Global Fix for Slider Mark Overlaps (Scientific Precision) */
+/* Global Fix for Slider Mark Overlaps */
 .rc-slider-mark-text {
     white-space: nowrap;
     font-size: 9px !important;
 }
-
 
 a {
     color: var(--colour-val5-purbla);
@@ -260,22 +310,9 @@ a:hover {
     color: var(--colour-val2-liglow);
 }
 
-.glass-command-main {
-    flex: 1;
-}
-
-.glass-command-title {
-    font-weight: 600;
-    color: var(--colour-val5-purbla);
-    display: block;
-    margin-bottom: 0.1rem;
-}
-
-.glass-command-desc {
-    font-size: 0.8rem;
-    color: var(--colour-val3-darlow);
-    display: block;
-}
+.glass-command-main { flex: 1; }
+.glass-command-title { font-weight: 600; color: var(--colour-val5-purbla); display: block; margin-bottom: 0.1rem; }
+.glass-command-desc { font-size: 0.8rem; color: var(--colour-val3-darlow); display: block; }
 
 .glass-shortcut {
     font-family: 'JetBrains Mono', monospace;
@@ -287,12 +324,9 @@ a:hover {
 }
 
 /* --- 6. FORM ELEMENTS & INPUTS --- */
-.form-control,
-.form-select,
-input:not(.Select-input input),
-select {
+.form-control, .form-select, input:not(.Select-input input), select {
     background: var(--colour-val0-purwhi) !important;
-    border: 1px solid var(--colour-val1-lighig) !important;
+    border: 1px solid var(--colour-val2-liglow) !important;
     color: var(--colour-val5-purbla) !important;
     border-radius: var(--rad-sm) !important;
     font-size: 0.9rem !important;
@@ -301,14 +335,11 @@ select {
     box-shadow: inset 0 1px 2px var(--colour-val3-darlow) !important;
 }
 
-.form-control:focus,
-.form-select:focus,
-input:not(.Select-input input):focus,
-select:focus {
+.form-control:focus, .form-select:focus, input:not(.Select-input input):focus, select:focus {
     border-color: var(--colour-val4-darhig) !important;
     background: var(--colour-val0-purwhi) !important;
     outline: none !important;
-    box-shadow: 0 0 0 2px var(--colour-chr3-toncya) !important;
+    box-shadow: 0 0 0 2px var(--colour-val3-darlow) !important;
 }
 
 .form-label {
@@ -319,47 +350,14 @@ select:focus {
     display: block;
 }
 
-/* React-Select (DCC Dropdown) Fixes */
-.Select-input input {
-    background: transparent !important;
-    border: none !important;
-    box-shadow: none !important;
-    padding: 0 !important;
-    color: var(--colour-val5-purbla) !important;
-}
-
-.Select-control {
-    background-color: var(--colour-val0-purwhi) !important;
-    border: 1px solid var(--colour-val1-lighig) !important;
-    border-radius: var(--rad-sm) !important;
-    color: var(--colour-val5-purbla) !important;
-    min-height: 28px !important;
-    box-shadow: none !important;
-    cursor: pointer !important;
-}
-
-.Select.is-focused>.Select-control {
-    border-color: var(--colour-val4-darhig) !important;
-    box-shadow: 0 0 0 1px var(--colour-chr3-toncya) !important;
-}
-
-.Select-value-label {
-    color: var(--colour-val5-purbla) !important;
-    font-size: 0.9rem !important;
-}
-
-.Select-placeholder {
-    color: var(--colour-val3-darlow) !important;
-    font-size: 0.9rem !important;
-}
-
-.Select-arrow {
-    border-color: var(--colour-val4-darhig) transparent transparent !important;
-}
-
-.Select-arrow-zone:hover>.Select-arrow {
-    border-top-color: var(--colour-val5-purbla) !important;
-}
+/* React-Select (DCC Dropdown) */
+.Select-input input { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; color: var(--colour-val5-purbla) !important; }
+.Select-control { background-color: var(--colour-val0-purwhi) !important; border: 1px solid var(--colour-val1-lighig) !important; border-radius: var(--rad-sm) !important; color: var(--colour-val5-purbla) !important; min-height: 28px !important; box-shadow: none !important; cursor: pointer !important; }
+.Select.is-focused > .Select-control { border-color: var(--colour-val4-darhig) !important; box-shadow: 0 0 0 1px var(--colour-val3-darlow) !important; }
+.Select-value-label { color: var(--colour-val5-purbla) !important; font-size: 0.9rem !important; }
+.Select-placeholder { color: var(--colour-val3-darlow) !important; font-size: 0.9rem !important; }
+.Select-arrow { border-color: var(--colour-val4-darhig) transparent transparent !important; }
+.Select-arrow-zone:hover > .Select-arrow { border-top-color: var(--colour-val5-purbla) !important; }
 
 .Select-menu-outer {
     background-color: var(--colour-val0-purwhi) !important;
@@ -370,9 +368,7 @@ select:focus {
     margin-top: 4px !important;
 }
 
-.dash-table-container .Select-menu-outer {
-    width: 140px !important;
-}
+.dash-table-container .Select-menu-outer { width: 140px !important; }
 
 .Select-option {
     background-color: var(--colour-val0-purwhi) !important;
@@ -383,30 +379,11 @@ select:focus {
     white-space: nowrap !important;
 }
 
-.Select-option.is-focused,
-.Select-option:hover {
-    background-color: var(--colour-val2-liglow) !important;
-    color: var(--colour-val5-purbla) !important;
-    border-left: 2px solid var(--colour-val4-darhig);
-}
-
-.Select-option.is-selected {
-    background-color: var(--colour-val2-liglow) !important;
-    color: var(--colour-val4-darhig) !important;
-}
-
-.Select-clear-zone {
-    color: var(--colour-val3-darlow) !important;
-}
-
-.Select-clear-zone:hover {
-    color: var(--colour-chr0-huered) !important;
-}
-
-.Select-noresults {
-    background-color: var(--colour-val0-purwhi) !important;
-    color: var(--colour-val3-darlow) !important;
-}
+.Select-option.is-focused, .Select-option:hover { background-color: var(--colour-val2-liglow) !important; color: var(--colour-val5-purbla) !important; border-left: 2px solid var(--colour-val4-darhig); }
+.Select-option.is-selected { background-color: var(--colour-val2-liglow) !important; color: var(--colour-val4-darhig) !important; }
+.Select-clear-zone { color: var(--colour-val3-darlow) !important; }
+.Select-clear-zone:hover { color: var(--colour-chr0-huered) !important; }
+.Select-noresults { background-color: var(--colour-val0-purwhi) !important; color: var(--colour-val3-darlow) !important; }
 
 /* --- 7. BUTTONS --- */
 .btn {
@@ -415,7 +392,7 @@ select:focus {
     font-weight: 600 !important;
     padding: 0.5rem 1rem !important;
     transition: all 0.2s var(--ease-spring) !important;
-    border: 1px solid transparent !important;
+    border: 1px solid var(--colour-val1-lighig);
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
@@ -423,68 +400,39 @@ select:focus {
     letter-spacing: -0.01em !important;
 }
 
-.btn-primary,
-.btn-outline-primary {
-    background: var(--colour-val0-purwhi) !important;
-    color: var(--colour-val5-purbla) !important;
-    border: 1px solid var(--colour-val5-purbla) !important;
-    box-shadow: 0 2px 4px var(--colour-val1-lighig) !important;
-}
-
-.btn-primary:hover,
-.btn-outline-primary:hover {
+.btn:hover {
+    filter: brightness(0.85);
     transform: translateY(-1px);
-    box-shadow: 0 4px 8px var(--colour-val1-lighig) !important;
-    background: var(--colour-val5-purbla) !important;
-    color: var(--colour-val0-purwhi) !important;
+    box-shadow: 0 4px 8px var(--colour-val1-lighig);
 }
 
-.btn-primary:active,
-.btn-outline-primary:active {
+.btn:active {
     transform: translateY(0);
 }
 
-.btn-secondary,
-.btn-light,
-.btn-outline-secondary {
-    background: var(--colour-val0-purwhi) !important;
-    color: var(--colour-val4-darhig) !important;
-    border: 1px solid var(--colour-val1-lighig) !important;
+/* Radioactivity Button specialized hover logic */
+.lens-radio-inactive { background: transparent !important; border: 1px solid var(--colour-val3-darlow) !important; color: var(--colour-val4-darhig) !important; transition: all 0.2s ease !important; }
+.lens-radio-inactive:hover { background: var(--colour-chr4-tongre) !important; color: var(--colour-val0-purwhi) !important; border-color: var(--colour-chr4-tongre) !important; }
+
+.lens-radio-active { background: rgba(94, 201, 98, 0.15) !important; border: 1px solid var(--colour-chr4-tongre) !important; color: var(--colour-val5-purbla) !important; transition: all 0.2s ease !important; }
+.lens-radio-active:hover { background: var(--colour-chr0-huered) !important; color: var(--colour-val0-purwhi) !important; border-color: var(--colour-chr0-huered) !important; }
+
+.btn:focus, .btn.focus {
+    box-shadow: 0 0 0 2px var(--colour-val2-liglow) !important;
+    outline: none !important;
 }
 
-.btn-secondary:hover,
-.btn-light:hover,
-.btn-outline-secondary:hover {
-    background: var(--colour-val2-liglow) !important;
-    border-color: var(--colour-val3-darlow) !important;
-    color: var(--colour-val5-purbla) !important;
+.btn.colourgl-c5hy:focus, .btn.colourgl-c5hy.focus {
+    box-shadow: 0 0 0 2px var(--colour-chr5-hueyel) !important;
 }
 
-.btn-success {
-    background-color: var(--colour-val1-lighig) !important;
-    color: var(--colour-chr4-tongre) !important;
-    border: 1px solid var(--colour-chr4-tongre) !important;
-}
-
-.btn-success:hover {
-    background-color: var(--colour-chr4-tongre) !important;
-    border-color: var(--colour-chr4-tongre) !important;
-    box-shadow: 0 0 10px var(--colour-chr4-tongre) !important;
-    color: var(--colour-val0-purwhi) !important;
+.btn.colourgl-c4tg:focus, .btn.colourgl-c4tg.focus {
+    box-shadow: 0 0 0 2px var(--colour-chr4-tongre) !important;
 }
 
 /* --- 8. TABLES & DATATABLES --- */
-.dash-table-container,
-.dash-table-container .dash-spreadsheet,
-.dash-table-container .dash-spreadsheet-container,
-.dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner {
-    overflow: visible !important;
-}
-
-.dash-dropdown-cell-dropdown {
-    z-index: 9999 !important;
-    position: absolute !important;
-}
+.dash-table-container, .dash-table-container .dash-spreadsheet, .dash-table-container .dash-spreadsheet-container, .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner { overflow: visible !important; }
+.dash-dropdown-cell-dropdown { z-index: 9999 !important; position: absolute !important; }
 
 .dash-spreadsheet-container .dash-spreadsheet-inner th {
     background-color: var(--colour-val0-purwhi) !important;
@@ -505,10 +453,7 @@ select:focus {
     padding: 10px !important;
 }
 
-.dash-spreadsheet-container .dash-spreadsheet-inner td:focus {
-    outline: 2px solid var(--colour-chr3-toncya) !important;
-    outline-offset: -2px !important;
-}
+.dash-spreadsheet-container .dash-spreadsheet-inner td:focus { outline: 2px solid var(--colour-val4-darhig) !important; outline-offset: -2px !important; }
 
 .dash-spreadsheet-container .dash-spreadsheet-inner input {
     background: transparent !important;
@@ -521,25 +466,9 @@ select:focus {
     color: var(--colour-val5-purbla) !important;
 }
 
-.glass-panel td input,
-.glass-panel td select,
-.glass-panel td .form-select,
-.glass-panel td .form-control,
-.deck-name-cell input {
-    font-size: 12px !important;
-    padding: 0.3rem 0.4rem !important;
-    height: auto !important;
-}
-
-.deck-name-cell>div {
-    width: 100% !important;
-}
-
-.deck-name-cell input {
-    width: 100% !important;
-    box-sizing: border-box !important;
-    display: block !important;
-}
+.glass-panel td input, .glass-panel td select, .glass-panel td .form-select, .glass-panel td .form-control, .deck-name-cell input { font-size: 12px !important; padding: 0.3rem 0.4rem !important; height: auto !important; }
+.deck-name-cell > div { width: 100% !important; }
+.deck-name-cell input { width: 100% !important; box-sizing: border-box !important; display: block !important; }
 
 /* --- 9. MODALS --- */
 .modal-content {
@@ -549,213 +478,79 @@ select:focus {
     box-shadow: 0 50px 100px -20px var(--colour-val4-darhig) !important;
 }
 
-.modal-header {
-    border-bottom: 1px solid var(--colour-val1-lighig) !important;
-    padding: 1.25rem 1.5rem !important;
-    background: var(--colour-val0-purwhi) !important;
-}
+.modal-header { border-bottom: 1px solid var(--colour-val1-lighig) !important; padding: 1.25rem 1.5rem !important; background: var(--colour-val0-purwhi) !important; }
+.modal-footer { border-top: 1px solid var(--colour-val1-lighig) !important; padding: 1.25rem 1.5rem !important; background-color: var(--colour-val1-lighig) !important; }
+.modal-title { color: var(--colour-val5-purbla) !important; font-size: 1.1rem !important; font-weight: 600 !important; }
 
-.modal-footer {
-    border-top: 1px solid var(--colour-val1-lighig) !important;
-    padding: 1.25rem 1.5rem !important;
-    background-color: var(--colour-val3-darlow) !important;
-}
+/* Diagnostics Tab Overrides (Avoid Blue) */
+.nav-tabs .nav-link { color: var(--colour-val4-darhig) !important; border: none !important; border-bottom: 2px solid transparent !important; padding: 0.75rem 1.25rem !important; font-weight: 500 !important; transition: all 0.2s ease !important; }
+.nav-tabs .nav-link.active { color: var(--colour-chr1-shamag) !important; background: transparent !important; border-bottom: 2px solid var(--colour-chr1-shamag) !important; font-weight: 600 !important; }
+.nav-tabs .nav-link:hover:not(.active) { border-bottom: 2px solid var(--colour-val1-lighig) !important; }
 
-.modal-title {
-    color: var(--colour-val5-purbla) !important;
-    font-size: 1.1rem !important;
-    font-weight: 600 !important;
-}
-
-.close {
-    color: var(--colour-val4-darhig) !important;
-    opacity: 0.7 !important;
-    text-shadow: none !important;
-}
-
-.close:hover {
-    opacity: 1 !important;
-    color: var(--colour-chr0-huered) !important;
-}
+.close { color: var(--colour-val4-darhig) !important; opacity: 0.7 !important; text-shadow: none !important; }
+.close:hover { opacity: 1 !important; color: var(--colour-chr0-huered) !important; }
 
 /* --- 10. FEEDBACK & ANIMATIONS --- */
-.spinner-grow,
-.spinner-border {
-    display: none !important;
-}
+.spinner-grow, .spinner-border { display: none !important; }
+._dash-loading { display: flex !important; align-items: center; justify-content: center; min-height: 48px; color: transparent !important; }
+._dash-loading::after { content: ''; width: 24px; height: 24px; border: 2px solid var(--colour-val1-lighig); border-top-color: var(--colour-chr1-shamag); border-radius: 50%; animation: daisho-spin 0.6s linear infinite; display: block; box-shadow: 0 0 10px var(--colour-val1-lighig); }
 
-._dash-loading {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    min-height: 48px;
-    color: transparent !important;
-}
+.dash-spinner * { display: none !important; }
+.dash-spinner { width: 28px !important; height: 28px !important; margin: auto !important; border: 2px solid var(--colour-val1-lighig) !important; border-top-color: var(--colour-chr1-shamag) !important; border-radius: 50% !important; animation: daisho-spin 0.6s linear infinite !important; box-shadow: 0 0 10px var(--colour-val1-lighig) !important; background: transparent !important; display: block !important; }
 
-._dash-loading::after {
-    content: '';
-    width: 24px;
-    height: 24px;
-    border: 2px solid var(--colour-val1-lighig);
-    border-top-color: var(--colour-chr5-hueyel);
+/* Dedicated startup overlay spinner */
+.sys-spinner {
+    width: 42px;
+    height: 42px;
+    margin-bottom: 24px;
+    border: 3px solid var(--colour-val1-lighig);
+    border-top-color: var(--colour-chr1-shamag);
     border-radius: 50%;
-    animation: daisho-spin 0.6s linear infinite;
+    animation: daisho-spin 0.8s linear infinite;
+    box-shadow: 0 0 15px var(--colour-val3-darlow);
+    background: transparent;
     display: block;
-    box-shadow: 0 0 10px var(--colour-val1-lighig);
 }
 
-.dash-spinner * {
-    display: none !important;
-}
-
-.dash-spinner {
-    width: 28px !important;
-    height: 28px !important;
-    margin: auto !important;
-    border: 2px solid var(--colour-val1-lighig) !important;
-    border-top-color: var(--colour-chr5-hueyel) !important;
-    border-radius: 50% !important;
-    animation: daisho-spin 0.6s linear infinite !important;
-    box-shadow: 0 0 10px var(--colour-val1-lighig) !important;
-    background: transparent !important;
-    display: block !important;
-}
-
-#lens-graph-main._dash-loading::after,
-#deck-run-output._dash-loading::after {
-    width: 40px;
-    height: 40px;
-    border-width: 3px;
-    margin: 100px auto;
-}
+#lens-graph-main._dash-loading::after, #deck-run-output._dash-loading::after { width: 40px; height: 40px; border-width: 3px; margin: 100px auto; }
 
 @keyframes daisho-spin {
-    to {
-        transform: rotate(360deg);
-    }
+    to { transform: rotate(360deg); }
 }
 
 /* Shimmer Effect */
-.glass-loading-status {
-    background: linear-gradient(90deg,
-            var(--colour-val0-purwhi) 25%,
-            var(--colour-val1-lighig) 50%,
-            var(--colour-val0-purwhi) 75%);
-    background-size: 200% 100%;
-    animation: daisho-shimmer 2s ease-in-out 4 forwards;
-    border-radius: var(--rad-sm);
-    padding: 0.6rem 1.2rem;
-    color: var(--colour-val4-darhig);
-    font-size: 0.8rem;
-    text-align: center;
-    border: 1px solid var(--colour-val1-lighig);
-}
+.glass-loading-status { background: linear-gradient(90deg, var(--colour-val0-purwhi) 25%, var(--colour-val1-lighig) 50%, var(--colour-val0-purwhi) 75%); background-size: 200% 100%; animation: daisho-shimmer 2s ease-in-out 4 forwards; border-radius: var(--rad-sm); padding: 0.6rem 1.2rem; color: var(--colour-val4-darhig); font-size: 0.8rem; text-align: center; border: 1px solid var(--colour-val1-lighig); }
 
 @keyframes daisho-shimmer {
-    0% {
-        background-position: 200% 0;
-    }
-
-    100% {
-        background-position: -200% 0;
-    }
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
 }
 
 /* Pulse Effect */
-.btn-primary:disabled {
-    opacity: 0.7 !important;
-    cursor: wait !important;
-    animation: daisho-pulse 2s ease-in-out infinite;
-}
+.btn-primary:disabled { opacity: 0.7 !important; cursor: wait !important; animation: daisho-pulse 2s ease-in-out infinite; }
 
 @keyframes daisho-pulse {
-
-    0%,
-    100% {
-        box-shadow: 0 0 0 0 var(--colour-chr3-toncya);
-    }
-
-    50% {
-        box-shadow: 0 0 0 6px rgba(33, 145, 140, 0.1);
-    }
+    0%, 100% { box-shadow: 0 0 0 0 var(--colour-val3-darlow); }
+    50% { box-shadow: 0 0 0 6px rgba(166, 166, 166, 0.1); }
 }
 
 /* --- 11. UNIFIED RESPONSIVENESS --- */
-
-/* Step Correction: Prevent modal from shrinking too early between 957px and 1264px */
 @media (min-width: 957px) and (max-width: 1264px) {
-
-    .modal-xl,
-    .modal-lg {
-        max-width: 92vw !important;
-    }
+    .modal-xl, .modal-lg { max-width: 92vw !important; }
 }
 
 @media (max-width: 957px) {
-
-    /* CSS GRID HIJACK: Force Bootstrap columns to stack at 957px regardless of class (md/lg) */
-    .row>[class*="col-md-"],
-    .row>[class*="col-lg-"] {
-        flex: 0 0 100% !important;
-        max-width: 100% !important;
-        width: 100% !important;
-    }
-
-    .app-container {
-        padding: 0.75rem 1rem;
-    }
-
-    .glass-navbar {
-        margin: 0.5rem 0.75rem;
-        padding: 0 1rem;
-        height: 50px;
-    }
-
-    .nav-links {
-        gap: 4px;
-        padding: 3px;
-    }
-
-    .nav-item {
-        padding: 0.4rem 0.75rem;
-        font-size: 0.8rem;
-    }
-
-    .glass-panel {
-        margin-bottom: 0.85rem;
-    }
-
-    .glass-header {
-        padding: 0.5rem 0.75rem;
-    }
-
-    .glass-caption {
-        font-size: 0.7rem;
-    }
-
-    .glass-content {
-        padding: 0.75rem 0.85rem;
-    }
-
-    .glass-command-row {
-        padding: 0.85rem 1rem;
-    }
-
-    .glass-command-icon {
-        margin-right: 0.75rem;
-        width: 30px;
-        height: 30px;
-        font-size: 0.9rem;
-    }
-
-    .glass-command-title {
-        font-size: 0.9rem;
-    }
-
-    /* Expand modals on tablets/mobile to prevent clipping */
-    .modal-xl,
-    .modal-lg {
-        max-width: 90vw !important;
-        margin: 0.5rem auto !important;
-    }
+    .row > [class*="col-md-"], .row > [class*="col-lg-"] { flex: 0 0 100% !important; max-width: 100% !important; width: 100% !important; }
+    .app-container { padding: 0.75rem 1rem; }
+    .glass-navbar { margin: 0.5rem 0.75rem; padding: 0 1rem; height: 50px; }
+    .nav-links { gap: 4px; padding: 3px; }
+    .nav-item { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
+    .glass-panel { margin-bottom: 0.85rem; }
+    .glass-header { padding: 0.5rem 0.75rem; }
+    .glass-caption { font-size: 0.7rem; }
+    .glass-content { padding: 0.75rem 0.85rem; }
+    .glass-command-row { padding: 0.85rem 1rem; }
+    .glass-command-icon { margin-right: 0.75rem; width: 30px; height: 30px; font-size: 0.9rem; }
+    .glass-command-title { font-size: 0.9rem; }
+    .modal-xl, .modal-lg { max-width: 90vw !important; margin: 0.5rem auto !important; }
 }

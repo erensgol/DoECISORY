@@ -59,8 +59,9 @@ function CORE_GenDesign_DDEF(Method::String, FactorCount::Int=3)
         Int8[;;]
     end
 
-    R, C = size(design)
-    Sys_Fast.FAST_Log_DDEF("CORE", "GEN_SUCCESS", "$R Runs x $C Variables created.", "OK")
+    R, C_dim = size(design)
+    Sys_Fast.FAST_Log_DDEF("CORE", "GEN_SUCCESS", "$R Runs x $C_dim Variables created.", "OK")
+    
     return design
 end
 
@@ -79,11 +80,12 @@ function CORE_MapLevels_DDEF(CodedMatrix::AbstractMatrix, Config::AbstractVector
     # Pre-allocate result and fill via vectorised indexing for performance
     result = Matrix{Float64}(undef, rows, cols)
     @inbounds for i in 1:cols
-        lvls = get(Config[i], "Levels", zeros(3))
+        lvls    = get(Config[i], "Levels", zeros(3))
         length(lvls) < 3 && (lvls = zeros(3))
         indices = clamp.(round.(Int, view(CodedMatrix, :, i)) .+ 2, 1, 3)
         result[:, i] .= getindex.(Ref(lvls), indices)
     end
+    
     return result
 end
 
@@ -102,17 +104,17 @@ end
 Generates a D-Optimal design matrix for quadratic response surfaces via `ExperimentalDesign.jl`.
 """
 function CORE_GenerateOptimalDesign_DDEF(FactorCount::Int=3, RunCount::Int=15)
-    C = Sys_Fast.FAST_Data_DDEC
+    C           = Sys_Fast.FAST_Data_DDEC
     FactorCount = 3 # Force 3
     Sys_Fast.FAST_Log_DDEF("CORE", "OPTIMAL_GEN", "Generating D-Optimal design for strict 3-variable system ($RunCount runs).", "WAIT")
 
     try
         # Define the parameter space: each factor has 3 levels (-1, 0, 1)
         factor_dists = fill(DiscreteUniform(-1, 1), FactorCount)
-        design_dist = DesignDistribution(factor_dists)
+        design_dist  = DesignDistribution(factor_dists)
 
         # Generate a large candidate pool (e.g. 500 or 3^FactorCount)
-        pool_size = min(3^FactorCount, 1000)
+        pool_size  = min(3^FactorCount, 1000)
         candidates = rand(design_dist, pool_size)
 
         # Build terms dynamically: Main effects + Interactions + Quadratics
@@ -120,7 +122,7 @@ function CORE_GenerateOptimalDesign_DDEF(FactorCount::Int=3, RunCount::Int=15)
         rename!(candidates.matrix, term_syms)
 
         # Construct formula using StatsModels Term objects to avoid eval()
-        main_terms = [term(s) for s in term_syms]
+        main_terms  = [term(s) for s in term_syms]
         inter_terms = []
         for i in 1:FactorCount
             for j in (i+1):FactorCount
@@ -131,7 +133,7 @@ function CORE_GenerateOptimalDesign_DDEF(FactorCount::Int=3, RunCount::Int=15)
 
         # Combine all terms: intercept is handled by OptimalDesign if not specified otherwise
         all_terms = reduce(+, [main_terms; inter_terms; quad_terms])
-        f = FormulaTerm(term(0), all_terms)
+        f         = FormulaTerm(term(0), all_terms)
 
         Sys_Fast.FAST_Log_DDEF("CORE", "OPTIMAL_GEN", "D-Optimal model structure established via safe Terms.", "WAIT")
 
@@ -140,8 +142,9 @@ function CORE_GenerateOptimalDesign_DDEF(FactorCount::Int=3, RunCount::Int=15)
 
         res_matrix = Matrix{Int8}(round.(opt_design.matrix))
 
-        R, C = size(res_matrix)
-        Sys_Fast.FAST_Log_DDEF("CORE", "GEN_SUCCESS", "$R Runs x $C Variables D-Optimal created.", "OK")
+        R, C_dim = size(res_matrix)
+        Sys_Fast.FAST_Log_DDEF("CORE", "GEN_SUCCESS", "$R Runs x $C_dim Variables D-Optimal created.", "OK")
+        
         return res_matrix
     catch e
         Sys_Fast.FAST_Log_DDEF("CORE", "GEN_FAIL", "Failed to generate optimal design: $e", "FAIL")
@@ -159,7 +162,7 @@ Globally optimises parameters by maximising composite desirability using BlackBo
 """
 function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractVector, X_Bounds::AbstractMatrix{Float64};
     MaxTime::Float64=5.0, PenaltyFn::Union{Function,Nothing}=nothing)
-    Dim = 3 # Fixed dimension
+    Dim       = 3 # Fixed dimension
     NumModels = length(Models)
 
     # Pre-parse goals for fast execution
@@ -177,25 +180,25 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
         m_type = lowercase(get(Models[m], "ModelType", ""))
         if m_type == "kriging" || m_type == "rbf"
             c = Main.Lib_Vise.VISE_BuildSurrogateClosure_DDEF(Models[m])
-            # Safety: VISE_BuildSurrogateClosure_DDEF should return a fallback lambda if build fails, but we double-check.
+            # Safety: VISE_BuildSurrogateClosure_DDEF should return a fallback lambda if build fails
             closures[m] = isnothing(c) ? ((x) -> mean(get(Models[m], "Y_Train", [0.0]))) : c
         else
             # For Linear/Quadratic GLM models
-            beta = Models[m]["Coefs"]::Vector{Float64}
+            beta     = Models[m]["Coefs"]::Vector{Float64}
             mod_type = Models[m]["ModelType"]
             closures[m] = (x_tup) -> begin
                 # Single point expansion
                 x_vec = collect(x_tup)
                 X_mat = reshape(x_vec, 1, Dim)
-                Xd = Main.Lib_Vise.VISE_ExpandDesign_DDEF(X_mat, mod_type)
-                return (Xd*beta)[1]
+                Xd    = Main.Lib_Vise.VISE_ExpandDesign_DDEF(X_mat, mod_type)
+                return (Xd * beta)[1]
             end
         end
     end
 
     # Define the Objective Function (BBO Minimises, so we return -Score)
     function CORE_CalcObjective_DDEF(x)
-        s = 1.0
+        s     = 1.0
         x_tup = ntuple(i -> x[i], Dim)
         for m in 1:NumModels
             val = closures[m](x_tup)
@@ -203,8 +206,8 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
                 return 0.0 # Extreme penalty, Desirability 0.0
             end
             gtup = parsed_goals[m]
-            d = Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
-            s *= d^gtup[6]
+            d    = Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
+            s   *= d^gtup[6]
         end
         score = clamp(s^pow_factor, 0.0, 1.0)
 
@@ -221,20 +224,25 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
     Main.Sys_Fast.FAST_Log_DDEF("CORE", "BBO_START", "Initiating BlackBoxOptim for Global Desirability (MaxTime: $(MaxTime)s)...", "WAIT")
 
     # Suppress BBO prints via TraceMode=:silent
-    res = bboptimize(CORE_CalcObjective_DDEF;
-        SearchRange=search_range,
-        NumDimensions=Dim,
-        MaxTime=MaxTime,
-        Method=:adaptive_de_rand_1_bin_radiuslimited,
-        TraceMode=:silent
-    )
+    try
+        res = bboptimize(CORE_CalcObjective_DDEF;
+            SearchRange       = search_range,
+            NumDimensions     = Dim,
+            MaxTime           = MaxTime,
+            Method            = :adaptive_de_rand_1_bin_radiuslimited,
+            TraceMode         = :silent
+        )
 
-    best_x = best_candidate(res)
-    best_score = -best_fitness(res)
+        best_x     = best_candidate(res)
+        best_score = -best_fitness(res)
 
-    Main.Sys_Fast.FAST_Log_DDEF("CORE", "BBO_SUCCESS", "Global Optimum Found -> Score: $(round(best_score, digits=4))", "OK")
-
-    return best_x
+        Main.Sys_Fast.FAST_Log_DDEF("CORE", "BBO_SUCCESS", "Global Optimum Found -> Score: $(round(best_score, digits=4))", "OK")
+        
+        return best_x, best_score
+    catch e
+        Main.Sys_Fast.FAST_Log_DDEF("CORE", "BBO_FAIL", "BlackBoxOptim encountered a critical failure: $e. Reverting to geometric center.", "FAIL")
+        return [ (X_Bounds[i, 1] + X_Bounds[i, 2]) / 2.0 for i in 1:Dim ], 0.0
+    end
 end
 
 # --------------------------------------------------------------------------------------
@@ -247,7 +255,7 @@ Retrieves experiment data for the optimal (leader) run from a previous phase rec
 Ensures variable ordering matches 'VarNames' if provided.
 """
 function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID::String="", VarNames::Vector{String}=String[])
-    C = Sys_Fast.FAST_Data_DDEC
+    C     = Sys_Fast.FAST_Data_DDEC
     sheet = C.PREFIX_LEADERS * PhaseCode
 
     df = Sys_Fast.FAST_ReadExcel_DDEF(FilePath, sheet)
@@ -256,9 +264,9 @@ function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID
         return Dict{String,Any}()
     end
 
-    cols = names(df)
+    cols      = names(df)
     col_score = findfirst(c -> occursin("SCORE", uppercase(c)), cols)
-    col_id = findfirst(c -> occursin("ID", uppercase(c)), cols)
+    col_id    = findfirst(c -> occursin("ID", uppercase(c)), cols)
 
     isnothing(col_score) && return Dict{String,Any}()
 
@@ -285,12 +293,12 @@ function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID
         for v_name in VarNames
             # Try with prefix and without
             v_key = startswith(v_name, C.PRE_INPUT) ? v_name : "$(C.PRE_INPUT)$v_name"
-            val = get(row, Symbol(v_key), get(row, Symbol(v_name), 0.0))
+            val   = get(row, Symbol(v_key), get(row, Symbol(v_name), 0.0))
             push!(vals, Sys_Fast.FAST_SafeNum_DDEF(val))
         end
     else
         input_cols = filter(n -> startswith(n, C.PRE_INPUT), cols)
-        vals = Sys_Fast.FAST_SafeNum_DDEF.(values(row[input_cols]))
+        vals       = Sys_Fast.FAST_SafeNum_DDEF.(values(row[input_cols]))
     end
 
     id_str = isnothing(col_id) ? "N/A" : string(row[col_id])
@@ -298,11 +306,11 @@ function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID
         "ID: $id_str | Score: $(round(row[col_score]; digits=4))", "OK")
 
     return Dict{String,Any}(
-        "ID" => id_str,
-        "Score" => row[col_score],
-        "Vals" => collect(vals),
+        "ID"         => id_str,
+        "Score"      => row[col_score],
+        "Vals"       => collect(vals),
         "InputNames" => isempty(VarNames) ? filter(n -> startswith(n, C.PRE_INPUT), cols) : VarNames,
-        "OldConfig" => Any[],
+        "OldConfig"  => Any[]
     )
 end
 
@@ -315,7 +323,7 @@ end
 Pre-flight integrity check for generated designs (detects singular matrices/degeneracy).
 """
 function CORE_ValidateDesign_DDEF(DesignMatrix::AbstractMatrix, Config::AbstractVector=[])
-    R, C = size(DesignMatrix)
+    R, C   = size(DesignMatrix)
     issues = String[]
 
     R < 3 && push!(issues, "Design has fewer than 3 runs ($R). Regression will fail.")
@@ -329,7 +337,7 @@ function CORE_ValidateDesign_DDEF(DesignMatrix::AbstractMatrix, Config::Abstract
     end
 
     # Check for duplicate rows
-    seen = Set{Vector{Float64}}()
+    seen      = Set{Vector{Float64}}()
     dup_count = 0
     @inbounds for i in 1:R
         row = Float64.(DesignMatrix[i, :])
@@ -344,7 +352,7 @@ function CORE_ValidateDesign_DDEF(DesignMatrix::AbstractMatrix, Config::Abstract
     # Det-Check (Mathematical Health)
     if R >= C
         # Scale to [-1, 1] for stable determinant
-        X_sc = DesignMatrix ./ max.(maximum(abs, DesignMatrix; dims=1), 1e-9)
+        X_sc    = DesignMatrix ./ max.(maximum(abs, DesignMatrix; dims=1), 1e-9)
         det_val = det(X_sc' * X_sc)
         if det_val < 1e-8
             push!(issues, "Design is near-singular (Det ≈ $(round(det_val; digits=4))). Regression may fail.")
@@ -382,22 +390,22 @@ Calculates a suite of design quality metrics (D, A, G, I efficiency).
 """
 function CORE_CalcDesignMetrics_DDEF(X::AbstractMatrix)
     R, C = size(X)
-    res = Dict("D" => 0.0, "A" => 0.0, "G" => 0.0, "I" => 0.0, "Condition" => Inf)
+    res  = Dict("D" => 0.0, "A" => 0.0, "G" => 0.0, "I" => 0.0, "Condition" => Inf)
     R < C && return res
 
     try
-        XtX = X' * X
+        XtX              = X' * X
         res["Condition"] = cond(XtX)
 
         # 1. D-Efficiency (Determinant-based)
         res["D"] = (det(XtX) / (R^C))^(1 / C)
 
         # 2. A-Efficiency (Average Variance-based)
-        inv_XtX = inv(XtX)
+        inv_XtX  = inv(XtX)
         res["A"] = C / (R * tr(inv_XtX))
 
         # 3. G-Efficiency (Max Variance-based proxy)
-        lev = diag(X * inv_XtX * X')
+        lev     = diag(X * inv_XtX * X')
         max_var = maximum(lev)
         res["G"] = C / (R * max_var)
 
@@ -407,6 +415,7 @@ function CORE_CalcDesignMetrics_DDEF(X::AbstractMatrix)
     catch e
         Sys_Fast.FAST_Log_DDEF("CORE", "METRICS_ERR", "Stability error in design metrics: $e", "WARN")
     end
+    
     return res
 end
 

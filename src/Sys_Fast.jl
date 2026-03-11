@@ -37,59 +37,46 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
 
 """
     FAST_Constants_DDES
-System-wide configuration and metadata structure.
+System-wide configuration and metadata structure. Daisho Palette.
 """
 Base.@kwdef struct FAST_Constants_DDES
-    VERSION::String = "v1.0 In Dev."
-    COLOUR_PURWHI::String = "#FFFFFF"
-    COLOUR_LIGHIG::String = "#E6E6E6"
-    COLOUR_LIGLOW::String = "#DCDCDC"
-    COLOUR_DARLOW::String = "#A6A6A6"
-    COLOUR_DARHIG::String = "#666666"
-    COLOUR_PURBLA::String = "#000000"
-    COLOUR_HUERED::String = "#FF0000"
-    COLOUR_SHAMAG::String = "#440154"
-    COLOUR_SHABLU::String = "#3B528B"
-    COLOUR_TONCYA::String = "#21918C"
-    COLOUR_TONGRE::String = "#5EC962"
-    COLOUR_HUEYEL::String = "#FDE725"
-
-    # --- Aesthetic Constants ---
-    FONT_DEFAULT::String = "Inter, sans-serif"
-
-    # --- Excel Sheet Names ---
-    SHEET_DATA::String = "DATA"
-    SHEET_CONFIG::String = "CONFIG"
-
-    # --- Column Prefixes ---
-    PRE_INPUT::String = "VARIA_"
-    PRE_FIXED::String = "FIXED_"
-    PRE_FILL::String = "FILL_"
-    PRE_MASS::String = "MASS_"
-    PRE_RESULT::String = "RESULT_"
-    PRE_PRED::String = "PRED_"
+    VERSION::String        = "v1.0 In Dev."
+    COLOUR_PURWHI::String  = "#FFFFFF"
+    COLOUR_LIGHIG::String  = "#E6E6E6"
+    COLOUR_LIGLOW::String  = "#DCDCDC"
+    COLOUR_DARLOW::String  = "#A6A6A6"
+    COLOUR_DARHIG::String  = "#666666"
+    COLOUR_PURBLA::String  = "#000000"
+    COLOUR_HUERED::String  = "#FF0000"
+    COLOUR_SHAMAG::String  = "#440154"
+    COLOUR_SHABLU::String  = "#3B528B"
+    COLOUR_TONCYA::String  = "#21918C"
+    COLOUR_TONGRE::String  = "#5EC962"
+    COLOUR_HUEYEL::String  = "#FDE725"
+    FONT_DEFAULT::String   = "Inter, sans-serif"
+    SHEET_DATA::String     = "DATA"
+    SHEET_CONFIG::String   = "CONFIG"
+    PRE_INPUT::String      = "VARIA_"
+    PRE_FIXED::String      = "FIXED_"
+    PRE_FILL::String       = "FILL_"
+    PRE_MASS::String       = "MASS_"
+    PRE_RESULT::String     = "RESULT_"
+    PRE_PRED::String       = "PRED_"
     PREFIX_LEADERS::String = "Leaders_"
-
-    # --- Standard Column Names ---
-    COL_EXP_ID::String = "EXP_ID"
-    COL_PHASE::String = "PHASE"
-    COL_RUN_ORDER::String = "RUN_ORDER"
-    COL_STATUS::String = "STATUS"
-    COL_SCORE::String = "SCORE"
-    COL_NOTES::String = "NOTES"
-    COL_ID::String = "ID"
-
-    # --- Role Definitions ---
-    ROLE_VAR::String = "Variable"
-    ROLE_FILL::String = "Filler"
-    ROLE_FIX::String = "Fixed"
-
-    # --- Design Methods ---
-    METHOD_BB15::String = "BB15"
-    METHOD_TL09::String = "TL09"
-    METHOD_DOPT15::String = "DOPT15"
-    METHOD_DOPT09::String = "DOPT09"
-
+    COL_EXP_ID::String     = "EXP_ID"
+    COL_PHASE::String      = "PHASE"
+    COL_RUN_ORDER::String  = "RUN_ORDER"
+    COL_STATUS::String     = "STATUS"
+    COL_SCORE::String      = "SCORE"
+    COL_NOTES::String      = "NOTES"
+    COL_ID::String         = "ID"
+    ROLE_VAR::String       = "Variable"
+    ROLE_FILL::String      = "Filler"
+    ROLE_FIX::String       = "Fixed"
+    METHOD_BB15::String    = "BB15"
+    METHOD_TL09::String    = "TL09"
+    METHOD_DOPT15::String  = "DOPT15"
+    METHOD_DOPT09::String  = "DOPT09"
 end
 
 const FAST_Data_DDEC = FAST_Constants_DDES()
@@ -123,10 +110,6 @@ function FAST_InitialiseWorkforce_DDEF()
     end
 end
 
-"""
-    FAST_CleanWorkforce_DDEF(all::Bool=false)::Nothing
-Scavenges the local transient bunker. If 'all' is true, attempts a deeper sweep (limited by permissions).
-"""
 function FAST_CleanWorkforce_DDEF(all::Bool=false)::Nothing
     !isdir(FAST_TempRoot_DDEC) && return nothing
 
@@ -138,6 +121,7 @@ function FAST_CleanWorkforce_DDEF(all::Bool=false)::Nothing
     catch e
         FAST_Log_DDEF("FAST", "CLEAN_WARN", "Workforce scavenging lookup encountered obstacles: $e", "WARN")
     end
+    
     return nothing
 end
 
@@ -162,11 +146,13 @@ const FAST_LogReset_DDEC = "\e[0m"
 Standardised console logging with ANSI colour support and timestamps.
 """
 function FAST_Log_DDEF(Source::String, Event::String, Detail::Any="", Type::String="INFO")
-    c = get(FAST_LogColours_DDEC, Symbol(Type), FAST_LogColourDefault_DDEC)
-    ts = Dates.format(now(), "HH:MM:SS.sss")
+    c       = get(FAST_LogColours_DDEC, Symbol(Type), FAST_LogColourDefault_DDEC)
+    ts      = Dates.format(now(), "HH:MM:SS.sss")
     det_str = isnothing(Detail) ? "null" : string(Detail)
+    
     @printf("\e[34m[%s]%s \e[32m%-12s%s: %s%-15s%s %s%s%s\n",
         ts, FAST_LogReset_DDEC, Source, FAST_LogReset_DDEC, c, Event, FAST_LogReset_DDEC, c, det_str, FAST_LogReset_DDEC)
+    
     flush(stdout)
 end
 
@@ -181,11 +167,13 @@ Mutates the DataFrame in-place for performance.
 """
 function FAST_NormaliseCols_DDEF!(df::DataFrame; force_upper::Bool=false)::DataFrame
     isempty(df) && return df
+    
     if force_upper
         mapping = [n => Symbol(uppercase(strip(string(n)))) for n in names(df)]
     else
         mapping = [n => Symbol(strip(string(n))) for n in names(df)]
     end
+    
     rename!(df, mapping)
     return df
 end
@@ -205,7 +193,7 @@ function FAST_ReadExcel_DDEF(FilePath::Union{String,Nothing}, SheetName::String)
     end
 
     try
-        xf = XLSX.readxlsx(FilePath)
+        xf           = XLSX.readxlsx(FilePath)
         sheet_exists = SheetName ∈ XLSX.sheetnames(xf)
 
         if !sheet_exists
@@ -215,6 +203,7 @@ function FAST_ReadExcel_DDEF(FilePath::Union{String,Nothing}, SheetName::String)
 
         df = DataFrame(XLSX.readtable(FilePath, SheetName))
         FAST_Log_DDEF("FAST", "IO_READ", "$(nrow(df)) rows extracted from [$SheetName]", "OK")
+        
         return FAST_NormaliseCols_DDEF!(df)
     catch e
         FAST_Log_DDEF("FAST", "IO_ERROR", "Scientific I/O Failure: $(first(string(e), 150))", "FAIL")
@@ -228,7 +217,8 @@ Rewrites Excel vault using a fresh buffer to prevent archive truncation.
 """
 function FAST_SafeExcelWrite_DDEF(File::Union{String,Nothing}, Updates::Dict{String,DataFrame})::Nothing
     (isnothing(File) || isempty(File)) && return nothing
-    all_data = Dict{String,DataFrame}()
+    
+    all_data    = Dict{String,DataFrame}()
     sheet_order = String[]
 
     if isfile(File)
@@ -257,6 +247,7 @@ function FAST_SafeExcelWrite_DDEF(File::Union{String,Nothing}, Updates::Dict{Str
     if !isempty(valid_pairs)
         XLSX.writetable(File, valid_pairs...; overwrite=true)
     end
+    
     return nothing
 end
 
@@ -272,6 +263,7 @@ function FAST_RoundCols_DDEF!(df::DataFrame)::DataFrame
         end
         return col
     end
+    
     return df
 end
 
@@ -300,15 +292,16 @@ function FAST_SafeNum_DDEF(Input::Any)::Float64
     (Input === missing || Input === nothing) && return NaN
 
     Input isa AbstractFloat && return Float64(Input)
-    Input isa Integer && return Float64(Input)
-    Input isa Bool && return Input ? 1.0 : 0.0
+    Input isa Integer       && return Float64(Input)
+    Input isa Bool          && return Input ? 1.0 : 0.0
 
     s::String = strip(string(Input))
     (isempty(s) || s == "-" || lowercase(s) == "nan") && return NaN
 
     # Handle comma/dot ambiguity
     clean_s = replace(s, ',' => '.')
-    res = tryparse(Float64, clean_s)
+    res     = tryparse(Float64, clean_s)
+    
     return something(res, NaN)
 end
 
@@ -487,22 +480,21 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
             end
         end
 
-
         FAST_RoundCols_DDEF!(df_final_data)
 
         # 5. File Construction Via SafeWrite
-
+        
         # Build Config
         clean_config = FAST_SanitiseJson_DDEF(Config)
-        json_str = isempty(Config) ? "{}" : JSON3.write(clean_config)
-        config_df = DataFrame(
-            "PARAMETER" => ["MasterConfig"],
+        json_str     = isempty(Config) ? "{}" : JSON3.write(clean_config)
+        config_df    = DataFrame(
+            "PARAMETER"  => ["MasterConfig"],
             "VALUE_JSON" => [json_str],
             "UPDATED_AT" => [string(now())],
         )
 
         updates = Dict{String,DataFrame}(
-            C.SHEET_DATA => df_final_data,
+            C.SHEET_DATA   => df_final_data,
             C.SHEET_CONFIG => config_df
         )
 
@@ -523,9 +515,10 @@ end
 Generates a unique, descriptive filename according to the Daisho protocol.
 """
 function FAST_GenerateSmartName_DDEF(Project::String, Phase::String, Status::String)::String
-    p_clean = isempty(strip(Project)) ? "Daisho" : replace(strip(Project), " " => "_")
+    p_clean  = isempty(strip(Project)) ? "Daisho" : replace(strip(Project), " " => "_")
     ph_clean = replace(Phase, "Phase" => "P")
-    ts = Dates.format(now(), "yyyy_mmdd_HHMM")
+    ts       = Dates.format(now(), "yyyy_mmdd_HHMM")
+    
     return "DDE_$(p_clean)_$(ph_clean)_$(Status)_$(ts).xlsx"
 end
 
@@ -537,13 +530,14 @@ function FAST_GetTransientPath_DDEF(Base64Content::Union{String,Nothing}=nothing
     # Ensure directory exists (failsafe)
     isdir(FAST_TempRoot_DDEC) || mkpath(FAST_TempRoot_DDEC)
 
-    ts = Dates.format(now(), "HHmmss_SSS")
-    rnd = rand(1000:9999)
+    ts       = Dates.format(now(), "HHmmss_SSS")
+    rnd      = rand(1000:9999)
     tmp_path = joinpath(FAST_TempRoot_DDEC, "DAISHO_TEMP_$(ts)_$(rnd).xlsx")
 
     if !isnothing(Base64Content)
         write(tmp_path, base64decode(split(Base64Content, ',')[end]))
     end
+    
     return tmp_path
 end
 
@@ -567,7 +561,8 @@ Reads the MasterConfig from an existing Excel file's CONFIG sheet.
 function FAST_ReadConfig_DDEF(File::Union{String,Nothing})::Dict{String,Any}
     try
         (isnothing(File) || isempty(File)) && return Dict{String,Any}()
-        C = FAST_Data_DDEC
+        
+        C  = FAST_Data_DDEC
         df = FAST_ReadExcel_DDEF(File, C.SHEET_CONFIG)
         isempty(df) && return Dict{String,Any}()
 
@@ -582,6 +577,7 @@ function FAST_ReadConfig_DDEF(File::Union{String,Nothing})::Dict{String,Any}
             FAST_Log_DDEF("FAST", "READ_CONFIG_WARN", "Binary signature detected in JSON field. Aborting parse.", "WARN")
             return Dict{String,Any}()
         end
+        
         return JSON3.read(js_val, Dict{String,Any})
     catch e
         FAST_Log_DDEF("FAST", "READ_CONFIG_FAIL", "Error reading config from $File: $e", "WARN")
@@ -604,17 +600,17 @@ function FAST_UpdateConfig_DDEF(File::Union{String,Nothing}, Updates::Dict)::Boo
         end
 
         clean_config = FAST_SanitiseJson_DDEF(current_config)
-        json_str = JSON3.write(clean_config)
+        json_str     = JSON3.write(clean_config)
 
         config_df = DataFrame(
-            "PARAMETER" => ["MasterConfig"],
+            "PARAMETER"  => ["MasterConfig"],
             "VALUE_JSON" => [json_str],
             "UPDATED_AT" => [string(now())],
         )
 
         FAST_SafeExcelWrite_DDEF(File, Dict(C.SHEET_CONFIG => config_df))
-
         FAST_Log_DDEF("FAST", "CONFIG_UPDATED", "Updated $(length(Updates)) keys in MasterConfig", "OK")
+        
         return true
     catch e
         FAST_Log_DDEF("FAST", "UPDATE_CONFIG_FAIL", sprint(showerror, e, catch_backtrace()), "FAIL")
@@ -629,7 +625,7 @@ Audit check for CPU concurrency status. Returns (Count, Theme_Colour, Status_Mes
 function FAST_GetThreadInfo_DDEF()::Tuple{Int,String,String}
     n::Int = Threads.nthreads()
     # High-performance status reporting
-    n > 1 ? (n, "success", "$n Threads [OPTIMAL]") : (n, "warning", "1 Thread [SUB-OPTIMAL]")
+    n > 1 ? (n, "var(--colour-chr4-tongre)", "$n Threads [OPTIMAL]") : (n, "var(--colour-chr5-hueyel)", "1 Thread [SUB-OPTIMAL]")
 end
 
 # --------------------------------------------------------------------------------------
@@ -646,9 +642,11 @@ Tries to acquire a named operation lock without blocking.
 """
 function FAST_AcquireLock_DDEF(op_name::Union{String,Nothing})::Bool
     (isnothing(op_name) || isempty(op_name)) && return false
+    
     lock(FAST_LockGuard_DDEC) do
         haskey(FAST_OperationLocks_DDEC, op_name) || (FAST_OperationLocks_DDEC[op_name] = ReentrantLock())
     end
+    
     lk = FAST_OperationLocks_DDEC[op_name]
     return trylock(lk)
 end
@@ -660,8 +658,11 @@ Releases the named operation lock safely.
 function FAST_ReleaseLock_DDEF(op_name::Union{String,Nothing})::Nothing
     (isnothing(op_name) || isempty(op_name)) && return nothing
     haskey(FAST_OperationLocks_DDEC, op_name) || return
+    
     lk = FAST_OperationLocks_DDEC[op_name]
     islocked(lk) && unlock(lk)
+    
+    return nothing
 end
 
 # --------------------------------------------------------------------------------------
@@ -670,7 +671,7 @@ end
 
 # Thread-safe in-memory DataFrame cache
 const FAST_CacheStore_DDEC = Dict{String,DataFrame}()
-const FAST_CacheLock_DDEC = ReentrantLock()
+const FAST_CacheLock_DDEC  = ReentrantLock()
 
 """
     FAST_CacheRead_DDEF(key) -> Union{DataFrame, Nothing}
@@ -678,6 +679,7 @@ Thread-safe read from the in-memory cache.
 """
 function FAST_CacheRead_DDEF(key::Union{String,Nothing})::Union{DataFrame,Nothing}
     (isnothing(key) || isempty(key)) && return nothing
+    
     lock(FAST_CacheLock_DDEC) do
         haskey(FAST_CacheStore_DDEC, key) ? copy(FAST_CacheStore_DDEC[key]) : nothing
     end
@@ -689,9 +691,11 @@ Thread-safe write to the in-memory cache.
 """
 function FAST_CacheWrite_DDEF(key::Union{String,Nothing}, df::DataFrame)::Nothing
     (isnothing(key) || isempty(key)) && return nothing
+    
     lock(FAST_CacheLock_DDEC) do
         FAST_CacheStore_DDEC[key] = copy(df)
     end
+    
     FAST_Log_DDEF("CACHE", "WRITE", "Cached '$(key)' ($(nrow(df)) rows)", "OK")
 end
 
@@ -710,6 +714,8 @@ function FAST_CacheEvict_DDEF(key::Union{String,Nothing}="")::Nothing
             FAST_Log_DDEF("CACHE", "EVICT", "Evicted '$key'", "INFO")
         end
     end
+    
+    return nothing
 end
 
 # --------------------------------------------------------------------------------------
@@ -748,8 +754,9 @@ Formats elapsed seconds into a human-readable string (ms, s, min).
 """
 function FAST_FormatDuration_DDEF(seconds::Float64)::String
     seconds < 0.001 && return "<1ms"
-    seconds < 1.0 && return @sprintf("%.0fms", seconds * 1000)
-    seconds < 60.0 && return @sprintf("%.2fs", seconds)
+    seconds < 1.0   && return @sprintf("%.0fms", seconds * 1000)
+    seconds < 60.0  && return @sprintf("%.2fs", seconds)
+    
     minutes = seconds / 60.0
     return @sprintf("%.1fmin", minutes)
 end
@@ -774,8 +781,9 @@ function FAST_ValidateDataFrame_DDEF(df::DataFrame, RequiredCols::Vector{String}
     for col in names(df)
         T = eltype(df[!, col])
         if T <: Union{Missing,Number} || T <: Number
-            vals = collect(skipmissing(df[!, col]))
+            vals         = collect(skipmissing(df[!, col]))
             numeric_vals = filter(v -> v isa Number, vals)
+            
             if !isempty(numeric_vals)
                 nan_count = count(v -> v isa AbstractFloat && isnan(v), numeric_vals)
                 if nan_count == length(numeric_vals)
@@ -811,7 +819,7 @@ function FAST_SystemAudit_DDEF()::String
     end
 
     # 2. Memory State
-    free_mem = Sys.free_memory() / 1024^3 # GB
+    free_mem  = Sys.free_memory() / 1024^3 # GB
     total_mem = Sys.total_memory() / 1024^3 # GB
     @printf(io, "[MEMORY] Utilization: %.2f / %.2f GB Free\n", free_mem, total_mem)
 
@@ -827,6 +835,7 @@ function FAST_SystemAudit_DDEF()::String
 
     write(io, "-------------------------------------\n")
     write(io, "System Status: MISSION READY")
+    
     return String(take!(io))
 end
 
@@ -858,7 +867,7 @@ function FAST_ScientificAudit_DDEF()::String
         ("Lib_Vise -> Lib_Arts", :VISE_GenerateScientificReport_DDEF)
     ]
     for (label, sym) in bridges
-        parts = split(label, " -> ")
+        parts   = split(label, " -> ")
         mod_sym = Symbol(parts[1])
         if isdefined(Main, mod_sym) && isdefined(getfield(Main, mod_sym), sym)
             write(io, "- [LINKED] Bridge **$label** active.\n")
