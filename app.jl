@@ -218,11 +218,10 @@ app.layout = html_div([
         dbc_modalbody([
             dbc_tabs([
                 dbc_tab([
-                    html_div(html_pre(id="modal-diagnostics-sys-content", 
-                        style=Dict("whiteSpace" => "pre-wrap", "fontSize" => "0.85rem")), className="p-3")
+                    html_div(id="modal-diagnostics-sys-content", className="p-3 d-flex flex-column justify-content-center")
                 ], label="System Health", tab_id="tab-sys"),
                 dbc_tab([
-                    html_div(dcc_markdown(id="modal-diagnostics-sci-content"), className="p-3")
+                    html_div(id="modal-diagnostics-sci-content", className="p-3 d-flex flex-column justify-content-center")
                 ], label="Scientific Integrity", tab_id="tab-sci"),
             ], id="modal-diagnostics-tabs", active_tab="tab-sys")
         ]),
@@ -409,7 +408,7 @@ callback!(app,
 
     if trig == "btn-open-sys-audit"
         if !isnothing(n_open) && n_open > 0
-            return true, Sys_Fast.FAST_SystemAudit_DDEF(), Sys_Fast.FAST_ScientificAudit_DDEF()
+            return true, Gui_Base.BASE_SystemAuditUI_DDEF(), Gui_Base.BASE_ScientificAuditUI_DDEF()
         end
     elseif trig == "btn-close-diagnostics"
         return false, Dash.no_update(), Dash.no_update()

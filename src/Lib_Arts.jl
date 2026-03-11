@@ -347,24 +347,7 @@ end
 Internal evaluator for plotting grids (stateless design matrix expansion).
 """
 function ARTS_Predict_DDEF(Model, X)
-    # Handle Surrogate Models (Kriging/RBF) via injected closure
-    if haskey(Model, "_Closure") && !isnothing(Model["_Closure"])
-        surr  = Model["_Closure"]
-        N_new = size(X, 1)
-        # Fixed 3-variable system
-        preds = zeros(N_new)
-        for i in 1:N_new
-            preds[i] = surr(ntuple(d -> X[i, d], 3))
-        end
-        return preds
-    end
-
     ModelType = get(Model, "ModelType", "quadratic")
-
-    # Legacy Surrogate check (fallback)
-    if ModelType == "kriging" || ModelType == "rbf"
-        return fill(NaN, size(X, 1))
-    end
 
     Beta = Model["Coefs"]
     N    = size(X, 1)

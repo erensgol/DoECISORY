@@ -45,7 +45,7 @@ function LENS_Layout_DDEF()
                 dbc_row(dbc_col(BASE_GlassPanel_DDEF([html_i(className="fas fa-cogs me-2"), "ANALYSIS CONFIGURATION"], [
                     # Data Ingestion
                     BASE_SidebarHeader_DDEF("DATA ACQUISITION", icon="fas fa-database"),
-                    BASE_Upload_DDEF("lens-upload-data", "Import Dataset", "fas fa-file-import"),
+                    BASE_Upload_DDEF("lens-upload-data", "Import Dataset", "fas fa-file-import", class="w-100 mb-2 fw-bold pulse-green"),
                     BASE_Loading_DDEF("lens-upload-status", "No Data Source"; class="glass-loading-status mb-2"),
                     BASE_Separator_DDEF(),
 
@@ -89,7 +89,7 @@ function LENS_Layout_DDEF()
                     # Main Operations
                     BASE_ActionButton_DDEF("lens-btn-view-report",    "Summary",    "fas fa-file-alt"),
                     BASE_ActionButton_DDEF("lens-btn-next-phase",    "Next Phase", "fas fa-forward"),
-                    BASE_NextButton_DDEF("lens-btn-run",            "Run Analysis"),
+                    BASE_NextButton_DDEF("lens-btn-run",            "Run Analysis", disabled=true),
 
                     dcc_download(id="lens-download-phase"),
                     dcc_download(id="lens-download-analysis"),
@@ -210,7 +210,7 @@ function LENS_Layout_DDEF()
             dbc_row([
                 dbc_col(dbc_button([html_i(className="fas fa-chevron-left me-2"), "Back"], id="lens-lead-btn-back", outline=false, size="sm", className="w-100 colourgl-neut"), xs=12, md=3),
                 dbc_col(dbc_button([html_i(className="fas fa-times me-2"),        "Cancel"], id="lens-lead-btn-cancel", outline=false, size="sm", className="w-100 colourgl-c0hr"), xs=12, md=3),
-                dbc_col(dbc_button(["Next: Adjust Design ", html_i(className="fas fa-chevron-right ms-2")], id="lens-lead-btn-confirm", className="w-100 colourgl-c1sm", disabled=true, size="sm"), xs=12, md=6),
+                dbc_col(dbc_button(["Next: Adjust Design ", html_i(className="fas fa-chevron-right ms-2")], id="lens-lead-btn-confirm", className="w-100 colourgl-c1sm pulse-purple", disabled=true, size="sm"), xs=12, md=6),
             ], className="w-100 g-2"); size="xl", close_button=false, backdrop="static", keyboard=false),
 
         # PHASE WIZARD STEP 3: Preview & Adjustment
@@ -297,6 +297,7 @@ function LENS_RegisterCallbacks_DDEF(app)
     callback!(app,
         Output("lens-dd-phase",       "options"),
         Output("lens-upload-status",  "children"),
+        Output("lens-upload-data-btn", "className"),
         Output("lens-dd-phase",       "value"),
         [Output("lens-goal-name-$i",   "value") for i in 1:3]...,
         [Output("lens-goal-min-$i",    "value") for i in 1:3]...,
@@ -316,7 +317,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         path = ""
         try  # Error guard for sync callback
             (isnothing(active_cont) || active_cont == "") &&
-                return [], "No Data Source", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", "", ""
+                return [], "No Data Source", "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", "", ""
 
             Sys_Fast.FAST_Log_DDEF("LENS", "Sync", "Synchronising from Master Vault...", "INFO")
             path = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
@@ -324,14 +325,14 @@ function LENS_RegisterCallbacks_DDEF(app)
             ext = lowercase(splitext(path)[2])
             if ext != ".xlsx" && ext != ".xlsm"
                 Sys_Fast.FAST_CleanTransient_DDEF(path)
-                return [], html_span("❌ This is not a valid Excel file! (Please upload .xlsx)", className="small colourtx-c0hr"), nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", "", ""
+                return [], html_span("❌ This is not a valid Excel file! (Please upload .xlsx)", className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", "", ""
             end
 
             df = Sys_Fast.FAST_ReadExcel_DDEF(path, C.SHEET_DATA)
             isempty(df) && (df = Sys_Fast.FAST_ReadExcel_DDEF(path, "DATA_RECORDS"))
 
             if isempty(df)
-                return [], html_span("❌ No Valid Data Sheet", className="small colourtx-c0hr"), nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", "", ""
+                return [], html_span("❌ No Valid Data Sheet", className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", "", ""
             end
 
             col_phase = Symbol(C.COL_PHASE)
@@ -377,18 +378,15 @@ function LENS_RegisterCallbacks_DDEF(app)
                 model_val  = "Linear"
             elseif method == "BB15" || method == "DOPT15"
                 model_opts = [
-                    Dict("label" => "Quadratic",           "value" => "Quadratic"),
-                    Dict("label" => "Kriging (Surrogate)", "value" => "kriging"),
-                    Dict("label" => "RBF (Surrogate)",     "value" => "rbf")
+                    Dict("label" => "Linear",    "value" => "Linear"),
+                    Dict("label" => "Quadratic", "value" => "Quadratic"),
                 ]
                 model_val  = "Quadratic"
             else
                 model_opts = [
-                    Dict("label" => "Automatic",           "value" => "Auto"),
-                    Dict("label" => "Linear",              "value" => "Linear"),
-                    Dict("label" => "Quadratic",           "value" => "Quadratic"),
-                    Dict("label" => "Kriging (Surrogate)", "value" => "kriging"),
-                    Dict("label" => "RBF (Surrogate)",     "value" => "rbf")
+                    Dict("label" => "Automatic", "value" => "Auto"),
+                    Dict("label" => "Linear",    "value" => "Linear"),
+                    Dict("label" => "Quadratic", "value" => "Quadratic"),
                 ]
                 model_val  = "Auto"
             end
@@ -426,6 +424,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             return (
                 phases,
                 html_span("✅ System Synced", className="small fw-bold", style=Dict("color" => "var(--colour-chr4-tongre)")),
+                "w-100 mb-2 fw-bold",
                 isempty(phases) ? nothing : phases[end]["value"],
                 goals_name...,
                 goals_min...,
@@ -443,7 +442,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         catch e  # Surface sync errors to status area
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "SYNC_FAIL", bt, "FAIL")
-            return [], html_span("❌ Sync Error: $(first(string(e), 120))", className="small colourtx-c0hr"),
+            return [], html_span("❌ Sync Error: $(first(string(e), 120))", className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green",
                 nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", "", ""
         finally
             # Guaranteed temp file cleanup
@@ -452,6 +451,14 @@ function LENS_RegisterCallbacks_DDEF(app)
             catch
             end
         end
+    end
+
+    # --- 1B. UI: PROTECT RUN BUTTON ---
+    callback!(app,
+        Output("lens-btn-run", "disabled"),
+        Input("store-master-vault", "data")
+    ) do mv
+        return isnothing(mv) || mv == ""
     end
 
     # --- 2. ENGINE: RUN GLM ANALYSIS & OPTIMISATION ---
@@ -515,7 +522,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         (n === nothing || n == 0) && return Dash.no_update(), Dash.no_update(), "", true, true, "", Dash.no_update(), Dash.no_update(), "", "", true, true, true
         isnothing(base64_file) &&
-            return Dash.no_update(), Dash.no_update(), html_span("Please upload data first.", className="colourtx-c5hy"), true, true, "", Dash.no_update(), Dash.no_update(), "", "", true, true, true
+            return Dash.no_update(), Dash.no_update(), html_span("Please upload an Excel file first.", className="colourtx-c5hy"), true, true, "", Dash.no_update(), Dash.no_update(), "", "", true, true, true
 
         # Race condition lock: reject concurrent analysis requests
         if !Sys_Fast.FAST_AcquireLock_DDEF("VISE_ANALYSIS")
@@ -526,9 +533,10 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
 
         # Create temp file BEFORE try so finally can always clean it
-        path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
-
-        try  # Error guard for analysis engine
+        path = ""
+        try
+            isnothing(base64_file) && return (ntuple(_ -> Dash.no_update(), 2)..., html_span("Please upload an Excel file first.", className="colourtx-c5hy"), ntuple(_ -> Dash.no_update(), 10)...)
+            path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
             Sys_Fast.FAST_Log_DDEF("LENS", "Process", "Starting GLM Analysis (Phase: $phase)...", "WAIT")
 
             opts = Dict{String,Any}(
@@ -780,8 +788,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         catch e  # Surface analysis errors to UI
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "ANALYSIS_CRASH", bt, "FAIL")
-            return [], "",
- html_span("❌ Critical Error: $(first(string(e), 150))", className="fw-bold colourtx-c0hr"), true, true,"", Dash.no_update(), Dash.no_update(),"","", true, true, true
+            return [], "", html_span("❌ Analysis Guard: Process aborted due to a technical exception.", className="fw-bold colourtx-c0hr"), true, true,"", Dash.no_update(), Dash.no_update(),"","", true, true, true
         finally
             # Guaranteed temp file cleanup (prevents disk leak)
             Sys_Fast.FAST_CleanTransient_DDEF(path)
@@ -947,12 +954,16 @@ function LENS_RegisterCallbacks_DDEF(app)
     callback!(app,
         Output("lens-download-report-file", "data"),
         Input("lens-btn-download-txt", "n_clicks"),
+        Input("lens-btn-download-report", "n_clicks"),
         State("lens-store-report",     "data"),
         State("lens-input-project",    "value"),
         State("lens-dd-phase",         "value"),
         prevent_initial_call=true
-    ) do n, report, project, phase
-        (isnothing(n) || n == 0 || isnothing(report) || isempty(report)) && return Dash.no_update()
+    ) do n1, n2, report, project, phase
+        if (isnothing(n1) || n1 == 0) && (isnothing(n2) || n2 == 0) && (isnothing(report) || isempty(report))
+            return Dash.no_update()
+        end
+        (isnothing(report) || isempty(report)) && return Dash.no_update()
 
         proj  = isnothing(project) ? "Daisho" : project
         ph    = isnothing(phase)   ? "Phase1" : phase
@@ -967,7 +978,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         Input("lens-table-candidates", "selected_rows")
     ) do s
         is_disabled = isnothing(s) || isempty(s)
-        btn_class   = is_disabled ? "w-100 colourgl-c1sm" : "w-100 colourgl-c4tg"
+        btn_class   = is_disabled ? "w-100 colourgl-c1sm pulse-purple" : "w-100 colourgl-c4tg"
         return is_disabled, btn_class
     end
 
@@ -1280,7 +1291,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         try
             project = isnothing(proj) ? "Daisho" : proj
-            ph      = isnothing(phase) ? "Phase1" : ph
+            ph      = isnothing(phase) ? "Phase1" : phase
 
             temp_uuid  = replace(string(Base.UUID(rand(UInt128))), "-" => "")
             export_dir = joinpath(tempdir(), "DaishoRender_$temp_uuid")

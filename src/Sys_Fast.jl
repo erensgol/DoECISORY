@@ -26,8 +26,8 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
     FAST_GetComputeThreads_DDEF,
     FAST_SafeExcelWrite_DDEF, FAST_CleanTransient_DDEF,
     FAST_FormatDuration_DDEF, FAST_ValidateDataFrame_DDEF,
-    FAST_SystemAudit_DDEF, FAST_GetSystemQuote_DDEF,
-    FAST_ScientificAudit_DDEF, FAST_RoundCols_DDEF!,
+    FAST_GetSystemQuote_DDEF,
+    FAST_RoundCols_DDEF!,
     FAST_InitialiseWorkforce_DDEF, FAST_CleanWorkforce_DDEF,
     FAST_Data_DDEC
 
@@ -389,7 +389,7 @@ function FAST_SanitiseJson_DDEF(x::Any)::Any
         return Dict(string(k) => FAST_SanitiseJson_DDEF(v) for (k, v) in x)
     elseif x isa AbstractMatrix
         # Convert matrix to nested vector (row-major) for JSON compatibility
-        return [FAST_SanitiseJson_DDEF(x[i, :]) for i in 1:size(x, 1)]
+        return [FAST_SanitiseJson_DDEF(x[i, :]) for i in axes(x, 1)]
     elseif x isa AbstractVector
         return map(FAST_SanitiseJson_DDEF, x)
     elseif x isa Union{Tuple,NamedTuple,Pair}
@@ -798,97 +798,7 @@ function FAST_ValidateDataFrame_DDEF(df::DataFrame, RequiredCols::Vector{String}
     return (isempty(issues), issues)
 end
 
-"""
-    FAST_SystemAudit_DDEF() -> String
-Generates a deep-level system health report for academic standards.
-"""
-function FAST_SystemAudit_DDEF()::String
-    io = IOBuffer()
-    write(io, "=== DAISHODOE SYSTEM AUDIT REPORT ===\n")
-    write(io, "Timestamp: $(now())\n")
-    write(io, "Engine Version: $(FAST_Data_DDEC.VERSION)\n")
-    write(io, "-------------------------------------\n")
 
-    # 1. Computing Resources
-    nt = Threads.nthreads()
-    write(io, "[COMPUTE] Thread Count: $nt\n")
-    if nt == 1
-        write(io, "![ALERT] Running on single thread. Global optimisation may be decelerated.\n")
-    else
-        write(io, "[OK] Parallel processing active across $nt threads.\n")
-    end
-
-    # 2. Memory State
-    free_mem  = Sys.free_memory() / 1024^3 # GB
-    total_mem = Sys.total_memory() / 1024^3 # GB
-    @printf(io, "[MEMORY] Utilization: %.2f / %.2f GB Free\n", free_mem, total_mem)
-
-    # 3. Cache Health
-    lock(FAST_CacheLock_DDEC) do
-        write(io, "[CACHE] Active Slots: $(length(FAST_CacheStore_DDEC))\n")
-    end
-
-    # 4. Critical Locks
-    lock(FAST_LockGuard_DDEC) do
-        write(io, "[LOCKS] Registry Status: $(length(FAST_OperationLocks_DDEC)) registered operations.\n")
-    end
-
-    write(io, "-------------------------------------\n")
-    write(io, "System Status: MISSION READY")
-    
-    return String(take!(io))
-end
-
-"""
-    FAST_ScientificAudit_DDEF() -> String
-Comprehensive academic health check for module connectivity and validation.
-"""
-function FAST_ScientificAudit_DDEF()::String
-    io = IOBuffer()
-    write(io, "### [DAISHODOE] SCIENTIFIC INTEGRITY CERTIFICATE\n")
-    write(io, "Timestamp: $(now())\n")
-    write(io, "---\n")
-
-    # 1. Check Module Presence in Main
-    modules = [:Sys_Fast, :Lib_Core, :Lib_Mole, :Lib_Vise, :Lib_Arts]
-    for m in modules
-        if isdefined(Main, m)
-            write(io, "- [OK] Module **$m** correctly integrated into global scope.\n")
-        else
-            write(io, "- [FAIL] Module **$m** missing or improperly scoped.\n")
-        end
-    end
-
-    # 2. Check Bridges
-    write(io, "\n#### Cross-Module Connectivity (Bridges):\n")
-    bridges = [
-        ("Lib_Core -> Lib_Vise", :CORE_D_Efficiency_DDEF),
-        ("Lib_Mole -> Lib_Core", :MOLE_ValidateDesignFeasibility_DDEF),
-        ("Lib_Vise -> Lib_Arts", :VISE_GenerateScientificReport_DDEF)
-    ]
-    for (label, sym) in bridges
-        parts   = split(label, " -> ")
-        mod_sym = Symbol(parts[1])
-        if isdefined(Main, mod_sym) && isdefined(getfield(Main, mod_sym), sym)
-            write(io, "- [LINKED] Bridge **$label** active.\n")
-        else
-            write(io, "- [BROKEN] Bridge **$label** inactive.\n")
-        end
-    end
-
-    # 3. Efficiency Metrics Check
-    write(io, "\n#### Mathematical Health Metrics:\n")
-    if isdefined(Main, :Lib_Core) && isdefined(Main.Lib_Core, :CORE_CalcDesignMetrics_DDEF)
-        write(io, "- [OK] Advanced Efficiency Engine (D, A, G, I) detected.\n")
-    else
-        write(io, "- [ERR] Missing advanced design metrics module.\n")
-    end
-
-    write(io, "---\n")
-    write(io, "*Final Integrity Check: PASSED. Project ready for academic submission.*")
-
-    return String(take!(io))
-end
 
 """
     FAST_GetSystemQuote_DDEF() -> String

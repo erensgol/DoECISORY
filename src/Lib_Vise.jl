@@ -22,13 +22,13 @@ using Main.Lib_Arts
 using Main.Lib_Mole
 using Main.Lib_Core
 using Main.Sys_Flow
-using Surrogates
+
 using HypothesisTests
 
 export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
     VISE_Predict_DDEF, VISE_Execute_DDEF, VISE_CrossValidate_DDEF,
     VISE_GetTermNames_DDEF, VISE_ClampIndex_DDEF,
-    VISE_TrainSurrogate_DDEF, VISE_BuildSurrogateClosure_DDEF,
+
     VISE_SelectBestModel_DDEF, VISE_CalcMetrics_DDEF,
     VISE_SensitivityAnalysis_DDEF, VISE_GenerateScientificReport_DDEF,
     VISE_CalcVIF_DDEF, VISE_LackOfFit_DDEF, VISE_GenerateAnovaTable_DDEF,
@@ -69,7 +69,7 @@ function VISE_ExpandDesign_DDEF(X::AbstractMatrix{Float64}, ModelType::String)
     N      = size(X, 1)
     K      = 3 # Fixed 3-variable system
     m_type = lowercase(ModelType)
-    (occursin("kriging", m_type) || occursin("rbf", m_type)) && return X
+
     occursin("linear", m_type) && return hcat(ones(N), X)
 
     combos  = [(1, 2), (1, 3), (2, 3)] # combinations(1:3, 2)
@@ -96,157 +96,22 @@ function VISE_ExpandDesign_DDEF(X::AbstractMatrix{Float64}, ModelType::String)
     return Xd
 end
 
-# --------------------------------------------------------------------------------------
-# --- SURROGATES.JL STATELESS WRAPPERS ---
-# --------------------------------------------------------------------------------------
-
-"""
-    VISE_TrainSurrogate_DDEF(X_Raw, Y, ModelType; [InNames]) -> Dict
-Extracts training data required for on-the-fly execution of Surrogate models (Kriging/RBF).
-"""
-function VISE_TrainSurrogate_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, ModelType::String; InNames::Vector{String}=String[])
-    N  = size(X_Raw, 1)
-    K  = 3 # Fixed 3-variable system
-    lb = vec(minimum(X_Raw; dims=1))
-    ub = vec(maximum(X_Raw; dims=1))
-
-    # Guard bounds for zero-variance limits
-    for i in 1:K
-        if abs(lb[i] - ub[i]) < 1e-6
-            lb[i] -= 1e-3
-            ub[i] += 1e-3
-        end
-    end
-
-    TNames = isempty(InNames) ? ["Term $i" for i in 1:K] : InNames
-
-    # --- LOO Cross-Validation for real Q2 ---
-    # Surrogates are exact interpolators (R2=1), so we need CV to see real error
-    q2_loo = 0.0
-    try
-        total_var = var(Y) * (N - 1)
-        if N > 5 && total_var > 1e-9
-            sq_err = 0.0
-            for i in 1:N
-                # Mask i-th point
-                indices = deleteat!(collect(1:N), i)
-                x_sub   = X_Raw[indices, :]
-                y_sub   = Y[indices]
-                
-                # Simple build/predict for LOO
-                sub_model = (lowercase(ModelType) == "kriging") ? 
-                    Kriging([ntuple(j -> x_sub[r, j], 3) for r in 1:(N-1)], y_sub, lb, ub) :
-                    RadialBasis([ntuple(j -> x_sub[r, j], 3) for r in 1:(N-1)], y_sub, lb, ub)
-                
-                pred    = sub_model(ntuple(j -> X_Raw[i, j], 3))
-                sq_err += (Y[i] - pred)^2
-            end
-            q2_loo = max(0.0, 1.0 - (sq_err / total_var))
-        end
-    catch
-        q2_loo = 0.5 # Safe fallback if CV fails
-    end
-
-    # Surrogate models (Kriging/RBF) are exact interpolators (R2=1.0)
-    return Dict(
-        "Status"    => "OK",
-        "ModelType" => ModelType,
-        "X_Train"   => X_Raw,
-        "Y_Train"   => Y,
-        "LB"        => lb,
-        "UB"        => ub,
-        "Coefs"     => zeros(K),
-        "TermNames" => TNames,
-        "R2"        => 1.0,               # Actual R2 for interpolator
-        "R2_Adj"    => 1.0,
-        "Q2"        => q2_loo,           # Real predictive metric
-        "RMSE"      => 0.0,
-        "F_Stat"    => NaN,
-        "P_Value"   => NaN,
-        "P_Coefs"   => fill(NaN, K),
-        "SE_Coefs"  => fill(NaN, K),
-        "t_Stats"   => fill(NaN, K),
-        "VIFs"      => fill(NaN, K),
-        "N_Samples" => N
-    )
-end
-
-"""
-    VISE_BuildSurrogateClosure_DDEF(Model::Dict)
-Reconstructs Surrogates.jl struct from stateless dictionary for prediction.
-"""
-function VISE_BuildSurrogateClosure_DDEF(Model::Dict)
-    X_mat = convert(Matrix{Float64}, Model["X_Train"])
-    Y_vec = convert(Vector{Float64}, Model["Y_Train"])
-    lb    = convert(Vector{Float64}, Model["LB"])
-    ub    = convert(Vector{Float64}, Model["UB"])
-
-    N = size(X_mat, 1)
-    K = 3 # Fixed 3-variable system
-
-    # --- Pre-processing: Average Responses for Duplicate Inputs ---
-    # Surrogates.jl models (Kriging/RBF) become singular if given duplicate coordinates.
-    # We identify unique points and average the Y values for those duplicates.
-    unique_points = Dict{NTuple{3,Float64}, Vector{Float64}}()
-    for i in 1:N
-        pt = ntuple(j -> X_mat[i, j], 3)
-        if haskey(unique_points, pt)
-            push!(unique_points[pt], Y_vec[i])
-        else
-            unique_points[pt] = [Y_vec[i]]
-        end
-    end
-
-    x_final = collect(keys(unique_points))
-    y_final = [mean(unique_points[pt]) for pt in x_final]
-    
-    m_type = lowercase(get(Model, "ModelType", ""))
-
-    try
-        if m_type == "kriging"
-            return Kriging(x_final, y_final, lb, ub)
-        else
-            # RadialBasis default is linearRadial
-            return RadialBasis(x_final, y_final, lb, ub)
-        end
-    catch e
-        Sys_Fast.FAST_Log_DDEF("VISE", "MODELING", "Failed to build surrogate: $e", "FAIL")
-        return (x) -> mean(Y_vec)
-    end
-end
-
 """
     VISE_Predict_DDEF(Model::Dict, X_Raw) -> Vector{Float64}
-Universal prediction gateway for both OLS and Surrogate models.
+Universal prediction gateway for OLS models (Linear / Quadratic).
 """
-function VISE_Predict_DDEF(Model::Dict, X_Raw::Any)
+function VISE_Predict_DDEF(Model::AbstractDict, X_Raw::Any)
     # Ensure Matrix format
     X = (X_Raw isa AbstractMatrix) ? Float64.(collect(X_Raw)) : (X_Raw isa AbstractVector && !isempty(X_Raw) && X_Raw[1] isa AbstractVector) ? 
         Float64.(reduce(vcat, transpose.(collect.(X_Raw)))) : (X_Raw isa AbstractVector && length(X_Raw) % 3 == 0) ? 
         reshape(Float64.(collect(X_Raw)), :, 3) : X_Raw
     
-    n      = size(X, 1)
     m_type = lowercase(get(Model, "ModelType", "linear"))
 
-    if occursin("kriging", m_type) || occursin("rbf", m_type)
-        # Check if closure is available and valid
-        closure = get(Model, "_Closure", nothing)
-        if isnothing(closure)
-            closure = VISE_BuildSurrogateClosure_DDEF(Model)
-        end
-        
-        preds = zeros(n)
-        for i in 1:n
-            # Ensure we wrap coordinate in tuple as expected by Surrogates.jl
-            preds[i] = closure(ntuple(j -> X[i, j], 3))
-        end
-        return preds
-    else
-        # Standard OLS Prediction
-        Xd   = VISE_ExpandDesign_DDEF(X, m_type)
-        Beta = get(Model, "Coefs", zeros(size(Xd, 2)))
-        return Xd * Beta
-    end
+    # Standard OLS Prediction
+    Xd   = VISE_ExpandDesign_DDEF(X, m_type)
+    Beta = collect(Float64, get(Model, "Coefs", zeros(size(Xd, 2))))
+    return Xd * Beta
 end
 
 # --------------------------------------------------------------------------------------
@@ -437,7 +302,7 @@ end
     VISE_GenerateAnovaTable_DDEF(Model::Dict, X::AbstractMatrix, Y::AbstractVector) -> DataFrame
 Constructs a comprehensive ANOVA table for experimental validation.
 """
-function VISE_GenerateAnovaTable_DDEF(Model::Dict, X_Raw::Any, Y_Raw::Any)
+function VISE_GenerateAnovaTable_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::Any)
     # Ensure Matrix/Vector format (handles JSON deserialization artifacts)
     X = (X_Raw isa AbstractMatrix) ? Float64.(collect(X_Raw)) : (X_Raw isa AbstractVector && !isempty(X_Raw) && X_Raw[1] isa AbstractVector) ?
         Float64.(reduce(vcat, transpose.(collect.(X_Raw)))) : (X_Raw isa AbstractVector && length(X_Raw) % 3 == 0) ?
@@ -448,17 +313,11 @@ function VISE_GenerateAnovaTable_DDEF(Model::Dict, X_Raw::Any, Y_Raw::Any)
     m_type = lowercase(get(Model, "ModelType", "linear"))
 
     # Calculate p (number of parameters/degrees of freedom)
-    p = 0
-    if occursin("kriging", m_type) || occursin("rbf", m_type)
-        # For surrogates, p effectively equals n as they are exact interpolators
-        p = n
-    else
-        # For OLS, p is derived from the design matrix expansion
-        Xd_temp = VISE_ExpandDesign_DDEF(zeros(1, 3), m_type)
-        p       = size(Xd_temp, 2)
-    end
+    # For OLS, p is derived from the design matrix expansion
+    Xd_temp = VISE_ExpandDesign_DDEF(zeros(1, 3), m_type)
+    p       = size(Xd_temp, 2)
 
-    # For Surrogates and OLS alike, we now use VISE_Predict_DDEF for consistency
+    # Use VISE_Predict_DDEF for consistency
     Y_Pred = VISE_Predict_DDEF(Model, convert(Matrix{Float64}, X))
     Resid  = Y .- Y_Pred
 
@@ -527,16 +386,11 @@ function VISE_GenerateAnovaTable_DDEF(Model::Dict, X_Raw::Any, Y_Raw::Any)
     end
 
     # Model F-Test
-    is_surr = occursin("kriging", m_type) || occursin("rbf", m_type)
     idx_mod = findfirst(==("Model"), sources)
     idx_res = findfirst(==("Residual"), sources)
 
     if !isnothing(idx_mod) && !isnothing(idx_res)
-        if is_surr
-            # For exact surrogates, F and P are not conventionally meaningful
-            df_anova.F[idx_mod] = NaN
-            df_anova.P[idx_mod] = NaN
-        elseif df_anova.MS[idx_res] > 1e-12
+        if df_anova.MS[idx_res] > 1e-12
             f                   = df_anova.MS[idx_mod] / df_anova.MS[idx_res]
             df_anova.F[idx_mod] = round(f; digits=2)
             df_anova.P[idx_mod] = round(1.0 - cdf(FDist(df_anova.df[idx_mod], df_anova.df[idx_res]), f); digits=4)
@@ -547,10 +401,7 @@ function VISE_GenerateAnovaTable_DDEF(Model::Dict, X_Raw::Any, Y_Raw::Any)
     idx_lof = findfirst(==("Lack of Fit"), sources)
     idx_pe = findfirst(==("Pure Error"), sources)
     if !isnothing(idx_lof) && !isnothing(idx_pe)
-        if is_surr
-            df_anova.F[idx_lof] = NaN
-            df_anova.P[idx_lof] = NaN
-        elseif df_anova.MS[idx_pe] > 1e-12
+        if df_anova.MS[idx_pe] > 1e-12
             f_lof               = df_anova.MS[idx_lof] / df_anova.MS[idx_pe]
             df_anova.F[idx_lof] = round(f_lof; digits=2)
             df_anova.P[idx_lof] = round(1.0 - cdf(FDist(df_anova.df[idx_lof], df_anova.df[idx_pe]), f_lof); digits=4)
@@ -564,7 +415,7 @@ end
     VISE_PerformNormalityTest_DDEF(Model::Dict, X::AbstractMatrix, Y::AbstractVector) -> Dict
 Executes Shapiro-Wilk test on model residuals.
 """
-function VISE_PerformNormalityTest_DDEF(Model::Dict, X_Raw::Any, Y_Raw::Any)
+function VISE_PerformNormalityTest_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::Any)
     # Ensure Matrix/Vector format (handles JSON deserialization artifacts)
     X      = (X_Raw isa AbstractMatrix) ? Float64.(collect(X_Raw)) : (X_Raw isa AbstractVector && !isempty(X_Raw) && X_Raw[1] isa AbstractVector) ? 
              Float64.(reduce(vcat, transpose.(collect.(X_Raw)))) : (X_Raw isa AbstractVector && length(X_Raw) % 3 == 0) ? 
@@ -616,7 +467,7 @@ end
     VISE_ExportToExcel_DDEF(FilePath::String, Results::Dict) -> Bool
 Exports all statistical models, ANOVA tables, and metrics to a professional XLSX file.
 """
-function VISE_ExportToExcel_DDEF(FilePath::String, Results::Any)
+function VISE_ExportToExcel_DDEF(FilePath::String, Results::AbstractDict)
     try
         XLSX.openxlsx(FilePath, mode="w") do xf
             # 1. Overview Sheet
@@ -763,27 +614,6 @@ function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector
     return (best_mod, msg)
 end
 
-"""
-    VISE_Predict_DDEF(Model, X_New) -> Vector{Float64}
-Evaluates the fitted model on a new set of data points.
-"""
-function VISE_Predict_DDEF(Model::Dict, X_New::AbstractMatrix{Float64})
-    get(Model, "Status", "FAIL") != "OK" && return zeros(size(X_New, 1))
-
-    m_type = lowercase(get(Model, "ModelType", ""))
-    if m_type == "kriging" || m_type == "rbf"
-        surr       = VISE_BuildSurrogateClosure_DDEF(Model)
-        N_new, Dim = size(X_New)
-        preds      = zeros(N_new)
-        for i in 1:N_new
-            preds[i] = surr(ntuple(d -> X_New[i, d], Dim))
-        end
-        return preds
-    end
-
-    return VISE_ExpandDesign_DDEF(X_New, Model["ModelType"]) * Model["Coefs"]
-end
-
 # --------------------------------------------------------------------------------------
 # --- VALIDATION (CROSS-VALIDATION & Q²) ---
 # --------------------------------------------------------------------------------------
@@ -860,44 +690,23 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
     Predictions  = zeros(Float64, NumPoints, NumModels)
     Active_Flags = falses(NumModels)
 
-    # Surrogate Closures Pre-compiled for Threads
-    surrogate_closures = Any[nothing for _ in 1:NumModels]
-    for m in 1:NumModels
-        m_type = lowercase(get(Models[m], "ModelType", ""))
-        if m_type == "kriging" || m_type == "rbf"
-            surrogate_closures[m] = VISE_BuildSurrogateClosure_DDEF(Models[m])
-        end
-    end
 
     # 3. Parallel Prediction (BLAS + thread-level)
     # Use capped compute thread pool
     Threads.@threads for m in 1:NumModels
         Mod  = Models[m]
-        Goal = Goals[m]
+        Goal = m <= length(Goals) ? Goals[m] : Dict{String, Any}("Type" => "Nominal", "Target" => 0.0, "Weight" => 1.0)
         Mod["Status"] != "OK" && continue
 
         m_type     = lowercase(get(Mod, "ModelType", ""))
         local_pred = zeros(Float64, NumPoints)
 
-        if m_type == "kriging" || m_type == "rbf"
-            surr = surrogate_closures[m]
-            if isnothing(surr)
-                 # Safety fallback if building failed in the first loop
-                 surr = VISE_BuildSurrogateClosure_DDEF(Mod)
-            end
-            
-            @inbounds for i in 1:NumPoints
-                tup           = ntuple(d -> Candidates[i, d], Dim)
-                local_pred[i] = surr(tup)
-            end
+        Beta = collect(Float64, Mod["Coefs"])
+        if get(Mod, "ModelType", "quadratic") != RefType
+            Xd_Local = VISE_ExpandDesign_DDEF(Candidates, Mod["ModelType"])
+            mul!(local_pred, Xd_Local, Beta)
         else
-            Beta = Mod["Coefs"]::Vector{Float64}
-            if get(Mod, "ModelType", "quadratic") != RefType
-                Xd_Local = VISE_ExpandDesign_DDEF(Candidates, Mod["ModelType"])
-                mul!(local_pred, Xd_Local, Beta)
-            else
-                mul!(local_pred, X_Design, Beta)
-            end
+            mul!(local_pred, X_Design, Beta)
         end
         Predictions[:, m] = local_pred
 
@@ -939,7 +748,7 @@ end
     VISE_SensitivityAnalysis_DDEF(Model, X_Point; [delta]) -> Vector{Float64}
 Calculates local sensitivity (gradients) at a specific coordinate.
 """
-function VISE_SensitivityAnalysis_DDEF(Model::Dict, X_Point::Vector{Float64}; delta=1e-4)
+function VISE_SensitivityAnalysis_DDEF(Model::AbstractDict, X_Point::Vector{Float64}; delta=1e-4)
     Dim       = 3 # Fixed constant
     gradients = zeros(3)
 
@@ -961,7 +770,7 @@ end
     VISE_GenerateScientificReport_DDEF(Res) -> String
 Generates high-fidelity academic compendium following rigorous editorial standards.
 """
-function VISE_GenerateScientificReport_DDEF(Res::Dict)
+function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     io = IOBuffer()
     write(io, "## [ACADEMIC COMPENDIUM] DAISHODOE ANALYTICAL REPORT\n")
     write(io, Printf.@sprintf("*Protocol Execution: %s | High-Fidelity Research Tier*\n", Dates.format(now(), "yyyy-mm-dd HH:MM")))
@@ -1040,40 +849,32 @@ function VISE_GenerateScientificReport_DDEF(Res::Dict)
             end
         end
 
-        # Skip OLS-specific diagnostics for Surrogate models
-        is_surrogate = occursin("kriging", lowercase(get(mod, "ModelType", ""))) || occursin("rbf", lowercase(get(mod, "ModelType", "")))
+        # VIF Check
+        write(io, "\n#### III. Orthogonality & Collinearity Diagnostics\n")
+        vifs    = get(mod, "VIFs", Float64[])
+        max_vif = isempty(vifs) ? 0.0 : maximum(vifs)
+        if max_vif > 10.0
+            @printf(io, "- **Multicollinearity Trace**: `WARNING` (Max VIF: %.2f). Parameters show significant correlation.\n", max_vif)
+        elseif max_vif > 0.0
+            @printf(io, "- **Multicollinearity Trace**: `CLEAN` (Max VIF: %.2f). The design preserves factor orthogonality.\n", max_vif)
+        end
 
-        if !is_surrogate
-            # VIF Check
-            write(io, "\n#### III. Orthogonality & Collinearity Diagnostics\n")
-            vifs    = get(mod, "VIFs", Float64[])
-            max_vif = isempty(vifs) ? 0.0 : maximum(vifs)
-            if max_vif > 10.0
-                @printf(io, "- **Multicollinearity Trace**: `WARNING` (Max VIF: %.2f). Parameters show significant correlation.\n", max_vif)
-            elseif max_vif > 0.0
-                @printf(io, "- **Multicollinearity Trace**: `CLEAN` (Max VIF: %.2f). The design preserves factor orthogonality.\n", max_vif)
+        # Driver Analysis
+        write(io, "\n#### IV. Principal Factor Topology\n")
+        coefs   = mod["Coefs"]
+        t_stats = get(mod, "t_Stats", Float64[])
+        if length(coefs) > 1 && !isempty(t_stats)
+            abs_t = abs.(view(t_stats, 2:length(t_stats)))
+            if !all(isnan, abs_t)
+                perm     = sortperm(abs_t; rev=true)
+                top_idx  = perm[1] + 1
+                top_term = mod["TermNames"][top_idx]
+                top_t    = t_stats[top_idx]
+                impact   = top_t > 0 ? "positive (synergistic)" : "inverse (antagonistic)"
+                @printf(io, "- **Primary Driver**: `%s` is the dominant factor (\$t = %.2f\$), manifesting a clear *%s* impact.\n", top_term, top_t, impact)
+            else
+                write(io, "- **Primary Driver**: Statistical inference inconclusive for this model profile.\n")
             end
-
-            # Driver Analysis
-            write(io, "\n#### IV. Principal Factor Topology\n")
-            coefs   = mod["Coefs"]
-            t_stats = get(mod, "t_Stats", Float64[])
-            if length(coefs) > 1 && !isempty(t_stats)
-                abs_t = abs.(view(t_stats, 2:length(t_stats)))
-                if !all(isnan, abs_t)
-                    perm     = sortperm(abs_t; rev=true)
-                    top_idx  = perm[1] + 1
-                    top_term = mod["TermNames"][top_idx]
-                    top_t    = t_stats[top_idx]
-                    impact   = top_t > 0 ? "positive (synergistic)" : "inverse (antagonistic)"
-                    @printf(io, "- **Primary Driver**: `%s` is the dominant factor (\$t = %.2f\$), manifesting a clear *%s* impact.\n", top_term, top_t, impact)
-                else
-                    write(io, "- **Primary Driver**: Statistical inference inconclusive for this model profile.\n")
-                end
-            end
-        else
-             write(io, "\n#### III. Optimisation Strategy\n")
-             write(io, "- **Surrogate Topology**: Model is based on a non-parametric kernel approach; traditional OLS diagnostics (VIF/t-stats) are not applicable. Sensitivity is calculated via local gradients.\n")
         end
         write(io, "\n")
     end
@@ -1265,17 +1066,14 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     # NOTE: InNames and OutNames already computed at line 518-519, no reassignment needed
 
     models = map(eachindex(out_cols)) do m
-        if occursin("kriging", eff_model) || occursin("rbf", eff_model)
-            mod       = VISE_TrainSurrogate_DDEF(X_Clean, view(Y_Clean, :, m), eff_model; InNames)
-            mod["Q2"] = 0.999 # Kriging exactly fits data points
-        elseif lowercase(eff_model) == "auto"
+        if lowercase(eff_model) == "auto"
             mod, tournament_msg = VISE_SelectBestModel_DDEF(X_Clean, view(Y_Clean, :, m), InNames)
             Log("VISE", "TOURNAMENT", "Output $(OutNames[m]): $tournament_msg", "INFO")
         else
             mod       = VISE_Regress_DDEF(X_Clean, view(Y_Clean, :, m), eff_model; InNames)
             mod["Q2"] = VISE_CrossValidate_DDEF(X_Clean, view(Y_Clean, :, m), eff_model)
         end
-        mod["Goal"] = Goals[m]
+        mod["Goal"] = m <= length(Goals) ? Goals[m] : Dict{String, Any}("Type" => "Nominal", "Target" => 0.0, "Weight" => 1.0)
         mod
     end
 
@@ -1538,13 +1336,6 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         Log("VISE", "PERSIST_FAIL", "Failed to save predictions: $e", "WARN")
     end
 
-    # --- Inject Surrogate Closures for Plotting ---
-    for m in models
-        m_type = lowercase(get(m, "ModelType", ""))
-        if m_type == "kriging" || m_type == "rbf"
-            m["_Closure"] = VISE_BuildSurrogateClosure_DDEF(m)
-        end
-    end
 
     graphs = Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, InNames, OutNames,
         Goals, r2_vec, r2_pred_vec, Opts, Leaders_DF)

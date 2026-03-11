@@ -16,6 +16,7 @@ export BASE_StyleHeader_DDEC, BASE_StyleDatatableCell_DDEC, BASE_StyleInlineHead
 export BASE_SafeRows_DDEF, BASE_GetTrigger_DDEF
 export BASE_PageHeader_DDEF, BASE_GlassPanel_DDEF, BASE_DataTable_DDEF, BASE_Modal_DDEF
 export BASE_ConvertThemePlotlyWhite!_DDEF, BASE_MiniVitals_DDEF, BASE_Loading_DDEF
+export BASE_SystemAuditUI_DDEF, BASE_ScientificAuditUI_DDEF
 export BASE_StatusIcon_DDEF, BASE_IconButton_DDEF, BASE_TableHeader_DDEF, BASE_ControlGroup_DDEF, BASE_ActionButton_DDEF
 export BASE_Separator_DDEF, BASE_SidebarHeader_DDEF, BASE_Upload_DDEF, BASE_NextButton_DDEF
 export BASE_BuildIdRow_DDEF, BASE_BuildLevelRow_DDEF, BASE_BuildLimitsRow_DDEF, BASE_BuildGoalRow_DDEF
@@ -340,8 +341,8 @@ end
     BASE_Upload_DDEF(id, label, icon; [multiple]) -> dbc_row
 Standardised upload component for dataset ingestion.
 """
-function BASE_Upload_DDEF(id::String, label::String, icon::String; multiple=false)
-    return dbc_row(dbc_col(dcc_upload(id=id, children=BASE_ActionButton_DDEF(id * "-btn", label, icon), multiple=multiple), xs=12))
+function BASE_Upload_DDEF(id::String, label::String, icon::String; multiple=false, class="w-100 mb-2 fw-bold", kwargs...)
+    return dbc_row(dbc_col(dcc_upload(id=id, children=BASE_ActionButton_DDEF(id * "-btn", label, icon; class=class, kwargs...), multiple=multiple), xs=12))
 end
 
 # --------------------------------------------------------------------------------------
@@ -483,6 +484,96 @@ function BASE_BuildGoalRow_DDEF(i)
                     Dict("label" => "★★★★★", "value" => "5.00"),
                 ], value="1.00", className="form-select form-select-sm border-0 py-0 text-center colourtx-v4dh", style=Dict("width" => "100%", "fontSize" => "12px", "backgroundColor" => "transparent", "boxShadow" => "none")), style=merge(BASE_StyleCell_DDEC, Dict("width" => "15%", "borderBottom" => "none")), className="p-1")
     ])
+end
+
+"""
+    BASE_SystemAuditUI_DDEF() -> html_div
+Generates the system audit UI in the "system health" aesthetic.
+"""
+function BASE_SystemAuditUI_DDEF()
+    nt = Threads.nthreads()
+    thread_colour = nt > 1 ? "var(--colour-chr4-tongre)" : "var(--colour-chr5-hueyel)"
+    thread_stat   = nt > 1 ? "OPTIMAL" : "LIMITED"
+
+    free_mem  = Sys.free_memory() / 1024^3
+    total_mem = Sys.total_memory() / 1024^3
+    mem_str   = "$(round(free_mem, digits=1)) / $(round(total_mem, digits=1)) GB"
+    mem_perc  = (total_mem - free_mem) / total_mem
+    mem_colour = mem_perc > 0.9 ? "var(--colour-chr0-huered)" : "var(--colour-chr4-tongre)"
+
+    cache_len = lock(Sys_Fast.FAST_CacheLock_DDEC) do
+        length(Sys_Fast.FAST_CacheStore_DDEC)
+    end
+    
+    lock_len = lock(Sys_Fast.FAST_LockGuard_DDEC) do
+        length(Sys_Fast.FAST_OperationLocks_DDEC)
+    end
+
+    status_icon = (nt > 1 && mem_perc <= 0.9) ? "fa-check-circle colourtx-c4tg" : "fa-exclamation-triangle colourtx-c5hy"
+    status_text = (nt > 1 && mem_perc <= 0.9) ? "System Status: MISSION READY" : "System Status: SUB-OPTIMAL"
+
+    return dbc_container([
+        html_h6("DAISHODOE SYSTEM HEALTH STATUS", className="fw-bold mb-3 colourtx-c3te text-center", style=Dict("letterSpacing" => "1px")),
+        html_hr(style=BASE_StyleHr_DDEC),
+        dbc_row([
+            dbc_col(BASE_MiniVitals_DDEF("Thread Count", "$nt [$thread_stat]", thread_colour), xs=12, md=3),
+            dbc_col(BASE_MiniVitals_DDEF("Memory Free", mem_str, mem_colour), xs=12, md=3),
+            dbc_col(BASE_MiniVitals_DDEF("Cache Entries", string(cache_len), "var(--colour-chr3-toncya)"), xs=12, md=3),
+            dbc_col(BASE_MiniVitals_DDEF("Active Locks", string(lock_len), "var(--colour-chr3-toncya)"), xs=12, md=3),
+        ], className="g-3 mb-4 mt-2", style=Dict("marginRight" => "0", "marginLeft" => "0")),
+        html_div([
+            html_i(className="fas $status_icon me-2"),
+            status_text
+        ], className="text-center fw-bold colourtx-v4dh mt-2")
+    ], fluid=true, className="overflow-hidden p-0")
+end
+
+"""
+    BASE_ScientificAuditUI_DDEF() -> html_div
+Generates the scientific integrity audit UI in the "system health" aesthetic.
+"""
+function BASE_ScientificAuditUI_DDEF()
+    modules = [:Sys_Fast, :Lib_Core, :Lib_Mole, :Lib_Vise, :Lib_Arts]
+    missing_mods = [m for m in modules if !isdefined(Main, m)]
+
+    bridges = [
+        ("Lib_Core -> Lib_Vise", :CORE_D_Efficiency_DDEF),
+        ("Lib_Mole -> Lib_Core", :MOLE_ValidateDesignFeasibility_DDEF),
+        ("Lib_Vise -> Lib_Arts", :VISE_GenerateScientificReport_DDEF)
+    ]
+    broken_bridges = [label for (label, sym) in bridges if !(isdefined(Main, Symbol(split(label, " -> ")[1])) && isdefined(getfield(Main, Symbol(split(label, " -> ")[1])), sym))]
+
+    has_metrics = isdefined(Main, :Lib_Core) && isdefined(Main.Lib_Core, :CORE_CalcDesignMetrics_DDEF)
+
+    mod_colour = isempty(missing_mods) ? "var(--colour-chr4-tongre)" : "var(--colour-chr0-huered)"
+    bridge_colour = isempty(broken_bridges) ? "var(--colour-chr4-tongre)" : "var(--colour-chr0-huered)"
+    metrics_colour = has_metrics ? "var(--colour-chr4-tongre)" : "var(--colour-chr0-huered)"
+
+    is_passed = isempty(missing_mods) && isempty(broken_bridges) && has_metrics
+
+    # Safely convert to strings before passing to Dash
+    stat_mod = isempty(missing_mods) ? "ALL LOADED" : "MISSING"
+    stat_bridge = isempty(broken_bridges) ? "CONNECTED" : "BROKEN"
+    stat_metrics = has_metrics ? "ACTIVE" : "MISSING"
+
+    icon_cls = is_passed ? "fa-award" : "fa-exclamation-triangle"
+    text_cls = is_passed ? "colourtx-c4tg" : "colourtx-c0hr"
+    
+    msg_text = is_passed ? "Final Integrity Check: PASSED. Project ready for academic submission." : "Final Integrity Check: FAILED. Please resolve missing modules or broken bridges."
+
+    return dbc_container([
+        html_h6("SCIENTIFIC INTEGRITY CERTIFICATE", className="fw-bold mb-3 colourtx-c3te text-center", style=Dict("letterSpacing" => "1px")),
+        html_hr(style=BASE_StyleHr_DDEC),
+        dbc_row([
+            dbc_col(BASE_MiniVitals_DDEF("Core Modules", stat_mod, mod_colour), xs=12, md=4),
+            dbc_col(BASE_MiniVitals_DDEF("Architectural Bridges", stat_bridge, bridge_colour), xs=12, md=4),
+            dbc_col(BASE_MiniVitals_DDEF("Math Metrics", stat_metrics, metrics_colour), xs=12, md=4),
+        ], className="g-3 mb-4 mt-2", style=Dict("marginRight" => "0", "marginLeft" => "0")),
+        html_div([
+            html_i(className="fas $icon_cls me-2 $text_cls"),
+            msg_text
+        ], className="text-center fw-bold colourtx-v4dh mt-2 fst-italic")
+    ], fluid=true, className="overflow-hidden p-0")
 end
 
 end # module Gui_Base
