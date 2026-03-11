@@ -1420,6 +1420,38 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         return new_state, btn_class, false, icon
     end
+
+    # --- 14. DYNAMIC BOUNDS SENSOR ---
+    for i in 1:3
+        callback!(app,
+            Output("lens-goal-target-$i", "style"),
+            Input("lens-goal-target-$i", "value"),
+            Input("lens-goal-min-$i",    "value"),
+            Input("lens-goal-max-$i",    "value"),
+            Input("lens-goal-type-$i",   "value"),
+            prevent_initial_call=true
+        ) do target, min_v, max_v, gtype
+            # Passive style by default
+            style_ok = Dict("borderRadius" => "8px")
+            style_err = Dict("borderRadius" => "8px", "border" => "2px solid var(--colour-huered-c0hr)", "backgroundColor" => "rgba(255, 0, 0, 0.05)")
+
+            (isnothing(target) || gtype == "Maximum" || gtype == "Minimum") && return style_ok
+            
+            # Logic: Target must be strictly between Min and Max for Nominal Type
+            if gtype == "Nominal"
+                t_val = Main.Sys_Fast.FAST_SafeNum_DDEF(target)
+                l_val = Main.Sys_Fast.FAST_SafeNum_DDEF(min_v)
+                u_val = Main.Sys_Fast.FAST_SafeNum_DDEF(max_v)
+
+                if t_val < l_val || t_val > u_val
+                    return style_err
+                end
+            end
+
+            return style_ok
+        end
+    end
+
 end
 
 end # module

@@ -209,10 +209,16 @@ function MOLE_QuickAudit_DDEF(TableData::AbstractVector, Vol::Float64, Conc::Flo
         is_valid = false
     end
 
-    # --- NEW: Unit Validation Audit ---
+    # --- Unit Validation Audit ---
     for r in D["Rows"]
         unit = string(get(r, "Unit", ""))
         mw = Float64(get(r, "MW", 0.0))
+        # --- NEGATIVE MW GUARD ---
+        if mw < 0.0
+            write(io, "![ERROR] Physical Impossibility: Component '$(get(r, "Name", ""))' has negative Molecular Weight ($mw). Calculation aborted.\n")
+            is_valid = false
+        end
+
         if mw > 0.0 && !isempty(unit) && unit != "-" && unit != "%M" && unit != "MR"
             # Try Mass then Concentration
             ok_m, _, _ = MOLE_ValidatePhysicalUnit_DDEF(unit, "Mass")

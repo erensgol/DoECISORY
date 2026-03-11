@@ -202,6 +202,17 @@ function FAST_ReadExcel_DDEF(FilePath::Union{String,Nothing}, SheetName::String)
         end
 
         df = DataFrame(XLSX.readtable(FilePath, SheetName))
+        
+        # --- FORMAT HASH MATCHING ---
+        required = [FAST_Data_DDEC.COL_EXP_ID, FAST_Data_DDEC.COL_PHASE]
+        missing_cols = filter(c -> Symbol(c) ∉ names(df), required)
+        if !isempty(missing_cols)
+            FAST_Log_DDEF("FAST", "FORMAT_FAIL", "Dataset incompatible. Missing required columns: $(join(missing_cols, ", "))", "FAIL")
+            # Return empty but with log, or throw if we want to be aggressive. 
+            # In Daisho's UX, throwing might be better to trigger a clear UI error.
+            throw(ArgumentError("Incompatible Dataset Format: This file does not match the DaishoDoE standard. Required columns '$(join(missing_cols, ", "))' were not found."))
+        end
+
         FAST_Log_DDEF("FAST", "IO_READ", "$(nrow(df)) rows extracted from [$SheetName]", "OK")
         
         return FAST_NormaliseCols_DDEF!(df)

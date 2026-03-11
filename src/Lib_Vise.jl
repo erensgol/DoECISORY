@@ -146,8 +146,14 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
             )
         end
 
-        if n < p
-            throw(ArgumentError("Insufficient data: Number of observations (\$n) is less than model parameters (\$p)."))
+        # --- STRICT DATA THRESHOLDS ---
+        m_type_lower = lowercase(ModelType)
+        if occursin("quadratic", m_type_lower) && n < 15
+            throw(ArgumentError("Insufficient data for Quadratic Model: N=$n. A minimum of 15 records is required for statistical stability."))
+        elseif occursin("linear", m_type_lower) && n < 9
+            throw(ArgumentError("Insufficient data for Linear Model: N=$n. A minimum of 9 records is required for valid inference."))
+        elseif n < p
+            throw(ArgumentError("Insufficient data: Number of observations ($n) is less than model parameters ($p)."))
         end
 
         # Explicit rank check to prevent data manipulation via pseudo-inverse
@@ -569,9 +575,14 @@ function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector
     k      = 3 # Fixed 3-variable system
     p_quad = 10 # 1 + 2*3 + 3*(3-1)/2 = 10
 
-    # Candidates: Linear, Quadratic (if N permits)
-    candidates = ["linear"]
-    n > p_quad + 2 && push!(candidates, "quadratic")
+    # --- STRICT CANDIDATE ELIGIBILITY ---
+    candidates = String[]
+    n >= 9  && push!(candidates, "linear")
+    n >= 15 && push!(candidates, "quadratic")
+
+    if isempty(candidates)
+        return (nothing, "Insufficient data for any model (N=$n). Need at least 9 for Linear, 15 for Quadratic.")
+    end
 
     best_score  = -Inf
     best_mod    = nothing
