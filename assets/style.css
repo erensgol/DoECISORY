@@ -519,7 +519,7 @@ a:hover {
 }
 
 /* Shimmer Effect */
-.glass-loading-status { background: linear-gradient(90deg, var(--colour-val0-purwhi) 25%, var(--colour-val1-lighig) 50%, var(--colour-val0-purwhi) 75%); background-size: 200% 100%; animation: daisho-shimmer 2s ease-in-out 4 forwards; border-radius: var(--rad-sm); padding: 0.6rem 1.2rem; color: var(--colour-val4-darhig); font-size: 0.8rem; text-align: center; border: 1px solid var(--colour-val1-lighig); }
+.glass-loading-status { background: var(--colour-val0-purwhi); border-radius: var(--rad-sm); padding: 0.6rem 1.2rem; color: var(--colour-val4-darhig); font-size: 0.8rem; text-align: center; border: 1px solid var(--colour-val1-lighig); }
 
 @keyframes daisho-shimmer {
     0% { background-position: 200% 0; }

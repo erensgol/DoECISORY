@@ -1438,14 +1438,14 @@ function DECK_RegisterCallbacks_DDEF(app)
                         return html_div([
                                 html_i(className="fas fa-exclamation-triangle me-2"),
                                 html_span("Audit Failed: Variables 1-3 must have Name, Min, and Max fields fully filled.", className="fw-bold"),
- ], className="h5 mb-3", style=Dict("color" => "var(--colour-chr0-huered)")), true
+                                        ], className="h6 mb-3", style=Dict("color" => "var(--colour-chr0-huered)")), true
                     end
 
                     if l1val < minval || l3val > maxval || l1val > l2val || l2val > l3val
                         return html_div([
                                 html_i(className="fas fa-exclamation-triangle me-2"),
                                 html_span("Audit Failed: Variable '$name' must strictly obey Min <= Low <= Centre <= High <= Max boundary logic. (Got: $minval <= $l1val <= $l2val <= $l3val <= $maxval)", className="fw-bold"),
- ], className="h5 mb-3", style=Dict("color" => "var(--colour-chr0-huered)")), true
+                                        ], className="h6 mb-3", style=Dict("color" => "var(--colour-chr0-huered)")), true
                     end
                 end
 
