@@ -258,8 +258,8 @@ function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID
     end
 
     cols      = names(df)
-    col_score = findfirst(c -> occursin("SCORE", uppercase(c)), cols)
-    col_id    = findfirst(c -> occursin("ID", uppercase(c)), cols)
+    col_score = findfirst(c -> occursin("SCORE", uppercase(strip(string(c)))), cols)
+    col_id    = findfirst(c -> occursin("ID", uppercase(strip(string(c)))), cols)
 
     isnothing(col_score) && return Dict{String,Any}()
 
@@ -284,13 +284,19 @@ function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID
     vals = Float64[]
     if !isempty(VarNames)
         for v_name in VarNames
-            # Try with prefix and without
-            v_key = startswith(v_name, C.PRE_INPUT) ? v_name : "$(C.PRE_INPUT)$v_name"
-            val   = get(row, Symbol(v_key), get(row, Symbol(v_name), 0.0))
+            # Try with prefix and without (Case-Insensitive)
+            v_key_pfx = startswith(uppercase(v_name), uppercase(C.PRE_INPUT)) ? v_name : "$(C.PRE_INPUT)$v_name"
+            
+            # Smart Lookup for the actual column name
+            actual_key = Sys_Fast.FAST_GetCol_DDEF(df, v_key_pfx)
+            actual_alt = isempty(actual_key) ? Sys_Fast.FAST_GetCol_DDEF(df, v_name) : ""
+            
+            val = !isempty(actual_key) ? row[Symbol(actual_key)] : (!isempty(actual_alt) ? row[Symbol(actual_alt)] : 0.0)
             push!(vals, Sys_Fast.FAST_SafeNum_DDEF(val))
         end
     else
-        input_cols = filter(n -> startswith(n, C.PRE_INPUT), cols)
+        # Case-insensitive input column detection
+        input_cols = filter(n -> startswith(uppercase(string(n)), uppercase(C.PRE_INPUT)), cols)
         vals       = Sys_Fast.FAST_SafeNum_DDEF.(values(row[input_cols]))
     end
 
@@ -302,7 +308,7 @@ function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID
         "ID"         => id_str,
         "Score"      => row[col_score],
         "Vals"       => collect(vals),
-        "InputNames" => isempty(VarNames) ? filter(n -> startswith(n, C.PRE_INPUT), cols) : VarNames,
+        "InputNames" => isempty(VarNames) ? filter(n -> startswith(uppercase(string(n)), uppercase(C.PRE_INPUT)), cols) : VarNames,
         "OldConfig"  => Any[]
     )
 end

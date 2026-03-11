@@ -724,7 +724,8 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
     if nrow(Leaders_DF) > 0
         C = Sys_Fast.FAST_Data_DDEC
         th = ARTS_Theme_DDEC
-        in_cols = filter(n -> startswith(n, C.PRE_INPUT), names(Leaders_DF))
+        # Extract variable columns (Case-Insensitive)
+        in_cols = filter(n -> startswith(uppercase(string(n)), uppercase(C.PRE_INPUT)), names(Leaders_DF))
         id_col = findfirst(c -> uppercase(c) == "ID" || uppercase(c) == "EXP_ID", names(Leaders_DF))
         score_col = findfirst(c -> uppercase(c) == "SCORE", names(Leaders_DF))
 

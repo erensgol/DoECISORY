@@ -146,14 +146,8 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
             )
         end
 
-        # --- STRICT DATA THRESHOLDS ---
-        m_type_lower = lowercase(ModelType)
-        if occursin("quadratic", m_type_lower) && n < 15
-            throw(ArgumentError("Insufficient data for Quadratic Model: N=$n. A minimum of 15 records is required for statistical stability."))
-        elseif occursin("linear", m_type_lower) && n < 9
-            throw(ArgumentError("Insufficient data for Linear Model: N=$n. A minimum of 9 records is required for valid inference."))
-        elseif n < p
-            throw(ArgumentError("Insufficient data: Number of observations ($n) is less than model parameters ($p)."))
+        if n < p
+            throw(ArgumentError("Insufficient data: Number of observations (\$n) is less than model parameters (\$p)."))
         end
 
         # Explicit rank check to prevent data manipulation via pseudo-inverse
@@ -575,14 +569,9 @@ function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector
     k      = 3 # Fixed 3-variable system
     p_quad = 10 # 1 + 2*3 + 3*(3-1)/2 = 10
 
-    # --- STRICT CANDIDATE ELIGIBILITY ---
-    candidates = String[]
-    n >= 9  && push!(candidates, "linear")
-    n >= 15 && push!(candidates, "quadratic")
-
-    if isempty(candidates)
-        return (nothing, "Insufficient data for any model (N=$n). Need at least 9 for Linear, 15 for Quadratic.")
-    end
+    # Candidates: Linear, Quadratic (if N permits)
+    candidates = ["linear"]
+    n > p_quad + 2 && push!(candidates, "quadratic")
 
     best_score  = -Inf
     best_mod    = nothing
@@ -937,25 +926,25 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         Log("VISE", "INITIALIZATION", "Pre-flight issues: $(join(issues, " | "))", "WARN")
     end
 
-    # Apply standardisation to the raw data
     Sys_Fast.FAST_NormaliseCols_DDEF!(df_raw)
-
-    col_phase = Symbol(C.COL_PHASE)
-    if !hasproperty(df_raw, col_phase)
-        Log("VISE", "INITIALIZATION", "Required column '$col_phase' not found in dataset.", "FAIL")
+    col_phase_name = Sys_Fast.FAST_GetCol_DDEF(df_raw, C.COL_PHASE)
+    if isempty(col_phase_name)
+        Log("VISE", "INITIALIZATION", "Required column '$(C.COL_PHASE)' not found in dataset.", "FAIL")
         return Dict(
             "Status"  => "FAIL", 
-            "Message" => "Required column '$col_phase' not found in dataset. Please ensure the data sheet is properly formatted."
+            "Message" => "Required column '$(C.COL_PHASE)' not found in dataset. Please ensure the data sheet is properly formatted."
         )
     end
-    df_train = hasproperty(df_raw, col_phase) ?
-               filter(r -> string(r[col_phase]) == Phase, df_raw) :
-               copy(df_raw)
+    
+    # Define phase symbol for functional filtering (British English: Case-Insensitive alignment)
+    col_phase = Symbol(col_phase_name)
+    df_train  = filter(r -> strip(uppercase(string(r[col_phase]))) == strip(uppercase(Phase)), df_raw)
 
     nrow(df_train) < 3 && return Dict("Status" => "FAIL", "Message" => "Insufficient data points (N < 3).")
 
-    in_cols  = filter(n -> startswith(n, C.PRE_INPUT), names(df_train))
-    out_cols = filter(n -> startswith(n, C.PRE_RESULT), names(df_train))
+    # Prefix-based search (Case-Insensitive)
+    in_cols  = filter(n -> startswith(uppercase(n), C.PRE_INPUT), names(df_train))
+    out_cols = filter(n -> startswith(uppercase(n), C.PRE_RESULT), names(df_train))
 
     # Construct numeric matrices from DataFrame robustly
     nr      = nrow(df_train)
@@ -978,8 +967,8 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     N          = size(X_Clean, 1)
     K          = 3 # Fixed 3-variable system
 
-    InNames  = replace.(in_cols, C.PRE_INPUT => "")
-    OutNames = replace.(out_cols, C.PRE_RESULT => "")
+    InNames  = [replace(n, Regex("(?i)^" * C.PRE_INPUT) => "") for n in in_cols]
+    OutNames = [replace(n, Regex("(?i)^" * C.PRE_RESULT) => "") for n in out_cols]
 
     # Calculate Design Efficiency (New Bridge Lib_Core -> Lib_Vise)
     d_eff = Lib_Core.CORE_D_Efficiency_DDEF(X_Clean)

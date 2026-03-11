@@ -28,6 +28,7 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
     FAST_FormatDuration_DDEF, FAST_ValidateDataFrame_DDEF,
     FAST_GetSystemQuote_DDEF,
     FAST_RoundCols_DDEF!,
+    FAST_GetCol_DDEF,
     FAST_InitialiseWorkforce_DDEF, FAST_CleanWorkforce_DDEF,
     FAST_Data_DDEC
 
@@ -201,21 +202,31 @@ function FAST_ReadExcel_DDEF(FilePath::Union{String,Nothing}, SheetName::String)
             return DataFrame()
         end
 
-        df = DataFrame(XLSX.readtable(FilePath, SheetName))
+        df = DataFrame(XLSX.readtable(FilePath, SheetName))        
         
-        # --- FORMAT HASH MATCHING ---
-        required = [FAST_Data_DDEC.COL_EXP_ID, FAST_Data_DDEC.COL_PHASE]
-        missing_cols = filter(c -> Symbol(c) ∉ names(df), required)
-        if !isempty(missing_cols)
-            FAST_Log_DDEF("FAST", "FORMAT_FAIL", "Dataset incompatible. Missing required columns: $(join(missing_cols, ", "))", "FAIL")
-            # Return empty but with log, or throw if we want to be aggressive. 
-            # In Daisho's UX, throwing might be better to trigger a clear UI error.
-            throw(ArgumentError("Incompatible Dataset Format: This file does not match the DaishoDoE standard. Required columns '$(join(missing_cols, ", "))' were not found."))
+        is_data_sheet = SheetName == FAST_Data_DDEC.SHEET_DATA || startswith(SheetName, FAST_Data_DDEC.PREFIX_LEADERS)
+        
+        if is_data_sheet
+            has_id = false
+            has_ph = false
+            for col in names(df)
+                uc = uppercase(strip(string(col)))
+                if uc == "EXP_ID" || uc == "ID"
+                    has_id = true
+                elseif uc == "PHASE"
+                    has_ph = true
+                end
+            end
+            
+            if !has_id || !has_ph
+                FAST_Log_DDEF("FAST", "FORMAT_FAIL", "Excel incompatible! Required columns (EXP_ID/ID or PHASE) missing in sheet [$SheetName].", "WARN")
+                throw(ArgumentError("Incompatible Format in sheet [$SheetName]: Required columns not found."))
+            end
         end
 
-        FAST_Log_DDEF("FAST", "IO_READ", "$(nrow(df)) rows extracted from [$SheetName]", "OK")
+        FAST_Log_DDEF("FAST", "IO_READ", "$(nrow(df)) rows extracted from [$SheetName].", "OK")
         
-        return FAST_NormaliseCols_DDEF!(df)
+        return FAST_NormaliseCols_DDEF!(df) 
     catch e
         FAST_Log_DDEF("FAST", "IO_ERROR", "Scientific I/O Failure: $(first(string(e), 150))", "FAIL")
         return DataFrame()
@@ -824,6 +835,22 @@ function FAST_GetSystemQuote_DDEF()::String
         "The best way to predict the future is to create it."
     ]
     return rand(quotes)
+end
+
+"""
+    FAST_GetCol_DDEF(df::DataFrame, Target::String)::String
+Finds the actual column name in DataFrame that matches Target case-insensitively.
+(Non-destructive: does not modify the DataFrame).
+"""
+function FAST_GetCol_DDEF(df::DataFrame, Target::String)::String
+    isempty(df) && return ""
+    t_up = uppercase(strip(Target))
+    for n in names(df)
+        if uppercase(strip(string(n))) == t_up
+            return string(n)
+        end
+    end
+    return ""
 end
 
 end # module Sys_Fast

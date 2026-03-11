@@ -345,8 +345,8 @@ function LENS_RegisterCallbacks_DDEF(app)
                 # Fallback: if no phase column, treat as single phase
                 phases = [Dict("label" => "Default", "value" => "Default")]
             end
-
-            out_cols = filter(c -> startswith(c, C.PRE_RESULT), names(df))
+            # Case-insensitive result column filter
+            out_cols = filter(c -> startswith(uppercase(string(c)), uppercase(C.PRE_RESULT)), names(df))
             goals_name   = fill("", 3)
             goals_min    = fill(0.0, 3)
             goals_target = fill(0.0, 3)
@@ -415,7 +415,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 
             panel_class = has_radio ? "d-block mt-3" : "d-none"
 
-            # --- RADIO OPTS OVERRIDES ---
+            # --- RADIO OPTIONS OVERRIDES ---
             saved_radio = get(config, "RadioOpts", Dict())
             rad_apply = get(saved_radio, "Apply", false)
             rad_t_cal = string(get(saved_radio, "CalibrationTime", ""))
@@ -445,7 +445,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             return [], html_span("❌ Sync Error: $(first(string(e), 120))", className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green",
                 nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", "", ""
         finally
-            # Guaranteed temp file cleanup
+            # Guaranteed temporary file cleanup
             !isempty(path) && try
                 rm(path; force=true)
             catch
@@ -532,7 +532,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 true, true, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), true, true, true
         end
 
-        # Create temp file BEFORE try so finally can always clean it
+        # Create temporary file BEFORE try so finally can always clean it
         path = ""
         try
             isnothing(base64_file) && return (ntuple(_ -> Dash.no_update(), 2)..., html_span("Please upload an Excel file first.", className="colourtx-c5hy"), ntuple(_ -> Dash.no_update(), 10)...)
@@ -715,10 +715,10 @@ function LENS_RegisterCallbacks_DDEF(app)
                 lcols = names(ldf)
 
                 # Column ordering: ID, Input Variables, Predicted Outputs, Score
-                id_col      = findfirst(c -> c == C.COL_EXP_ID || c == C.COL_ID, lcols)
-                in_cols_l   = filter(c -> startswith(c, C.PRE_INPUT), lcols)
-                pred_cols_l = filter(c -> startswith(c, C.PRE_PRED),  lcols)
-                score_col   = findfirst(==(C.COL_SCORE), lcols)
+                id_col      = findfirst(c -> occursin("ID", uppercase(string(c))), lcols)
+                in_cols_l   = filter(c -> startswith(uppercase(string(c)), uppercase(C.PRE_INPUT)), lcols)
+                pred_cols_l = filter(c -> startswith(uppercase(string(c)), uppercase(C.PRE_PRED)),  lcols)
+                score_col   = findfirst(==(uppercase(C.COL_SCORE)), uppercase.(lcols))
 
                 # Build display header names
                 display_cols  = String[]
@@ -729,11 +729,11 @@ function LENS_RegisterCallbacks_DDEF(app)
                 end
                 for c in in_cols_l
                     push!(display_cols,  c)
-                    push!(display_names, replace(c, C.PRE_INPUT => ""))
+                    push!(display_names, replace(c, Regex(uppercase(C.PRE_INPUT), "i") => ""))
                 end
                 for c in pred_cols_l
                     push!(display_cols,  c)
-                    push!(display_names, replace(c, C.PRE_PRED => ""))
+                    push!(display_names, replace(c, Regex(uppercase(C.PRE_PRED), "i") => ""))
                 end
                 if !isnothing(score_col)
                     push!(display_cols,  lcols[score_col])
@@ -749,8 +749,8 @@ function LENS_RegisterCallbacks_DDEF(app)
                         let v = ldf[r, Symbol(c)]
                             ismissing(v) ? "-" : (v isa Number ? @sprintf("%.3f", v) : string(v))
                         end,
-                        className = c == C.COL_SCORE ? "colourtx-c1sm" : "",
-                        style=merge(td_style, c == C.COL_SCORE ? Dict("fontWeight" => "bold") : Dict())
+                        className = uppercase(c) == uppercase(C.COL_SCORE) ? "colourtx-c1sm" : "",
+                        style=merge(td_style, uppercase(c) == uppercase(C.COL_SCORE) ? Dict("fontWeight" => "bold") : Dict())
                     ) for c in display_cols
                 ], style=Dict("borderBottom" => "1px solid var(--colour-val1-lighig)")) for r in 1:nrow(ldf)]
 
@@ -790,7 +790,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             Sys_Fast.FAST_Log_DDEF("LENS", "ANALYSIS_CRASH", bt, "FAIL")
             return [], "", html_span("❌ Analysis Guard: Process aborted due to a technical exception.", className="fw-bold colourtx-c0hr"), true, true,"", Dash.no_update(), Dash.no_update(),"","", true, true, true
         finally
-            # Guaranteed temp file cleanup (prevents disk leak)
+            # Guaranteed temporary file cleanup (prevents disk leak)
             Sys_Fast.FAST_CleanTransient_DDEF(path)
             # Always release the lock, even if an error occurred
             Sys_Fast.FAST_ReleaseLock_DDEF("VISE_ANALYSIS")
@@ -982,7 +982,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return is_disabled, btn_class
     end
 
-    # --- 5. UI: PHASE WIZARD DATA INITIALIZATION ---
+    # --- 5. UI: PHASE WIZARD DATA INITIALISATION ---
     callback!(app,
         Output("lens-wiz-dd-source",    "options"),
         Output("lens-wiz-dd-source",    "value"),
@@ -1034,6 +1034,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         for c in ingredients
             name = get(c, "Name", "")
             if get(c, "Role", "") == C.ROLE_VAR
+                # Construct key with prefix (ensuring casing matches or using lookup)
                 v_key = "$(C.PRE_INPUT)$name"
                 if any(k -> string(k) == v_key, all_keys)
                     push!(cols_to_show, v_key)

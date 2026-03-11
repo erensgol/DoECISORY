@@ -140,7 +140,9 @@ function FLOW_GetCandidates_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase
     # Functional extraction and numeric coercion
     candidates = map(eachrow(df)) do row
         d          = Dict{String,Any}(string(k) => v for (k, v) in pairs(row))
-        d["Score"] = Sys_Fast.FAST_SafeNum_DDEF(get(d, "SCORE", 0.0))
+        # Case-insensitive score extraction
+        lookup     = Dict(uppercase(string(k)) => v for (k, v) in pairs(row))
+        d["Score"] = Sys_Fast.FAST_SafeNum_DDEF(get(lookup, "SCORE", 0.0))
         d
     end
 

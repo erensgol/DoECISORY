@@ -628,8 +628,9 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
         try
             if isfile(path)
                 df_old = Sys_Fast.FAST_ReadExcel_DDEF(path, C.SHEET_DATA)
-                if !isempty(df_old) && hasproperty(df_old, Symbol(C.COL_PHASE))
-                    phases = filter(!ismissing, unique(df_old[!, Symbol(C.COL_PHASE)]))
+                phase_col = Sys_Fast.FAST_GetCol_DDEF(df_old, C.COL_PHASE) # Find column name case-insensitively
+                if !isempty(df_old) && !isempty(phase_col)
+                    phases = filter(!ismissing, unique(df_old[!, Symbol(phase_col)]))
                     nums   = [
                         let m = match(r"\d+", string(p))
                             isnothing(m) ? 1 : parse(Int, m.match)
@@ -666,8 +667,18 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
 
         for i in 1:N_Runs
             RowMap = Dict{String, Float64}()
-            for col in names(df), pfx in (C.PRE_INPUT, C.PRE_FIXED, C.PRE_FILL)
-                startswith(col, pfx) && (RowMap[replace(col, pfx => "")] = df[i, col])
+            # Clean temporary columns from design table (Case-Insensitive)
+            for col in names(df)
+                col_s  = string(col)
+                col_up = uppercase(strip(col_s))
+                for pfx in (C.PRE_INPUT, C.PRE_FIXED, C.PRE_FILL)
+                    pfx_up = uppercase(pfx)
+                    if startswith(col_up, pfx_up)
+                        # Extract the core name by stripping the prefix regardless of case
+                        core_name = replace(col_s, Regex("(?i)^" * pfx) => "")
+                        RowMap[core_name] = df[i, col]
+                    end
+                end
             end
 
             if !isempty(D["Idx_Fill"])
@@ -688,7 +699,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
                 [get(RowMap, n, 0.0) for n in D["Names"][chems]], sv, sc)
             
             for r in eachrow(m_df)
-                k = "MASS_" * r.Component * "_mg"
+                k = C.PRE_MASS * r.Component * "_mg"
                 haskey(mass_cols, k) || (mass_cols[k] = zeros(N_Runs))
                 mass_cols[k][i] = r.TARGET_MASS_mg
             end
@@ -702,8 +713,8 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
         # Response validation
         for r in output_data
             n = string(get(r, "Name", "Unknown"))
-            df[!, "RESULT_$n"] = fill(missing, N_Runs)
-            df[!, "PRED_$n"]   = fill(missing, N_Runs)
+            df[!, C.PRE_RESULT * n] = fill(missing, N_Runs)
+            df[!, C.PRE_PRED * n]   = fill(missing, N_Runs)
         end
         df[!, C.COL_SCORE] = fill(missing, N_Runs)
         df[!, C.COL_NOTES] = fill("", N_Runs)
