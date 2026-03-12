@@ -194,9 +194,9 @@ app.layout = html_div([
     APP_Navbar_DDEC,
     APP_Content_DDEC,
 
-    # Global State Architecture
-    dcc_store(id="store-session-config", storage_type="session"),
-    dcc_store(id="store-master-vault",   storage_type="session"),
+    # Global State Architecture 
+    dcc_store(id="store-session-config", storage_type="memory"),
+    dcc_store(id="store-master-vault",   storage_type="memory"),
 
     # Master Sync Bus
     dcc_store(id="sync-deck-content",  storage_type="memory"),
