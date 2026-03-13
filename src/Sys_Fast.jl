@@ -213,7 +213,7 @@ end
 ASCII-safe filename generator. Converts Turkish characters to ASCII and replaces 
 non-alphanumeric characters with underscores. Ensures filesystem compatibility.
 """
-function FAST_SanitiseFilename_DDEF(name::String)
+function FAST_SanitiseFilename_DDEF(name::AbstractString)
     # Mapping table for Turkish characters (UTF-8)
     mapping = Dict(
         'ç' => 'c', 'Ç' => 'C',

@@ -60,19 +60,16 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
     InNames    = String[]
 
     if !isempty(df_config)
-        # Idiomatic search for JSON payload column
         json_col = findfirst(c -> occursin("JSON", uppercase(c)), names(df_config))
         if !isnothing(json_col)
             try
                 RawConf = JSON3.read(df_config[1, json_col], Dict{String,Any})
 
-                # Functional restoration of ingredients
                 if haskey(RawConf, "Ingredients")
                     raw_ing  = RawConf["Ingredients"]
                     iter_ing = raw_ing isa Dict ? values(raw_ing) : raw_ing
                     OldConfig = map(iter_ing) do item
                         d = Dict{String,Any}(string(k) => v for (k, v) in pairs(item))
-                        # Unified level restoration
                         d["Levels"] = if haskey(d, "Levels")
                             Float64[isnothing(x) ? NaN : Float64(x) for x in d["Levels"]]
                         elseif all(k -> haskey(d, k), ("L1", "L2", "L3"))
@@ -81,7 +78,6 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
                             Float64[0.0, 0.0, 0.0]
                         end
 
-                        # Collect names of variables to ensure extraction order
                         if get(d, "Role", "") == C.ROLE_VAR
                             push!(InNames, get(d, "Name", ""))
                         end
@@ -89,7 +85,6 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
                     end
                 end
 
-                # Carry forward session metadata
                 Outputs    = [Dict{String,Any}(string(k) => v for (k, v) in pairs(o)) for o in get(RawConf, "Outputs", [])]
                 GlobalInfo = Dict{String,Any}(string(k) => v for (k, v) in pairs(get(RawConf, "Global", Dict())))
 
@@ -137,10 +132,8 @@ function FLOW_GetCandidates_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase
     df = Sys_Fast.FAST_ReadExcel_DDEF(MasterFile, C.PREFIX_LEADERS * CurrentPhase)
     isempty(df) && return Dict{String,Any}[]
 
-    # Functional extraction and numeric coercion
     candidates = map(eachrow(df)) do row
         d          = Dict{String,Any}(string(k) => v for (k, v) in pairs(row))
-        # Case-insensitive score extraction
         lookup     = Dict(uppercase(string(k)) => v for (k, v) in pairs(row))
         d["Score"] = Sys_Fast.FAST_SafeNum_DDEF(get(lookup, "SCORE", 0.0))
         d
@@ -225,7 +218,8 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
             "L1"   => Float64(lvls[1]), 
             "L2"   => Float64(lvls[2]), 
             "L3"   => Float64(lvls[3]), 
-            "MW"   => Float64(_get(c, "MW", 0.0))
+            "MW"   => Float64(_get(c, "MW", 0.0)),
+            "Unit" => string(_get(c, "Unit", "-"))
         )
     end
 

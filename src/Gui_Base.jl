@@ -244,13 +244,28 @@ function BASE_Loading_DDEF(id::String, content; color::String="var(--colour-chr1
 end
 
 """
-    BASE_StatusIcon_DDEF(symbol, id; [color], [size], [tip]) -> html_span
+    BASE_StatusIcon_DDEF(symbol, id; [color], [size], [tip], [glow]) -> html_span
 Small status indicator used for matrix properties (radioactivity, filler, etc).
 """
-function BASE_StatusIcon_DDEF(symbol::String, id::String; color_class::String="colourtx-v4dh", size::String="0.45rem", tip=nothing)
-    icon = html_span(symbol, id=id, className=color_class, style=Dict("fontSize" => size, "marginRight" => "1px"))
+function BASE_StatusIcon_DDEF(symbol::String, id::String; color_class::String="colourtx-v4dh", size::String="0.65rem", tip=nothing, glow=false)
+    s = Dict("fontSize" => size, "marginRight" => "2px", "cursor" => "help")
+    if glow
+        s["textShadow"] = "0 0 5px currentColor"
+        s["fontWeight"] = "bold"
+    end
+    
+    # Tooltip fix: Unique ID for the target to ensure Dash identifies it correctly
+    target_id = id
+    icon = html_span(symbol, id=target_id, className=color_class, style=s)
+    
     isnothing(tip) && return icon
-    return dbc_tooltip(tip, target=id, placement="top")
+    
+    # Use a unique ID for the tooltip as well to prevent DOM pollution
+    tip_id = "tip-" * id
+    return html_span([
+        icon, 
+        dbc_tooltip(tip, target=target_id, id=tip_id, placement="top", is_open=false)
+    ])
 end
 
 """
@@ -381,27 +396,27 @@ function BASE_BuildIdRow_DDEF(i, row, visible, show_del=false)
     hl_v     = Float64(get(row, "HalfLife", 0.0))
     is_radio = (get(row, "IsRadioactive", false) == true) || (hl_v > 0.0)
 
+    # MW indicator (Chemical) -> Blue (c2sb)
+    # Half-life indicator (Radioactivity) -> Green (c4tg)
     mw_v        = Float64(get(row, "MW", 0.0))
-    dot1_class  = mw_v > 0.0 ? "colourtx-c4tg" : "colourtx-v4dh"
+    dot1_class  = mw_v > 0.0 ? "colourtx-c2sb" : "colourtx-v4dh" 
     dot2_class  = hl_v > 0.0 ? "colourtx-c4tg" : "colourtx-v4dh"
 
     dots = html_span([
         is_radio  ? html_i(className="fas fa-radiation me-1 colourtx-c0hr", style=Dict("fontSize" => "0.7rem")) : nothing,
         is_filler ? html_i(className="fas fa-fill-drip me-1 colourtx-c5hy", style=Dict("fontSize" => "0.7rem")) : nothing,
-        BASE_StatusIcon_DDEF("●", "deck-dot1-$i", color_class=dot1_class),
-        BASE_StatusIcon_DDEF("●", "deck-dot2-$i", color_class=dot2_class),
+        BASE_StatusIcon_DDEF("●", "deck-dot1-$i", color_class=dot1_class, tip=mw_v > 0.0 ? "Molecular Weight defined (Scientific context ACTIVE)" : "No Molecular Weight", glow=mw_v > 0.0),
+        BASE_StatusIcon_DDEF("●", "deck-dot2-$i", color_class=dot2_class, tip=hl_v > 0.0 ? "Radioactive Decay data present" : "No half-life data", glow=hl_v > 0.0),
     ], style=Dict("display" => "inline-flex", "alignItems" => "center"))
 
     prop_btn = BASE_IconButton_DDEF("btn-prop-$i", "fas fa-cog", color_class=is_filler ? "colourtx-c5hy" : "colourtx-v3dl")
 
     row_children = Any[]
     
-    # Always include TD for alignment & callback ID stability
     push!(row_children, html_td(del_btn,
         style     = merge(BASE_StyleCell_DDEC, Dict("textAlign" => "center", "width" => "30px", "display" => show_del ? "table-cell" : "none")),
         className = "p-0"))
 
-    # Name cell
     push!(row_children, html_td(
         dcc_input(id="deck-name-$i", type="text", value=name_val, debounce=true, style=name_input_style),
         className = "deck-name-cell p-0", 
@@ -428,10 +443,9 @@ function BASE_BuildLevelRow_DDEF(i, row, visible)
     l2_val    = get(row, "L2", 0.0)
     l3_val    = get(row, "L3", 0.0)
 
-    # Determine visibility of L1, L2, L3 based on row index
-    show_l1 = (i <= 3)           # Visible only for Variables
-    show_l2 = (i <= 3 || i >= 5) # Visible for Variables and Constants
-    show_l3 = (i <= 3)           # Visible only for Variables
+    show_l1 = (i <= 3)
+    show_l2 = (i <= 3 || i >= 5)
+    show_l3 = (i <= 3)
 
     return html_tr([
         html_td(dcc_input(id="deck-l1-$i", type="number", value=l1_val, debounce=true, style=merge(BASE_StyleInputCentre_DDEC, Dict("fontSize" => "10px", "display" => show_l1 ? "block" : "none")), className="px-0 py-0"), style=merge(BASE_StyleCell_DDEC, Dict("textAlign" => "center", "width" => "33%")), className="p-0"),

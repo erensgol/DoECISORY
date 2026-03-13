@@ -133,6 +133,47 @@ end
 # --------------------------------------------------------------------------------------
 
 """
+    MOLE_GetUnitType_DDEF(UnitStr::String) -> (Symbol, Float64)
+Categorises a unit string into :Mass (Fixed), :Molar (Relational), or :Other.
+Returns (Type, ScaleToSystemBase).
+System Base: Mass -> mg, Molar -> parts (for MR) or fractions (for %M).
+"""
+function MOLE_GetUnitType_DDEF(UnitStr::String)
+    u = lowercase(strip(UnitStr))
+    isempty(u) && return (:Molar, 1.0)
+    
+    # Relative / Molar Types (Ratio/Percent)
+    if u == "%m" || u == "%" || u == "molar"
+        return (:Molar, 0.01) # Percentage base
+    elseif u == "mr" || u == "ratio" || u == "-"
+        return (:Molar, 1.0) # Ratio base
+    elseif u == "m" || u == "mol/l"
+        return (:Concentration, 1000.0) # Molar base (conv to mM)
+    end
+
+    # Absolute / Mass Types (Unitful supported)
+    try
+        # Support common chemical variants
+        u_mod = replace(u, 
+            " " => "*", 
+            "_" => "*", 
+            "mc" => "u", 
+            "mic" => "u",
+            "μ" => "u"
+        )
+        uq = uparse(u_mod)
+        if dimension(uq) == dimension(u"g")
+            # Convert to mg (our internal base)
+            val_mg = ustrip(uconvert(u"mg", 1.0 * uq))
+            return (:Mass, Float64(val_mg))
+        end
+    catch
+    end
+
+    return (:Other, 1.0)
+end
+
+"""
     MOLE_ValidatePhysicalUnit_DDEF(ValueStr::String, ExpectedType::String) -> (Bool, Float64, String)
 Uses strict dimensional analysis via Unitful.jl to ensure chemical/physical safety.
 """
@@ -141,10 +182,13 @@ function MOLE_ValidatePhysicalUnit_DDEF(ValueStr::String, ExpectedType::String)
     isempty(val_clean) && return (false, 0.0, "Input is empty.")
 
     # Convert space/underscore separators to multiplication for Unitful macro parsing
-    parse_str = replace(val_clean, " " => "*", "_" => "*")
+    parse_str = replace(val_clean, " " => "*", "_" => "*", "mc" => "u")
 
     try
         exp_val = uparse(parse_str)
+        if typeof(exp_val) <: Real
+            exp_val = exp_val * u"1" # Handle numeric only cases if any
+        end
 
         tgt_unit      = nothing
         expected_name = ""
@@ -165,13 +209,18 @@ function MOLE_ValidatePhysicalUnit_DDEF(ValueStr::String, ExpectedType::String)
             return (false, 0.0, "Unknown physical dimension requested: $ExpectedType")
         end
 
+        # Handle dimensionless cases from Unitful if needed
+        if dimension(exp_val) == dimension(u"1") && ExpectedType != "Ratio"
+             return (false, 0.0, "Dimensionless value provided where $ExpectedType was expected.")
+        end
+
         # Strict dimensionality check: is this biologically/physically identical to our target?
         if dimension(exp_val) != dimension(tgt_unit)
             return (false, 0.0, "Dimensional mismatch: Expected $expected_name, got $(dimension(exp_val)).")
         end
 
         # Convert and strip to raw Float64
-        sys_val = uconvert(tgt_unit, exp_val)
+        sys_val = uconvert(tgt_unit, 1.0 * exp_val)
         return (true, Float64(ustrip(sys_val)), "OK")
     catch e
         return (false, 0.0, "Unitful Parsing Error: Invalid format or unknown unit ('$val_clean') -> $e")
@@ -211,65 +260,105 @@ function MOLE_QuickAudit_DDEF(TableData::AbstractVector, Vol::Float64, Conc::Flo
         is_valid = false
     end
 
-    # --- Unit Validation Audit ---
+    # --- Unit & MW Validation Audit ---
     for r in D["Rows"]
-        unit = string(get(r, "Unit", ""))
+        unit = lowercase(strip(string(get(r, "Unit", ""))))
         mw = Float64(get(r, "MW", 0.0))
+        name = string(get(r, "Name", "Unknown"))
+        
         # --- NEGATIVE MW GUARD ---
         if mw < 0.0
-            write(io, "![ERROR] Physical Impossibility: Component '$(get(r, "Name", ""))' has negative Molecular Weight ($mw). Calculation aborted.\n")
+            @printf(io, "![ERROR] Physical Impossibility: Component '%s' has negative Molecular Weight (%.2f). Calculation aborted.\n", name, mw)
             is_valid = false
         end
 
-        if mw > 0.0 && !isempty(unit) && unit != "-" && unit != "%M" && unit != "MR"
-            # Try Mass then Concentration
-            ok_m, _, _ = MOLE_ValidatePhysicalUnit_DDEF(unit, "Mass")
-            ok_c, _, _ = MOLE_ValidatePhysicalUnit_DDEF(unit, "Concentration")
-            if !ok_m && !ok_c
-                write(io, "![WARN] Unit Error: Component '$(get(r, "Name", ""))' has invalid chemical unit '$unit'.\n")
+        # --- MW REQUIREMENT FOR RELATIONAL & CONCENTRATION UNITS ---
+        if (unit == "%m" || unit == "mr" || unit == "ratio" || unit == "m") && mw <= 0.0
+            @printf(io, "![ERROR] Stoichiometry Error: Component '%s' uses unit '%s' (Molar/Ratio) but has no Molecular Weight (MW). MW is mandatory for these calculations.\n", name, unit)
+            is_valid = false
+        end
+
+        if mw > 0.0 && !isempty(unit) && unit != "-" && unit != "%m" && unit != "mr" && unit != "ratio" && unit != "m"
+            u_type, _ = MOLE_GetUnitType_DDEF(unit)
+            if u_type == :Other
+                @printf(io, "![WARN] Unit Error: Component '%s' has invalid chemical unit '%s'.\n", name, unit)
             end
         end
     end
 
-    # Filler auto-balance with tolerance-safe subtraction
+    # Filler auto-balance logic - Restricted to Relational Sums only
     if !isempty(idx_fill) && is_valid
-        other_chems = setdiff(idx_chem, idx_fill)
-        other_sum = sum(view(ratios, other_chems))
-        if other_sum > 100.0 + 1e-4
-            write(io, "![ERROR] Filler balance failed: Pre-filler components exceed 100% (Sum: $(round(other_sum; digits=2))%)\n")
-            is_valid = false
-            ratios[idx_fill[1]] = 0.0
-        else
-            filler_val = 100.0 - other_sum
-            # Clamp near-zero negatives from FP drift
-            ratios[idx_fill[1]] = max(0.0, filler_val)
-            # Tolerant balance check
-            if !MOLE_ApproxEq_DDEF(ratios[idx_fill[1]] + other_sum, 100.0; atol=1e-4)
-                @printf(io, "![WARN] Balance drift: sum=%.8f (expected 100.0)\n",
-                    ratios[idx_fill[1]] + other_sum)
-            end
+        # We only balance components that share the SAME relational logic (e.g. all in %M)
+        # If the user mixes units, filler becomes ambiguous unless we define it as a Molar Balancer.
+        fill_idx = idx_fill[1]
+        fill_unit = lowercase(strip(D["Rows"][fill_idx]["Unit"]))
+        
+        if fill_unit == "%m"
+             other_m_idx = findall(i -> lowercase(strip(D["Rows"][i]["Unit"])) == "%m" && i != fill_idx, 1:length(D["Rows"]))
+             other_sum = isempty(other_m_idx) ? 0.0 : sum(ratios[other_m_idx])
+             
+             if other_sum > 100.0 + 1e-4
+                @printf(io, "![ERROR] Filler balance failed: Relational %%M components exceed 100%% (Sum: %.2f%%)\n", other_sum)
+                is_valid = false
+                ratios[fill_idx] = 0.0
+             else
+                ratios[fill_idx] = max(0.0, 100.0 - other_sum)
+             end
         end
     end
 
+    units = [string(get(r, "Unit", "")) for r in D["Rows"]]
+    # Pass 0.0 for Scale as we use raw values in audit
     mass_results = MOLE_CalcMass_DDEF(
-        D["Names"][idx_chem], D["MWs"][idx_chem], ratios[idx_chem], Vol, Conc
+        D["Names"][idx_chem], D["MWs"][idx_chem], ratios[idx_chem], Vol, Conc, units[idx_chem]
     )
+
+    # Check for over-concentration (Fixed + %M moles > total budget)
+    total_moles_target_mmol = (Vol / 1000.0) * Conc
+    if total_moles_target_mmol > 0 && is_valid
+        total_moles_calc = sum(mass_results[!, :Moles_mmol])
+        if total_moles_calc > total_moles_target_mmol + 1e-5
+            @printf(io, "![WARN] Over-Concentrated: Total moles (%.4f mmol) exceeds target budget (%.4f mmol). System may be physically impossible at this volume.\n", total_moles_calc, total_moles_target_mmol)
+        end
+    end
 
     total_mass_mg = sum(mass_results[!, :TARGET_MASS_mg])
 
-    for row in eachrow(mass_results)
-        @printf(io, "> %-12s: %9.3f mg (Ratio: %6.1f%%)\n",
-            row.Component, row.TARGET_MASS_mg, row.Molar_Ratio)
+    write(io, "\n[CHEMICAL BREAKDOWN]\n")
+    for (i, row) in enumerate(eachrow(mass_results))
+        u_label = row[:IsFixed] ? "(Absolute/Fixed)" : "(Relational MR)"
+        u_raw   = lowercase(strip(units[idx_chem][i]))
+        
+        # Mandatory units for MW
+        is_relational = (u_raw == "%m" || u_raw == "mr" || u_raw == "ratio" || u_raw == "m")
+        mw_missing    = is_relational && (D["MWs"][idx_chem][i] <= 0.0 || isnan(D["MWs"][idx_chem][i]))
+        mw_warn       = mw_missing ? " [⚠️ MW MISSING]" : ""
+        
+        @printf(io, "> %-15s: %9.3f mg %-15s (Ratio: %6.1f%%)%s\n",
+            row[:Component], row[:TARGET_MASS_mg], u_label, row[:Molar_Ratio], mw_warn)
+    end
+
+    write(io, "\n[SOLVENT / MATRIX]\n")
+    if Vol > 0
+        # Assume density approx 1.0 g/mL (water-based) for estimation if needed, 
+        # but the user usually just wants the target volume.
+        # Here we just state the requirement.
+        @printf(io, "> Solvent Req.   : Fill up to %.2f mL total volume\n", Vol)
+    else
+        write(io, "> No liquid environment defined.\n")
     end
 
     write(io, "--------------------------------------\n")
-    @printf(io, "TOTAL MASS   : %9.3f mg\n", total_mass_mg)
+    @printf(io, "SUM DRY MASS : %9.4f mg\n", total_mass_mg)
 
     # Tolerance-based fraction validation
-    frac_sum = sum(mass_results[!, :Molar_Fraction])
-    frac_ok = MOLE_ApproxEq_DDEF(frac_sum, 1.0; atol=1e-6)
-    if !frac_ok
-        @printf(io, "\n[WARN] Molar fraction sum = %.10f (expected ~1.0)\n", frac_sum)
+    target_moles_mmol = (Vol / 1000.0) * Conc
+    if target_moles_mmol > 0
+        moles_sum = sum(mass_results[!, :Moles_mmol])
+        frac_ok = MOLE_ApproxEq_DDEF(moles_sum, target_moles_mmol; atol=1e-6)
+        if !frac_ok
+            @printf(io, "\n[WARN] Moles sum = %.8f (expected %.8f)\n", moles_sum, target_moles_mmol)
+        end
     end
 
     fill_status = if isempty(idx_fill)
@@ -297,27 +386,92 @@ end
 # --------------------------------------------------------------------------------------
 
 """
-    MOLE_CalcMass_DDEF(Names, MWs, Ratios, Vol, Conc, [Scale]) -> DataFrame
-Analytical engine for calculating mass from molar concentrations.
-Formula: n = M * V (total moles) | m = n_comp * MW (component mass).
+    MOLE_CalcMass_DDEF(Names, MWs, Ratios, Vol, Conc, Units, [Scale]) -> DataFrame
+Universal Stoichiometry Engine. Supports Hybrid Absolute (Mass) and Relational (Molar) models.
 """
 function MOLE_CalcMass_DDEF(Names::AbstractVector{String}, MWs::AbstractVector{Float64},
     Ratios::AbstractVector{Float64}, Tgt_Vol::Float64, Tgt_Conc::Float64,
-    Scale::Float64=1.0)
-    total_parts = sum(Ratios)
-    # Tolerant zero-check instead of exact <= 0.0
-    total_parts   = MOLE_ApproxEq_DDEF(total_parts, 0.0) ? 1.0 : total_parts
-    mol_fractions = Ratios ./ total_parts
+    Units::AbstractVector{String}, Scale::Float64=1.0)
+    
+    n_comp = length(Names)
+    res_mass_mg = zeros(n_comp)
+    res_moles_mmol = zeros(n_comp)
+    is_fixed = fill(false, n_comp)
 
-    total_moles_mmol = (Tgt_Vol / 1000.0) * (Tgt_Conc * Scale)
-    comp_moles_mmol  = total_moles_mmol .* mol_fractions
+    # 0. System Budget
+    total_moles_target_mmol = (Tgt_Vol / 1000.0) * (Tgt_Conc * Scale)
+
+    # Pass 1: Resolve Absolute (Fixed Mass / Molarity) components
+    for i in 1:n_comp
+        u_type, u_scale = MOLE_GetUnitType_DDEF(Units[i])
+        if u_type == :Mass
+            res_mass_mg[i]    = Ratios[i] * u_scale
+            res_moles_mmol[i] = MWs[i] > 0 ? res_mass_mg[i] / MWs[i] : 0.0
+            is_fixed[i]      = true
+        elseif u_type == :Concentration
+            # Absolute Molarity (M -> mM)
+            target_mM = Ratios[i] * u_scale
+            res_moles_mmol[i] = (Tgt_Vol / 1000.0) * target_mM
+            res_mass_mg[i]    = MWs[i] > 0 ? res_moles_mmol[i] * MWs[i] : 0.0
+            is_fixed[i]      = true
+        end
+    end
+
+    # Pass 2: Resolve Absolute Molar % (%M) components
+    # These take a fixed slice of the TOTAL target budget, not the residual.
+    for i in 1:n_comp
+        if !is_fixed[i]
+            u_str = lowercase(strip(Units[i]))
+            if u_str == "%m" || u_str == "%"
+                if MWs[i] > 0
+                    # %M is literally Molar Percentage of the Target Concentration
+                    res_moles_mmol[i] = total_moles_target_mmol * (Ratios[i] / 100.0)
+                    res_mass_mg[i]    = res_moles_mmol[i] * MWs[i]
+                    is_fixed[i]       = true # Mark as resolved for the next pass
+                else
+                    # Fallback or Error: MW is required for molar percent
+                    res_moles_mmol[i] = 0.0
+                    res_mass_mg[i]    = 0.0
+                end
+            end
+        end
+    end
+
+    # Pass 3: Resolve Relative Molar Relational components (MR / Ratio)
+    fixed_moles_sum_mmol = sum(res_moles_mmol)
+    residual_moles_mmol  = max(0.0, total_moles_target_mmol - fixed_moles_sum_mmol)
+
+    molar_indices = findall(.!is_fixed)
+    if !isempty(molar_indices)
+        total_molar_parts = sum(Ratios[molar_indices])
+        total_molar_parts = MOLE_ApproxEq_DDEF(total_molar_parts, 0.0) ? 1.0 : total_molar_parts
+
+        for i in molar_indices
+            if MWs[i] > 0
+                ratio_frac = Ratios[i] / total_molar_parts
+                res_moles_mmol[i] = residual_moles_mmol * ratio_frac
+                res_mass_mg[i]    = res_moles_mmol[i] * MWs[i]
+            else
+                res_moles_mmol[i] = 0.0
+                res_mass_mg[i]    = 0.0
+            end
+        end
+    end
+
+    # Final Molar Ratio representation (Force back-calculation for information context)
+    final_ratios = copy(Ratios)
+    if total_moles_target_mmol > 0
+        for i in 1:n_comp
+             final_ratios[i] = (res_moles_mmol[i] / total_moles_target_mmol) * 100.0
+        end
+    end
 
     return DataFrame(
         :Component      => Names,
-        :Molar_Ratio    => Ratios,
-        :Molar_Fraction => mol_fractions,
-        :Moles_mmol     => comp_moles_mmol,
-        :TARGET_MASS_mg => comp_moles_mmol .* MWs
+        :Molar_Ratio    => final_ratios,
+        :Moles_mmol     => res_moles_mmol,
+        :TARGET_MASS_mg => res_mass_mg,
+        :IsFixed        => is_fixed
     )
 end
 
@@ -337,7 +491,11 @@ function MOLE_AuditMatrix_DDEF(Design::AbstractMatrix, Names::AbstractVector,
 
     for i in 1:R
         ratios          = Design[i, :]
-        df              = MOLE_CalcMass_DDEF(Names, MWs, ratios, Vol, Conc)
+        # We assume Design matrix doesn't change units mid-batch, 
+        # but if it does (rare for DoE), we'd need more data. 
+        # Using '-' as default which maps to Molar.
+        dummy_units = fill("-", length(Names)) 
+        df              = MOLE_CalcMass_DDEF(Names, MWs, ratios, Vol, Conc, dummy_units)
         total_masses[i] = sum(df.TARGET_MASS_mg)
     end
     
@@ -393,11 +551,12 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
         r_chem = ratios_full[idx_chem]
         n_chem = D["Names"][idx_chem]
         w_chem = D["MWs"][idx_chem]
+        u_chem = [string(get(r, "Unit", "-")) for r in D["Rows"][idx_chem]]
 
         if isempty(idx_chem)
             masses[i] = 0.0
         else
-            df        = MOLE_CalcMass_DDEF(n_chem, w_chem, r_chem, Vol, Conc)
+            df        = MOLE_CalcMass_DDEF(n_chem, w_chem, r_chem, Vol, Conc, u_chem)
             masses[i] = sum(df.TARGET_MASS_mg)
         end
     end
@@ -448,17 +607,23 @@ function MOLE_ValidateDesignFeasibility_DDEF(DesignMatrix::AbstractMatrix, InMet
             ratios[idx] = get(chems[idx], "L2", 0.0) # Using Mid/Default for fixed
         end
 
-        # Auto-balance filler if present
+        # Auto-balance filler if present using L3 (Worst-case scenario)
         if !isnothing(fill_index)
             # Safe deletion for sum calculation
-            temp_ratios = copy(ratios)
-            deleteat!(temp_ratios, fill_index)
-            other_sum = sum(temp_ratios)
+            # We check the SUM of L3 values for variables + Fixed values
+            total_max_percent = 0.0
+            for k in eachindex(chems)
+                k == fill_index && continue
+                role = get(chems[k], "Role", "")
+                if role == "Variable"
+                    total_max_percent += Float64(get(chems[k], "L3", 0.0))
+                elseif role == "Fixed"
+                    total_max_percent += Float64(get(chems[k], "L2", 0.0))
+                end
+            end
             
-            if other_sum > 100.0 + 1e-4
-                push!(issues, "Run $i: Chemical sum exceeds 100% ($(round(other_sum; digits=2))%) before filler.")
-            else
-                ratios[fill_index] = max(0.0, 100.0 - other_sum)
+            if total_max_percent > 100.0 + 1e-4
+                push!(issues, "Run $i: Total stoichiometry budget (L3 + Fixed) exceeds 100% ($(round(total_max_percent; digits=2))%). Result logic may fail.")
             end
         end
 

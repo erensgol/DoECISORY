@@ -120,7 +120,6 @@ Sys_Fast.FAST_InitialiseWorkforce_DDEF()
 # --------------------------------------------------------------------------------------
 
 FAST_Log_DDEF("INIT", "Setup", "Configuring Dash Framework...", "WAIT")
-# Pathname prefix handling for HF Spaces
 pathname_prefix = get(ENV, "DASH_REQUESTS_PATHNAME_PREFIX", "/")
 
 app = dash(;
@@ -162,7 +161,6 @@ app.index_string = """
 # --- UI COMPONENTS ---
 # --------------------------------------------------------------------------------------
 
-# 1. Navigation Controller (Constant UI)
 const APP_Navbar_DDEC = html_div([
     html_div([
         dcc_link(html_div([
@@ -184,7 +182,6 @@ const APP_Navbar_DDEC = html_div([
     ], className="nav-actions", style=Dict("flex" => "1", "textAlign" => "right")),
 ], className="glass-navbar d-flex align-items-center justify-content-between")
 
-# 2. Page Content Render Area (Constant UI)
 const APP_Content_DDEC = html_div(id="page-content", className="app-container")
 
 # 3. Main Application Framework
@@ -231,7 +228,7 @@ app.layout = html_div([
     ], id="modal-diagnostics", size="xl", is_open=false),
 
     # System readiness overlay + polling
-    dcc_interval(id="sys-ready-poll", interval=2000, max_intervals=-1),
+    dcc_interval(id="sys-ready-poll", interval=500, max_intervals=-1),
     html_div(id="sys-loading-overlay", children=[
         html_div([
             html_div(className="sys-spinner"),
