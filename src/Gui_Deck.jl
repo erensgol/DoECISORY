@@ -108,8 +108,7 @@ function DECK_ModalChemical_DDEF()
                     options=[
                         Dict("label" => "Minutes", "value" => "Minutes"),
                         Dict("label" => "Hours",   "value" => "Hours"),
-                        Dict("label" => "Days",    "value" => "Days"),
-                        Dict("label" => "Years",   "value" => "Years")
+                        Dict("label" => "Days",    "value" => "Days")
                     ], 
                     value="Hours", 
                     size="sm", 
@@ -716,8 +715,17 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
             df[!, C.PRE_RESULT * n] = fill(missing, N_Runs)
             df[!, C.PRE_PRED * n]   = fill(missing, N_Runs)
         end
+
         df[!, C.COL_SCORE] = fill(missing, N_Runs)
         df[!, C.COL_NOTES] = fill("", N_Runs)
+
+        # 6.5. Radioactivity (CHRO) Management - GLOBAL HOUR/MIN
+        any_rad_in  = any(r -> get(r, "IsRadioactive", false), D["Rows"])
+        any_rad_out = any(r -> get(r, "IsRadioactive", false), output_data)
+        if any_rad_in || any_rad_out
+            df[!, "CHRO_HOUR"] = fill(0.0, N_Runs)
+            df[!, "CHRO_MIN"]  = fill(0.0, N_Runs)
+        end
 
         f_name = ""
         f_mw   = 0.0
@@ -738,7 +746,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method)
             [string(get(r, "Name", "")) for r in output_data],
             df, ConfigDict)
 
-        msg = success ? "Protocol successfully generated. (D-Efficiency: $(round(d_eff, digits=4)))" : "Master Initialization Failed"
+        msg = success ? "Protocol successfully generated. (D-Efficiency: $(round(d_eff, digits=4)))" : "Master Initialisation Failed"
         return (success, msg)
         
     catch e
@@ -1256,11 +1264,10 @@ function DECK_RegisterCallbacks_DDEF(app)
                     json_str = JSON3.write(Dict("Inputs" => DECK_SnapRows_DDEF(), "Outputs" => out_d, "Global" => g_dict))
                     b64 = base64encode(json_str)
 
-                    # Correctly capture Project and Phase for smart naming in JSON export
-                    proj_v = string(args[271])
+                    # Standardized Naming: Project, Phase, Tag (MEMO), Extension (json)
+                    proj_v = (isnothing(args[271]) || isempty(strip(string(args[271])))) ? "Daisho" : string(args[271])
                     phase_v = string(args[272])
-                    fname = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_v, phase_v, "WS")
-                    fname = replace(fname, ".xlsx" => ".json")
+                    fname = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_v, phase_v, "MEMO", "json")
 
                     dl_dict = Dict("filename" => fname, "content" => b64, "base64" => true)
                     lbl = html_div([html_i(className="fas fa-check-circle me-2"), "Workspace Exported"],
@@ -1315,25 +1322,34 @@ function DECK_RegisterCallbacks_DDEF(app)
                         end
                         push!(new_rows, nr)
                     end
-                    new_store = Dict{String,Any}("rows" => new_rows, "count" => get(store_data, "count", length(new_rows)))
+                    new_store = Dict{String,Any}("rows" => new_rows, "count" => get(store_data, "count", length(new_rows)))                # Update store, hidden vol/conc inputs, and stoch store
+                return DECK_Return_DDEF(new_store, NO, NO, new_stoch["Volume"], new_stoch["Conc"], NO, NO, NO, NO, NO, NO, fill(NO, 6), new_stoch)
                 end
 
-                # Update store, hidden vol/conc inputs, and stoch store
-                return DECK_Return_DDEF(new_store, NO, NO, new_stoch["Volume"], new_stoch["Conc"], NO, NO, NO, NO, NO, NO, fill(NO, 6), new_stoch)
-
-                # --- F. IMPORT PROTOCOL ---
+                # --- F. IMPORT PROTOCOL (from Smart Vault) ---
             elseif trig == "deck-upload" && !isnothing(up_cont)
                 try
                     if up_cont == ""
                         rows = [DECK_GetDefaultRow_DDEF(i) for i in 1:5]
-                        return DECK_Return_DDEF(Dict("rows" => rows, "count" => 5), rows, [Dict("label" => "Loading...", "value" => "NONE")], 0.0, 0.0, "", "BoxBehnken", NO, NO, "No data source", "NONE", fill(NO, 6), NO)
+                        return DECK_Return_DDEF(Dict("rows" => rows, "count" => 5), rows, [Dict("label" => "Loading...", "value" => "NONE")], 0.0, 0.0, "Daisho", "BoxBehnken", NO, NO, "No data source", "NONE", fill(NO, 6), NO)
                     end
-                    tmp = Sys_Fast.FAST_GetTransientPath_DDEF(up_cont)
-                    cfg = Sys_Fast.FAST_ReadConfig_DDEF(tmp)
-                    rm(tmp; force=true)
-                    if !isempty(cfg) && haskey(cfg, "Ingredients") || haskey(cfg, :Ingredients)
-                        g = DECK_GetSafeKey_DDEF(cfg, "Global", Dict())
-                        mapped = map(DECK_GetSafeKey_DDEF(cfg, "Ingredients", [])) do itm
+                    
+                    # Project Name Extraction from Filename
+                    extracted_proj = Sys_Fast.FAST_ExtractProjectFromFilename_DDEF(fname)
+                    # If empty, keep current or default to "Daisho"
+                    proj_v = (extracted_proj != "") ? extracted_proj : (isnothing(args[271]) || isempty(strip(string(args[271])))) ? "Daisho" : string(args[271])
+
+                    # Check extension for JSON support
+                    is_json = lowercase(splitext(fname)[2]) == ".json"
+
+                    if is_json
+                        # Support JSON import (Workspace format)
+                        base64_data = split(up_cont, ",")[end]
+                        json_str = String(base64decode(base64_data))
+                        data = JSON3.read(json_str)
+                        
+                        ingreds = DECK_GetSafeKey_DDEF(data, "Ingredients", DECK_GetSafeKey_DDEF(data, "Inputs", []))
+                        mapped = map(ingreds) do itm
                             Dict("Name" => DECK_GetSafeKey_DDEF(itm, "Name", ""), "Role" => DECK_GetSafeKey_DDEF(itm, "Role", "Variable"),
                                 "L1" => DECK_GetSafeKey_DDEF(itm, "L1", 0.0), "L2" => DECK_GetSafeKey_DDEF(itm, "L2", 0.0),
                                 "L3" => DECK_GetSafeKey_DDEF(itm, "L3", 0.0), "Min" => DECK_GetSafeKey_DDEF(itm, "Min", 0.0), "Max" => DECK_GetSafeKey_DDEF(itm, "Max", 0.0), "MW" => DECK_GetSafeKey_DDEF(itm, "MW", 0.0),
@@ -1344,28 +1360,71 @@ function DECK_RegisterCallbacks_DDEF(app)
                                 "IsFiller" => DECK_GetSafeKey_DDEF(itm, "IsFiller", false))
                         end
                         nc = min(length(mapped), DECK_MaxRows_DDEC)
-                        method_val = get(g, "Method", "BoxBehnken")
-                        outs = get(cfg, "Outputs", [])
+                        
+                        g = DECK_GetSafeKey_DDEF(data, "Global", Dict())
+                        method_val = get(g, "Method", "BB15")
+                        outs = DECK_GetSafeKey_DDEF(data, "Outputs", [])
                         out_vals = vcat(
                             [i <= length(outs) ? get(outs[i], "Name", "") : "" for i in 1:3],
                             [i <= length(outs) ? get(outs[i], "Unit", "-") : "-" for i in 1:3]
                         )
- stat_msg = html_span("✅ Sync: $(length(fname) > 15 ? fname[1:15]*"..." : fname)", className="small fw-bold", style=Dict("color" => "var(--colour-chr4-tongre)"))
+                        stat_msg = html_span("✅ Sync: JSON Workspace", className="small fw-bold", style=Dict("color" => "var(--colour-chr4-tongre)"))
                         ph_opts = [Dict("label" => "Phase 1 Initiated", "value" => "Phase1")]
-
+                        
                         loaded_stoch = Dict(
                             "FillerName" => string(get(g, "FillerName", "")),
                             "FillerMW" => Float64(get(g, "FillerMW", 0.0)),
                             "Volume" => Float64(get(g, "Volume", 0.0)),
                             "Conc" => Float64(get(g, "Conc", 0.0))
                         )
-
                         return DECK_Return_DDEF(Dict("rows" => mapped[1:nc], "count" => nc), mapped[1:nc], ph_opts,
-                            get(g, "Volume", 0.0), get(g, "Conc", 0.0), NO, method_val, NO, NO, stat_msg, "Phase1", out_vals, loaded_stoch)
+                            get(g, "Volume", 0.0), get(g, "Conc", 0.0), proj_v, method_val, NO, NO, stat_msg, "Phase1", out_vals, loaded_stoch)
+                    else
+                        # Protocol import (Excel/Smart Vault format)
+                        tmp = Sys_Fast.FAST_GetTransientPath_DDEF(up_cont)
+                        if !isfile(tmp)
+                             return DECK_Return_DDEF(NO, NO, NO, NO, NO, proj_v, NO, html_div("❌ Data session stale. Please re-upload.", className="badge w-100 p-2", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)")), NO, NO, NO, fill(NO, 6), NO)
+                        end
+
+                        cfg = Sys_Fast.FAST_ReadConfig_DDEF(tmp)
+                        Sys_Fast.FAST_CleanTransient_DDEF(tmp)
+                        
+                        if !isempty(cfg) && (haskey(cfg, "Ingredients") || haskey(cfg, :Ingredients))
+                            g = DECK_GetSafeKey_DDEF(cfg, "Global", Dict())
+                            mapped = map(DECK_GetSafeKey_DDEF(cfg, "Ingredients", [])) do itm
+                                Dict("Name" => DECK_GetSafeKey_DDEF(itm, "Name", ""), "Role" => DECK_GetSafeKey_DDEF(itm, "Role", "Variable"),
+                                    "L1" => DECK_GetSafeKey_DDEF(itm, "L1", 0.0), "L2" => DECK_GetSafeKey_DDEF(itm, "L2", 0.0),
+                                    "L3" => DECK_GetSafeKey_DDEF(itm, "L3", 0.0), "Min" => DECK_GetSafeKey_DDEF(itm, "Min", 0.0), "Max" => DECK_GetSafeKey_DDEF(itm, "Max", 0.0), "MW" => DECK_GetSafeKey_DDEF(itm, "MW", 0.0),
+                                    "Unit" => DECK_GetSafeKey_DDEF(itm, "Unit", "-"),
+                                    "IsRadioactive" => DECK_GetSafeKey_DDEF(itm, "IsRadioactive", false),
+                                    "HalfLife" => Float64(DECK_GetSafeKey_DDEF(itm, "HalfLife", 0.0)),
+                                    "HalfLifeUnit" => string(DECK_GetSafeKey_DDEF(itm, "HalfLifeUnit", "Hours")),
+                                    "IsFiller" => DECK_GetSafeKey_DDEF(itm, "IsFiller", false))
+                            end
+                            nc = min(length(mapped), DECK_MaxRows_DDEC)
+                            method_val = get(g, "Method", "BB15") # Defaulting to BB15 for Deck
+                            outs = get(cfg, "Outputs", [])
+                            out_vals = vcat(
+                                [i <= length(outs) ? get(outs[i], "Name", "") : "" for i in 1:3],
+                                [i <= length(outs) ? get(outs[i], "Unit", "-") : "-" for i in 1:3]
+                            )
+                            stat_msg = html_span("✅ Sync: Valid Workspace", className="small fw-bold", style=Dict("color" => "var(--colour-chr4-tongre)"))
+                            ph_opts = [Dict("label" => "Phase 1 Initiated", "value" => "Phase1")]
+
+                            loaded_stoch = Dict(
+                                "FillerName" => string(get(g, "FillerName", "")),
+                                "FillerMW" => Float64(get(g, "FillerMW", 0.0)),
+                                "Volume" => Float64(get(g, "Volume", 0.0)),
+                                "Conc" => Float64(get(g, "Conc", 0.0))
+                            )
+
+                            return DECK_Return_DDEF(Dict("rows" => mapped[1:nc], "count" => nc), mapped[1:nc], ph_opts,
+                                get(g, "Volume", 0.0), get(g, "Conc", 0.0), proj_v, method_val, NO, NO, stat_msg, "Phase1", out_vals, loaded_stoch)
+                        end
                     end
                 catch e
                     @error "Import failed" exception = (e, catch_backtrace())
- return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, html_div("❌ Import Failed: $e", className="badge w-100 p-2", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)")), NO, NO, NO, fill(NO, 6), NO)
+                    return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, html_div("❌ Import Failed: $e", className="badge w-100 p-2", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)")), NO, NO, NO, fill(NO, 6), NO)
                 end
             end
 
@@ -1647,7 +1706,8 @@ function DECK_RegisterCallbacks_DDEF(app)
                 catch
                 end
             end
-            fname = Sys_Fast.FAST_GenerateSmartName_DDEF(project, current_phase, "DESIGN")
+            # Standardized Naming: Project, Phase, Tag (DOE), Extension (xlsx)
+            fname = Sys_Fast.FAST_GenerateSmartName_DDEF(project, current_phase, "DOE", "xlsx")
             rm(path; force=true)
 
             return (
@@ -1847,7 +1907,7 @@ function DECK_RegisterCallbacks_DDEF(app)
 
                 rows_val = get(store_out, "rows", get(store_out, :rows, []))
 
-                # Create fresh normalized row structure to avoid immutability issues
+                # Create fresh normalised row structure to avoid immutability issues
                 new_rows = []
                 for (i, rv) in enumerate(rows_val)
                     new_r = Dict{String,Any}()

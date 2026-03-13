@@ -166,7 +166,15 @@ Extracts and normalises goal parameters from an objective dictionary.
 function ARTS_ExtractGoal_DDEF(Goal::AbstractDict)
     G_Min = Float64(get(Goal, "Min", -Inf))
     G_Max = Float64(get(Goal, "Max", Inf))
-    G_Tgt = Float64(get(Goal, "Target", (G_Min + G_Max) / 2))
+    # Safety: Handle cases where Min/Max are -Inf/Inf to avoid NaN Target
+    G_Tgt_Raw = get(Goal, "Target", nothing)
+    G_Tgt = if !isnothing(G_Tgt_Raw)
+        Float64(G_Tgt_Raw)
+    elseif isfinite(G_Min) && isfinite(G_Max)
+        (G_Min + G_Max) / 2
+    else
+        0.0 # Default fallback
+    end
     Type = string(get(Goal, "Type", "Nominal"))
     # Weight must be non-negative for mathematical stability
     Weight = max(0.0, Float64(get(Goal, "Weight", 1.0)))
@@ -619,7 +627,8 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
 
     col_means = col_ref # Use the calculated reference for naming consistency below
 
-    parsed_goals = [ARTS_ExtractGoal_DDEF(Goals[m]) for m in eachindex(Models)]
+    # Prioritize goals attached to the models themselves for robustness
+    parsed_goals = [ARTS_ExtractGoal_DDEF(get(Models[m], "Goal", Goals[m])) for m in eachindex(Models)]
 
     for (s, zv) in enumerate(z_vals)
         Grid = repeat(col_means', N * N)
@@ -820,7 +829,8 @@ function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames:
 
     # Composite Desirability Calc
     Scores       = ones(N^3)
-    parsed_goals = [ARTS_ExtractGoal_DDEF(g) for g in Goals]
+    # Prioritize goals attached to the models themselves for robustness
+    parsed_goals = [ARTS_ExtractGoal_DDEF(get(Models[m], "Goal", Goals[m])) for m in eachindex(Models)]
     weight_sum   = sum([g[6] for g in parsed_goals])
     pow          = weight_sum > 0.0 ? (1.0 / weight_sum) : 1.0
 

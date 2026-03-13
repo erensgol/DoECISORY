@@ -63,7 +63,7 @@
 .colourgl-c1sm { background: rgba(68, 1, 84, 0.15); border: 1px solid var(--colour-chr1-shamag) !important; color: var(--colour-val5-purbla) !important; }
 .colourgl-c2sb { background: rgba(59, 82, 139, 0.15); border: 1px solid var(--colour-chr2-shablu) !important; color: var(--colour-val5-purbla) !important; }
 .colourgl-c3tc { background: rgba(33, 145, 140, 0.15); border: 1px solid var(--colour-chr3-toncya) !important; color: var(--colour-val5-purbla) !important; }
-.colourgl-c4tg { background: rgba(94, 201, 98, 0.15); border: 1px solid var(--colour-chr4-tongre) !important; color: var(--colour-val5-purbla) !important; }
+.colourgl-c4tg { background: rgba(94, 201, 98, 0.45) !important; border: 1px solid var(--colour-chr4-tongre) !important; color: var(--colour-val5-purbla) !important; }
 .colourgl-c5hy { background: rgba(253, 231, 37, 0.15); border: 1px solid var(--colour-chr5-hueyel) !important; color: var(--colour-val5-purbla) !important; }
 
 .btn[class*="colourgl-"] { background: transparent !important; transition: all 0.2s ease-in-out !important; }

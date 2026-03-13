@@ -37,35 +37,37 @@ end
 # --------------------------------------------------------------------------------------
 
 """
-    MOLE_ApplyRadioDecay_DDEF(RawValue, HalfLife, HalfLifeUnit, DeltaTHours) -> Float64
-Applies mathematical decay correction for radioactive elements (reverse-calculation).
-(Moved from Lib_Vise.jl)
+    MOLE_ConvertTimeToMinutes_DDEF(Value, Unit) -> Float64
+Normalises arbitrary time units (Seconds, Hours, Days) to Minutes for kinetic calculations.
 """
-function MOLE_ApplyRadioDecay_DDEF(RawValue::Float64, HalfLife::Float64, HalfLifeUnit::String, DeltaTHours::Float64)
-    HalfLife <= 0.0 && return RawValue
-
-    # Normalise Half-Life to Hours
-    unit_upper = uppercase(strip(HalfLifeUnit))
-    hl_hours   = HalfLife
-    if occursin("SEC", unit_upper)
-        hl_hours = HalfLife / 3600.0
-    elseif occursin("MIN", unit_upper)
-        hl_hours = HalfLife / 60.0
-    elseif occursin("DAY", unit_upper)
-        hl_hours = HalfLife * 24.0
-    elseif occursin("YEAR", unit_upper) || occursin("YR", unit_upper)
-        hl_hours = HalfLife * 24.0 * 365.25
+function MOLE_ConvertTimeToMinutes_DDEF(Value::Real, Unit::String)
+    Value <= 0.0 && return 0.0
+    u = uppercase(strip(Unit))
+    if occursin("SEC", u)
+        return Value / 60.0
+    elseif occursin("MIN", u)
+        return Float64(Value)
+    elseif occursin("DAY", u)
+        return Value * 24.0 * 60.0 # Standard Day -> Minutes
+    elseif occursin("HOUR", u) || occursin("HR", u)
+        return Value * 60.0
+    else
+        return Float64(Value) # Default: Minutes (Minute-centric)
     end
+end
 
-    hl_hours <= 0.0 && return RawValue
+"""
+    MOLE_ApplyRadioDecay_DDEF(RawValue, HalfLife, HalfLifeUnit, DeltaTMinutes) -> Float64
+Calculates effective mass/activity after isothermal decay (Measured * DF).
+"""
+function MOLE_ApplyRadioDecay_DDEF(RawValue::Float64, HalfLife::Float64, HalfLifeUnit::String, DeltaTMinutes::Float64)
+    hl_minutes = MOLE_ConvertTimeToMinutes_DDEF(HalfLife, HalfLifeUnit)
+    hl_minutes <= 0.0 && return RawValue
 
-    lambda       = log(2) / hl_hours
-    decay_factor = exp(-lambda * DeltaTHours)
-
-    # Avoid extreme inflation
-    decay_factor < 1e-6 && return RawValue
-
-    return RawValue / decay_factor
+    lambda       = log(2) / hl_minutes
+    decay_factor = exp(-lambda * DeltaTMinutes)
+    
+    return RawValue * decay_factor
 end
 
 # --- FLOATING-POINT TOLERANCE COMPARATOR ---

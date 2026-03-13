@@ -18,11 +18,13 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
     FAST_Constants_DDES, FAST_SafeNum_DDEF, FAST_GetLabDefaults_DDEF,
     FAST_InitialiseMaster_DDEF, FAST_NormaliseCols_DDEF!,
     FAST_SanitiseJson_DDEF, FAST_PrepareDownload_DDEF,
-    FAST_GenerateSmartName_DDEF, FAST_GetTransientPath_DDEF, FAST_ReadToStore_DDEF,
-    FAST_ReadConfig_DDEF, FAST_UpdateConfig_DDEF, FAST_GetThreadInfo_DDEF,
+    FAST_GenerateSmartName_DDEF, FAST_ExtractProjectFromFilename_DDEF,
+    FAST_GetTransientPath_DDEF, FAST_ReadToStore_DDEF,
+    FAST_UpdateConfig_DDEF, FAST_GetThreadInfo_DDEF,
     FAST_SanitiseInput_DDEF,
-    FAST_AcquireLock_DDEF, FAST_ReleaseLock_DDEF,
+    FAST_AcquireLock_DDEF, FAST_ReleaseLock_DDEF, FAST_ForceReleaseAll_DDEF,
     FAST_CacheRead_DDEF, FAST_CacheWrite_DDEF, FAST_CacheEvict_DDEF,
+    FAST_VaultWrite_DDEF, FAST_VaultRead_DDEF,
     FAST_GetComputeThreads_DDEF,
     FAST_SafeExcelWrite_DDEF, FAST_CleanTransient_DDEF,
     FAST_FormatDuration_DDEF, FAST_ValidateDataFrame_DDEF,
@@ -30,7 +32,8 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
     FAST_RoundCols_DDEF!,
     FAST_GetCol_DDEF,
     FAST_InitialiseWorkforce_DDEF, FAST_CleanWorkforce_DDEF,
-    FAST_Data_DDEC
+    FAST_Data_DDEC,
+    FAST_SanitiseFilename_DDEF
 
 # --------------------------------------------------------------------------------------
 # --- CONSTANTS & CONFIGURATION ---
@@ -63,6 +66,7 @@ Base.@kwdef struct FAST_Constants_DDES
     PRE_MASS::String       = "MASS_"
     PRE_RESULT::String     = "RESULT_"
     PRE_PRED::String       = "PRED_"
+    PRE_CHRO::String       = "CHRO_"
     PREFIX_LEADERS::String = "Leaders_"
     COL_EXP_ID::String     = "EXP_ID"
     COL_PHASE::String      = "PHASE"
@@ -94,9 +98,14 @@ const FAST_TempRoot_DDEC = joinpath(tempdir(), "DaishoDoE_Workforce")
 
 """
     FAST_InitialiseWorkforce_DDEF()
-Initialises global transient directories and purges legacy temporary files.
+Initialises global transient directories, locks environment to workforce, and purges legacy temporary files.
 """
 function FAST_InitialiseWorkforce_DDEF()
+    # PRE-FLIGHT: Force environment variables to trap leaky external libraries (Plotly, Kaleido, etc.)
+    ENV["TMP"]    = FAST_TempRoot_DDEC
+    ENV["TEMP"]   = FAST_TempRoot_DDEC
+    ENV["TMPDIR"] = FAST_TempRoot_DDEC
+    
     FAST_Log_DDEF("SYS", "Initialise", "Synchronising workforce directories...", "INFO")
     try
         if !isdir(FAST_TempRoot_DDEC)
@@ -115,14 +124,56 @@ function FAST_CleanWorkforce_DDEF(all::Bool=false)::Nothing
     !isdir(FAST_TempRoot_DDEC) && return nothing
 
     try
-        targets = filter(isfile, readdir(FAST_TempRoot_DDEC; join=true))
-        foreach(f -> rm(f; force=true), targets)
+        # Recursive cleaning: get all files and directories
+        # We walk backwards to delete files before their parent directories
+        for (root, dirs, files) in walkdir(FAST_TempRoot_DDEC; topdown=false)
+            for f in files
+                # Safety Guard: Never delete files not matching Daisho pattern unless 'all' is true
+                if all || startswith(f, "DAISHO_TEMP_") || startswith(f, "DDE_")
+                    try
+                        rm(joinpath(root, f); force=true)
+                    catch
+                        # Ignore locked files
+                    end
+                end
+            end
+            for d in dirs
+                try
+                    # Only remove if it's within our root
+                    if root != FAST_TempRoot_DDEC || all
+                         rm(joinpath(root, d); force=true, recursive=true)
+                    end
+                catch
+                    # Ignore locked directories
+                end
+            end
+        end
 
         all && FAST_Log_DDEF("FAST", "CLEAN_DEEP", "Extended workforce sweep executed.", "INFO")
     catch e
         FAST_Log_DDEF("FAST", "CLEAN_WARN", "Workforce scavenging lookup encountered obstacles: $e", "WARN")
     end
     
+    return nothing
+end
+
+"""
+    FAST_CleanTransient_DDEF(path)
+Surgically removes a specific transient file from the workforce.
+"""
+function FAST_CleanTransient_DDEF(path::Union{String,Nothing})
+    (isnothing(path) || isempty(path) || !isfile(path)) && return nothing
+    
+    # Internal path safety check
+    if !startswith(abspath(path), abspath(FAST_TempRoot_DDEC))
+        FAST_Log_DDEF("FAST", "GUARD_VIOLATION", "Attempted deletion outside workforce: $path", "FAIL")
+        return nothing
+    end
+
+    try
+        rm(path; force=true)
+    catch
+    end
     return nothing
 end
 
@@ -155,6 +206,35 @@ function FAST_Log_DDEF(Source::String, Event::String, Detail::Any="", Type::Stri
         ts, FAST_LogReset_DDEC, Source, FAST_LogReset_DDEC, c, Event, FAST_LogReset_DDEC, c, det_str, FAST_LogReset_DDEC)
     
     flush(stdout)
+end
+
+"""
+    FAST_SanitiseFilename_DDEF(name::String) -> String
+ASCII-safe filename generator. Converts Turkish characters to ASCII and replaces 
+non-alphanumeric characters with underscores. Ensures filesystem compatibility.
+"""
+function FAST_SanitiseFilename_DDEF(name::String)
+    # Mapping table for Turkish characters (UTF-8)
+    mapping = Dict(
+        'ç' => 'c', 'Ç' => 'C',
+        'ğ' => 'g', 'Ğ' => 'G',
+        'ı' => 'i', 'İ' => 'I',
+        'ö' => 'o', 'Ö' => 'O',
+        'ş' => 's', 'Ş' => 'S',
+        'ü' => 'u', 'Ü' => 'U'
+    )
+    
+    # 1. Map special characters
+    res = map(c -> get(mapping, c, c), name)
+    
+    # 2. Strict ASCII filter & replace whitespace/symbols with "_"
+    # We keep letters, numbers, hyphens, and periods.
+    res = replace(res, r"[^\w\-_.]" => "_")
+    
+    # 3. Collapse multiple underscores
+    res = replace(res, r"_{2,}" => "_")
+    
+    return strip(res, ['_'])
 end
 
 # --------------------------------------------------------------------------------------
@@ -464,6 +544,15 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
         end
         push!(headers, C.COL_SCORE)
 
+        # 3b. Append Chronological/Radioactivity Columns if present
+        if !isnothing(DesignData)
+            for chr_col in ("CHRO_HOUR", "CHRO_MIN")
+                if chr_col ∈ names(DesignData) && chr_col ∉ headers
+                    push!(headers, chr_col)
+                end
+            end
+        end
+
         # 4. Data Integration (Smart Appending)
         df_new = isnothing(DesignData) ? DataFrame(Dict(h => [] for h in headers)) : copy(DesignData)
 
@@ -533,22 +622,40 @@ end
 # --- WRITELEADERS MOVED TO Sys_Flow.jl ---
 
 """
-    FAST_GenerateSmartName_DDEF(Project, Phase, Status) -> String
+    FAST_GenerateSmartName_DDEF(Project, Phase, Tag, [Extension]) -> String
 Generates a unique, descriptive filename according to the Daisho protocol.
+Template: DDE_[Proj]_[Phase]_[Tag]_[Timestamp].[Ext]
 """
-function FAST_GenerateSmartName_DDEF(Project::String, Phase::String, Status::String)::String
-    p_clean  = isempty(strip(Project)) ? "Daisho" : replace(strip(Project), " " => "_")
+function FAST_GenerateSmartName_DDEF(Project::String, Phase::String, Tag::String, Ext::String="xlsx")::String
+    p_raw    = strip(Project)
+    p_clean  = (isempty(p_raw) || lowercase(p_raw) == "daisho") ? "Daisho" : FAST_SanitiseFilename_DDEF(p_raw)
+    
+    # Standardise Phase (Phase1 -> P1, P1 -> P1)
     ph_clean = replace(Phase, "Phase" => "P")
     ts       = Dates.format(now(), "yyyy_mmdd_HHMM")
     
-    return "DDE_$(p_clean)_$(ph_clean)_$(Status)_$(ts).xlsx"
+    return "DDE_$(p_clean)_$(ph_clean)_$(Tag)_$(ts).$(Ext)"
 end
 
 """
-    FAST_GetTransientPath_DDEF([Base64Content]) -> String
-Creates a identifiable temporary file path inside the Workforce bunker.
+    FAST_ExtractProjectFromFilename_DDEF(Filename::String) -> String
+Extracts the project name from a Daisho standard filename.
+Returns empty string if the pattern doesn't match.
 """
-function FAST_GetTransientPath_DDEF(Base64Content::Union{String,Nothing}=nothing)::String
+function FAST_ExtractProjectFromFilename_DDEF(Filename::String)::String
+    # Pattern: DDE_ProjectName_Phase_Tag_TS.ext
+    # Project name can contain underscores (sanitised from spaces).
+    # We look for everything between DDE_ and the Phase part (_P\d+_).
+    m = match(r"^DDE_(.*?)_P\d+_", Filename)
+    return isnothing(m) ? "" : string(m.captures[1])
+end
+
+"""
+    FAST_GetTransientPath_DDEF([DataHandle]) -> String
+Creates a identifiable temporary file path inside the Workforce bunker.
+If DataHandle is a Hash, it retrieves binary from Vault. If it's Base64, it decodes it.
+"""
+function FAST_GetTransientPath_DDEF(DataHandle::Union{String,Nothing}=nothing)::String
     # Ensure directory exists (failsafe)
     isdir(FAST_TempRoot_DDEC) || mkpath(FAST_TempRoot_DDEC)
 
@@ -556,8 +663,18 @@ function FAST_GetTransientPath_DDEF(Base64Content::Union{String,Nothing}=nothing
     rnd      = rand(1000:9999)
     tmp_path = joinpath(FAST_TempRoot_DDEC, "DAISHO_TEMP_$(ts)_$(rnd).xlsx")
 
-    if !isnothing(Base64Content)
-        write(tmp_path, base64decode(split(Base64Content, ',')[end]))
+    if !isnothing(DataHandle) && !isempty(DataHandle)
+        # 1. Try Vault Retrieval (Optimised Path)
+        vault_binary = FAST_VaultRead_DDEF(DataHandle)
+        if !isnothing(vault_binary)
+            write(tmp_path, vault_binary)
+            return tmp_path
+        end
+
+        # 2. Fallback to Base64 Decoding (Legacy Compat)
+        if contains(DataHandle, ";base64,")
+            write(tmp_path, base64decode(split(DataHandle, ',')[end]))
+        end
     end
     
     return tmp_path
@@ -565,12 +682,20 @@ end
 
 """
     FAST_ReadToStore_DDEF(Path) -> String
-Reads a file and returns its Base64 representation for frontend storage.
+Reads a file, persists it to Server Vault, and returns its Hash handle for frontend.
 """
 function FAST_ReadToStore_DDEF(Path::Union{String,Nothing})::String
     try
         (isnothing(Path) || isempty(Path) || !isfile(Path)) && return ""
-        return "data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64," * base64encode(read(Path))
+        
+        binary = read(Path)
+        h_val  = string(hash(binary))
+        
+        # Persist to server memory
+        FAST_VaultWrite_DDEF(h_val, binary)
+        
+        # Return only the handle (h_val) to Dash
+        return h_val
     catch
         return ""
     end
@@ -659,10 +784,10 @@ const FAST_OperationLocks_DDEC = Dict{String,ReentrantLock}()
 const FAST_LockGuard_DDEC = ReentrantLock()
 
 """
-    FAST_AcquireLock_DDEF(op_name) -> Bool
-Tries to acquire a named operation lock without blocking.
+    FAST_AcquireLock_DDEF(op_name, Reason::String="Unspecified") -> Bool
+Tries to acquire a named operation lock without blocking. Logs acquisition status for system transparency.
 """
-function FAST_AcquireLock_DDEF(op_name::Union{String,Nothing})::Bool
+function FAST_AcquireLock_DDEF(op_name::Union{String,Nothing}, Reason::String="Unspecified")::Bool
     (isnothing(op_name) || isempty(op_name)) && return false
     
     lock(FAST_LockGuard_DDEC) do
@@ -670,20 +795,57 @@ function FAST_AcquireLock_DDEF(op_name::Union{String,Nothing})::Bool
     end
     
     lk = FAST_OperationLocks_DDEC[op_name]
-    return trylock(lk)
+    success = trylock(lk)
+    
+    if success
+        FAST_Log_DDEF("SYS", "LOCK_ACQUIRE", "Lock: $op_name | Reason: $Reason", "OK")
+    else
+        FAST_Log_DDEF("SYS", "LOCK_REJECT", "Lock: $op_name | Active Process Detected", "WARN")
+    end
+    
+    return success
 end
 
 """
-    FAST_ReleaseLock_DDEF(op_name)
-Releases the named operation lock safely.
+    FAST_ReleaseLock_DDEF(op_name::Union{String,Nothing})
+Releases the named operation lock safely. Logs release status and handles reentrancy or ownership errors.
 """
-function FAST_ReleaseLock_DDEF(op_name::Union{String,Nothing})::Nothing
+function FAST_ReleaseLock_DDEF(op_name::Union{String,Nothing})
     (isnothing(op_name) || isempty(op_name)) && return nothing
     haskey(FAST_OperationLocks_DDEC, op_name) || return
     
     lk = FAST_OperationLocks_DDEC[op_name]
-    islocked(lk) && unlock(lk)
     
+    if islocked(lk)
+        try
+            unlock(lk)
+            # Re-check status for logging
+            still_locked = islocked(lk)
+            if still_locked
+                FAST_Log_DDEF("SYS", "LOCK_RELEASE_PARTIAL", "Lock: $op_name (Reentrancy Level Decreased)", "INFO")
+            else
+                FAST_Log_DDEF("SYS", "LOCK_RELEASE", "Lock: $op_name (Active Lock: OFF)", "INFO")
+            end
+        catch e
+            FAST_Log_DDEF("SYS", "LOCK_RELEASE_FAIL", "Lock: $op_name | Error: $(string(e))", "FAIL")
+        end
+    else
+        # Optional: log if trying to release an already free lock
+        # FAST_Log_DDEF("SYS", "LOCK_RELEASE_IDLE", "Lock: $op_name already free.", "LIST")
+    end
+    
+    return nothing
+end
+
+"""
+    FAST_ForceReleaseAll_DDEF()
+Clears all operation locks from the global pool. Use only for system recovery.
+"""
+function FAST_ForceReleaseAll_DDEF()
+    lock(FAST_LockGuard_DDEC) do
+        empty!(FAST_OperationLocks_DDEC)
+    end
+    FAST_Log_DDEF("SYS", "LOCK_FLUSH", "All operation locks cleared (Self-Healing executed).", "WARN")
     return nothing
 end
 
@@ -721,23 +883,34 @@ function FAST_CacheWrite_DDEF(key::Union{String,Nothing}, df::DataFrame)::Nothin
     FAST_Log_DDEF("CACHE", "WRITE", "Cached '$(key)' ($(nrow(df)) rows)", "OK")
 end
 
+# --------------------------------------------------------------------------------------
+# --- BINARY VAULT (SERVER-SIDE BLOB STORAGE) ---
+# --------------------------------------------------------------------------------------
+
+# Store for large binary blobs (Excel files) to prevent dcc.Store bloat
+const FAST_BinaryVault_DDEC = Dict{String, Vector{UInt8}}()
+const FAST_VaultLock_DDEC   = ReentrantLock()
+
 """
-    FAST_CacheEvict_DDEF(key)
-Evicts specific key or clears entire cache if key is empty.
+    FAST_VaultWrite_DDEF(key, binary)
+Thread-safe write to binary vault.
 """
-function FAST_CacheEvict_DDEF(key::Union{String,Nothing}="")::Nothing
-    k_val = isnothing(key) ? "" : key
-    lock(FAST_CacheLock_DDEC) do
-        if isempty(k_val)
-            empty!(FAST_CacheStore_DDEC)
-            FAST_Log_DDEF("CACHE", "FLUSH", "Entire cache cleared.", "WARN")
-        elseif haskey(FAST_CacheStore_DDEC, key)
-            delete!(FAST_CacheStore_DDEC, key)
-            FAST_Log_DDEF("CACHE", "EVICT", "Evicted '$key'", "INFO")
-        end
+function FAST_VaultWrite_DDEF(key::String, binary::Vector{UInt8})::Nothing
+    lock(FAST_VaultLock_DDEC) do
+        FAST_BinaryVault_DDEC[key] = binary
     end
-    
+    FAST_Log_DDEF("VAULT", "STORE", "Binary persisted ($key) | Size: $(length(binary) ÷ 1024) KB", "OK")
     return nothing
+end
+
+"""
+    FAST_VaultRead_DDEF(key) -> Vector{UInt8}
+Thread-safe read from binary vault.
+"""
+function FAST_VaultRead_DDEF(key::String)::Union{Vector{UInt8}, Nothing}
+    lock(FAST_VaultLock_DDEC) do
+        return haskey(FAST_BinaryVault_DDEC, key) ? FAST_BinaryVault_DDEC[key] : nothing
+    end
 end
 
 # --------------------------------------------------------------------------------------
@@ -753,40 +926,14 @@ function FAST_GetComputeThreads_DDEF()::Int
     return max(1, total - 1)
 end
 
-# --------------------------------------------------------------------------------------
-# --- TRANSIENT FILE MANAGEMENT ---
-# --------------------------------------------------------------------------------------
-
-"""
-    FAST_CleanTransient_DDEF(path)
-Guaranteed removal of temporary files.
-"""
-function FAST_CleanTransient_DDEF(path::Union{String,Nothing})::Nothing
-    (isnothing(path) || isempty(path)) && return nothing
-    try
-        isfile(path) && rm(path; force=true)
-    catch e
-        FAST_Log_DDEF("FAST", "CLEAN_WARN", "Failed to remove temp file: $path ($e)", "WARN")
-    end
-end
-
-"""
-    FAST_FormatDuration_DDEF(seconds) -> String
-Formats elapsed seconds into a human-readable string (ms, s, min).
-"""
 function FAST_FormatDuration_DDEF(seconds::Float64)::String
     seconds < 0.001 && return "<1ms"
     seconds < 1.0   && return @sprintf("%.0fms", seconds * 1000)
     seconds < 60.0  && return @sprintf("%.2fs", seconds)
-    
     minutes = seconds / 60.0
     return @sprintf("%.1fmin", minutes)
 end
 
-"""
-    FAST_ValidateDataFrame_DDEF(df, [RequiredCols]) -> (Bool, Vector{String})
-Pre-flight data quality validator checking for missing columns and NaNs.
-"""
 function FAST_ValidateDataFrame_DDEF(df::DataFrame, RequiredCols::Vector{String}=String[])::Tuple{Bool,Vector{String}}
     issues = String[]
 

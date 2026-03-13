@@ -185,7 +185,7 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
                 end
             end
         catch
-            Sys_Fast.FAST_Log_DDEF("VISE", "MODELING", "Failed to compute exact p-values during model fitting.", "WARN")
+            Sys_Fast.FAST_Log_DDEF("VISE", "MODELLING", "Failed to compute exact p-values during model fitting.", "WARN")
         end
 
         vifs     = VISE_CalcVIF_DDEF(X_Design)
@@ -211,7 +211,7 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
             "Status"    => "OK"
         )
     catch e
-        Sys_Fast.FAST_Log_DDEF("VISE", "MODELING", sprint(showerror, e, catch_backtrace()), "FAIL")
+        Sys_Fast.FAST_Log_DDEF("VISE", "MODELLING", sprint(showerror, e, catch_backtrace()), "FAIL")
         return Dict("Status" => "FAIL", "Error" => string(e))
     end
 end
@@ -541,15 +541,15 @@ function VISE_ExportToExcel_DDEF(FilePath::String, Results::AbstractDict)
             # 4. Radiation & Decay Correction Sheet (If applicable)
             if haskey(Results, "RadioCorrection")
                 sh_rad       = XLSX.addsheet!(xf, "Radiation_Decay_Correction")
-                sh_rad["A1"] = ["Component/Response", "Half-Life", "Unit", "Delta-T (Hours)", "Decay Factor (DF)", "Correction Applied"]
+                sh_rad["A1"] = ["Component", "Half-Life", "Unit", "Avg Delta-T (Hours)", "Avg Decay Factor", "Correction Applied"]
                 data         = Results["RadioCorrection"]
                 for (r_idx, itm) in enumerate(data)
                     sh_rad[r_idx+1, 1] = itm["Name"]
                     sh_rad[r_idx+1, 2] = itm["HalfLife"]
                     sh_rad[r_idx+1, 3] = itm["Unit"]
-                    sh_rad[r_idx+1, 4] = round(itm["DeltaT"]; digits=4)
-                    sh_rad[r_idx+1, 5] = round(itm["DecayFactor"]; digits=6)
-                    sh_rad[r_idx+1, 6] = itm["IsCorrected"] ? "YES" : "NO"
+                    sh_rad[r_idx+1, 4] = round(get(itm, "AvgDeltaT", 0.0); digits=4)
+                    sh_rad[r_idx+1, 5] = round(get(itm, "AvgDF", 0.0); digits=6)
+                    sh_rad[r_idx+1, 6] = get(itm, "IsCorrected", false) ? "YES (Dynamic)" : "NO"
                 end
             end
         end
@@ -665,7 +665,7 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
     while eff_steps^Dim > max_pts && eff_steps > 3
         eff_steps -= 2
     end
-    Sys_Fast.FAST_Log_DDEF("VISE", "OPTIMIZATION",
+    Sys_Fast.FAST_Log_DDEF("VISE", "OPTIMISATION",
         "Grid: $(eff_steps)^$Dim = $(eff_steps^Dim) pts | Compute threads: $compute_threads", "INFO")
 
     # Generate coordinate ranges
@@ -801,12 +801,12 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     # --- Section: Radioactive Decay Correction ---
     if haskey(Res, "RadioCorrection") && !isempty(Res["RadioCorrection"])
         write(io, "### II. Radioactive Decay Correction (Audit)\n")
-        write(io, "Systematic correction applied to compensate for isothermal decay between calibration and experimental execution.\n\n")
+        write(io, "Row-based dynamic correction applied to compensate for isothermal decay between calibration and experimental execution.\n\n")
         for itm in Res["RadioCorrection"]
-            @printf(io, "- **%s**: Applied correction for isotope decay.\n", itm["Name"])
+            @printf(io, "- **%s**: Applied dynamic row-based correction.\n", itm["Name"])
             @printf(io, "  - *Half-Life (T½)*: %.2f %s\n", itm["HalfLife"], itm["Unit"])
-            @printf(io, "  - *Decay Time (Δt)*: %.2f hours\n", itm["DeltaT"])
-            @printf(io, "  - *Decay Factor (DF)*: %.4f (Correction: 1/DF)\n", itm["DecayFactor"])
+            @printf(io, "  - *Avg Decay Time*: %.2f hours\n", get(itm, "AvgDeltaT", 0.0))
+            @printf(io, "  - *Avg Decay Factor*: %.4f\n", get(itm, "AvgDF", 0.0))
         end
         write(io, "\n")
     end
@@ -912,7 +912,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     C   = Sys_Fast.FAST_Data_DDEC
     Log = Sys_Fast.FAST_Log_DDEF
 
-    Log("VISE", "INITIALIZATION", "Analyzing Phase: $Phase", "WAIT")
+    Log("VISE", "INITIALISATION", "Analysing Phase: $Phase", "WAIT")
     t0                = time()
     boundary_warnings = String[]
 
@@ -923,13 +923,13 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     # Pre-flight data quality validation (Sys_Fast -> Lib_Vise bridge)
     valid, issues = Sys_Fast.FAST_ValidateDataFrame_DDEF(df_raw, [C.COL_PHASE])
     if !valid
-        Log("VISE", "INITIALIZATION", "Pre-flight issues: $(join(issues, " | "))", "WARN")
+        Log("VISE", "INITIALISATION", "Pre-flight issues: $(join(issues, " | "))", "WARN")
     end
 
     Sys_Fast.FAST_NormaliseCols_DDEF!(df_raw)
     col_phase_name = Sys_Fast.FAST_GetCol_DDEF(df_raw, C.COL_PHASE)
     if isempty(col_phase_name)
-        Log("VISE", "INITIALIZATION", "Required column '$(C.COL_PHASE)' not found in dataset.", "FAIL")
+        Log("VISE", "INITIALISATION", "Required column '$(C.COL_PHASE)' not found in dataset.", "FAIL")
         return Dict(
             "Status"  => "FAIL", 
             "Message" => "Required column '$(C.COL_PHASE)' not found in dataset. Please ensure the data sheet is properly formatted."
@@ -975,84 +975,58 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     Log("VISE", "DESIGN_QUALITY", "Calculated D-Efficiency: $(round(d_eff * 100; digits=2))%",
         d_eff > 0.5 ? "OK" : "WARN")
 
-    # --- RADIOACTIVITY DECAY CORRECTION ---
+    # --- RADIOACTIVITY DECAY CORRECTION (GLOBAL HOUR/MIN) ---
     radio_correction_audit = []
-    radio_opts             = get(Opts, "RadioOpts", Dict("Apply" => false, "CalibrationTime" => "", "ExperimentalTime" => ""))
-    if get(radio_opts, "Apply", false)
-        t_cal_str = get(radio_opts, "CalibrationTime", "")
-        t_exp_str = get(radio_opts, "ExperimentalTime", "")
+    if get(get(Opts, "RadioOpts", Dict()), "Apply", false)
+        Log("VISE", "DECAY", "Executing global Hour/Minute radioactivity correction.", "INFO")
+        
+        col_hr  = Sys_Fast.FAST_GetCol_DDEF(df_train, "CHRO_HOUR")
+        col_min = Sys_Fast.FAST_GetCol_DDEF(df_train, "CHRO_MIN")
 
-        if !isempty(t_cal_str) && !isempty(t_exp_str)
-            try
-                # Standard ISO format is yyyy-mm-ddTHH:MM, but sometimes browsers can vary or add seconds
-                parse_dt(s) = begin
-                    s_clean = replace(strip(s), " " => "T")
-                    for fmt in ["yyyy-mm-ddTHH:MM:SS", "yyyy-mm-ddTHH:MM"]
-                        try return Dates.DateTime(s_clean, fmt) catch; end
-                    end
-                    return Dates.DateTime(s_clean) # Fallback to default ISO
-                end
+        if isempty(col_hr) || isempty(col_min)
+            push!(boundary_warnings, "Radioactivity correction enabled but CHRO_HOUR/CHRO_MIN columns not found in dataset. Skipping correction.")
+            Log("VISE", "DECAY_SKIP", "CHRO columns missing.", "WARN")
+        else
+            config = Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
+            ingredients = if haskey(config, "Ingredients")
+                config["Ingredients"] isa Dict ? collect(values(config["Ingredients"])) : config["Ingredients"]
+            else
+                []
+            end
 
-                dt_cal        = parse_dt(t_cal_str)
-                dt_exp        = parse_dt(t_exp_str)
-                delta_t_hours = Dates.value(dt_exp - dt_cal) / (1000.0 * 60.0 * 60.0)
+            for (v_idx, v_name) in enumerate(InNames)
+                ing_idx = findfirst(i -> get(i, "Name", "") == v_name, ingredients)
+                isnothing(ing_idx) && continue
+                ing = ingredients[ing_idx]
 
-                if abs(delta_t_hours) > 1e-4 # Apply if there is a measurable difference
-                    config = Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
+                if get(ing, "IsRadioactive", false)
+                    hl_raw  = get(ing, "HalfLife", 0.0)
+                    hl_unit = get(ing, "HalfLifeUnit", "Hours")
+                    hl_min  = Lib_Mole.MOLE_ConvertTimeToMinutes_DDEF(hl_raw, hl_unit)
 
-                    # Correct Inputs (X)
-                    in_meta = get(config, "Ingredients", [])
-                    for (ci, name) in enumerate(InNames)
-                        idx = findfirst(x -> get(x, "Name", "") == name, in_meta)
-                        if !isnothing(idx) && get(in_meta[idx], "IsRadioactive", false)
-                            hl  = Float64(get(in_meta[idx], "HalfLife", 0.0))
-                            hlu = string(get(in_meta[idx], "HalfLifeUnit", "Hours"))
-                            for r in 1:N
-                                X_Clean[r, ci] = Lib_Mole.MOLE_ApplyRadioDecay_DDEF(X_Clean[r, ci], hl, hlu, delta_t_hours)
-                            end
-
-                            # Log for Excel/Report
-                            conv   = (hlu == "Days" ? 24.0 : (hlu == "Minutes" ? 1/60 : (hlu == "Seconds" ? 1/3600 : (hlu == "Years" ? 24*365.25 : 1.0))))
-                            lambda = log(2) / (hl * conv) # hl_hours based lambda for audit
-                            push!(radio_correction_audit, Dict(
-                                "Name"         => name, 
-                                "IsCorrected"  => true,
-                                "HalfLife"     => hl, 
-                                "Unit"         => hlu, 
-                                "DeltaT"       => delta_t_hours,
-                                "DecayFactor"  => exp(-lambda * delta_t_hours)
-                            ))
-                            Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_CORRECT", "Input $name corrected.", "WARN")
+                    if hl_min > 0.0
+                        dfs = Float64[]
+                        for i in 1:N
+                            # Default to 0 if not entered
+                            t_hr  = Sys_Fast.FAST_SafeNum_DDEF(df_train[i, col_hr])
+                            t_min = Sys_Fast.FAST_SafeNum_DDEF(df_train[i, col_min])
+                            t_total_min = t_hr * 60.0 + t_min
+                            
+                            df_row = exp(-log(2) * t_total_min / hl_min)
+                            X_Clean[i, v_idx] *= df_row
+                            push!(dfs, df_row)
                         end
-                    end
 
-                    # Correct Outputs (Y)
-                    out_meta = get(config, "Outputs", [])
-                    for (ci, name) in enumerate(OutNames)
-                        idx = findfirst(x -> get(x, "Name", "") == name, out_meta)
-                        if !isnothing(idx) && get(out_meta[idx], "IsRadioactive", false)
-                            hl  = Float64(get(out_meta[idx], "HalfLife", 0.0))
-                            hlu = string(get(out_meta[idx], "HalfLifeUnit", "Hours"))
-                            if hl > 0
-                                for r in 1:N
-                                    Y_Clean[r, ci] = Lib_Mole.MOLE_ApplyRadioDecay_DDEF(Y_Clean[r, ci], hl, hlu, delta_t_hours)
-                                end
-                                lambda = log(2) / (hl * (hlu == "Days" ? 24.0 : (hlu == "Minutes" ? 1/60 : (hlu == "Seconds" ? 1/3600 : (hlu == "Years" ? 24*365.25 : 1.0)))))
-                                push!(radio_correction_audit, Dict(
-                                    "Name"         => name, 
-                                    "IsCorrected"  => true,
-                                    "HalfLife"     => hl, 
-                                    "Unit"         => hlu, 
-                                    "DeltaT"       => delta_t_hours,
-                                    "DecayFactor"  => exp(-lambda * delta_t_hours)
-                                ))
-                                Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_CORRECT", "Output $name corrected.", "WARN")
-                            end
-                        end
+                        push!(radio_correction_audit, Dict(
+                            "Name"        => v_name,
+                            "HalfLife"    => hl_raw,
+                            "Unit"        => hl_unit,
+                            "AvgDeltaT"   => (isempty(dfs) ? 0.0 : mean((Sys_Fast.FAST_SafeNum_DDEF.(df_train[!, col_hr]) .* 60.0 .+ Sys_Fast.FAST_SafeNum_DDEF.(df_train[!, col_min])))),
+                            "AvgDF"       => (isempty(dfs) ? 1.0 : mean(dfs)),
+                            "IsCorrected" => true
+                        ))
                     end
                 end
-            catch e
-                Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_ERROR", "Failed to apply correction: $e", "FAIL")
             end
         end
     end
@@ -1087,16 +1061,19 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     Best_Point = Float64[]
     Leaders_DF = DataFrame()
 
+    # Ensure Goals are correctly populated for multi-objective engine
+    active_goals = isempty(Goals) ? [get(m, "Goal", Dict{String, Any}()) for m in models] : Goals
+
     if get(Opts, "Optim", true) && K >= 2
         bounds = hcat(minimum(X_Clean; dims=1)', maximum(X_Clean; dims=1)')
 
         # 1. Grid Search for Density Exploration & Leaders
-        XT, YP, SC = VISE_GridSearch_DDEF(models, Goals, bounds)
+        XT, YP, SC = VISE_GridSearch_DDEF(models, active_goals, bounds)
 
         num_candidates = length(SC)
 
         # 2. BlackBoxOptim for absolute Global Maximum (Best_Point)
-        Best_Point, Best_Score = Lib_Core.CORE_OptimiseDesirability_DDEF(models, Goals, bounds)
+        Best_Point, Best_Score = Lib_Core.CORE_OptimiseDesirability_DDEF(models, active_goals, bounds)
 
         # --- Leader Candidate Selection (Diversity-Focused) ---
         used_indices = Int[]

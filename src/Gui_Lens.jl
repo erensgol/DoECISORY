@@ -75,20 +75,14 @@ function LENS_Layout_DDEF()
                     # Radioactivity Panel
                     html_div(id="lens-panel-radio", className="d-none", children=[
                         BASE_SidebarHeader_DDEF("RADIOACTIVITY", icon="fas fa-radiation-alt"),
-                        BASE_ControlGroup_DDEF("Calibration Time",
-                            dbc_input(id="lens-date-cal", type="datetime-local", className="mb-2 form-control-sm", style=Dict("fontSize" => "11px")), class="mb-2"),
-                        BASE_ControlGroup_DDEF("Experimental Time",
-                            dbc_input(id="lens-date-exp", type="datetime-local", className="mb-2 form-control-sm", style=Dict("fontSize" => "11px")), class="mb-2"),
                         dbc_row(dbc_col([
                             dbc_button([html_i(id="lens-icon-radio-correct", className="fas fa-times me-2"), "Decay Correction"],
                                 id="lens-btn-radio-correct", className="w-100 fw-bold lens-radio-inactive", outline=false, size="sm")
                         ], xs=12)),
                         BASE_Separator_DDEF(),
                     ]),
-
-                    # Main Operations
-                    BASE_ActionButton_DDEF("lens-btn-view-report",    "Summary",    "fas fa-file-alt"),
-                    BASE_ActionButton_DDEF("lens-btn-next-phase",    "Next Phase", "fas fa-forward"),
+                    BASE_ActionButton_DDEF("lens-btn-view-report",    "Summary",    "fas fa-file-alt", disabled=true),
+                    BASE_ActionButton_DDEF("lens-btn-next-phase",    "Next Phase", "fas fa-forward",  disabled=true),
                     BASE_NextButton_DDEF("lens-btn-run",            "Run Analysis", disabled=true),
 
                     dcc_download(id="lens-download-phase"),
@@ -164,7 +158,9 @@ function LENS_Layout_DDEF()
                 dcc_store(id="lens-store-report",        data=""),
                 dcc_store(id="lens-store-results",       data=Dict()),
                 dcc_store(id="lens-store-radio-correct", data=true),
+                dcc_store(id="lens-store-sync-flag",     data=Dict("status" => 0, "vid" => "")), 
                 dcc_store(id="lens-signal-process",      data=Dict("ts" => 0, "success" => false)),
+                dcc_store(id="lens-store-diag-force",    data=0), # Emergency Unlock Signal
             ]; xs=12, md=9),
         ], className="g-3"),
 
@@ -277,7 +273,7 @@ end
 
 """
     LENS_RegisterCallbacks_DDEF(app)
-Orchestrates all reactive behavior for the LENS module.
+Orchestrates all reactive behaviour for the LENS module.
 """
 function LENS_RegisterCallbacks_DDEF(app)
     C = Sys_Fast.FAST_Data_DDEC
@@ -286,53 +282,71 @@ function LENS_RegisterCallbacks_DDEF(app)
     callback!(app,
         Output("sync-lens-content", "data"),
         Input("lens-upload-data",  "contents"),
+        State("lens-upload-data",  "filename"),
         prevent_initial_call=true
-    ) do cont
+    ) do cont, fname
         (isnothing(cont) || cont == "") && return Dash.no_update()
-        # Return raw base64 content to the sync store (app.jl will push to Master Vault)
-        return cont
+        # Return Dict with content and filename for project extraction and sync
+        return Dict("content" => cont, "filename" => fname)
     end
 
-    # --- 1B. PIPELINE: GLOBAL SYNC -> GOAL INITIALIZATION ---
+    # --- 1B. PIPELINE: GLOBAL SYNC -> GOAL INITIALISATION ---
     callback!(app,
         Output("lens-dd-phase",       "options"),
         Output("lens-upload-status",  "children"),
         Output("lens-upload-data-btn", "className"),
-        Output("lens-dd-phase",       "value"),
-        [Output("lens-goal-name-$i",   "value") for i in 1:3]...,
-        [Output("lens-goal-min-$i",    "value") for i in 1:3]...,
         [Output("lens-goal-target-$i", "value") for i in 1:3]...,
         [Output("lens-goal-max-$i",    "value") for i in 1:3]...,
         [Output("lens-goal-type-$i",   "value") for i in 1:3]...,
         [Output("lens-goal-weight-$i", "value") for i in 1:3]...,
         Output("lens-dd-model",       "options"),
         Output("lens-dd-model",       "value"),
-        Output("lens-panel-radio",    "className"),
-        Output("lens-date-cal",       "value"),
-        Output("lens-date-exp",       "value"),
+        Output("lens-store-sync-flag", "data"), # NEW: Reliability Flag
+        Output("lens-panel-radio", "className"),
+        Output("lens-input-project",  "value"),
         Input("store-master-vault",   "data"),
+        State("lens-input-project",   "value"),
         prevent_initial_call=true
-    ) do active_cont
+    ) do active_data, current_proj
         # Determine temp path BEFORE try for guaranteed cleanup
         path = ""
         try  # Error guard for sync callback
-            (isnothing(active_cont) || active_cont == "") &&
-                return [], "No Data Source", "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", "", ""
+            # Extraction logic for project name and content handle
+            active_cont = ""
+            active_fname = ""
+            if active_data isa String
+                active_cont = active_data
+            elseif active_data isa AbstractDict || active_data isa Dict
+                active_cont = get(active_data, "content", active_data)
+                active_fname = get(active_data, "filename", "")
+            end
 
-            Sys_Fast.FAST_Log_DDEF("LENS", "Sync", "Synchronising from Master Vault...", "INFO")
+            # Project Name extraction
+            extracted_proj = Sys_Fast.FAST_ExtractProjectFromFilename_DDEF(active_fname)
+            proj_v = (extracted_proj != "") ? extracted_proj : (isnothing(current_proj) || isempty(strip(string(current_proj)))) ? "Daisho" : string(current_proj)
+
+            if isnothing(active_cont) || active_cont == ""
+                return [], "No Data Source", "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 0, "vid" => ""), "d-none", proj_v
+            end
+
+            Sys_Fast.FAST_Log_DDEF("LENS", "Sync", "Synchronising from Smart Vault (Handle: $(first(active_cont, 64))...)...", "INFO")
             path = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
+
+            if !isfile(path)
+                 return [], html_span("❌ Data handle expired or missing. Please re-upload.", className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v
+            end
 
             ext = lowercase(splitext(path)[2])
             if ext != ".xlsx" && ext != ".xlsm"
                 Sys_Fast.FAST_CleanTransient_DDEF(path)
-                return [], html_span("❌ This is not a valid Excel file! (Please upload .xlsx)", className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", "", ""
+                return [], html_span("❌ This is not a valid Excel file! (Please upload .xlsx)", className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v
             end
 
             df = Sys_Fast.FAST_ReadExcel_DDEF(path, C.SHEET_DATA)
             isempty(df) && (df = Sys_Fast.FAST_ReadExcel_DDEF(path, "DATA_RECORDS"))
 
             if isempty(df)
-                return [], html_span("❌ No Valid Data Sheet", className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", "", ""
+                return [], html_span("❌ No Valid Data Sheet", className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dict("status" => 2, "vid" => ""), "d-none", proj_v
             end
 
             col_phase = Symbol(C.COL_PHASE)
@@ -405,21 +419,18 @@ function LENS_RegisterCallbacks_DDEF(app)
                 end
             end
 
-            has_radio = false
+            # Check for radioactivity (Headers OR Config)
+            has_radio_headers = any(c -> occursin("CHRO_HOUR", string(c)) || occursin("CHRO_MIN", string(c)), names(df))
+            has_radio_config = false
             if haskey(config, "Ingredients")
-                has_radio = has_radio || any(get(f, "IsRadioactive", false) == true for f in config["Ingredients"])
+                has_radio_config = has_radio_config || any(get(f, "IsRadioactive", false) == true for f in config["Ingredients"])
             end
             if haskey(config, "Outputs")
-                has_radio = has_radio || any(get(o, "IsRadioactive", false) == true for o in config["Outputs"])
+                has_radio_config = has_radio_config || any(get(o, "IsRadioactive", false) == true for o in config["Outputs"])
             end
-
+            
+            has_radio = has_radio_headers || has_radio_config
             panel_class = has_radio ? "d-block mt-3" : "d-none"
-
-            # --- RADIO OPTS OVERRIDES ---
-            saved_radio = get(config, "RadioOpts", Dict())
-            rad_apply = get(saved_radio, "Apply", false)
-            rad_t_cal = string(get(saved_radio, "CalibrationTime", ""))
-            rad_t_exp = string(get(saved_radio, "ExperimentalTime", ""))
 
             return (
                 phases,
@@ -434,16 +445,16 @@ function LENS_RegisterCallbacks_DDEF(app)
                 goals_weight...,
                 model_opts,
                 model_val,
+                Dict("status" => 1, "vid" => active_cont), # Use Data Handle as VID
                 panel_class,
-                rad_t_cal,
-                rad_t_exp
+                proj_v
             )
 
         catch e  # Surface sync errors to status area
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "SYNC_FAIL", bt, "FAIL")
             return [], html_span("❌ Sync Error: $(first(string(e), 120))", className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green",
-                nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dash.no_update(), Dash.no_update(), "d-none", "", ""
+                nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v
         finally
             # Guaranteed temp file cleanup
             !isempty(path) && try
@@ -453,29 +464,16 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # --- 1B. UI: PROTECT RUN BUTTON ---
-    callback!(app,
-        Output("lens-btn-run", "disabled"),
-        Input("store-master-vault", "data")
-    ) do mv
-        return isnothing(mv) || mv == ""
-    end
-
     # --- 2. ENGINE: RUN GLM ANALYSIS & OPTIMISATION ---
     callback!(app,
         Output("lens-store-graphs",    "data"),
         Output("lens-results-text",    "children"),
         Output("lens-run-output",      "children"),
-        Output("lens-btn-next-phase",  "disabled"),
-        Output("lens-btn-view-report", "disabled"),
         Output("lens-store-report",    "data"),
         Output("lens-store-results",   "data"),
         Output("sync-lens-analysis",   "data"),
         Output("lens-leaders-text",    "children"),
         Output("lens-radio-badge",     "children"),
-        Output("lens-btn-export-plots",   "disabled"),
-        Output("lens-btn-download-report", "disabled"),
-        Output("lens-btn-export-excel",    "disabled"),
         Input("lens-btn-run", "n_clicks"),
         State("lens-dd-phase", "value"),
         State("lens-dd-model", "value"),
@@ -486,18 +484,13 @@ function LENS_RegisterCallbacks_DDEF(app)
         [State("lens-goal-type-$i",   "value") for i in 1:3]...,
         [State("lens-goal-weight-$i", "value") for i in 1:3]...,
         State("lens-store-radio-correct", "data"),
-        State("lens-date-cal",            "value"),
-        State("lens-date-exp",            "value"),
         State("store-master-vault",       "data"),
         prevent_initial_call=true
     ) do args...
         n, phase, model = args[1:3]
 
         is_rad_apply = args[22] === true
-        t_cal = isnothing(args[23]) ? "" : string(args[23])
-        t_exp = isnothing(args[24]) ? "" : string(args[24])
-
-        base64_file = args[25]
+        base64_file = args[23]
 
         goals = Dict{String,Any}[]
         gnames = collect(args[4:6])
@@ -520,34 +513,35 @@ function LENS_RegisterCallbacks_DDEF(app)
             end
         end
 
-        (n === nothing || n == 0) && return Dash.no_update(), Dash.no_update(), "", true, true, "", Dash.no_update(), Dash.no_update(), "", "", true, true, true
+        (n === nothing || n == 0) && return Dash.no_update(), Dash.no_update(), "", "", Dash.no_update(), Dash.no_update(), "", ""
         isnothing(base64_file) &&
-            return Dash.no_update(), Dash.no_update(), html_span("Please upload an Excel file first.", className="colourtx-c5hy"), true, true, "", Dash.no_update(), Dash.no_update(), "", "", true, true, true
+            return Dash.no_update(), Dash.no_update(), html_span("Please upload an Excel file first.", className="colourtx-c5hy"), "", Dash.no_update(), Dash.no_update(), "", ""
 
         # Race condition lock: reject concurrent analysis requests
-        if !Sys_Fast.FAST_AcquireLock_DDEF("VISE_ANALYSIS")
+        if !Sys_Fast.FAST_AcquireLock_DDEF("VISE_ANALYSIS", "User triggered GLM Analysis via lens-btn-run")
             Sys_Fast.FAST_Log_DDEF("LENS", "LOCK_REJECT", "Analysis already running. New request rejected.", "WARN")
             return Dash.no_update(), Dash.no_update(),
                 html_span("⚠ An analysis is already in progress. Please wait.", className="fw-bold colourtx-c5hy"),
-                true, true, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), true, true, true
+                Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update()
         end
 
         # Create temp file BEFORE try so finally can always clean it
         path = ""
         try
-            if isnothing(base64_file) || isempty(base64_file)
+             if isnothing(base64_file) || isempty(base64_file)
                 return ([], html_span("Please upload a dataset.", className="small colourtx-v3dl"), "w-100 mb-2", nothing,
                         fill("", 3)..., fill(nothing, 3)..., fill(nothing, 3)..., fill(nothing, 3)..., fill("Nominal", 3)..., fill("1.00", 3)...,
-                        Dash.no_update(), Dash.no_update(), "d-none", "", "")
+                        Dash.no_update(), Dash.no_update(), "")
             end
             path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
+            if !isfile(path)
+                return [], "", html_span("❌ Data session stale. Please re-upload dataset.", className="fw-bold colourtx-c0hr"), "", Dash.no_update(), Dash.no_update(),"",""
+            end
             Sys_Fast.FAST_Log_DDEF("LENS", "Process", "Starting GLM Analysis (Phase: $phase)...", "WAIT")
 
             opts = Dict{String,Any}(
                 "RadioOpts" => Dict(
-                    "Apply" => is_rad_apply,
-                    "CalibrationTime" => t_cal,
-                    "ExperimentalTime" => t_exp
+                    "Apply" => is_rad_apply
                 )
             )
 
@@ -556,9 +550,8 @@ function LENS_RegisterCallbacks_DDEF(app)
             res = Lib_Vise.VISE_Execute_DDEF(path, phase_str, goals, model_str; Opts=opts)
 
             if res["Status"] != "OK"
-                # Updated to match the expected number of return values (13)
-                # Output order: graphs, summary, status_msg, btn_next_dis, btn_view_dis, report_store, results_store, sync_store, leaders_html, rad_badge, export_btn_dis, download_btn_dis, excel_btn_dis
-                return [], "", html_span("❌ Analysis Failed: $(res["Message"])", className="colourtx-c0hr"), true, true, "", Dash.no_update(), Dash.no_update(), "", "", true, true, true
+                # Updated to match the expected number of return values (8)
+                return [], "", html_span("❌ Analysis Failed: $(res["Message"])", className="colourtx-c0hr"), "", Dash.no_update(), Dash.no_update(), "", ""
             end
 
             # Generate and capture Scientific Report
@@ -763,42 +756,86 @@ function LENS_RegisterCallbacks_DDEF(app)
                     html_tbody(body_rows),
                 ], className="table table-sm table-borderless mb-0 mx-auto", style=Dict("width" => "100%", "marginTop" => "5px"))
             end
-
-            # Radio Badge Logic
             rad_badge = (haskey(res, "RadioCorrection") && !isempty(res["RadioCorrection"])) ?
-                        dbc_badge([html_i(className="fas fa-radiation me-1 colourtx-v5pb"), "Radio-Corrected"], className="ms-2 fw-bold colourgl-c5hy colourtx-v5pb", style=Dict("borderColor" => "var(--colour-chr5-hueyel)")) : ""
+                        dbc_badge([html_i(className="fas fa-radiation me-1 colourtx-v5pb"), "Radio-Corrected"], className="ms-2 fw-bold colourgl-c4tg colourtx-v5pb") : ""
 
             # Show elapsed time in analysis success message
             elapsed_str   = get(res, "Elapsed", "")
             elapsed_badge = isempty(elapsed_str) ? "" :
                             html_span(" ($elapsed_str)", className="colourtx-v3dl")
 
+            # Embed Vault ID for correlation - USE THE NEW UPDATED HANDLE
+            final_res = Sys_Fast.FAST_SanitiseJson_DDEF(res)
+            final_res["vid"] = updated_base64
+
             return (
                 graphs, 
                 summary, 
                 html_span(["✅ Analysis Complete", elapsed_badge], className="fw-bold small colourtx-c4tg"), 
-                false, 
-                false, 
                 sci_report, 
-                Sys_Fast.FAST_SanitiseJson_DDEF(res), 
+                final_res, 
                 updated_base64, 
                 leaders_html, 
-                rad_badge, 
-                false, 
-                false, 
-                false
+                rad_badge
             )
 
         catch e  # Surface analysis errors to UI
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "ANALYSIS_CRASH", bt, "FAIL")
-            return [], "", html_span("❌ Analysis Guard: Process aborted due to a technical exception.", className="fw-bold colourtx-c0hr"), true, true,"", Dash.no_update(), Dash.no_update(),"","", true, true, true
+            return [], "", html_span("❌ Analysis Guard: Process aborted due to a technical exception.", className="fw-bold colourtx-c0hr"), "", Dash.no_update(), Dash.no_update(),"",""
         finally
             # Guaranteed temp file cleanup (prevents disk leak)
             Sys_Fast.FAST_CleanTransient_DDEF(path)
             # Always release the lock, even if an error occurred
             Sys_Fast.FAST_ReleaseLock_DDEF("VISE_ANALYSIS")
         end
+    end
+
+    # --- 2B. UI: CONSOLIDATED BUTTON CONTROLLER (THE ULTIMATE FIX: STATE-CORRELATION) ---
+    callback!(app,
+        [Output("lens-btn-$id", "disabled") for id in ["run", "view-report", "next-phase", "export-plots", "download-report", "export-excel"]]...,
+        Input("store-master-vault",   "data"),
+        Input("lens-store-sync-flag",  "data"),
+        Input("lens-store-results",    "data"),
+        Input("lens-store-diag-force", "data") # NEW: Diagnostics override
+    ) do vault, sync_flag, results, diag_force
+        trig = BASE_GetTrigger_DDEF(callback_context())
+
+        # 0. Emergency Unlock (Diagnostics)
+        if trig == "lens-store-diag-force" && diag_force > 0
+            Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Emergency Unlock triggered via Diagnostics.", "OK")
+            # If results exist, unlock all; otherwise unlock only 'run'
+            if !isnothing(results) && haskey(results, "vid")
+                return ntuple(_ -> false, 6)
+            end
+            return false, true, true, true, true, true
+        end
+
+        # 1. Page Load or Data Cleared -> Lockdown
+        # 1. Page Load or Data Cleared -> Lockdown
+        if isnothing(vault) || isempty(vault)
+            return ntuple(_ -> true, 6)
+        end
+
+        curr_vid = vault # Hash Handle
+
+        # 2. Analysis Results State (Highest Priority)
+        # If we have valid results for CURRENT vault, unlock everything
+        if !isnothing(results) && get(results, "vid", "") == curr_vid
+            Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Analysis valid for current data. Unlocked all.", "OK")
+            return ntuple(_ -> false, 6)
+        end
+
+        # 3. Sync Flag State
+        # If sync is finished successfully for CURRENT vault, unlock Run Analysis
+        if !isnothing(sync_flag) && get(sync_flag, "vid", "") == curr_vid && get(sync_flag, "status", 0) == 1
+            Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Sync validated. Unlocked Analysis Engine.", "OK")
+            return false, true, true, true, true, true
+        end
+
+        # 4. Default / Syncing / Stale data -> Stay Locked
+        Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Data in transition or sync pending. Locking controls.", "WAIT")
+        return ntuple(_ -> true, 6)
     end
 
     # --- 3. UI: GRAPH INDEX TRACKER ---
@@ -986,7 +1023,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return is_disabled, btn_class
     end
 
-    # --- 5. UI: PHASE WIZARD DATA INITIALIZATION ---
+    # --- 5. UI: PHASE WIZARD DATA INITIALISATION ---
     callback!(app,
         Output("lens-wiz-dd-source",    "options"),
         Output("lens-wiz-dd-source",    "value"),
@@ -1088,8 +1125,9 @@ function LENS_RegisterCallbacks_DDEF(app)
         State("lens-table-candidates",  "selected_rows"),
         State("lens-table-candidates",  "data"),
         State("store-master-vault",     "data"),
+        State("lens-store-results",     "data"),
         prevent_initial_call=true
-    ) do n_prev, zoom_p, shift_p, meth_p, src, sel_rows, cand_data, base64_file
+    ) do n_prev, zoom_p, shift_p, meth_p, src, sel_rows, cand_data, base64_file, results
         trig = BASE_GetTrigger_DDEF(callback_context())
 
         # Correct initialization logic: 
@@ -1133,6 +1171,9 @@ function LENS_RegisterCallbacks_DDEF(app)
         res["SelectedZoom"]   = z
         res["SelectedShift"]  = s
         res["SelectedMethod"] = m
+
+        # Pass radio-correction status for UI warning
+        res["IsRadioCorrected"] = !isnothing(results) && haskey(results, "RadioCorrection") && !isempty(results["RadioCorrection"])
 
         # STRICT LEADER VALUES ORDERING: Follow the config variable order
         lead_vals = Float64[]
@@ -1225,10 +1266,23 @@ function LENS_RegisterCallbacks_DDEF(app)
         else
             dbc_alert([
                 html_h6([html_i(className="fas fa-exclamation-triangle me-2"), "No stoichiometry configuration found for this system or composition is out of limits."], className="mb-0 small fw-bold")
-            ], className="shadow-sm border-0 py-3 colourgl-c0hr colourtx-v0pw", style=Dict("borderColor" => "var(--colour-chr0-huered)"))
+            ], className="shadow-sm border-0 py-3 colourgl-neut colourtx-v5pb", style=Dict("borderColor" => "var(--colour-val3-darlow)"))
         end
 
-        return tbl, audit_html, fig
+        # 3. Radioactivity Correction Critical Warning
+        radio_warn = get(res, "IsRadioCorrected", false) ? dbc_alert([
+            html_div([
+                html_i(className="fas fa-radiation-alt fa-2x me-3"),
+                html_div([
+                    html_h6("DECAY-CORRECTION DETECTED", className="fw-bold mb-1"),
+                    html_p([
+                        "Values are decay-corrected. Calculate required radioactivity and masses for your next experiment."
+                    ], className="mb-0 small")
+                ])
+            ], className="d-flex align-items-center")
+        ], className="mt-3 border-0 shadow colourgl-c5hy colourtx-v5pb") : html_div()
+
+        return tbl, [audit_html, radio_warn], fig
     end
 
     # --- 12. LOGIC: COMMIT PHASE TO EXCEL ---
@@ -1241,8 +1295,9 @@ function LENS_RegisterCallbacks_DDEF(app)
         State("lens-table-candidates", "data"),
         State("lens-wiz-dd-source",    "value"),
         State("store-master-vault",    "data"),
+        State("lens-input-project",    "value"),
         prevent_initial_call=true
-    ) do n_commit, proposal, sel_rows, cand_data, src, base64_file
+    ) do n_commit, proposal, sel_rows, cand_data, src, base64_file, proj_v
         (isnothing(n_commit) || n_commit == 0 || isnothing(proposal) || get(proposal, "Status", "") != "OK") && return Dash.no_update()
         (isnothing(sel_rows) || isempty(sel_rows)) && return Dash.no_update()
 
@@ -1267,8 +1322,9 @@ function LENS_RegisterCallbacks_DDEF(app)
 
             Sys_Fast.FAST_CleanTransient_DDEF(path)
 
-            # Use smart naming
-            fname = Sys_Fast.FAST_GenerateSmartName_DDEF("Daisho", res["TargetPhase"], "READY")
+            # Standardized Naming: Project, Phase, Tag (EVO), Extension (xlsx)
+            proj_n = (isnothing(proj_v) || isempty(strip(string(proj_v)))) ? "Daisho" : string(proj_v)
+            fname = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_n, res["TargetPhase"], "EVO", "xlsx")
 
             return (
                 Dict("filename" => fname, "content" => base64encode(bytes), "base64" => true),
@@ -1289,16 +1345,18 @@ function LENS_RegisterCallbacks_DDEF(app)
         State("lens-input-project",    "value"),
         State("lens-dd-phase",         "value"),
         prevent_initial_call=true
-    ) do n, graphs, proj, phase
+    ) do n, graphs, proj_v, phase_v
         (isnothing(n) || n == 0 || isnothing(graphs) || isempty(graphs)) &&
             return Dash.no_update(), Dash.no_update()
 
         try
-            project = isnothing(proj) ? "Daisho" : proj
-            ph      = isnothing(phase) ? "Phase1" : phase
+            # Standardized Naming: Project, Phase, Tag (ARTS), Extension (zip)
+            proj_n = (isnothing(proj_v) || isempty(strip(string(proj_v)))) ? "Daisho" : string(proj_v)
+            ph_n   = (isnothing(phase_v) || isempty(strip(string(phase_v)))) ? "Phase1" : string(phase_v)
+            fname  = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_n, ph_n, "ARTS", "zip")
 
             temp_uuid  = replace(string(Base.UUID(rand(UInt128))), "-" => "")
-            export_dir = joinpath(tempdir(), "DaishoRender_$temp_uuid")
+            export_dir = joinpath(Sys_Fast.FAST_TempRoot_DDEC, "DaishoRender_$temp_uuid")
             mkpath(export_dir)
 
             count = 0
@@ -1309,7 +1367,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 # Apply Light Theme via BASE function
                 fig_dict = BASE_ConvertThemePlotlyWhite!_DDEF(fig_dict)
 
-                safe_title = replace(title, r"[^\w\-_\\.]" => "_")
+                safe_title = Sys_Fast.FAST_SanitiseFilename_DDEF(title)
                 filepath   = joinpath(export_dir, "$(safe_title).png")
 
                 traces     = [GenericTrace(d) for d in fig_dict["data"]]
@@ -1320,7 +1378,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 count += 1
             end
 
-            zip_path = joinpath(tempdir(), "Daisho_$(project)_$(ph)_Plots.zip")
+            zip_path = joinpath(Sys_Fast.FAST_TempRoot_DDEC, fname)
             let zdir = ZipFile.Writer(zip_path)
                 for file in readdir(export_dir)
                     fpath = joinpath(export_dir, file)
@@ -1336,7 +1394,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 
             Sys_Fast.FAST_Log_DDEF("LENS", "Export", "Zipped $count high-res plots.", "OK")
             return (
-                Dict("filename" => "Daisho_$(project)_$(ph)_Plots.zip", "content" => base64encode(bytes), "base64" => true),
+                Dict("filename" => fname, "content" => base64encode(bytes), "base64" => true),
                 html_span("✅ Successfully downloaded $count High-Res plots.", className="fw-bold colourtx-c4tg"),
             )
         catch e
@@ -1368,9 +1426,11 @@ function LENS_RegisterCallbacks_DDEF(app)
 
             if success
                 bytes = read(path)
-                pj    = isnothing(proj) ? "Daisho" : proj
-                ph    = isnothing(phase) ? "Phase1" : phase
-                fname = "Daisho_$(pj)_$(ph)_Scientific_Analysis.xlsx"
+                
+                # Standardized Naming: Project, Phase, Tag (SCI), Extension (xlsx)
+                proj_n = (isnothing(proj) || isempty(strip(string(proj)))) ? "Daisho" : string(proj)
+                ph_n   = (isnothing(phase) || isempty(strip(string(phase)))) ? "Phase1" : string(phase)
+                fname  = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_n, ph_n, "SCI", "xlsx")
 
                 return (
                     Dict("filename" => fname, "content" => base64encode(bytes), "base64" => true),

@@ -51,6 +51,7 @@ catch e
     rethrow(e)
 end
 using Main.Sys_Fast
+Sys_Fast.FAST_InitialiseWorkforce_DDEF() # Lock environment to Workforce bunker immediately
 
 # --- Terminal Identity (Official Julia REPL) ---
 println("\e[1m               \e[32m_\e[0m")
@@ -202,6 +203,7 @@ app.layout = html_div([
     dcc_store(id="sync-deck-content",  storage_type="memory"),
     dcc_store(id="sync-lens-content",  storage_type="memory"),
     dcc_store(id="sync-lens-analysis", storage_type="memory"),
+    dcc_store(id="lens-store-diag-force", data=0, storage_type="memory"), # Global Diagnostic Signal
 
     dbc_toast(id="global-toast",
         header="System Notification", is_open=false, dismissable=true,
@@ -371,7 +373,7 @@ function APP_RoutePage_DDEF(pathname::String)
                         ], className="d-flex align-items-center me-4"),
                         html_div([
                             html_span([html_i(className="fas fa-cog me-1"), "Diagnostics"],
-                                id="btn-open-sys-audit", className="badge border",
+                                id="btn-open-sys-audit", className="badge border", n_clicks=0,
                                 style=Dict("cursor" => "pointer", "backgroundColor" => "var(--colour-val1-lighig)", "color" => "var(--colour-val5-purbla)"))
                         ], className="d-flex align-items-center"),
                     ], className="d-flex justify-content-center align-items-center p-3 rounded-pill",
@@ -415,6 +417,50 @@ callback!(app,
     end
 
     return is_open, Dash.no_update(), Dash.no_update()
+end
+
+# 14. LOGIC: SYSTEM DIAGNOSTICS & EMERGENCY RECOVERY (GLOBAL)
+callback!(app,
+    Output("lens-store-diag-force", "data"),
+    Output("diag-global-output",    "children"),
+    Input("btn-diag-force-unlock",  "n_clicks"),
+    Input("btn-diag-clear-temp",    "n_clicks"),
+    prevent_initial_call=true
+) do n_lock, n_temp
+    ctx = callback_context()
+    isempty(ctx.triggered) && return Dash.no_update(), Dash.no_update()
+    
+    trig = split(ctx.triggered[1].prop_id, ".")[1]
+    
+    if trig == "btn-diag-force-unlock"
+        (isnothing(n_lock) || n_lock == 0) && return Dash.no_update(), Dash.no_update()
+        # 1. Backend: Clear all reentrant locks
+        Sys_Fast.FAST_ForceReleaseAll_DDEF()
+        
+        # 2. Frontend: Emit unlock signal (timestamp)
+        new_force = Int(round(time()))
+        
+        msg = html_div([
+            html_span("✅ Force Open Lock: SUCCESS", className="fw-bold colourtx-c4tg d-block"),
+            html_span("Backend locks cleared. System control guards reset.", className="x-small colourtx-v4dh")
+        ], className="mt-2 text-center")
+        
+        return new_force, msg
+        
+    elseif trig == "btn-diag-clear-temp"
+        (isnothing(n_temp) || n_temp == 0) && return Dash.no_update(), Dash.no_update()
+        # 1. Backend: Deep clean workforce bunker
+        Sys_Fast.FAST_CleanWorkforce_DDEF(true)
+        
+        msg = html_div([
+            html_span("✅ Clear Temporary Files: SUCCESS", className="fw-bold colourtx-c4tg d-block text-center"),
+            html_span("Transient workforce bunker has been scavenged and cleared.", className="x-small colourtx-v4dh d-block text-center")
+        ], className="mt-2")
+        
+        return Dash.no_update(), msg
+    end
+    
+    return Dash.no_update(), Dash.no_update()
 end
 
 # Loading overlay dismiss callback (polls until warmup completes)

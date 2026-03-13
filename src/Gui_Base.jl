@@ -524,7 +524,20 @@ function BASE_SystemAuditUI_DDEF()
         html_div([
             html_i(className="fas $status_icon me-2"),
             status_text
-        ], className="text-center fw-bold colourtx-v4dh mt-2")
+        ], className="text-center fw-bold colourtx-v4dh mt-2"),
+
+        html_hr(style=BASE_StyleHr_DDEC),
+        dbc_row([
+            dbc_col(html_div("RECOVERY TOOLS", className="small fw-bold colourtx-v3dl text-start"), width="auto"),
+            dbc_col([
+                dbc_button([html_i(className="fas fa-unlock-alt me-1"), "Force Open Lock"], 
+                    id="btn-diag-force-unlock", className="colourgl-c0hr me-2", size="sm", outline=true, n_clicks=0),
+                dbc_button([html_i(className="fas fa-trash-alt me-1"), "Clear Temp"], 
+                    id="btn-diag-clear-temp", className="colourgl-c1sm", size="sm", outline=true, n_clicks=0),
+            ], className="text-end")
+        ], align="center", className="mt-1"),
+        
+        html_div(id="diag-global-output", className="mt-2 small text-center")
     ], fluid=true, className="overflow-hidden p-0")
 end
 
