@@ -523,28 +523,28 @@ function APP_Warmup_DDEF()::Nothing
         # 1. Type system & Core Logic
         Sys_Fast.FAST_SafeNum_DDEF("42.0")
         
-        # 2. Physics & Chemistry
-        # Mock data for CalcMass
+        # 2. Physics & Chemistry (Safe Linear Pulse)
+        # Mock data for CalcMass - Balanced to 100% via %M
         names_mock  = String["A"]
         mw_mock     = Float64[100.0]
         ratios_mock = Float64[100.0]
-        units_mock  = String["mg"]
-        Lib_Mole.MOLE_CalcMass_DDEF(names_mock, mw_mock, ratios_mock, 5.0, 10.0, units_mock)
+        units_mock  = String["%M"]
+        Lib_Mole.MOLE_CalcMass_DDEF(names_mock, mw_mock, ratios_mock, 5.0, 10.0, units_mock, 1.0; SuppressLog=true)
         
-        # Dummy table data for AuditBatch
-        table_mock = [Dict("Name"=>"A", "MW"=>100.0, "Unit"=>"mg", "Type"=>"Variable", "Min"=>0.0, "Max"=>100.0, "Mid"=>50.0, "Rows"=>[[Dict("Unit"=>"mg")]]),
+        # Dummy table data for AuditBatch - Include Filler for auto-balance
+        table_mock = [Dict("Name"=>"A", "MW"=>100.0, "Unit"=>"%M", "Type"=>"Variable", "Min"=>0.0, "Max"=>50.0, "Mid"=>25.0, "Rows"=>[[Dict("Unit"=>"%M")]]),
                      Dict("Name"=>"W", "MW"=>18.0, "Unit"=>"%", "Type"=>"Filler", "Min"=>0.0, "Max"=>100.0, "Mid"=>50.0)]
-        design_mock = rand(10, 1)
+        design_mock = fill(20.0, 5, 1) # 20% A, rest is Filler. Safe.
         Lib_Mole.MOLE_AuditBatch_DDEF(table_mock, design_mock, 5.0, 10.0)
 
-        # 3. Analytics (Grid Search & Regression)
-        X_dummy = rand(11, 3) # Use 3 vars for standard compatibility
+        # 3. Analytics (Safe Linear Pulse)
+        X_dummy = rand(11, 3) 
         Y_dummy = rand(11, 1)
-        mod_dummy = Lib_Vise.VISE_Regress_DDEF(X_dummy, vec(Y_dummy), "quadratic")
+        names_in = ["X1", "X2", "X3"]
+        mod_dummy = Lib_Vise.VISE_Regress_DDEF(X_dummy, vec(Y_dummy), "linear"; InNames=names_in)
         
-        goals_dummy = [Dict("Type"=>"Maximise", "Weight"=>1.0)]
+        goals_dummy  = [Dict("Type"=>"Maximise", "Weight"=>1.0)]
         bounds_dummy = [0.0 1.0; 0.0 1.0; 0.0 1.0]
-        
         Lib_Vise.VISE_GridSearch_DDEF([mod_dummy], goals_dummy, bounds_dummy)
         
         # Memory Housekeeping
