@@ -543,7 +543,10 @@ function APP_Warmup_DDEF()::Nothing
         names_in = ["X1", "X2", "X3"]
         mod_dummy = Lib_Vise.VISE_Regress_DDEF(X_dummy, vec(Y_dummy), "linear"; InNames=names_in)
         
-        goals_dummy  = [Dict("Type"=>"Maximise", "Weight"=>1.0)]
+        goals_dummy = [Dict("Type"=>"Maximise", "Weight"=>1.0)]
+        # Add explicit Goal key for multi-layered robustness
+        mod_dummy["Goal"] = goals_dummy[1]
+        
         bounds_dummy = [0.0 1.0; 0.0 1.0; 0.0 1.0]
         Lib_Vise.VISE_GridSearch_DDEF([mod_dummy], goals_dummy, bounds_dummy)
         

@@ -169,11 +169,12 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
     NumModels = length(Models)
 
     # Pre-parse goals for fast execution
-    parsed_goals = [Main.Lib_Arts.ARTS_ExtractGoal_DDEF(Models[m]["Goal"]) for m in 1:NumModels]
+    parsed_goals = [Main.Lib_Arts.ARTS_ExtractGoal_DDEF(m <= length(Goals) ? Goals[m] : get(Models[m], "Goal", Dict{String, Any}())) for m in 1:NumModels]
 
     weight_sum = 0.0
     for m in 1:NumModels
-        weight_sum += Float64(get(Models[m]["Goal"], "Weight", 1.0))
+        m_goal = m <= length(Goals) ? Goals[m] : get(Models[m], "Goal", Dict{String, Any}())
+        weight_sum += Float64(get(m_goal, "Weight", 1.0))
     end
     pow_factor = weight_sum > 0.0 ? (1.0 / weight_sum) : 1.0
 

@@ -733,11 +733,13 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
 
         weight_sum = 0.0
         for m_idx in active_idx
-            weight_sum += Float64(get(Models[m_idx]["Goal"], "Weight", 1.0))
+            # Safe Goal Access: Prioritise the explicit Goals array
+            m_goal = m_idx <= length(Goals) ? Goals[m_idx] : get(Models[m_idx], "Goal", Dict{String, Any}())
+            weight_sum += Float64(get(m_goal, "Weight", 1.0))
         end
         pow = weight_sum > 0.0 ? (1.0 / weight_sum) : 1.0
 
-        parsed_goals = [Main.Lib_Arts.ARTS_ExtractGoal_DDEF(Models[m]["Goal"]) for m in 1:NumModels]
+        parsed_goals = [Main.Lib_Arts.ARTS_ExtractGoal_DDEF(m <= length(Goals) ? Goals[m] : get(Models[m], "Goal", Dict{String, Any}())) for m in 1:NumModels]
 
         Threads.@threads for i in 1:NumPoints
             s = 1.0
