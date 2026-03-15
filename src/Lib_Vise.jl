@@ -662,12 +662,12 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
     compute_threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
     
     # 1. Determine Capacity Limit & Base Resolution (N)
-    # Level 1 (Entry): ≤ 4 cores, 250k pts, N=25
-    # Level 2 (Pro): > 4 cores, 750k pts, N=25
+    # Level 1 (Entry): ≤ 4 cores, 300k pts, N=21
+    # Level 2 (Pro): > 4 cores, 500k pts, N=21
     cap_limit, base_n = if compute_threads <= 4
-        250_000, 25
+        300_000, 21
     else
-        750_000, 25
+        500_000, 21
     end
 
     # 2. Adjust steps dynamically to stay within cap
