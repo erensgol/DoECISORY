@@ -3,8 +3,8 @@ module Gui_Lens
 # ======================================================================================
 # DAISHODOE - GUI LENS (STATISTICAL ANALYSIS ENGINE)
 # ======================================================================================
-# Purpose: Data analysis, model fitting (GLM), and high-fidelity visualisation.
-# Module Tag: LENS
+# Description: Data analysis, model fitting (GLM), and high-fidelity visualisation.
+# Module Tag:  LENS
 # ======================================================================================
 
 using Dash
@@ -27,11 +27,9 @@ export LENS_Layout_DDEF, LENS_RegisterCallbacks_DDEF
 # SECTION 1: INTERFACE LAYOUT
 # --------------------------------------------------------------------------------------
 
-# --- RESTRUCTURING: LENS_BuildGoalRow_DDEF IS NOW MOVED TO Gui_Base.jl AS BASE_BuildGoalRow_DDEF
-
 """
-    LENS_Layout_DDEF()
-Constructs the statistical analysis and visualisation interface layout.
+    LENS_Layout_DDEF() -> Container
+Constructs the primary statistical analysis and visualisation interface layout.
 """
 function LENS_Layout_DDEF()
     return dbc_container([
@@ -164,7 +162,7 @@ function LENS_Layout_DDEF()
             ]; xs=12, md=9),
         ], className="g-3"),
 
-        # Modal Dialogs
+        # --- SYSTEM MODAL DIALOGUES ---
         BASE_Modal_DDEF("lens-modal-report", "DaishoDoE Scientific Intelligence Report",
             html_pre(id="lens-report-content", className="p-4 rounded small academic-report", style=Dict("whiteSpace" => "pre-wrap", "fontFamily" => "monospace", "maxHeight" => "600px", "overflowY" => "auto")),
             dbc_button(["Download Report (TXT)"], id="lens-btn-download-txt", className="w-100 colourgl-c4tg"); size="lg"),
@@ -176,7 +174,7 @@ function LENS_Layout_DDEF()
                     html_p("Define the experimental horizon for the next phase sequence.", className="small mb-4 colourtx-v3dl"),
                     dbc_row([
                         dbc_col([
-                            dbc_label("Source Phase (Where we are)", className="x-small fw-bold text-uppercase mb-2 colourtx-v3dl"),
+                            dbc_label("Source Phase", className="x-small fw-bold text-uppercase mb-2 colourtx-v3dl"),
                             dcc_dropdown(id="lens-wiz-dd-source", options=[], clearable=false, className="mb-3"),
                         ], xs=12, md=6),
                         dbc_col([
@@ -267,13 +265,12 @@ function LENS_Layout_DDEF()
     ], fluid=true, className="px-4 py-3")
 end
 
-# --------------------------------------------------------------------------------------
-# SECTION 2: REACTIVE LOGIC (CALLBACKS)
+# SECTION 2: REACTIVE ARCHITECTURE AND CALLBACK REGISTRY
 # --------------------------------------------------------------------------------------
 
 """
-    LENS_RegisterCallbacks_DDEF(app)
-Orchestrates all reactive behaviour for the LENS module.
+    LENS_RegisterCallbacks_DDEF(app) -> Nothing
+Initialises the reactive architecture and callback registry for the LENS module.
 """
 function LENS_RegisterCallbacks_DDEF(app)
     C = Sys_Fast.FAST_Data_DDEC
@@ -295,13 +292,16 @@ function LENS_RegisterCallbacks_DDEF(app)
         Output("lens-dd-phase",       "options"),
         Output("lens-upload-status",  "children"),
         Output("lens-upload-data-btn", "className"),
+        Output("lens-dd-phase",       "value"),
+        [Output("lens-goal-name-$i",   "value") for i in 1:3]...,
+        [Output("lens-goal-min-$i",    "value") for i in 1:3]...,
         [Output("lens-goal-target-$i", "value") for i in 1:3]...,
         [Output("lens-goal-max-$i",    "value") for i in 1:3]...,
         [Output("lens-goal-type-$i",   "value") for i in 1:3]...,
         [Output("lens-goal-weight-$i", "value") for i in 1:3]...,
         Output("lens-dd-model",       "options"),
         Output("lens-dd-model",       "value"),
-        Output("lens-store-sync-flag", "data"), # NEW: Reliability Flag
+        Output("lens-store-sync-flag", "data"), 
         Output("lens-panel-radio", "className"),
         Output("lens-input-project",  "value"),
         Input("store-master-vault",   "data"),
@@ -464,7 +464,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # --- 2. ENGINE: RUN GLM ANALYSIS & OPTIMISATION ---
+    # --- 2. STATISTICAL ENGINE: GLM MODELLING AND OPTIMISATION ---
     callback!(app,
         Output("lens-store-graphs",    "data"),
         Output("lens-results-text",    "children"),
@@ -513,9 +513,18 @@ function LENS_RegisterCallbacks_DDEF(app)
             end
         end
 
+        # Extraction logic for project name and content handle
+        active_cont = ""
+        if base64_file isa String
+            active_cont = base64_file
+        elseif base64_file isa AbstractDict || base64_file isa Dict
+            active_cont = get(base64_file, "content", "")
+        end
+
         (n === nothing || n == 0) && return Dash.no_update(), Dash.no_update(), "", "", Dash.no_update(), Dash.no_update(), "", ""
-        isnothing(base64_file) &&
+        if isnothing(active_cont) || isempty(active_cont)
             return Dash.no_update(), Dash.no_update(), html_span("Please upload an Excel file first.", className="colourtx-c5hy"), "", Dash.no_update(), Dash.no_update(), "", ""
+        end
 
         # Race condition lock: reject concurrent analysis requests
         if !Sys_Fast.FAST_AcquireLock_DDEF("VISE_ANALYSIS", "User triggered GLM Analysis via lens-btn-run")
@@ -528,12 +537,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         # Create temp file BEFORE try so finally can always clean it
         path = ""
         try
-             if isnothing(base64_file) || isempty(base64_file)
-                return ([], html_span("Please upload a dataset.", className="small colourtx-v3dl"), "w-100 mb-2", nothing,
-                        fill("", 3)..., fill(nothing, 3)..., fill(nothing, 3)..., fill(nothing, 3)..., fill("Nominal", 3)..., fill("1.00", 3)...,
-                        Dash.no_update(), Dash.no_update(), "")
-            end
-            path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
+            path = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
             if !isfile(path)
                 return [], "", html_span("❌ Data session stale. Please re-upload dataset.", className="fw-bold colourtx-c0hr"), "", Dash.no_update(), Dash.no_update(),"",""
             end
@@ -550,7 +554,6 @@ function LENS_RegisterCallbacks_DDEF(app)
             res = Lib_Vise.VISE_Execute_DDEF(path, phase_str, goals, model_str; Opts=opts)
 
             if res["Status"] != "OK"
-                # Updated to match the expected number of return values (8)
                 return [], "", html_span("❌ Analysis Failed: $(res["Message"])", className="colourtx-c0hr"), "", Dash.no_update(), Dash.no_update(), "", ""
             end
 
@@ -586,7 +589,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                         html_tbody(summary_rows, style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)")),
                     ], className="table table-sm table-borderless caption-top mb-1 mx-auto", style=Dict("width" => "95%", "marginTop" => "5px")),
 
-                # --- NEW: SCIENTIFIC VITALS TABLE ---
+                # --- SCIENTIFIC VITALS TABLE ---
                 (haskey(res, "Vitals") ? html_div([
                     html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px dashed var(--colour-val1-lighig)", "margin" => "10px 0")),
                     html_div([
@@ -764,7 +767,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             elapsed_badge = isempty(elapsed_str) ? "" :
                             html_span(" ($elapsed_str)", className="colourtx-v3dl")
 
-            # Embed Vault ID for correlation - USE THE NEW UPDATED HANDLE
+            # Embed Vault ID for correlation
             final_res = Sys_Fast.FAST_SanitiseJson_DDEF(res)
             final_res["vid"] = updated_base64
 
@@ -791,13 +794,13 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # --- 2B. UI: CONSOLIDATED BUTTON CONTROLLER (THE ULTIMATE FIX: STATE-CORRELATION) ---
+    # --- 2B. UI ARCHITECTURE: ORCHESTRATED ACTION CONTROLLER ---
     callback!(app,
         [Output("lens-btn-$id", "disabled") for id in ["run", "view-report", "next-phase", "export-plots", "download-report", "export-excel"]]...,
         Input("store-master-vault",   "data"),
         Input("lens-store-sync-flag",  "data"),
         Input("lens-store-results",    "data"),
-        Input("lens-store-diag-force", "data") # NEW: Diagnostics override
+        Input("lens-store-diag-force", "data")
     ) do vault, sync_flag, results, diag_force
         trig = BASE_GetTrigger_DDEF(callback_context())
 
@@ -812,12 +815,16 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
 
         # 1. Page Load or Data Cleared -> Lockdown
-        # 1. Page Load or Data Cleared -> Lockdown
         if isnothing(vault) || isempty(vault)
             return ntuple(_ -> true, 6)
         end
 
-        curr_vid = vault # Hash Handle
+        curr_vid = ""
+        if vault isa String
+            curr_vid = vault
+        elseif vault isa AbstractDict || vault isa Dict
+            curr_vid = get(vault, "content", "")
+        end
 
         # 2. Analysis Results State (Highest Priority)
         # If we have valid results for CURRENT vault, unlock everything
@@ -838,7 +845,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return ntuple(_ -> true, 6)
     end
 
-    # --- 3. UI: GRAPH INDEX TRACKER ---
+    # --- 3. UI ARCHITECTURE: VISUALISATION INDEX MANAGEMENT ---
     callback!(app,
         Output("lens-store-index", "data"),
         Output("lens-graph-input", "value"),
@@ -872,7 +879,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return idx, idx + 1, max(1, tot)
     end
 
-    # --- 4. UI: GRAPH RENDER SYNC ---
+    # --- 4. UI ARCHITECTURE: VISUALISATION RENDERING SYNCHRONISATION ---
     callback!(app,
         Output("lens-graph-main",    "figure"),
         Output("lens-graph-title",   "children"),
@@ -925,7 +932,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return g[idx]["figure"], g[idx]["title"], "/ $(length(g))", info_html
     end
 
-    # --- 7. UI: MODAL SEQUENTIAL SWITCHING (3-STEP WIZARD) ---
+    # --- 7. UI ARCHITECTURE: SEQUENTIAL PHASE EVOLUTION WIZARD ---
     callback!(app,
         Output("lens-modal-wizard",  "is_open"),
         Output("lens-modal-leader",  "is_open"),
@@ -1012,7 +1019,8 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         return Dict("filename" => fname, "content" => report)
     end
-    # --- 9. UI: CONDITIONAL ACTION ENABLING ---
+
+    # --- 9. UI ARCHITECTURE: CONDITIONAL ACTION REGULATION ---
     callback!(app,
         Output("lens-lead-btn-confirm", "disabled"),
         Output("lens-lead-btn-confirm", "className"),
@@ -1131,15 +1139,13 @@ function LENS_RegisterCallbacks_DDEF(app)
         trig = BASE_GetTrigger_DDEF(callback_context())
 
         # Correct initialization logic: 
-        # When coming from Step 2, use defaults. When adjusting in Step 3, use slider values.
-        # Slider value 1-5 maps to [1.0, 0.75, 0.5, 0.25, 0.1]
         zoom_map = Float64[1.0, 0.75, 0.5, 0.25, 0.1]
         z_idx = isnothing(zoom_p) ? 3 : clamp(round(Int, zoom_p), 1, 5)
 
         z = (trig == "lens-lead-btn-confirm") ? 0.5 : zoom_map[z_idx]
         ret_idx = (trig == "lens-lead-btn-confirm") ? 3 : z_idx
 
-        s = 0.0 # Shift is now always 0/centered as requested
+        s = 0.0
         m = (trig == "lens-lead-btn-confirm") ? "TL09" : meth_p
 
         (isnothing(base64_file) || isnothing(sel_rows) || isempty(sel_rows)) && return Dict(), ret_idx, s, m
@@ -1174,17 +1180,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         # Pass radio-correction status for UI warning
         res["IsRadioCorrected"] = !isnothing(results) && haskey(results, "RadioCorrection") && !isempty(results["RadioCorrection"])
-
-        # STRICT LEADER VALUES ORDERING: Follow the config variable order
-        lead_vals = Float64[]
-        for v_conf in vars_config
-            v_name = get(v_conf, "Name", "")
-            v_key = "$(C.PRE_INPUT)$v_name"
-            val = get(row_sel, v_key, get(row_sel, v_name, 0.0))
-            push!(lead_vals, Sys_Fast.FAST_SafeNum_DDEF(val))
-        end
-        res["LeaderValues"] = lead_vals
-
+        
         return res, ret_idx, s, m
     end
 
@@ -1203,16 +1199,51 @@ function LENS_RegisterCallbacks_DDEF(app)
         # Transformation Visualisation — use OldConfig (original boundaries) so the chart
         # performs a single zoom/shift, matching the NewConfig values shown in the table.
         old_conf    = get(res, "OldConfig", conf)
+        new_conf    = get(res, "NewConfig", conf)
         leader_vals = get(res, "LeaderValues", Float64[])
-        zoom        = Float64(get(res, "SelectedZoom", 1.0))
-        shift       = Float64(get(res, "SelectedShift", 0.0))
+        header_info = get(res, "Global", Dict())
+        vol         = Float64(get(header_info, "Volume", 5.0))
+        conc        = Float64(get(header_info, "Concentration", 10.0))
 
-        # FLOW_RenderPhaseTransition_DDEF now returns a Dict, so we pass it directly
-        fig = Sys_Flow.FLOW_RenderPhaseTransition_DDEF(old_conf, leader_vals, zoom, shift)
+        # 0.5 DYNAMIC FILLER CALCULATION
+        fd = Sys_Fast.FAST_Data_DDEC
+        
+        # Create a mutable copy for display purposes
+        display_conf = map(new_conf) do c
+            Dict{String,Any}(string(k) => v for (k,v) in pairs(c))
+        end
+
+        audit_rows = map(display_conf) do c
+            lvls = get(c, "Levels", [0.0, 0.0, 0.0])
+            Dict(
+                "Name" => string(get(c, "Name", "Unknown")), 
+                "Role" => string(get(c, "Role", "Fixed")),
+                "L1"   => Float64(lvls[1]), "L2"   => Float64(lvls[2]), "L3"   => Float64(lvls[3]), 
+                "MW"   => Float64(get(c, "MW", 0.0)),
+                "Unit" => string(get(c, "Unit", "-"))
+            )
+        end
+        audit_ok, audit_report, audit_results, _, _ = Main.Lib_Mole.MOLE_QuickAudit_DDEF(audit_rows, vol, conc)
+        
+        # Mapping audit results (mg) back to the display_conf for table display
+        if !isempty(audit_results)
+            for c in display_conf
+                if get(c, "Role", "") == fd.ROLE_FILL
+                    c_name = get(c, "Name", "")
+                    m_idx = findfirst(r -> r.Component == c_name, eachrow(audit_results))
+                    if !isnothing(m_idx)
+                        c["Levels"] = [0.0, audit_results[m_idx, :TARGET_MASS_mg], 0.0]
+                    end
+                end
+            end
+        end
+
+        # Guaranteed 100% sync by passing pre-calculated NewConfig
+        fig = Sys_Flow.FLOW_RenderPhaseTransition_DDEF(old_conf, display_conf, leader_vals)
 
         # 1. Comparison Table
         rows = []
-        for c in conf
+        for c in display_conf
             role = get(c, "Role", "Variable")
             lvls = get(c, "Levels", [0.0, 0.0, 0.0])
             push!(rows, html_tr([
@@ -1233,39 +1264,16 @@ function LENS_RegisterCallbacks_DDEF(app)
             html_tbody(rows)
         ], className="table table-sm table-hover align-middle small")
 
-        # 2. Stoichiometry Audit
-        # Robust key access helper (JSON3 compatibility)
-        function get_val_local(o, k, d)
-            haskey(o, string(k)) && return o[string(k)]
-            haskey(o, Symbol(k)) && return o[Symbol(k)]
-            return d
-        end
-
-        glb  = get_val_local(res, "Global", Dict())
-        vol  = Float64(get_val_local(glb, "Volume", 5.0))
-        conc = Float64(get_val_local(glb, "Concentration", 10.0))
-
-        chem_rows = [Dict(
-            "Name" => string(get_val_local(c, "Name", "")),
-            "Role" => string(get_val_local(c, "Role", "Variable")),
-            "L1"   => Float64(get_val_local(c, "Levels", [0.0, 0.0, 0.0])[1]),
-            "L2"   => Float64(get_val_local(c, "Levels", [0.0, 0.0, 0.0])[2]),
-            "L3"   => Float64(get_val_local(c, "Levels", [0.0, 0.0, 0.0])[3]),
-            "MW"   => Float64(get_val_local(c, "MW", 0.0))
-        ) for c in conf]
-
-        # Use safe vol/conc and handle cases where audit might fail due to "no stoichiometry configured"
-        audit_ok, audit_report, _, t_mass, _ = Main.Lib_Mole.MOLE_QuickAudit_DDEF(chem_rows, vol, conc)
-
+        # 2. Stoichiometry Audit Report & UI Components
         audit_html = if audit_ok
             dbc_alert([
-                html_h5([html_i(className="fas fa-check-circle me-2"), "Stochiometry Audit (Proposed Phase): PASS"], className="alert-heading small fw-bold"),
+                html_h5([html_i(className="fas fa-check-circle me-2"), "Stoichiometry Audit (Proposed Phase): PASS"], className="alert-heading small fw-bold"),
                 html_hr(),
                 html_pre(audit_report, className="mb-0 x-small", style=Dict("fontFamily" => "monospace"))
             ], className="shadow-sm border-0 py-3 colourgl-c4tg colourtx-v5pb", style=Dict("borderColor" => "var(--colour-chr4-tongre)"))
         else
             dbc_alert([
-                html_h6([html_i(className="fas fa-exclamation-triangle me-2"), "No stoichiometry configuration found for this system or composition is out of limits."], className="mb-0 small fw-bold")
+                html_h6([html_i(className="fas fa-exclamation-triangle me-2"), "Stoichiometric limits exceeded or configuration missing for this phase."], className="mb-0 small fw-bold")
             ], className="shadow-sm border-0 py-3 colourgl-neut colourtx-v5pb", style=Dict("borderColor" => "var(--colour-val3-darlow)"))
         end
 
@@ -1336,7 +1344,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # --- 11. HIGH-RES PLOT EXPORT ---
+    # --- 11. HIGH-DEFINITION VISUALISATION EXPORT ---
     callback!(app,
         Output("lens-download-plots",        "data"),
         Output("lens-export-plots-status", "children"),
@@ -1403,7 +1411,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # --- 12. SCIENTIFIC EXCEL EXPORT ---
+    # --- 12. SCIENTIFIC DATA EXPORT ---
     callback!(app,
         Output("lens-download-analysis",     "data"),
         Output("lens-export-excel-status", "children"),
@@ -1447,7 +1455,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # --- 13. RADIO CORRECTION TOGGLE & SYNC ---
+    # --- 13. RADIOACTIVITY CORRECTION ARCHITECTURE ---
     callback!(app,
         Output("lens-store-radio-correct", "data"),
         Output("lens-btn-radio-correct",   "className"),

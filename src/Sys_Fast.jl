@@ -3,8 +3,8 @@ module Sys_Fast
 # ======================================================================================
 # DAISHODOE - SYSTEM FAST (IO & UTILS)
 # ======================================================================================
-# Purpose: High-speed I/O (Excel/XLSX), system-wide logging, and transient data orchestration.
-# Module Tag: FAST
+# Description: High-speed I/O (Excel/XLSX), system-wide logging, and transient data orchestration.
+# Module Tag:  FAST
 # ======================================================================================
 
 using Dates
@@ -31,6 +31,7 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
     FAST_GetSystemQuote_DDEF,
     FAST_RoundCols_DDEF!,
     FAST_GetCol_DDEF,
+    FAST_CleanHeader_DDEF,
     FAST_InitialiseWorkforce_DDEF, FAST_CleanWorkforce_DDEF,
     FAST_Data_DDEC,
     FAST_SanitiseFilename_DDEF
@@ -41,7 +42,7 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
 
 """
     FAST_Constants_DDES
-System-wide configuration and metadata structure. Daisho Palette.
+System-wide configuration, metadata structure, and primary colour palettes.
 """
 Base.@kwdef struct FAST_Constants_DDES
     VERSION::String        = "v1.0 In Dev."
@@ -87,18 +88,18 @@ end
 const FAST_Data_DDEC = FAST_Constants_DDES()
 
 # --------------------------------------------------------------------------------------
-# --- TRANSIENT STORAGE MANAGEMENT (ANTI-BLOAT) ---
+# --- TRANSIENT STORAGE MANAGEMENT ---
 # --------------------------------------------------------------------------------------
 
 """
     FAST_TempRoot_DDEC
-Dedicated directory for all DaishoDoE transient operations to prevent AppData scattering.
+Dedicated directory for transient operations to prevent system-wide data scattering.
 """
 const FAST_TempRoot_DDEC = joinpath(tempdir(), "DaishoDoE_Workforce")
 
 """
     FAST_InitialiseWorkforce_DDEF()
-Initialises global transient directories, locks environment to workforce, and purges legacy temporary files.
+Initialises transient directories and clears existing temporary files.
 """
 function FAST_InitialiseWorkforce_DDEF()
     # PRE-FLIGHT: Force environment variables to trap leaky external libraries (Plotly, Kaleido, etc.)
@@ -110,10 +111,10 @@ function FAST_InitialiseWorkforce_DDEF()
     try
         if !isdir(FAST_TempRoot_DDEC)
             mkpath(FAST_TempRoot_DDEC)
-            FAST_Log_DDEF("FAST", "WORKFORCE", "Created transient bunker: $FAST_TempRoot_DDEC", "OK")
+            FAST_Log_DDEF("FAST", "WORKFORCE", "Created transient directory: $FAST_TempRoot_DDEC", "OK")
         else
             FAST_CleanWorkforce_DDEF()
-            FAST_Log_DDEF("FAST", "WORKFORCE", "Transient bunker scavenged and ready.", "OK")
+            FAST_Log_DDEF("FAST", "WORKFORCE", "Transient directory prepared for execution.", "OK")
         end
     catch e
         FAST_Log_DDEF("FAST", "WORKFORCE_FAIL", "Could not initialise temp directory: $e", "FAIL")
@@ -125,7 +126,6 @@ function FAST_CleanWorkforce_DDEF(all::Bool=false)::Nothing
 
     try
         # Recursive cleaning: get all files and directories
-        # We walk backwards to delete files before their parent directories
         for (root, dirs, files) in walkdir(FAST_TempRoot_DDEC; topdown=false)
             for f in files
                 # Safety Guard: Never delete files not matching Daisho pattern unless 'all' is true
@@ -151,7 +151,7 @@ function FAST_CleanWorkforce_DDEF(all::Bool=false)::Nothing
 
         all && FAST_Log_DDEF("FAST", "CLEAN_DEEP", "Extended workforce sweep executed.", "INFO")
     catch e
-        FAST_Log_DDEF("FAST", "CLEAN_WARN", "Workforce scavenging lookup encountered obstacles: $e", "WARN")
+        FAST_Log_DDEF("FAST", "CLEAN_WARN", "Recursive cleaning encountered an error: $e", "WARN")
     end
     
     return nothing
@@ -166,7 +166,7 @@ function FAST_CleanTransient_DDEF(path::Union{String,Nothing})
     
     # Internal path safety check
     if !startswith(abspath(path), abspath(FAST_TempRoot_DDEC))
-        FAST_Log_DDEF("FAST", "GUARD_VIOLATION", "Attempted deletion outside workforce: $path", "FAIL")
+        FAST_Log_DDEF("FAST", "GUARD_VIOLATION", "Deletion attempt outside transient scope: $path", "FAIL")
         return nothing
     end
 
@@ -228,7 +228,6 @@ function FAST_SanitiseFilename_DDEF(name::AbstractString)
     res = map(c -> get(mapping, c, c), name)
     
     # 2. Strict ASCII filter & replace whitespace/symbols with "_"
-    # We keep letters, numbers, hyphens, and periods.
     res = replace(res, r"[^\w\-_.]" => "_")
     
     # 3. Collapse multiple underscores
@@ -269,7 +268,7 @@ function FAST_ReadExcel_DDEF(FilePath::Union{String,Nothing}, SheetName::String)
 
     ext = lowercase(splitext(FilePath)[2])
     if ext != ".xlsx" && ext != ".xlsm"
-        FAST_Log_DDEF("FAST", "IO_ERROR", "Selected file [$ext] is not a valid Excel (.xlsx/.xlsm) document.", "FAIL")
+        FAST_Log_DDEF("FAST", "IO_ERROR", "The selected file type [$ext] is not a valid Excel document (.xlsx/.xlsm).", "FAIL")
         return DataFrame()
     end
 
@@ -299,8 +298,8 @@ function FAST_ReadExcel_DDEF(FilePath::Union{String,Nothing}, SheetName::String)
             end
             
             if !has_id || !has_ph
-                FAST_Log_DDEF("FAST", "FORMAT_FAIL", "Excel incompatible! Required columns (EXP_ID/ID or PHASE) missing in sheet [$SheetName].", "WARN")
-                throw(ArgumentError("Incompatible Format in sheet [$SheetName]: Required columns not found."))
+                FAST_Log_DDEF("FAST", "FORMAT_FAIL", "Compatibility error: Mandatory columns (EXP_ID/ID or PHASE) are missing in sheet [$SheetName].", "WARN")
+                throw(ArgumentError("Incompatible format in sheet [$SheetName]: Required columns not found."))
             end
         end
 
@@ -314,8 +313,8 @@ function FAST_ReadExcel_DDEF(FilePath::Union{String,Nothing}, SheetName::String)
 end
 
 """
-    FAST_SafeExcelWrite_DDEF(File::String, Updates::Dict{String,DataFrame})::Nothing
-Rewrites Excel vault using a fresh buffer to prevent archive truncation.
+    FAST_SafeExcelWrite_DDEF(File, Updates) -> Nothing
+Writes to the Excel file using a buffered approach to prevent data truncation.
 """
 function FAST_SafeExcelWrite_DDEF(File::Union{String,Nothing}, Updates::Dict{String,DataFrame})::Nothing
     (isnothing(File) || isempty(File)) && return nothing
@@ -428,7 +427,6 @@ function FAST_SanitiseInput_DDEF(TableData::AbstractVector)::Tuple{Vector{Dict{S
 
         # Boolean Logic
         r["IsRadioactive"] = get(r, "IsRadioactive", false) == true
-        r["IsFiller"] = get(r, "IsFiller", false) == true
 
         # 2. Safe Numeric Coercion Loop
         num_fields = ("L1", "L2", "L3", "MW", "Min", "Max", "Target", "HalfLife")
@@ -451,7 +449,7 @@ function FAST_SanitiseInput_DDEF(TableData::AbstractVector)::Tuple{Vector{Dict{S
         return r
     end
 
-    !isempty(warnings) && FAST_Log_DDEF("FAST", "SANITY", "Rectified $(length(warnings)) data anomalies.", "WARN")
+    !isempty(warnings) && FAST_Log_DDEF("FAST", "SANITY", "Resolved $(length(warnings)) data anomalies.", "WARN")
     return (sanitized, warnings)
 end
 
@@ -503,7 +501,7 @@ end
 
 """
     FAST_InitMaster_DDEF(File, InNames, OutNames, [DesignData], [Config]) -> Bool
-Initialises or updates the master Excel record with headers and configuration.
+Initialises or updates the primary Excel record with headers and configuration metadata.
 """
 function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::Vector{String},
     DesignData::Union{DataFrame,Nothing}=nothing, Config::Dict{String,Any}=Dict{String,Any}())::Bool
@@ -522,10 +520,17 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
                     push!(headers, col)
                 end
             end
-            for name in InNames, pfx in (C.PRE_INPUT, C.PRE_FIXED, C.PRE_FILL)
-                col = pfx * name
-                if col ∈ data_cols && col ∉ headers
-                    push!(headers, col)
+            
+            # Robust mapping for Inputs/Fixed/Fillers that may contain unit suffixes
+            for name in InNames
+                for pfx in (C.PRE_INPUT, C.PRE_FIXED, C.PRE_FILL)
+                    # Find any column that starts with prefix + name
+                    target_pfx = pfx * name
+                    for col in data_cols
+                        if startswith(col, target_pfx) && col ∉ headers
+                            push!(headers, col)
+                        end
+                    end
                 end
             end
         else
@@ -593,7 +598,7 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
 
         FAST_RoundCols_DDEF!(df_final_data)
 
-        # 5. File Construction Via SafeWrite
+        # 5. File Construction via SafeWrite
         
         # Build Config
         clean_config = FAST_SanitiseJson_DDEF(Config)
@@ -623,7 +628,7 @@ end
 
 """
     FAST_GenerateSmartName_DDEF(Project, Phase, Tag, [Extension]) -> String
-Generates a unique, descriptive filename according to the Daisho protocol.
+Generates a unique, descriptive filename according to the project protocol.
 Template: DDE_[Proj]_[Phase]_[Tag]_[Timestamp].[Ext]
 """
 function FAST_GenerateSmartName_DDEF(Project::String, Phase::String, Tag::String, Ext::String="xlsx")::String
@@ -644,15 +649,13 @@ Returns empty string if the pattern doesn't match.
 """
 function FAST_ExtractProjectFromFilename_DDEF(Filename::String)::String
     # Pattern: DDE_ProjectName_Phase_Tag_TS.ext
-    # Project name can contain underscores (sanitised from spaces).
-    # We look for everything between DDE_ and the Phase part (_P\d+_).
     m = match(r"^DDE_(.*?)_P\d+_", Filename)
     return isnothing(m) ? "" : string(m.captures[1])
 end
 
 """
     FAST_GetTransientPath_DDEF([DataHandle]) -> String
-Creates a identifiable temporary file path inside the Workforce bunker.
+Creates an identifiable temporary file path within the transient directory.
 If DataHandle is a Hash, it retrieves binary from Vault. If it's Base64, it decodes it.
 """
 function FAST_GetTransientPath_DDEF(DataHandle::Union{String,Nothing}=nothing)::String
@@ -785,7 +788,7 @@ const FAST_LockGuard_DDEC = ReentrantLock()
 
 """
     FAST_AcquireLock_DDEF(op_name, Reason::String="Unspecified") -> Bool
-Tries to acquire a named operation lock without blocking. Logs acquisition status for system transparency.
+Attempts to acquire a named operation lock without blocking. Logs status for system transparency.
 """
 function FAST_AcquireLock_DDEF(op_name::Union{String,Nothing}, Reason::String="Unspecified")::Bool
     (isnothing(op_name) || isempty(op_name)) && return false
@@ -845,7 +848,7 @@ function FAST_ForceReleaseAll_DDEF()
     lock(FAST_LockGuard_DDEC) do
         empty!(FAST_OperationLocks_DDEC)
     end
-    FAST_Log_DDEF("SYS", "LOCK_FLUSH", "All operation locks cleared (Self-Healing executed).", "WARN")
+    FAST_Log_DDEF("SYS", "LOCK_FLUSH", "All operation locks successfully cleared during system recovery.", "WARN")
     return nothing
 end
 
@@ -887,7 +890,7 @@ end
 # --- BINARY VAULT (SERVER-SIDE BLOB STORAGE) ---
 # --------------------------------------------------------------------------------------
 
-# Store for large binary blobs (Excel files) to prevent dcc.Store bloat
+# Repository for large binary objects (Excel archives) to maintain frontend performance
 const FAST_BinaryVault_DDEC = Dict{String, Vector{UInt8}}()
 const FAST_VaultLock_DDEC   = ReentrantLock()
 
@@ -968,18 +971,32 @@ function FAST_ValidateDataFrame_DDEF(df::DataFrame, RequiredCols::Vector{String}
 end
 
 
-
 """
     FAST_GetSystemQuote_DDEF() -> String
 Returns a random scientific/academic quote to inspire the researcher.
 """
 function FAST_GetSystemQuote_DDEF()::String
     quotes = [
-        "Data is the new oil, but intelligence is the refinery.",
-        "Equipped with his five senses, man explores the universe around him and calls the adventure Science.",
-        "The art of discovery is the art of seeing what everyone else has seen, and thinking what no one else has thought.",
-        "Everything must be made as simple as possible, but not simpler.",
-        "The best way to predict the future is to create it."
+        "Everything should be as simple as possible, but not simpler. - A.E.",
+        "Data is the new oil, but intelligence is the refinery. - C.H.",
+        "The first principle is that you must not fool yourself. - R.F.",
+        "Mathematics is the language of the universe. - G.G.",
+        "Errors with data are better than errors without it. - F.N.",
+        "Chance favours only the prepared mind. - L.P.",
+        "In science there is only physics; all the rest is stamp collecting. - E.R.",
+        "The best way to predict the future is to create it. - P.D.",
+        "Imagination is more important than knowledge. - A.E.",
+        "Measure what is measurable, and make measurable what is not. - G.G.",
+        "Science is a way of thinking, not a body of knowledge. - C.S.",
+        "All science is the refinement of everyday thinking. - A.E.",
+        "What we know is a drop, what we ignore is an ocean. - I.N.",
+        "An investment in knowledge pays the best interest. - B.F.",
+        "I have no special talent, I am only passionately curious. - A.E.",
+        "Experiment is the mother of certainty. - L.D.V.",
+        "Science is true whether you believe in it or not. - N.D.T.",
+        "The science of today is the technology of tomorrow. - E.T.",
+        "Truth is too complex for anything but approximations. - J.V.N.",
+        "Science is the belief in the ignorance of experts. - R.F."
     ]
     return rand(quotes)
 end
@@ -991,13 +1008,60 @@ Finds the actual column name in DataFrame that matches Target case-insensitively
 """
 function FAST_GetCol_DDEF(df::DataFrame, Target::String)::String
     isempty(df) && return ""
+    
+    # 1. Direct Match (Case-Insensitive)
     t_up = uppercase(strip(Target))
     for n in names(df)
-        if uppercase(strip(string(n))) == t_up
-            return string(n)
+        n_str = string(n)
+        if uppercase(strip(n_str)) == t_up
+            return n_str
         end
     end
+    
+    # 2. Unit-Aware Match (Case-Insensitive)
+    # If Target is "VARIA_A", look for "VARIA_A_unit"
+    for n in names(df)
+        n_str = string(n)
+        n_up = uppercase(strip(n_str))
+        if startswith(n_up, t_up * "_")
+            return n_str
+        end
+    end
+    
     return ""
+end
+
+"""
+    FAST_CleanHeader_DDEF(Header::String) -> String
+Standardises column headers by removing internal prefixes and trailing unit metadata.
+Example: 'VARIA_Component_mg' -> 'VARIA_Component'
+"""
+function FAST_CleanHeader_DDEF(Header::AbstractString)
+    h = strip(string(Header))
+    isempty(h) && return ""
+    
+    # 1. Identify Prefix (VARIA_, FIXED_, FILL_, MASS_, RESULT_, PRED_)
+    idx = findlast('_', h)
+    isnothing(idx) && return h
+    
+    C = FAST_Data_DDEC
+    matched_prefix = false
+    for pfx in (C.PRE_INPUT, C.PRE_FIXED, C.PRE_FILL, C.PRE_MASS, C.PRE_RESULT, C.PRE_PRED)
+        if startswith(uppercase(h), uppercase(pfx))
+            matched_prefix = true
+            break
+        end
+    end
+    
+    if matched_prefix
+        underscores = findall('_', h)
+        if length(underscores) >= 2
+            last_u = underscores[end]
+            return h[1:prevind(h, last_u)]
+        end
+    end
+
+    return h
 end
 
 end # module Sys_Fast

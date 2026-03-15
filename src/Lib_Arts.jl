@@ -1,10 +1,11 @@
 module Lib_Arts
 
 # ======================================================================================
-# DAISHODOE - LIB ARTS (VISUALISATION & GRAPHICS MOTOR)
+# DAISHODOE PROJECT - LIB ARTS
 # ======================================================================================
-# Purpose: Visualisation and graphics logic for DaishoDoE.
-# Module Tag: ARTS
+# Description: Visualisation and graphics engine for high-fidelity scientific 
+#              data representation and response surface mapping.
+# Module Tag:  ARTS
 # ======================================================================================
 
 using Base.Threads
@@ -25,12 +26,12 @@ export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
     ARTS_AdaptiveGridN_DDEF, ARTS_RenderSpaceImpl_DDEF
 
 # --------------------------------------------------------------------------------------
-# --- INTERFACE LAYOUT & THEME ---
+# INTERFACE LAYOUT & GRAPHICAL THEME
 # --------------------------------------------------------------------------------------
 
 # Theme as a module-level const for zero-alloc access
-# Theme linked to Sys_Fast constants for single-source-of-truth
-const ARTS_Theme_DDEC = let C = Sys_Fast.FAST_Data_DDEC
+# Theme linked to Main.Sys_Fast constants for single-source-of-truth
+const ARTS_Theme_DDEC = let C = Main.Sys_Fast.FAST_Data_DDEC
     (
         PURWHI = C.COLOUR_PURWHI,
         LIGHIG = C.COLOUR_LIGHIG,
@@ -48,8 +49,8 @@ const ARTS_Theme_DDEC = let C = Sys_Fast.FAST_Data_DDEC
     )
 end
 
-# High-fidelity Viridis colour mapping for surfaces and heatmaps
-const ARTS_ViridisScale_DDEC = let C = Sys_Fast.FAST_Data_DDEC
+# Viridis colour mapping for surfaces and heatmaps
+const ARTS_ViridisScale_DDEC = let C = Main.Sys_Fast.FAST_Data_DDEC
     [
         [0.00, C.COLOUR_SHAMAG],
         [0.25, C.COLOUR_SHABLU],
@@ -138,7 +139,7 @@ end
 
 """
     ARTS_Downsample_DDEF(Z, target_rows, target_cols) -> Matrix
-Intelligent sub-sampling for oversized plot matrices using strided decimation.
+Sub-samples oversized matrices using strided decimation for optimal browser performance.
 """
 function ARTS_Downsample_DDEF(Z::Matrix{T}, target_rows::Int, target_cols::Int) where T
     nr, nc = size(Z)
@@ -154,7 +155,7 @@ function ARTS_Downsample_DDEF(Z::Matrix{T}, target_rows::Int, target_cols::Int) 
     row_idx = unique([collect(row_idx); nr])
     col_idx = unique([collect(col_idx); nc])
 
-    Sys_Fast.FAST_Log_DDEF("ARTS", "DOWNSAMPLE",
+    Main.Sys_Fast.FAST_Log_DDEF("ARTS", "DOWNSAMPLE",
         "Reduced $(nr)×$(nc) → $(length(row_idx))×$(length(col_idx))", "INFO")
     return Z[row_idx, col_idx]
 end
@@ -189,7 +190,7 @@ end
 
 """
     ARTS_CalcDesirability_DDEF(Val, GoalTup) -> Float64
-Harrington's Desirability Function for multi-objective optimisation mapping.
+Calculates desirability scores using Harrington's function for multi-objective mapping.
 """
 function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
     G_Min, G_Max, G_Tgt, is_max, is_min, _ = GoalTup
@@ -231,7 +232,7 @@ function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
     return (isnan(res) || isinf(res)) ? 0.0 : clamp(res, 0.0, 1.0)
 end
 # --------------------------------------------------------------------------------------
-# --- LINEAR PLOTS (PARETO, ACTUAL VS PRED) ---
+# LINEAR PLOTS (Pareto, Predicted vs Actual)
 # --------------------------------------------------------------------------------------
 
 """
@@ -347,7 +348,7 @@ function ARTS_RenderFit_DDEF(Y_Real::Vector{Float64}, Y_Pred::Vector{Float64}, O
 end
 
 # --------------------------------------------------------------------------------------
-# --- RSM VISUALISATION (SURFACE & CONTOUR) ---
+# RSM VISUALISATION (Surface & Contour)
 # --------------------------------------------------------------------------------------
 
 """
@@ -359,7 +360,7 @@ function ARTS_Predict_DDEF(Model, X)
 
     Beta = Model["Coefs"]
     N    = size(X, 1)
-    K    = 3 # Fixed 3-variable system
+    K    = 3
     if occursin("linear", ModelType)
         Xd = hcat(ones(N), X)
         return Xd * Beta
@@ -381,7 +382,7 @@ end
 
 """
     ARTS_BuildGrid_DDEF(X, ix, iy, N_requested) -> (x1, x2, Grid)
-Constructs a prediction grid for surface/contour plots centred on factor means.
+Constructs a prediction grid for surface and contour plots centred on factor means.
 """
 function ARTS_BuildGrid_DDEF(X::Matrix{Float64}, ix::Int, iy::Int, N_requested::Int)
     # Adaptive grid limiter
@@ -477,7 +478,7 @@ function ARTS_RenderContour_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
 end
 
 # --------------------------------------------------------------------------------------
-# --- ADVANCED ANALYTICS (SLICES, TRENDS, DESIGN SPACE) ---
+# ADVANCED ANALYTICS (Slices, Trends, Design Space)
 # --------------------------------------------------------------------------------------
 
 """
@@ -586,22 +587,26 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
     ix, iy = Idx[1], Idx[2]
 
     N = ARTS_AdaptiveGridN_DDEF(200, 40000)
-    K = 3 # Fixed 3-variable system
+    K = 3
 
     x1 = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N))
     x2 = collect(range(minimum(view(X, :, iy)), maximum(view(X, :, iy)); length=N))
 
     # --- CROSS-SECTION LOGIC (CENTRING) ---
-    # Centering on top leader average (user request) instead of global mean
     col_ref = vec(mean(X; dims=1))
     if nrow(Leaders_DF) > 0
-        C       = Sys_Fast.FAST_Data_DDEC
+        C       = Main.Sys_Fast.FAST_Data_DDEC
         in_cols = filter(n -> startswith(n, C.PRE_INPUT), names(Leaders_DF))
         if length(in_cols) == K
             # Average coordinates of top 8 leaders (or all if < 8)
             num_ref    = min(8, nrow(Leaders_DF))
-            ref_matrix = Matrix{Float64}(Leaders_DF[1:num_ref, Symbol.(in_cols)])
-            col_ref    = vec(mean(ref_matrix; dims=1))
+            # Filter out any rows that have missing values in the input columns before conversion
+            ref_sub    = Leaders_DF[1:num_ref, Symbol.(in_cols)]
+            ref_clean  = dropmissing(ref_sub)
+            if !isempty(ref_clean)
+                ref_matrix = Matrix{Float64}(ref_clean)
+                col_ref    = vec(mean(ref_matrix; dims=1))
+            end
         end
     end
 
@@ -731,7 +736,7 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
     end
 
     if nrow(Leaders_DF) > 0
-        C = Sys_Fast.FAST_Data_DDEC
+        C = Main.Sys_Fast.FAST_Data_DDEC
         th = ARTS_Theme_DDEC
         # Extract variable columns (Case-Insensitive)
         in_cols = filter(n -> startswith(uppercase(string(n)), uppercase(C.PRE_INPUT)), names(Leaders_DF))
@@ -811,14 +816,13 @@ end
 
 """
     ARTS_RenderOptimalZone_DDEF(Models, Goals, X, InNames) -> (Plot, PctString)
-Renders a 3D isometric volume of the 'Optimal Zone' (Top 10% Desirability).
+Renders a 3D isometric volume of the 'Optimal Zone' based on desirability criteria (Top 10% Desirability).
 """
 function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames::Vector{String})
     N      = 50 # High-fidelity grid for volume stability (50^3 = 125,000 pts)
     ranges = [range(minimum(view(X, :, i)), maximum(view(X, :, i)); length=N) for i in 1:3]
     Grid   = Matrix{Float64}(undef, N^3, 3)
 
-    # Fill 3D Grid (Fixed 3-variable design)
     idx = 1
     for (x, y, z) in Iterators.product(ranges...)
         Grid[idx, 1] = x
@@ -827,7 +831,7 @@ function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames:
         idx += 1
     end
 
-    # Composite Desirability Calc
+    # Composite desirability calculation
     Scores       = ones(N^3)
     # Prioritize goals attached to the models themselves for robustness
     parsed_goals = [ARTS_ExtractGoal_DDEF(get(Models[m], "Goal", Goals[m])) for m in eachindex(Models)]
@@ -885,10 +889,10 @@ end
 
 """
     ARTS_RenderInteractionMatrix_DDEF(Model, InNames, OutName) -> Plot
-Renders a Heatmap matrix illustrating factor interaction strengths (synergy/antagonism).
+Renders a heatmap matrix illustrating factor interaction strengths and types.
 """
 function ARTS_RenderInteractionMatrix_DDEF(Model::Dict, InNames::Vector{String}, OutName::String)
-    K = 3 # Fixed 3rd dimension
+    K = 3
     M = zeros(K, K)
 
     ModelType = get(Model, "ModelType", "quadratic")
@@ -915,8 +919,8 @@ function ARTS_RenderInteractionMatrix_DDEF(Model::Dict, InNames::Vector{String},
 end
 
 """
-    ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::String) -> Plot
-Renders a Q-Q Plot (Normal Probability Plot) for residual diagnostic analysis.
+    ARTS_RenderQQPlot_DDEF(Residuals, OutName) -> Plot
+Renders a Q-Q plot (Normal Probability Plot) for residual diagnostic validation.
 """
 function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::String)
     n          = length(Residuals)
@@ -955,8 +959,8 @@ function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::Str
 end
 
 """
-    ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residuals::AbstractVector{Float64}, OutName::String) -> Plot
-Renders Residuals vs. Predicted plot to check for homoscedasticity.
+    ARTS_RenderResidualsVsPred_DDEF(Y_Pred, Residuals, OutName) -> Plot
+Renders Residuals vs. Predicted plot to assess variance homogeneity (homoscedasticity).
 """
 function ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residuals::AbstractVector{Float64}, OutName::String)
     trace_pts = scatter(; 
@@ -984,8 +988,8 @@ function ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residu
 end
 
 """
-    ARTS_RenderSensitivityPlot_DDEF(Sens::AbstractVector{Float64}, InNames::Vector{String}, OutName::String) -> Plot
-Renders localized factor sensitivity percentage contribution at the optimal point.
+    ARTS_RenderSensitivityPlot_DDEF(Sens, InNames, OutName) -> Plot
+Renders factor sensitivity contributions at the identified optimal coordinates.
 """
 function ARTS_RenderSensitivityPlot_DDEF(Sens::AbstractVector{Float64}, InNames::Vector{String}, OutName::String)
     trace = bar(; 
@@ -1012,16 +1016,20 @@ end
 
 """
     ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, Leaders_DF, Sens, Residuals) -> Vector{Dict}
-Primary output orchestrator for generating all selected plot types.
+Primary output orchestrator for generating the selected suite of analytical plots.
 """
 function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts,
     Leaders_DF::AbstractDataFrame=DataFrame(),
     Sens::Vector{Vector{Float64}}=Vector{Float64}[],
     Residuals::Vector{Vector{Float64}}=Vector{Float64}[])
 
-    graphs      = Dict{String,Any}[]
+    C      = Main.Sys_Fast.FAST_Data_DDEC
+    graphs = Dict{String,Any}[]
+    
+    Main.Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_INIT", "Constructing high-fidelity plot suite...", "WAIT")
+
     graphs_lock = ReentrantLock()
-    NumVars     = 3 # Fixed 3-variable system
+    NumVars     = 3
     NumOut      = length(OutNames)
 
     Combos = NumVars >= 2 ? collect(combinations(1:NumVars, 2)) : Vector{Int}[]
@@ -1045,7 +1053,7 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                         push!(graphs, Dict("Type" => "Fit",    "Title" => "Fit: $name",         "Plot" => p2))
                     end
 
-                    # New Academic Diagnostics
+                    # Academic Diagnostics
                     if m <= length(Residuals) && !isempty(Residuals[m])
                         p_qq  = ARTS_RenderQQPlot_DDEF(Residuals[m], name)
                         p_res = ARTS_RenderResidualsVsPred_DDEF(y_pred, Residuals[m], name)

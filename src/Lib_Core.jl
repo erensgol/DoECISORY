@@ -1,11 +1,11 @@
 module Lib_Core
 
 # ======================================================================================
-# DAISHODOE - LIB CORE (EXPERIMENTAL DESIGN ENGINE)
+# DAISHODOE PROJECT - LIB CORE
 # ======================================================================================
-# Purpose: Core algorithms for matrix generation, coordinate mapping, and
-#          adaptive search logic (Zoom/Shift).
-# Module Tag: CORE
+# Description: Core engine for experimental design generation, coordinate mapping, 
+#              and adaptive search algorithms (Zoom/Shift).
+# Module Tag:  CORE
 # ======================================================================================
 
 using Random
@@ -24,7 +24,9 @@ export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF,
     CORE_OptimiseDesirability_DDEF, CORE_ValidateDesign_DDEF,
     CORE_D_Efficiency_DDEF, CORE_CalcDesignMetrics_DDEF
 
-# Pre-allocated immutable design matrices (coded format)
+# --------------------------------------------------------------------------------------
+# CONSTANTS - Pre-allocated design matrices
+# --------------------------------------------------------------------------------------
 const CORE_Bb15Design_DDEC = Int8[
     -1 -1 0; -1 1 0; 1 -1 0; 1 1 0;
     -1 0 -1; -1 0 1; 1 0 -1; 1 0 1;
@@ -40,11 +42,12 @@ const CORE_Tl09Design_DDEC = Int8[
 
 """
     CORE_GenDesign_DDEF(Method::String, FactorCount::Int) -> Matrix{Int8}
-Generates a coded (-1, 0, 1) experiment matrix for the specified method.
+Generates a coded (-1, 0, 1) experimental design matrix for the specified method.
+Supports Box-Behnken (BB15), Taguchi (TL09), and D-Optimal designs.
 """
 function CORE_GenDesign_DDEF(Method::String, FactorCount::Int=3)
-    C = Sys_Fast.FAST_Data_DDEC
-    Sys_Fast.FAST_Log_DDEF("CORE", "DESIGN_GEN", "Generating matrix for $Method (Strict 3-Var Mode)", "WAIT")
+    C = Main.Sys_Fast.FAST_Data_DDEC
+    Main.Sys_Fast.FAST_Log_DDEF("CORE", "DESIGN_GEN", "Generating matrix for $Method (Strict 3-Var Mode)", "WAIT")
 
     design = if Method == C.METHOD_BB15 || Method == "BB15"
         copy(CORE_Bb15Design_DDEC)
@@ -55,18 +58,18 @@ function CORE_GenDesign_DDEF(Method::String, FactorCount::Int=3)
     elseif Method == C.METHOD_DOPT09 || Method == "DOPT09"
         CORE_GenerateOptimalDesign_DDEF(FactorCount, 9)
     else
-        Sys_Fast.FAST_Log_DDEF("CORE", "METHOD_ERROR", "Undefined Method: $Method", "FAIL")
+        Main.Sys_Fast.FAST_Log_DDEF("CORE", "METHOD_ERROR", "Undefined Method: $Method", "FAIL")
         Int8[;;]
     end
 
     R, C_dim = size(design)
-    Sys_Fast.FAST_Log_DDEF("CORE", "GEN_SUCCESS", "$R Runs x $C_dim Variables created.", "OK")
+    Main.Sys_Fast.FAST_Log_DDEF("CORE", "GEN_SUCCESS", "$R Runs x $C_dim Variables created.", "OK")
     
     return design
 end
 
 # --------------------------------------------------------------------------------------
-# --- COORDINATE MAPPING (CODED -> PHYSICAL) ---
+# COORDINATE MAPPING (Coded -> Physical)
 # --------------------------------------------------------------------------------------
 
 """
@@ -75,9 +78,9 @@ Maps coded entries (-1, 0, 1) to physical units based on factor level configurat
 """
 function CORE_MapLevels_DDEF(CodedMatrix::AbstractMatrix, Config::AbstractVector)
     rows = size(CodedMatrix, 1)
-    cols = 3 # Fixed 3rd dimension
+    cols = 3
 
-    # Pre-allocate result and fill via vectorised indexing for performance
+    # Pre-allocate result and map values via vectorised indexing
     result = Matrix{Float64}(undef, rows, cols)
     @inbounds for i in 1:cols
         lvls    = get(Config[i], "Levels", zeros(3))
@@ -90,13 +93,13 @@ function CORE_MapLevels_DDEF(CodedMatrix::AbstractMatrix, Config::AbstractVector
 end
 
 # --------------------------------------------------------------------------------------
-# --- ADAPTIVE SEARCH LOGIC (ZOOM / SHIFT) ---
+# ADAPTIVE SEARCH LOGIC (Zoom / Shift)
 # --------------------------------------------------------------------------------------
 
-# --- NEXT RANGE CALCULATION MOVED TO Sys_Flow.jl ---
+# Note: Domain-specific range calculations are handled within Sys_Flow.jl logic.
 
 # --------------------------------------------------------------------------------------
-# --- EXPERIMENTAL DESIGN - OPTIMAL GENERATION ---
+# OPTIMAL DESIGN GENERATION
 # --------------------------------------------------------------------------------------
 
 """
@@ -104,9 +107,9 @@ end
 Generates a D-Optimal design matrix for quadratic response surfaces via `ExperimentalDesign.jl`.
 """
 function CORE_GenerateOptimalDesign_DDEF(FactorCount::Int=3, RunCount::Int=15)
-    C           = Sys_Fast.FAST_Data_DDEC
-    FactorCount = 3 # Force 3
-    Sys_Fast.FAST_Log_DDEF("CORE", "OPTIMAL_GEN", "Generating D-Optimal design for strict 3-variable system ($RunCount runs).", "WAIT")
+    C           = Main.Sys_Fast.FAST_Data_DDEC
+    FactorCount = 3
+    Main.Sys_Fast.FAST_Log_DDEF("CORE", "OPTIMAL_GEN", "Generating D-Optimal design for strict 3-variable system ($RunCount runs).", "WAIT")
 
     try
         # Define the parameter space: each factor has 3 levels (-1, 0, 1)
@@ -135,25 +138,25 @@ function CORE_GenerateOptimalDesign_DDEF(FactorCount::Int=3, RunCount::Int=15)
         all_terms = reduce(+, [main_terms; inter_terms; quad_terms])
         f         = FormulaTerm(term(0), all_terms)
 
-        Sys_Fast.FAST_Log_DDEF("CORE", "OPTIMAL_GEN", "D-Optimal model structure established via safe Terms.", "WAIT")
+        Main.Sys_Fast.FAST_Log_DDEF("CORE", "OPTIMAL_GEN", "D-Optimal model structure established via safe Terms.", "WAIT")
 
-        # OptimalDesign(candidates, formula, run_count)
+        # OptimalDesign(candidates, formula, run_count) - Dynamic dispatch for robust handling
         opt_design = Base.invokelatest(OptimalDesign, candidates, f, RunCount)
 
-        res_matrix = Matrix{Int8}(round.(opt_design.matrix))
+        res_matrix = Matrix{Int8}(round.(Matrix(opt_design.matrix)))
 
         R, C_dim = size(res_matrix)
-        Sys_Fast.FAST_Log_DDEF("CORE", "GEN_SUCCESS", "$R Runs x $C_dim Variables D-Optimal created.", "OK")
+        Main.Sys_Fast.FAST_Log_DDEF("CORE", "GEN_SUCCESS", "$R Runs x $C_dim Variables D-Optimal created.", "OK")
         
         return res_matrix
     catch e
-        Sys_Fast.FAST_Log_DDEF("CORE", "GEN_FAIL", "Failed to generate optimal design: $e", "FAIL")
+        Main.Sys_Fast.FAST_Log_DDEF("CORE", "GEN_FAIL", "Failed to generate optimal design: $e", "FAIL")
         return zeros(Int8, RunCount, FactorCount)
     end
 end
 
 # --------------------------------------------------------------------------------------
-# --- DESIRABILITY OPTIMISATION (BLACKBOXOPTIM) ---
+# DESIRABILITY OPTIMISATION (BlackBoxOptim)
 # --------------------------------------------------------------------------------------
 
 """
@@ -162,7 +165,7 @@ Globally optimises parameters by maximising composite desirability using BlackBo
 """
 function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractVector, X_Bounds::AbstractMatrix{Float64};
     MaxTime::Float64=5.0, PenaltyFn::Union{Function,Nothing}=nothing)
-    Dim       = 3 # Fixed dimension
+    Dim       = 3
     NumModels = length(Models)
 
     # Pre-parse goals for fast execution
@@ -199,7 +202,7 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
                 return 0.0 # Extreme penalty, Desirability 0.0
             end
             gtup = parsed_goals[m]
-            d    = Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
+            d    = Main.Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
             s   *= d^gtup[6]
         end
         score = clamp(s^pow_factor, 0.0, 1.0)
@@ -216,7 +219,7 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
 
     Main.Sys_Fast.FAST_Log_DDEF("CORE", "BBO_START", "Initiating BlackBoxOptim for Global Desirability (MaxTime: $(MaxTime)s)...", "WAIT")
 
-    # Suppress BBO prints via TraceMode=:silent
+    # Suppress BBO diagnostic output via silent trace mode
     try
         res = bboptimize(CORE_CalcObjective_DDEF;
             SearchRange       = search_range,
@@ -239,7 +242,7 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
 end
 
 # --------------------------------------------------------------------------------------
-# --- LEADER EXTRACTION ---
+# LEADER DATA EXTRACTION
 # --------------------------------------------------------------------------------------
 
 """
@@ -248,12 +251,12 @@ Retrieves experiment data for the optimal (leader) run from a previous phase rec
 Ensures variable ordering matches 'VarNames' if provided.
 """
 function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID::String="", VarNames::Vector{String}=String[])
-    C     = Sys_Fast.FAST_Data_DDEC
+    C     = Main.Sys_Fast.FAST_Data_DDEC
     sheet = C.PREFIX_LEADERS * PhaseCode
 
-    df = Sys_Fast.FAST_ReadExcel_DDEF(FilePath, sheet)
+    df = Main.Sys_Fast.FAST_ReadExcel_DDEF(FilePath, sheet)
     if isempty(df)
-        Sys_Fast.FAST_Log_DDEF("CORE", "EXTRACTION_FAIL", "Sheet '$sheet' not found or empty.", "FAIL")
+        Main.Sys_Fast.FAST_Log_DDEF("CORE", "EXTRACTION_FAIL", "Sheet '$sheet' not found or empty.", "FAIL")
         return Dict{String,Any}()
     end
 
@@ -267,15 +270,15 @@ function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID
     if !isempty(SelectedID) && !isnothing(col_id)
         idx = findfirst(==(SelectedID), string.(df[!, col_id]))
         if isnothing(idx)
-            Sys_Fast.FAST_Log_DDEF("CORE", "LEADER_WARN", "ID '$SelectedID' not found. Defaulting to Best.", "WARN")
+            Main.Sys_Fast.FAST_Log_DDEF("CORE", "LEADER_WARN", "ID '$SelectedID' not found. Defaulting to Best.", "WARN")
         else
-            Sys_Fast.FAST_Log_DDEF("CORE", "LEADER_FETCH", "Manual selection: $SelectedID", "OK")
+            Main.Sys_Fast.FAST_Log_DDEF("CORE", "LEADER_FETCH", "Manual selection: $SelectedID", "OK")
         end
     end
 
     if isnothing(idx) || idx == 0
         _, idx = findmax(df[!, col_score])
-        Sys_Fast.FAST_Log_DDEF("CORE", "LEADER_FETCH", "Automatic selection: Global Best", "OK")
+        Main.Sys_Fast.FAST_Log_DDEF("CORE", "LEADER_FETCH", "Automatic selection: Global Best", "OK")
     end
 
     row = df[idx, :]
@@ -288,20 +291,20 @@ function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID
             v_key_pfx = startswith(uppercase(v_name), uppercase(C.PRE_INPUT)) ? v_name : "$(C.PRE_INPUT)$v_name"
             
             # Smart Lookup for the actual column name
-            actual_key = Sys_Fast.FAST_GetCol_DDEF(df, v_key_pfx)
-            actual_alt = isempty(actual_key) ? Sys_Fast.FAST_GetCol_DDEF(df, v_name) : ""
+            actual_key = Main.Sys_Fast.FAST_GetCol_DDEF(df, v_key_pfx)
+            actual_alt = isempty(actual_key) ? Main.Sys_Fast.FAST_GetCol_DDEF(df, v_name) : ""
             
             val = !isempty(actual_key) ? row[Symbol(actual_key)] : (!isempty(actual_alt) ? row[Symbol(actual_alt)] : 0.0)
-            push!(vals, Sys_Fast.FAST_SafeNum_DDEF(val))
+            push!(vals, Main.Sys_Fast.FAST_SafeNum_DDEF(val))
         end
     else
         # Case-insensitive input column detection
         input_cols = filter(n -> startswith(uppercase(string(n)), uppercase(C.PRE_INPUT)), cols)
-        vals       = Sys_Fast.FAST_SafeNum_DDEF.(values(row[input_cols]))
+        vals       = Main.Sys_Fast.FAST_SafeNum_DDEF.(values(row[input_cols]))
     end
 
     id_str = isnothing(col_id) ? "N/A" : string(row[col_id])
-    Sys_Fast.FAST_Log_DDEF("CORE", "LEADER_DATA",
+    Main.Sys_Fast.FAST_Log_DDEF("CORE", "LEADER_DATA",
         "ID: $id_str | Score: $(round(row[col_score]; digits=4))", "OK")
 
     return Dict{String,Any}(
@@ -314,7 +317,7 @@ function CORE_ExtractLeader_DDEF(FilePath::String, PhaseCode::String, SelectedID
 end
 
 # --------------------------------------------------------------------------------------
-# --- DESIGN MATRIX VALIDATION ---
+# DESIGN MATRIX VALIDATION
 # --------------------------------------------------------------------------------------
 
 """
@@ -360,17 +363,22 @@ function CORE_ValidateDesign_DDEF(DesignMatrix::AbstractMatrix, Config::Abstract
 
     is_valid = isempty(issues)
     if is_valid
-        Sys_Fast.FAST_Log_DDEF("CORE", "VALIDATE", "Design matrix OK ($R×$C, $(R-dup_count) unique).", "OK")
+        Main.Sys_Fast.FAST_Log_DDEF("CORE", "VALIDATE", "Design matrix OK ($R×$C, $(R-dup_count) unique).", "OK")
     else
-        Sys_Fast.FAST_Log_DDEF("CORE", "VALIDATE", "Design issues: $(join(issues, " | "))", "WARN")
+        Main.Sys_Fast.FAST_Log_DDEF("CORE", "VALIDATE", "Design issues: $(join(issues, " | "))", "WARN")
     end
 
     return (is_valid, join(issues, "\n"))
 end
 
+# --------------------------------------------------------------------------------------
+# DESIGN QUALITY METRICS (D, A, G, I Efficiency)
+# --------------------------------------------------------------------------------------
+
 """
     CORE_D_Efficiency_DDEF(X::Matrix) -> Float64
-Calculates D-Efficiency as a design quality metric (spread of points).
+
+Calculates D-Efficiency as a design quality metric representing the spread of points.
 """
 function CORE_D_Efficiency_DDEF(X::AbstractMatrix)
     R, C = size(X)
@@ -385,7 +393,8 @@ end
 
 """
     CORE_CalcDesignMetrics_DDEF(X::Matrix) -> Dict
-Calculates a suite of design quality metrics (D, A, G, I efficiency).
+
+Calculates a comprehensive suite of design quality metrics including D, A, G, and I efficiency.
 """
 function CORE_CalcDesignMetrics_DDEF(X::AbstractMatrix)
     R, C = size(X)

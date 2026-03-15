@@ -1,10 +1,11 @@
 module Lib_Vise
 
 # ======================================================================================
-# DAISHODOE - LIB VISE (STATISTICAL ANALYSIS ENGINE)
+# DAISHODOE PROJECT - LIB VISE
 # ======================================================================================
-# Purpose: Statistical modelling (GLM), sensitivity analysis, and multi-objective optimisation.
-# Module Tag: VISE
+# Description: Statistical analysis engine for modelling (GLM), sensitivity 
+#              analysis, and multi-objective optimisation tasks.
+# Module Tag:  VISE
 # ======================================================================================
 
 using GLM
@@ -35,7 +36,7 @@ export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
     VISE_PerformNormalityTest_DDEF, VISE_ExportToExcel_DDEF
 
 # --------------------------------------------------------------------------------------
-# --- PHYSICAL CORRECTIONS & MATH MODELS (MOVED TO Lib_Mole) ---
+# TERM GENERATION & DESIGN EXPANSION
 # --------------------------------------------------------------------------------------
 
 """
@@ -43,7 +44,7 @@ export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
 Generates human-readable names for regression terms (e.g., "A × B", "A²").
 """
 function VISE_GetTermNames_DDEF(InNames::Vector{String}, ModelType::String)
-    K     = 3 # Fixed 3-variable system
+    K     = 3
     names = Vector{String}(undef, 0)
     push!(names, "Intercept")
     append!(names, InNames)
@@ -67,7 +68,7 @@ Expands raw factor matrix into a design matrix (intercept + linear + interaction
 """
 function VISE_ExpandDesign_DDEF(X::AbstractMatrix{Float64}, ModelType::String)
     N      = size(X, 1)
-    K      = 3 # Fixed 3-variable system
+    K      = 3
     m_type = lowercase(ModelType)
 
     occursin("linear", m_type) && return hcat(ones(N), X)
@@ -115,7 +116,7 @@ function VISE_Predict_DDEF(Model::AbstractDict, X_Raw::Any)
 end
 
 # --------------------------------------------------------------------------------------
-# --- REGRESSION ENGINE (OLS CORE) ---
+# REGRESSION ENGINE (OLS Core)
 # --------------------------------------------------------------------------------------
 
 """
@@ -138,7 +139,7 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
         n = size(X_Design, 1)
         p = size(X_Design, 2)
 
-        # Condition Number Check (Matrix Health)
+        # Condition number assessment for numerical stability
         if cond(X_Design) > 1e10
             return Dict(
                 "Status" => "FAIL", 
@@ -150,7 +151,7 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
             throw(ArgumentError("Insufficient data: Number of observations (\$n) is less than model parameters (\$p)."))
         end
 
-        # Explicit rank check to prevent data manipulation via pseudo-inverse
+        # Explicit rank check to prevent near-singular matrix inversion
         if rank(X_Design) < p
             throw(ArgumentError("Design matrix is linearly dependent (Singular/Collinear)."))
         end
@@ -185,7 +186,7 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
                 end
             end
         catch
-            Sys_Fast.FAST_Log_DDEF("VISE", "MODELLING", "Failed to compute exact p-values during model fitting.", "WARN")
+            Main.Sys_Fast.FAST_Log_DDEF("VISE", "MODELLING", "Failed to compute exact p-values during model fitting.", "WARN")
         end
 
         vifs     = VISE_CalcVIF_DDEF(X_Design)
@@ -211,7 +212,7 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
             "Status"    => "OK"
         )
     catch e
-        Sys_Fast.FAST_Log_DDEF("VISE", "MODELLING", sprint(showerror, e, catch_backtrace()), "FAIL")
+        Main.Sys_Fast.FAST_Log_DDEF("VISE", "MODELLING", sprint(showerror, e, catch_backtrace()), "FAIL")
         return Dict("Status" => "FAIL", "Error" => string(e))
     end
 end
@@ -233,7 +234,7 @@ function VISE_CalcVIF_DDEF(X_Design::AbstractMatrix)
         # Correlation matrix method
         C = cor(X)
         if cond(C) > 1e12
-            # Use ridge-like regularisation for VIF stability in degenerate designs
+            # Use ridge-like regularisation for stability in degenerate designs
             C += I * 1e-6
         end
         v_diag       = diag(inv(C))
@@ -412,8 +413,8 @@ function VISE_GenerateAnovaTable_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::An
 end
 
 """
-    VISE_PerformNormalityTest_DDEF(Model::Dict, X::AbstractMatrix, Y::AbstractVector) -> Dict
-Executes Shapiro-Wilk test on model residuals.
+    VISE_PerformNormalityTest_DDEF(Model, X, Y) -> Dict
+Executes the Shapiro-Wilk test on model residuals for normality assessment.
 """
 function VISE_PerformNormalityTest_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::Any)
     # Ensure Matrix/Vector format (handles JSON deserialization artifacts)
@@ -555,7 +556,7 @@ function VISE_ExportToExcel_DDEF(FilePath::String, Results::AbstractDict)
         end
         return true
     catch e
-        Sys_Fast.FAST_Log_DDEF("VISE", "EXPORT_ERR", "Excel export failed: $e", "FAIL")
+        Main.Sys_Fast.FAST_Log_DDEF("VISE", "EXPORT_ERR", "Excel export failed: $e", "FAIL")
         return false
     end
 end
@@ -566,7 +567,7 @@ Evaluates multiple model structures and selects the optimal winner.
 """
 function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, InNames::Vector{String})
     n      = size(X, 1)
-    k      = 3 # Fixed 3-variable system
+    k      = 3
     p_quad = 10 # 1 + 2*3 + 3*(3-1)/2 = 10
 
     # Candidates: Linear, Quadratic (if N permits)
@@ -655,7 +656,7 @@ Performs high-density grid search across factor space for desirability explorati
 """
 function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
     X_Bounds::AbstractMatrix{Float64}; Steps::Int=41)
-    Dim = 3 # Fixed 3rd dimension
+    Dim = 3
 
     # Thread-aware density balancing
     compute_threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
@@ -665,7 +666,7 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
     while eff_steps^Dim > max_pts && eff_steps > 3
         eff_steps -= 2
     end
-    Sys_Fast.FAST_Log_DDEF("VISE", "OPTIMISATION",
+    Main.Sys_Fast.FAST_Log_DDEF("VISE", "OPTIMISATION",
         "Grid: $(eff_steps)^$Dim = $(eff_steps^Dim) pts | Compute threads: $compute_threads", "INFO")
 
     # Generate coordinate ranges
@@ -726,14 +727,14 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
         end
         pow = weight_sum > 0.0 ? (1.0 / weight_sum) : 1.0
 
-        parsed_goals = [Lib_Arts.ARTS_ExtractGoal_DDEF(Models[m]["Goal"]) for m in 1:NumModels]
+        parsed_goals = [Main.Lib_Arts.ARTS_ExtractGoal_DDEF(Models[m]["Goal"]) for m in 1:NumModels]
 
         Threads.@threads for i in 1:NumPoints
             s = 1.0
             @inbounds for m_idx in active_idx
                 val  = Predictions[i, m_idx]
                 gtup = parsed_goals[m_idx]
-                d    = Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
+                d    = Main.Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
                 s   *= d^gtup[6]
             end
             res_val   = s^pow
@@ -768,7 +769,7 @@ end
 
 """
     VISE_GenerateScientificReport_DDEF(Res) -> String
-Generates high-fidelity academic compendium following rigorous editorial standards.
+Generates an academic report following rigorous editorial and scientific standards.
 """
 function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     io = IOBuffer()
@@ -936,7 +937,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         )
     end
     
-    # Define phase symbol for functional filtering (British English: Case-Insensitive alignment)
+    # Define phase symbol for functional filtering (Case-Insensitive alignment)
     col_phase = Symbol(col_phase_name)
     df_train  = filter(r -> strip(uppercase(string(r[col_phase]))) == strip(uppercase(Phase)), df_raw)
 
@@ -962,23 +963,52 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
 
     # Only validate against actual outputs, immune to missing columns
     valid_mask = vec(all(!isnan, view(Y_Raw, :, 1:length(out_cols)); dims=2))
-    X_Clean    = X_Raw[valid_mask, 1:3] # Enforce fixed 3-factor architecture securely
+    X_Clean    = X_Raw[valid_mask, 1:3]
     Y_Clean    = Y_Raw[valid_mask, 1:length(out_cols)]
     N          = size(X_Clean, 1)
-    K          = 3 # Fixed 3-variable system
+    K          = 3
 
-    InNames  = [replace(n, Regex("(?i)^" * C.PRE_INPUT) => "") for n in in_cols]
-    OutNames = [replace(n, Regex("(?i)^" * C.PRE_RESULT) => "") for n in out_cols]
+    # Load configuration to accurately map columns back to ingredient/output names
+    # This ensures that headers like 'VARIA_Component_mg' correctly map to 'Component'
+    config      = Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
+    cfg_ingreds = get(config, "Ingredients", [])
+    cfg_outputs = get(config, "Outputs", [])
+
+    InNames = map(in_cols) do n
+        n_up = uppercase(n)
+        for ing in cfg_ingreds
+            nm = get(ing, "Name", "")
+            pfx_nm = uppercase(C.PRE_INPUT * nm)
+            if n_up == pfx_nm || startswith(n_up, pfx_nm * "_")
+                return nm
+            end
+        end
+        # Fallback to structural cleaning if no JSON match
+        return replace(Sys_Fast.FAST_CleanHeader_DDEF(n), Regex("(?i)^" * C.PRE_INPUT) => "")
+    end
+
+    OutNames = map(out_cols) do n
+        n_up = uppercase(n)
+        for out in cfg_outputs
+            nm = get(out, "Name", "")
+            pfx_nm = uppercase(C.PRE_RESULT * nm)
+            if n_up == pfx_nm || startswith(n_up, pfx_nm * "_")
+                return nm
+            end
+        end
+        # Fallback to structural cleaning if no JSON match
+        return replace(Sys_Fast.FAST_CleanHeader_DDEF(n), Regex("(?i)^" * C.PRE_RESULT) => "")
+    end
 
     # Calculate Design Efficiency (New Bridge Lib_Core -> Lib_Vise)
     d_eff = Lib_Core.CORE_D_Efficiency_DDEF(X_Clean)
     Log("VISE", "DESIGN_QUALITY", "Calculated D-Efficiency: $(round(d_eff * 100; digits=2))%",
         d_eff > 0.5 ? "OK" : "WARN")
 
-    # --- RADIOACTIVITY DECAY CORRECTION (GLOBAL HOUR/MIN) ---
+    # Radioactive decay correction based on experimental timestamps
     radio_correction_audit = []
     if get(get(Opts, "RadioOpts", Dict()), "Apply", false)
-        Log("VISE", "DECAY", "Executing global Hour/Minute radioactivity correction.", "INFO")
+        Log("VISE", "DECAY", "Executing global radioactivity decay correction.", "INFO")
         
         col_hr  = Sys_Fast.FAST_GetCol_DDEF(df_train, "CHRO_HOUR")
         col_min = Sys_Fast.FAST_GetCol_DDEF(df_train, "CHRO_MIN")
@@ -987,8 +1017,10 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
             push!(boundary_warnings, "Radioactivity correction enabled but CHRO_HOUR/CHRO_MIN columns not found in dataset. Skipping correction.")
             Log("VISE", "DECAY_SKIP", "CHRO columns missing.", "WARN")
         else
-            config = Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
-            ingredients = if haskey(config, "Ingredients")
+            # Use already loaded config from earlier mapping step
+            ingredients = if !isempty(cfg_ingreds)
+                cfg_ingreds
+            elseif haskey(config, "Ingredients")
                 config["Ingredients"] isa Dict ? collect(values(config["Ingredients"])) : config["Ingredients"]
             else
                 []
@@ -1037,7 +1069,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
 
     Log("VISE", "MODEL_SETUP", "Using '$eff_model' model for $N samples.", "OK")
 
-    # NOTE: InNames and OutNames already computed at line 518-519, no reassignment needed
+    # NOTE: InNames and OutNames already computed, no reassignment needed
 
     models = map(eachindex(out_cols)) do m
         if lowercase(eff_model) == "auto"
@@ -1179,9 +1211,9 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
             elseif h == C.COL_SCORE
                 Leaders_DF[!, h_sym] = round.(SC[cand_indices]; digits=4)
             elseif startswith(h, C.PRE_INPUT)
-                # Find index of this input in InNames
+                # Robust index matching: Header might be 'VARIA_Name_unit' while InNames has 'Name'
                 clean_n = replace(h, C.PRE_INPUT => "")
-                ki      = findfirst(==(clean_n), InNames)
+                ki      = findfirst(n -> (clean_n == n || startswith(clean_n, n * "_")), InNames)
                 if !isnothing(ki)
                     Leaders_DF[!, h_sym] = round.(XT[cand_indices, ki]; digits=3)
                 else
@@ -1189,7 +1221,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
                 end
             elseif startswith(h, C.PRE_PRED)
                 clean_n = replace(h, C.PRE_PRED => "")
-                ki      = findfirst(==(clean_n), OutNames)
+                ki      = findfirst(n -> (clean_n == n || startswith(clean_n, n * "_")), OutNames)
                 if !isnothing(ki)
                     Leaders_DF[!, h_sym] = round.(YP[cand_indices, ki]; digits=3)
                 else
@@ -1212,7 +1244,10 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         config  = Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
         ingreds = get(config, "Ingredients", [])
         if !isempty(ingreds)
-            audit = Main.Lib_Mole.MOLE_AuditBatch_DDEF(ingreds, XT, 5.0, 10.0) # Defaults for stability
+            g_cfg = get(config, "Global", Dict())
+            sv = Float64(get(g_cfg, "Volume", 5.0))
+            sc = Float64(get(g_cfg, "Conc", 10.0))
+            audit = Main.Lib_Mole.MOLE_AuditBatch_DDEF(ingreds, XT, sv, sc)
             if !audit["IsFeasible"]
                 Log("VISE", "STOICHIOMETRY", "Experimental design contains physically questionable runs (Negative Mass).", "WARN")
             else
@@ -1379,7 +1414,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
 
     t_end = time()
     elapsed_sec = t_end - t0
-    elapsed_str = elapsed_sec < 60 ? @sprintf("%.1fs", elapsed_sec) : @sprintf("%dm %ds", Int(elapsed_sec ÷ 60), Int(elapsed_sec % 60))
+    elapsed_str = elapsed_sec < 60 ? @sprintf("%.1fs", elapsed_sec) : @sprintf("%dm %ds", floor(Int, elapsed_sec / 60), floor(Int, elapsed_sec % 60))
 
     return Dict(
         "Status"            => "OK",
@@ -1405,6 +1440,5 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         "Elapsed"           => elapsed_str
     )
 end
-
 
 end # module Lib_Vise

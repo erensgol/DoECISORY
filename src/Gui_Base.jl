@@ -3,8 +3,8 @@ module Gui_Base
 # ======================================================================================
 # DAISHODOE - GUI BASE (SHARED COMPONENTS)
 # ======================================================================================
-# Purpose: Reusable Dash-Bootstrap components and high-fidelity styling tokens.
-# Module Tag: BASE
+# Description: Reusable Dash-Bootstrap components and high-fidelity styling tokens.
+# Module Tag:  BASE
 # ======================================================================================
 
 using Dash
@@ -102,8 +102,8 @@ const BASE_EmptyFigure_DDEC = Dict(
 # --------------------------------------------------------------------------------------
 
 """
-    BASE_PageHeader_DDEF(title, subtitle)
-Standardised page header layout with title and secondary description.
+    BASE_PageHeader_DDEF(title, subtitle) -> Row
+Constructs a standardised page header with a primary title and descriptive subtitle.
 """
 function BASE_PageHeader_DDEF(title::String, subtitle::String)
     return dbc_row(dbc_col([
@@ -120,8 +120,8 @@ function BASE_PageHeader_DDEF(title::String, subtitle::String)
 end
 
 """
-    BASE_GlassPanel_DDEF(title, content; [right_node], [panel_class], [content_class], [overflow])
-Standardised 'glass-panel' component wrapper for UI sections.
+    BASE_GlassPanel_DDEF(title, content; [right_node], [panel_class], [content_class], [overflow]) -> Div
+Constructs a semi-transparent 'glass-panel' container for grouping UI elements.
 """
 function BASE_GlassPanel_DDEF(title::Union{String, Vector{Any}}, content; right_node=nothing, panel_class="h-100", content_class="glass-content p-2 p-md-3", overflow="hidden")
     header_content = Any[html_span(title, className="glass-caption")]
@@ -134,8 +134,8 @@ function BASE_GlassPanel_DDEF(title::Union{String, Vector{Any}}, content; right_
 end
 
 """
-    BASE_DataTable_DDEF(id, columns, data; kwargs...)
-Dash DataTable wrapper enforcing DaishoDoE CSS consistency and responsiveness.
+    BASE_DataTable_DDEF(id, columns, data; kwargs...) -> DataTable
+A Dash DataTable wrapper ensuring aesthetic consistency and responsive data presentation.
 """
 function BASE_DataTable_DDEF(id::String, columns::Vector, data; kwargs...)
     return dash_datatable(;
@@ -154,8 +154,8 @@ function BASE_DataTable_DDEF(id::String, columns::Vector, data; kwargs...)
 end
 
 """
-    BASE_Modal_DDEF(id, title, body, footer; [size], [is_open], [centred], [close_button])
-Standardised modal constructor for popup dialogs.
+    BASE_Modal_DDEF(id, title, body, footer; [size], [is_open], [centred], [close_button]) -> Modal
+Constructs a standardised modal dialogue for focused user interactions.
 """
 function BASE_Modal_DDEF(id::String, title, body, footer; size="lg", is_open=false, centred=true, close_button=true, kwargs...)
     return dbc_modal([
@@ -171,14 +171,14 @@ end
 
 """
     BASE_SafeRows_DDEF(d) -> Vector{Dict{String,Any}}
-Safely converts raw callback table data to string-keyed dictionary vectors.
+Converts raw callback data (Any-keyed dictionaries) into string-keyed dictionary vectors for processing.
 """
 BASE_SafeRows_DDEF(d) = isnothing(d) ? Dict{String,Any}[] :
                         [Dict{String,Any}(string(k) => v for (k, v) in r) for r in d]
 
 """
     BASE_GetTrigger_DDEF(ctx) -> String
-Identifies the component ID that triggered the current Dash callback.
+Extracts the identifier of the component that initiated the current callback.
 """
 function BASE_GetTrigger_DDEF(ctx)
     isempty(ctx.triggered) && return ""
@@ -186,8 +186,8 @@ function BASE_GetTrigger_DDEF(ctx)
 end
 
 """
-    BASE_ConvertThemePlotlyWhite!_DDEF(fig_dict)
-Mutates a PlotlyJS figure object into a standardised white theme for academic reports.
+    BASE_ConvertThemePlotlyWhite!_DDEF(fig_dict) -> Dict
+Transforms a PlotlyJS figure object into a high-contrast white theme suitable for academic publications.
 """
 function BASE_ConvertThemePlotlyWhite!_DDEF(fig_dict)
     if haskey(fig_dict, "layout")
@@ -222,8 +222,8 @@ function BASE_ConvertThemePlotlyWhite!_DDEF(fig_dict)
 end
 
 """
-    BASE_MiniVitals_DDEF(label, value, color) -> dbc_card
-Compact metric display unit for scientific dashboards.
+    BASE_MiniVitals_DDEF(label, value, color) -> Card
+Displays a compact quantitative metric for real-time system monitoring.
 """
 function BASE_MiniVitals_DDEF(label::String, value::String, color_class::String="colourtx-c1sm")
     return dbc_card([
@@ -236,16 +236,16 @@ function BASE_MiniVitals_DDEF(label::String, value::String, color_class::String=
 end
 
 """
-    BASE_Loading_DDEF(id, content; [color]) -> dcc_loading
-Standardised loading spinner with consistent theme colors.
+    BASE_Loading_DDEF(id, content; [color]) -> Row
+Constructs a standardised loading indicator for background process feedback.
 """
 function BASE_Loading_DDEF(id::String, content; color::String="var(--colour-chr1-shamag)", class="mt-2 small")
     return dbc_row(dbc_col(dcc_loading(html_div(content, id=id, className=class), type="default", color=color), xs=12))
 end
 
 """
-    BASE_StatusIcon_DDEF(symbol, id; [color], [size], [tip], [glow]) -> html_span
-Small status indicator used for matrix properties (radioactivity, filler, etc).
+    BASE_StatusIcon_DDEF(symbol, id; [color], [size], [tip], [glow]) -> Span
+Constructs a small status indicator for identifying specific dataset attributes in grids.
 """
 function BASE_StatusIcon_DDEF(symbol::String, id::String; color_class::String="colourtx-v4dh", size::String="0.65rem", tip=nothing, glow=false)
     s = Dict("fontSize" => size, "marginRight" => "2px", "cursor" => "help")
@@ -254,7 +254,7 @@ function BASE_StatusIcon_DDEF(symbol::String, id::String; color_class::String="c
         s["fontWeight"] = "bold"
     end
     
-    # Tooltip fix: Unique ID for the target to ensure Dash identifies it correctly
+    # Unique ID for the target to ensure Dash identifies it correctly
     target_id = id
     icon = html_span(symbol, id=target_id, className=color_class, style=s)
     
@@ -305,8 +305,8 @@ function BASE_TableHeader_DDEF(label::String; width="auto", textAlign="center", 
 end
 
 """
-    BASE_ControlGroup_DDEF(label, input; [help]) -> dbc_row
-Standardised sidebar control unit: label + input pair.
+    BASE_ControlGroup_DDEF(label, input; [help]) -> Row
+Standardised control unit pairing a descriptive label with a Dash input component.
 """
 function BASE_ControlGroup_DDEF(label::String, input; class="mb-3")
     return dbc_row(dbc_col([
@@ -316,16 +316,16 @@ function BASE_ControlGroup_DDEF(label::String, input; class="mb-3")
 end
 
 """
-    BASE_ActionButton_DDEF(id, label, icon; [color], [outline], [size], [class]) -> dbc_button
-Standardised sidebar action button.
+    BASE_ActionButton_DDEF(id, label, icon; [color], [outline], [size], [class]) -> Button
+Constructs a standardised action button with an integrated FontAwesome icon.
 """
 function BASE_ActionButton_DDEF(id::String, label::String, icon::String; outline=true, size="sm", class="w-100 mb-2 fw-bold", style_override=Dict("borderColor" => "var(--colour-val1-lighig)"), kwargs...)
     return dbc_button([html_i(className="$icon me-2"), label], id=id, n_clicks=0, outline=outline, size=size, className="$class", style=style_override; kwargs...)
 end
 
 """
-    BASE_NextButton_DDEF(id, label; [icon]) -> dbc_button
-Standardised primary action button for phase transitions or execution.
+    BASE_NextButton_DDEF(id, label; [icon]) -> Row
+Primary navigation button intended for phase transitions and execution triggers.
 """
 function BASE_NextButton_DDEF(id::String, label::String; icon::String="fas fa-play", class="w-100 fw-bold mb-2", kwargs...)
     return dbc_row(dbc_col(dbc_button([html_i(className="$icon me-2"), label], id=id, n_clicks=0, style=Dict("borderWidth" => "1px", "borderStyle" => "solid", "borderColor" => "var(--colour-chr4-tongre)"), size="sm", className="$class colourgl-c4tg"; kwargs...), xs=12))
@@ -340,8 +340,8 @@ function BASE_Separator_DDEF(; class="my-2")
 end
 
 """
-    BASE_SidebarHeader_DDEF(label; [icon]) -> dbc_row
-Standardised section header for sidebars.
+    BASE_SidebarHeader_DDEF(label; [icon]) -> Row
+Standardised header for demarcating logical sections within the application sidebar.
 """
 function BASE_SidebarHeader_DDEF(label::String; icon=nothing, class="small mb-1 fw-bold text-center")
     children = Any[]
@@ -361,21 +361,18 @@ function BASE_Upload_DDEF(id::String, label::String, icon::String; multiple=fals
 end
 
 # --------------------------------------------------------------------------------------
-# --- RESTRUCTURING: MOVED UI BUILDERS ---
+# --- UI BUILDERS ---
 # --------------------------------------------------------------------------------------
 
 """
-    BASE_BuildIdRow_DDEF(i, row, visible, [show_del]) -> html_tr
-Table-based ID row including delete button (optional), name input, and property icons.
-(Moved from Gui_Deck.jl)
+    BASE_BuildIdRow_DDEF(i, row, visible, [show_del]) -> Tr
+Constructs a table row for ingredient identification, including deletion and property controls.
 """
 function BASE_BuildIdRow_DDEF(i, row, visible, show_del=false)
     row_style = Dict("display" => visible ? "table-row" : "none")
     name_val  = string(get(row, "Name", ""))
-    is_filler = get(row, "IsFiller",    false)
 
     name_input_style = Dict{String, Any}()
-    is_filler && (name_input_style["borderLeft"] = "3px solid var(--colour-chr5-hueyel)")
 
     # Ensure delete button ID always exists in layout for callback stability
     del_btn = html_button("×", id="deck-del-$i", n_clicks=0,
@@ -404,12 +401,11 @@ function BASE_BuildIdRow_DDEF(i, row, visible, show_del=false)
 
     dots = html_span([
         is_radio  ? html_i(className="fas fa-radiation me-1 colourtx-c0hr", style=Dict("fontSize" => "0.7rem")) : nothing,
-        is_filler ? html_i(className="fas fa-fill-drip me-1 colourtx-c5hy", style=Dict("fontSize" => "0.7rem")) : nothing,
         BASE_StatusIcon_DDEF("●", "deck-dot1-$i", color_class=dot1_class, tip=mw_v > 0.0 ? "Molecular Weight defined (Scientific context ACTIVE)" : "No Molecular Weight", glow=mw_v > 0.0),
         BASE_StatusIcon_DDEF("●", "deck-dot2-$i", color_class=dot2_class, tip=hl_v > 0.0 ? "Radioactive Decay data present" : "No half-life data", glow=hl_v > 0.0),
     ], style=Dict("display" => "inline-flex", "alignItems" => "center"))
 
-    prop_btn = BASE_IconButton_DDEF("btn-prop-$i", "fas fa-cog", color_class=is_filler ? "colourtx-c5hy" : "colourtx-v3dl")
+    prop_btn = BASE_IconButton_DDEF("btn-prop-$i", "fas fa-cog", color_class="colourtx-v3dl")
 
     row_children = Any[]
     
@@ -433,9 +429,8 @@ function BASE_BuildIdRow_DDEF(i, row, visible, show_del=false)
 end
 
 """
-    BASE_BuildLevelRow_DDEF(i, row, visible) -> html_tr
-Renders the 3-column levels portion of the row (Lower, Centre, Upper).
-(Moved from Gui_Deck.jl)
+    BASE_BuildLevelRow_DDEF(i, row, visible) -> Tr
+Constructs a table row for experimental level specifications (Lower, Centre, Upper).
 """
 function BASE_BuildLevelRow_DDEF(i, row, visible)
     row_style = Dict("display" => visible ? "table-row" : "none")
@@ -444,7 +439,7 @@ function BASE_BuildLevelRow_DDEF(i, row, visible)
     l3_val    = get(row, "L3", 0.0)
 
     show_l1 = (i <= 3)
-    show_l2 = (i <= 3 || i >= 5)
+    show_l2 = (i <= 3 || i >= 4)
     show_l3 = (i <= 3)
 
     return html_tr([
@@ -455,9 +450,8 @@ function BASE_BuildLevelRow_DDEF(i, row, visible)
 end
 
 """
-    BASE_BuildLimitsRow_DDEF(i, row, visible) -> html_tr
-Renders the 3-column limits portion of the row (Min Limit, Unit, Max Limit).
-(Moved from Gui_Deck.jl)
+    BASE_BuildLimitsRow_DDEF(i, row, visible) -> Tr
+Constructs a table row for search space boundaries and unit metadata.
 """
 function BASE_BuildLimitsRow_DDEF(i, row, visible)
     row_style = Dict("display" => visible ? "table-row" : "none")
@@ -475,9 +469,8 @@ function BASE_BuildLimitsRow_DDEF(i, row, visible)
 end
 
 """
-    BASE_BuildGoalRow_DDEF(i)
-Constructs a single goal-specification row for the optimisation objectives table.
-(Moved from Gui_Lens.jl)
+    BASE_BuildGoalRow_DDEF(i) -> Tr
+Constructs a row for defining analytical objectives and desirability constraints.
 """
 function BASE_BuildGoalRow_DDEF(i)
     return html_tr([
@@ -501,8 +494,8 @@ function BASE_BuildGoalRow_DDEF(i)
 end
 
 """
-    BASE_SystemAuditUI_DDEF() -> html_div
-Generates the system audit UI in the "system health" aesthetic.
+    BASE_SystemAuditUI_DDEF() -> Container
+Generates the technical diagnostic interface for monitoring system health and resources.
 """
 function BASE_SystemAuditUI_DDEF()
     nt = Threads.nthreads()
@@ -527,7 +520,7 @@ function BASE_SystemAuditUI_DDEF()
     status_text = (nt > 1 && mem_perc <= 0.9) ? "System Status: MISSION READY" : "System Status: SUB-OPTIMAL"
 
     return dbc_container([
-        html_h6("DAISHODOE SYSTEM HEALTH STATUS", className="fw-bold mb-3 colourtx-c3te text-center", style=Dict("letterSpacing" => "1px")),
+        html_h6("DAISHODOE SYSTEM DIAGNOSTICS", className="fw-bold mb-3 colourtx-c3te text-center", style=Dict("letterSpacing" => "1px")),
         html_hr(style=BASE_StyleHr_DDEC),
         dbc_row([
             dbc_col(BASE_MiniVitals_DDEF("Thread Count", "$nt [$thread_stat]", thread_colour), xs=12, md=3),
@@ -556,8 +549,8 @@ function BASE_SystemAuditUI_DDEF()
 end
 
 """
-    BASE_ScientificAuditUI_DDEF() -> html_div
-Generates the scientific integrity audit UI in the "system health" aesthetic.
+    BASE_ScientificAuditUI_DDEF() -> Container
+Generates the integrity certificate interface to verify architectural consistency.
 """
 function BASE_ScientificAuditUI_DDEF()
     modules = [:Sys_Fast, :Lib_Core, :Lib_Mole, :Lib_Vise, :Lib_Arts]

@@ -3,13 +3,14 @@ module Sys_Flow
 # ======================================================================================
 # DAISHODOE - SYSTEM FLOW (PROCESS & STATE)
 # ======================================================================================
-# Purpose: Experimental phase management, transition logic, and state synchronisation bus.
-# Module Tag: FLOW
+# Description: Experimental phase management, transition logic, and state synchronisation bus.
+# Module Tag:  FLOW
 # ======================================================================================
 
 using JSON3
 using DataFrames
 using PlotlyJS
+using Printf
 using Main.Sys_Fast
 using Main.Lib_Arts
 
@@ -17,15 +18,13 @@ export FLOW_AskLeader_DDEF, FLOW_NextPhase_DDEF, FLOW_GetCandidates_DDEF,
     FLOW_BuildNextPhase_DDEF, FLOW_CalcNextRange_DDEF, FLOW_WriteLeaders_DDEF,
     FLOW_CalcAdaptiveRange_DDEF, FLOW_RenderPhaseTransition_DDEF
 
-
-
 # --------------------------------------------------------------------------------------
 # --- PROCESS FLOW LOGIC ---
 # --------------------------------------------------------------------------------------
 
 """
     FLOW_AskLeader_DDEF(LeaderVal, CurrentRange) -> (Valid, Msg)
-Validates leader point proximity to boundaries to prevent search space clipping.
+Evaluates the proximity of the selected leader to existing boundaries to prevent search space clipping.
 """
 function FLOW_AskLeader_DDEF(LeaderVal::Float64, CurrentRange::Vector{Float64})
     min_val, _, max_val = CurrentRange
@@ -41,8 +40,8 @@ function FLOW_AskLeader_DDEF(LeaderVal::Float64, CurrentRange::Vector{Float64})
 end
 
 """
-    FLOW_NextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedLeaderID::String="", ZoomFactor::Float64=0.5)::Dict{String, Any}
-Orchestrates transition to the next experimental phase based on selected leader performance.
+    FLOW_NextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor, ShiftFactor) -> Dict
+Orchestrates the transition to the subsequent experimental phase based on leader performance.
 """
 function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Union{String,Nothing},
     SelectedLeaderID::Union{String,Nothing}="", ZoomFactor::Float64=0.5, ShiftFactor::Float64=0.0)::Dict{String,Any}
@@ -50,7 +49,7 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
     (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict("Status" => "FAIL", "Message" => "Invalid master file path provided.")
     (isnothing(CurrentPhase) || isempty(CurrentPhase)) && return Dict("Status" => "FAIL", "Message" => "Current phase not specified.")
     
-    # 1. Reconstruct session state from MasterVault FIRST to get correct variable order
+    # 1. Synchronise session state from the master record to ensure correct variable ordering
     C         = Sys_Fast.FAST_Data_DDEC
     df_config = Sys_Fast.FAST_ReadExcel_DDEF(MasterFile, C.SHEET_CONFIG)
 
@@ -96,7 +95,7 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
 
     isempty(OldConfig) && return Dict("Status" => "FAIL", "Message" => "Configuration state loss detected.")
 
-    # 2. Now extract leader using the strict InNames order
+    # 2. Extract leader using the strict InNames order
     Leader = Main.Lib_Core.CORE_ExtractLeader_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, InNames)
     isempty(Leader) && return Dict("Status" => "FAIL", "Message" => "Leader extraction failed for $CurrentPhase.")
 
@@ -109,14 +108,15 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
     target_phase = "Phase$(isnothing(p_num) ? 2 : p_num + 1)"
 
     return Dict(
-        "Status"      => "OK",
-        "SourcePhase" => CurrentPhase,
-        "TargetPhase" => target_phase,
-        "NewConfig"   => NewConfig,
-        "OldConfig"   => OldConfig,
-        "LeaderScore" => get(Leader, "Score", 0.0),
-        "Outputs"     => Outputs,
-        "Global"      => GlobalInfo,
+        "Status"       => "OK",
+        "SourcePhase"  => CurrentPhase,
+        "TargetPhase"  => target_phase,
+        "NewConfig"    => NewConfig,
+        "OldConfig"    => OldConfig,
+        "LeaderValues" => collect(get(Leader, "Vals", Float64[])),
+        "LeaderScore"  => get(Leader, "Score", 0.0),
+        "Outputs"      => Outputs,
+        "Global"       => GlobalInfo,
     )
 end
 
@@ -139,7 +139,6 @@ function FLOW_GetCandidates_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase
         d
     end
 
-    # Idiomatic reverse sort by score
     return sort!(candidates; by=x -> x["Score"], rev=true)
 end
 
@@ -183,8 +182,8 @@ end
 # --------------------------------------------------------------------------------------
 
 """
-    FLOW_BuildNextPhase_DDEF(MasterFile::String, CurrentPhase::String, SelectedLeaderID::String="", ZoomFactor::Float64=0.5, Method::String="TL09")::Dict{String, Any}
-Constructs the next experimental phase by mapping adaptive ranges to a coded design matrix.
+    FLOW_BuildNextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor, Method, ShiftFactor) -> Dict
+Generates the subsequent experimental phase by mapping adaptive ranges to a coded design matrix.
 """
 function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Union{String,Nothing},
     SelectedLeaderID::Union{String,Nothing}="", ZoomFactor::Float64=0.5, Method::String="TL09", ShiftFactor::Float64=0.0)::Dict{String,Any}
@@ -214,7 +213,7 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
         lvls = _get(c, "Levels", [0.0, 0.0, 0.0])
         Dict(
             "Name" => string(_get(c, "Name", "Unknown")), 
-            "Role" => string(_get(c, "Role", "Variable")),
+            "Role" => string(_get(c, "Role", "Fixed")),
             "L1"   => Float64(lvls[1]), 
             "L2"   => Float64(lvls[2]), 
             "L3"   => Float64(lvls[3]), 
@@ -232,7 +231,7 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
     end
 
     # 2. Design Matrix Generation
-    var_indices = findall(c -> get(c, "Role", "Variable") == C.ROLE_VAR, NewConfig)
+    var_indices = findall(c -> _get(c, "Role", "") == C.ROLE_VAR, NewConfig)
     length(var_indices) != 3 && return Dict("Status" => "FAIL", "Message" => "System requires 3 ingredients for phase transitions.")
 
     design_coded = Main.Lib_Core.CORE_GenDesign_DDEF(Method, 3)
@@ -245,40 +244,38 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
     # 4. Canonical DataFrame Construction
     p_num = something(tryparse(Int, replace(TargetPhase, "Phase" => "")), 2)
 
-    df = DataFrame(
+    # 4a. System Meta Data
+    df_sys = DataFrame(
         C.COL_EXP_ID    => ["EXP_P$(p_num)_$(lpad(i, 2, '0'))" for i in 1:N_Runs],
         C.COL_PHASE     => fill(TargetPhase, N_Runs),
         C.COL_STATUS    => fill("Pending", N_Runs),
         C.COL_NOTES     => fill("", N_Runs)
     )
 
-    # Vectorized column insertion
-    for (k, idx) in enumerate(var_indices)
-        df[!, C.PRE_INPUT*get(NewConfig[idx], "Name", "Var$k")] = round.(real_matrix[:, k]; digits=3)
-    end
+    # 4b. CENTRALIZED STOICHIOMETRY ENGINE (Lib_Mole)
+    # This ensures MASS_ and FILL_ columns are correctly calculated and included in the report.
+    df_chem = Main.Lib_Mole.MOLE_ProcessDesign_DDEF(real_matrix, audit_rows, vol, conc)
 
-    foreach(NewConfig) do c
-        role, name = get(c, "Role", ""), get(c, "Name", "")
-        if role == C.ROLE_FIX
-            lvls = get(c, "Levels", [0.0, 0.0, 0.0])
-            df[!, C.PRE_FIXED*name] = fill(length(lvls) >= 2 ? lvls[2] : 0.0, N_Runs)
-        elseif role == C.ROLE_FILL
-            df[!, C.PRE_FILL*name] = fill(0.0, N_Runs)
-        end
-    end
+    # Assemble: System Meta + Chemical Gradient Design
+    df = hcat(df_sys, df_chem)
 
     # result structures
     if haskey(res, "Outputs")
         for o in res["Outputs"]
             n = string(get(o, "Name", ""))
+            u = string(get(o, "Unit", ""))
             isempty(n) && continue
-            df[!, C.PRE_RESULT*n] = Vector{Union{Missing,Float64}}(missing, N_Runs)
-            df[!, C.PRE_PRED*n]   = Vector{Union{Missing,Float64}}(missing, N_Runs)
+            
+            res_header  = (isempty(u) || u == "-") ? C.PRE_RESULT * n : C.PRE_RESULT * n * "_" * u
+            pred_header = (isempty(u) || u == "-") ? C.PRE_PRED * n   : C.PRE_PRED * n   * "_" * u
+            
+            df[!, res_header] = Vector{Union{Missing,Float64}}(missing, N_Runs)
+            df[!, pred_header] = Vector{Union{Missing,Float64}}(missing, N_Runs)
         end
     end
     df[!, C.COL_SCORE] = Vector{Union{Missing,Float64}}(missing, N_Runs)
 
-    # 5. MasterVault Finalization
+    # 5. Master record finalisation
     current_config                = Sys_Fast.FAST_ReadConfig_DDEF(MasterFile)
     current_config["Ingredients"] = [Dict{String,Any}(string(k) => v for (k, v) in pairs(c)) for c in NewConfig]
 
@@ -301,9 +298,8 @@ end
 # --------------------------------------------------------------------------------------
 
 """
-    FLOW_CalcNextRange_DDEF(LeaderInfo, ZoomFactor=0.5) -> Vector{Dict}
-Calculates the search space for the next phase using Zoom (reduction) or Shift (translation).
-(Moved from Lib_Core.jl)
+    FLOW_CalcNextRange_DDEF(LeaderInfo, ZoomFactor, ShiftFactor) -> Vector{Dict}
+Calculates the adaptive search space for the subsequent phase using Zoom (compression) or Shift (translation).
 """
 function FLOW_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5, ShiftFactor::Float64=0.0)
     C       = Sys_Fast.FAST_Data_DDEC
@@ -349,7 +345,6 @@ function FLOW_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5, Shif
         org_max = L_Old[3] + Range * 0.5
         if New_Max > org_max && org_max > 0.0
             New_Max = org_max
-            # If we hit the top, we might need to push Min down if Range must be preserved
         end
 
         conf["Levels"] = [New_Min, New_Mid, New_Max]
@@ -363,8 +358,7 @@ end
 
 """
     FLOW_WriteLeaders_DDEF(File, Phase, LeadersDF) -> Bool
-Persists potential leaders for the current phase to the shared Excel vault.
-(Moved from Sys_Fast.jl)
+Persists prioritized candidates for the current phase to the shared master record.
 """
 function FLOW_WriteLeaders_DDEF(File::Union{String,Nothing}, Phase::Union{String,Nothing}, LeadersDF::DataFrame)
     (isnothing(File) || isempty(File) || isnothing(Phase) || isempty(Phase)) && return false
@@ -384,22 +378,24 @@ function FLOW_WriteLeaders_DDEF(File::Union{String,Nothing}, Phase::Union{String
 end
 
 """
-    FLOW_RenderPhaseTransition_DDEF(Config, LeaderVals, Zoom, Shift) -> Plot
-Visualizes the adaptation of search space boundaries between experimental phases.
+    FLOW_RenderPhaseTransition_DDEF(OldConfig, NewConfig, LeaderVals) -> Dict
+Visualises the adaptation of search space boundaries between sequential experimental phases.
+Standardised Coded Scale: Current boundaries are mapped to [-1, 1].
 """
-function FLOW_RenderPhaseTransition_DDEF(Config::AbstractVector, LeaderVals::AbstractVector, Zoom::Real, Shift::Real)
+function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVector, LeaderVals::AbstractVector)
     # Premium Palette - Strict binding to Sys_Fast standard constants
     FD = Sys_Fast.FAST_Data_DDEC
 
-    vars = [(i, c) for (i, c) in enumerate(Config) if get(c, "Role", "Variable") == FD.ROLE_VAR]
+    # 1. Identify variables and ensure strict ordering (A-B-C)
+    vars = [(i, c) for (i, c) in enumerate(OldConfig) if get(c, "Role", "Variable") == FD.ROLE_VAR]
     n_vars = length(vars)
     if n_vars == 0
-        return Plot([], Layout(title="No variables detected."))
+        return Dict("data" => [], "layout" => Layout(title="No variables detected."))
     end
 
-    # --- Fixed axis bounds ---
-    AXIS_LO = -200.0
-    AXIS_HI = 200.0
+    # --- Standardised Coded Range: [-2.0, 2.0] ---
+    AXIS_LO = -2.0
+    AXIS_HI = 2.0
 
     traces      = GenericTrace[]
     annotations = Dict{String,Any}[]
@@ -407,22 +403,32 @@ function FLOW_RenderPhaseTransition_DDEF(Config::AbstractVector, LeaderVals::Abs
 
     for (j, (i, conf)) in enumerate(vars)
         L_Old = Float64.(get(conf, "Levels", [0.0, 0.0, 0.0]))
-        Val   = (j <= length(LeaderVals)) ? Float64(LeaderVals[j]) : L_Old[2]
-        L_New = FLOW_CalcAdaptiveRange_DDEF(Val, L_Old, Zoom, Shift)
+        
+        # Robust lookup in NewConfig (Proposed)
+        v_name = get(conf, "Name", "")
+        n_idx  = findfirst(c -> get(c, "Name", "") == v_name, NewConfig)
+        L_New  = !isnothing(n_idx) ? Float64.(get(NewConfig[n_idx], "Levels", L_Old)) : L_Old
 
-        # NORMALISATION: Map [L_Old_Min, L_Old_Max] → [-100, 100]
+        # Variable Mapping: First variable at top
+        y_pos = n_vars - j + 1
+
+        # Leader mapping - ensure Val is extracted from the correct index
+        Val = (j <= length(LeaderVals)) ? Float64(LeaderVals[j]) : L_Old[2]
+        
+        # NORMALISATION: Map Current [Min, Max] → [-1.0, 1.0]
         base_mid  = (L_Old[1] + L_Old[3]) / 2.0
         base_span = max(L_Old[3] - L_Old[1], 1e-5)
-        norm(v)   = (v - base_mid) / (base_span / 2.0) * 100.0
+        norm(v)   = (v - base_mid) / (base_span / 2.0)
 
         n_new_min = norm(L_New[1])
         n_new_max = norm(L_New[3])
         n_leader  = norm(Val)
 
-        # 1. Current (Old Space) — always [-100, 100]
+        # 1. Current (Old Space) — always [-1.0, 1.0]
         push!(traces, scatter(; 
-            x=[-100.0, 100.0], y=[j, j], mode="lines",
+            x=[-1.0, 1.0], y=[y_pos, y_pos], mode="lines",
             name="Current", 
+            legendgroup="Current",
             line=attr(color=FD.COLOUR_DARLOW, width=18),
             showlegend=(j == 1), 
             hoverinfo="skip"
@@ -430,16 +436,17 @@ function FLOW_RenderPhaseTransition_DDEF(Config::AbstractVector, LeaderVals::Abs
 
         # 2. Target Space (New Boundaries)
         push!(traces, scatter(; 
-            x=[n_new_min, n_new_max], y=[j, j], mode="lines",
+            x=[n_new_min, n_new_max], y=[y_pos, y_pos], mode="lines",
             name="Target", 
+            legendgroup="Target",
             line=attr(color=FD.COLOUR_HUEYEL, width=18),
             showlegend=(j == 1),
             hoverinfo="text",
             hovertext="New: $(round(L_New[1]; digits=2)) → $(round(L_New[3]; digits=2))"
         ))
 
-        # --- Boundary Annotations ---
-        y_ann = j - 0.32
+        # --- Boundary Annotations (Raw Values) ---
+        y_ann = y_pos - 0.35
         push!(annotations, Dict(
             "x" => n_new_min, "y" => y_ann, "xref" => "x", "yref" => "y",
             "text" => string(round(L_New[1]; digits=1)),
@@ -453,12 +460,13 @@ function FLOW_RenderPhaseTransition_DDEF(Config::AbstractVector, LeaderVals::Abs
             "font" => Dict("size" => 8, "color" => FD.COLOUR_DARHIG),
         ))
 
-        # 3. Leader Point
+        # 3. Leader Point Fix
         push!(traces, scatter(; 
-            x=[n_leader], y=[j], mode="markers", 
+            x=[n_leader], y=[y_pos], mode="markers", 
             name="Leader",
+            legendgroup="Leader",
             marker=attr(
-                symbol="circle", size=12, color=FD.COLOUR_SHAMAG,
+                symbol="circle", size=18, color=FD.COLOUR_SHAMAG,
                 line=attr(color=FD.COLOUR_PURWHI, width=2)
             ),
             showlegend=(j == 1),
@@ -468,56 +476,59 @@ function FLOW_RenderPhaseTransition_DDEF(Config::AbstractVector, LeaderVals::Abs
 
         # Annotations for Old Space (Current) - Top boundaries
         push!(annotations, Dict(
-            "x" => -100.0, "y" => j + 0.35, "xref" => "x", "yref" => "y",
-            "text" => string(round(L_Old[1]; digits=3)),
+            "x" => -1.0, "y" => y_pos + 0.35, "xref" => "x", "yref" => "y",
+            "text" => string(round(L_Old[1]; digits=1)),
             "showarrow" => false, "xanchor" => "center",
             "font" => Dict("size" => 8, "color" => FD.COLOUR_DARLOW),
         ))
         push!(annotations, Dict(
-            "x" => 100.0, "y" => j + 0.35, "xref" => "x", "yref" => "y",
-            "text" => string(round(L_Old[3]; digits=3)),
+            "x" => 1.0, "y" => y_pos + 0.35, "xref" => "x", "yref" => "y",
+            "text" => string(round(L_Old[3]; digits=1)),
             "showarrow" => false, "xanchor" => "center",
             "font" => Dict("size" => 8, "color" => FD.COLOUR_DARLOW),
         ))
     end
 
-    ticks_vals = collect(AXIS_LO:50:AXIS_HI)
-    ticks_text = [v == -100 ? "-100 (Min)" : (v == 0 ? "0 (Mid)" : (v == 100 ? "100 (Max)" : string(Int(v)))) for v in ticks_vals]
+    ticks_vals = collect(AXIS_LO:0.5:AXIS_HI)
+    ticks_text = [v == 0 ? "0" : (v == -1.0 ? "-1.0 (Lower)" : (v == 1.0 ? "+1.0 (Upper)" : Printf.@sprintf("%+.1f", v))) for v in ticks_vals]
+
+    # Map labels to the correct Y positions (A=Top, C=Bottom)
+    y_tick_vals = collect(n_vars:-1:1)
 
     layout = Layout(;
         height         = min(120 + n_vars * 50, 280),
-        margin         = attr(l=100, r=40, t=10, b=40),
+        margin         = attr(l=120, r=40, t=10, b=40),
         plot_bgcolor   = FD.COLOUR_PURWHI,
         paper_bgcolor  = "rgba(0,0,0,0)",
         xaxis = attr(
-            title      = attr(text="Relative Design Space (%)", font=attr(size=10, color=FD.COLOUR_DARHIG)),
+            title      = attr(text="Standardised Coded Scale", font=attr(size=10, color=FD.COLOUR_DARHIG)),
             gridcolor  = FD.COLOUR_LIGHIG, 
             zeroline   = false,
             autorange  = false, 
-            range      = [AXIS_LO - 2, AXIS_HI + 2],
+            range      = [AXIS_LO - 0.05, AXIS_HI + 0.05],
             tickvals   = ticks_vals, 
             ticktext   = ticks_text,
             tickfont   = attr(size=9)
         ),
         yaxis = attr(
-            tickvals   = collect(1:n_vars), 
+            tickvals   = y_tick_vals, 
             ticktext   = y_nms, 
             showgrid   = false,
             zeroline   = false, 
-            fixedrange = true, 
+            fixedrange = true,
             tickfont   = attr(size=10, color=FD.COLOUR_DARHIG, weight="bold")
         ),
         legend      = attr(orientation="h", y=-0.4, x=0.5, xanchor="center", font=attr(size=9)),
         annotations = annotations,
         shapes      = [
-            # Boundary Walls (LIME/RED) for scientific awareness
-            attr(type="line", x0=AXIS_LO, x1=AXIS_LO, y0=0, y1=1, yref="paper", line=attr(color=FD.COLOUR_HUERED, width=1, dash="dot")),
-            attr(type="line", x0=AXIS_HI, x1=AXIS_HI, y0=0, y1=1, yref="paper", line=attr(color=FD.COLOUR_HUERED, width=1, dash="dot"))
+            # Scientific Boundary Walls at -2.0 and 2.0
+            attr(type="line", x0=AXIS_LO, x1=AXIS_LO, y0=0, y1=1, yref="paper", line=attr(color=FD.COLOUR_HUERED, width=1.5, dash="dash")),
+            attr(type="line", x0=AXIS_HI, x1=AXIS_HI, y0=0, y1=1, yref="paper", line=attr(color=FD.COLOUR_HUERED, width=1.5, dash="dash"))
         ]
     )
 
     if isempty(traces)
-        push!(traces, scatter(x=[50], y=[1], text=["Invalid Data"], mode="text"))
+        push!(traces, scatter(x=[0], y=[1], text=["Visualisation engine standby."], mode="text"))
     end
 
     p = Plot(traces, layout)

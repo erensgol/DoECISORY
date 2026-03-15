@@ -1,13 +1,9 @@
-# ======================================================================================
-# DAISHODOE - MAIN APPLICATION ENTRY
-# ======================================================================================
-# ======================================================================================
-# Version: v1.0 In Dev.
-# Author: Ecz. Eren Selim GÖL
-# ======================================================================================
+# Description: Primary application entry point, routing orchestrator, and UI layout definition.
+# Version:     v1.0-dev 
+# Author:      Ecz. Eren Selim GÖL
 
-# --- Headless & Stability Overrides ---
-# Must be set BEFORE loading any graphics libraries
+# --- Environment & Stability Configurations ---
+# These overrides must be established prior to initialising graphical libraries
 ENV["GKSwstype"]               = "100"
 ENV["JULIA_WEBIO_NOT_AVAILABLE"] = "1"
 ENV["PLOTLY_KALEIDO_NO_SANDBOX"] = "1"
@@ -27,7 +23,7 @@ else
     8060 # Local standard port
 end
 
-# --- Hot Reload Support (Strictly Local Only) ---
+# --- Hot Reload Functionality (Local Deployment) ---
 const APP_HasRevise_DDEC = if APP_IsHfSpaces_DDEC
     false
 else
@@ -51,19 +47,19 @@ catch e
     rethrow(e)
 end
 using Main.Sys_Fast
-Sys_Fast.FAST_InitialiseWorkforce_DDEF() # Lock environment to Workforce bunker immediately
+Sys_Fast.FAST_InitialiseWorkforce_DDEF() # Initialise transient storage for execution environment
 
 # --- Terminal Identity (Official Julia REPL) ---
 println("\e[1m               \e[32m_\e[0m")
-println("\e[1m   \e[34m_\e[0m       _ \e[31m_\e[32m(_)\e[35m_\e[0m     |  \e[1mDaishoDoE Engine\e[0m v1.0 In Dev.")
-println("\e[1m  \e[34m(_)\e[0m     | \e[31m(_)\e[0m \e[35m(_)\e[0m    |")
-println("\e[1m   _ _   _| |_  __ _   |  Official Research Software")
-println("\e[1m  | | | | | | |/ _` |  |")
-println("\e[1m  | | |_| | | | (_| |  |  Developed for Hacettepe University")
-println("\e[1m _/ |\\__'_|_|_|\\__'_|  |  System Status: \e[32m[OPTIMAL]\e[0m")
-println("\e[1m|__/                   |")
+println("\e[1m   \e[34m_\e[0m       _ \e[31m_\e[32m(_)\e[35m_\e[0m     |  \e[1mDaishoDoE Engine\e[0m v1.0-dev")
+println("\e[1m  \e[34m(_)\e[0m     | \e[31m(_)\e[0m \e[35m(_)\e[0m    |  System Status: \e[32m[OPTIMAL]\e[0m")
+println("\e[1m   _ _   _| |_  __ _   |")
+println("\e[1m  | | | | | | |/ _` |  |  Radiopharmacy Research Software")
+println("\e[1m  | | |_| | | | (_| |  |  Author: E.S. GÖL, Pharmacist")
+println("\e[1m _/ |\\__'_|_|_|\\__'_|  |  Department of Radiopharmacy")
+println("\e[1m|__/                   |  Hacettepe University")
 
-# Performance Status
+# System Status Reporting
 let (n_threads, _, _) = Sys_Fast.FAST_GetThreadInfo_DDEF()
     status = n_threads > 1 ? "[OPTIMAL]" : "\e[31m[LIMITED]\e[0m"
     println("\n\e[1m  Computing Core: \e[0m\e[32m$n_threads Threads\e[0m $status")
@@ -97,7 +93,7 @@ for (label, file) in [
     end
 end
 
-# Explicitly bring all modules into the current namespace (even for sub-processes)
+# Explicitly bring all modules into the current namespace
 using Main.Lib_Arts
 using Main.Lib_Core
 using Main.Lib_Mole
@@ -108,7 +104,7 @@ using Main.Gui_Base
 using Main.Gui_Deck
 using Main.Gui_Lens
 
-FAST_Log_DDEF("BOOT", "Complete", "Core Libraries Integrated", "OK")
+FAST_Log_DDEF("BOOT", "Complete", "All Modules Integrated", "OK")
 
 # --------------------------------------------------------------------------------------
 # --- TRANSIENT HOUSEKEEPING ---
@@ -175,7 +171,7 @@ const APP_Navbar_DDEC = html_div([
     ], className="nav-links d-flex justify-content-center"),
 
     html_div([
-        html_span("v1.0 In Dev.", 
+        html_span("v1.0-dev", 
             className="badge opacity-75", 
             style=Dict("backgroundColor" => "var(--colour-val3-darlow)", "color" => "var(--colour-val0-purwhi)")
         ),
@@ -192,11 +188,11 @@ app.layout = html_div([
     APP_Navbar_DDEC,
     APP_Content_DDEC,
 
-    # Global State Architecture 
+    # Global Application State
     dcc_store(id="store-session-config", storage_type="memory"),
     dcc_store(id="store-master-vault",   storage_type="memory"),
 
-    # Master Sync Bus
+    # Component Communication Bus
     dcc_store(id="sync-deck-content",  storage_type="memory"),
     dcc_store(id="sync-lens-content",  storage_type="memory"),
     dcc_store(id="sync-lens-analysis", storage_type="memory"),
@@ -263,7 +259,7 @@ app.layout = html_div([
 # 1. Global State Sync Bus
 """
     APP_SyncVault_DDEF(deck, lens, lens_analysis) -> Any
-Orchestrates the synchronisation of data between UI components and the session store.
+Synchronises session data between the UI components and the master repository.
 """
 function APP_SyncVault_DDEF(deck::Any, lens::Any, lens_analysis::Any)
     ctx = callback_context()
@@ -293,7 +289,7 @@ end
 # 2. Main Navigation Orchestrator
 """
     APP_RoutePage_DDEF(pathname::String) -> Any
-Handles top-level routing and renders the appropriate layout or portal dashboard.
+Top-level routing orchestrator for navigating between experimental and analytical modules.
 """
 function APP_RoutePage_DDEF(pathname::String)
     if pathname == "/design"
@@ -313,8 +309,12 @@ function APP_RoutePage_DDEF(pathname::String)
                         style     = Dict("letterSpacing" => "-0.04em", "color" => "var(--colour-val5-purbla)")
                     ),
                     html_p("A Decision-Adaptive, Interactive, and Sequential Hybrid Optimisation Environment for Design of Experiments (DoE) Processes",
-                        className = "lead mb-5", 
+                        className = "lead mb-2", 
                         style     = Dict("color" => "var(--colour-val4-darhig)", "maxWidth" => "800px", "margin" => "0 auto")
+                    ),
+                    html_p("Under active system development. No liability is assumed for the accuracy of results or computations during this phase.",
+                        className = "small opacity-75 mb-5",
+                        style     = Dict("color" => "var(--colour-val3-darlow)", "fontStyle" => "italic")
                     ),
                 ], xs=12, className="text-center mt-5 pt-4")),
 
@@ -416,7 +416,7 @@ callback!(app,
     return is_open, Dash.no_update(), Dash.no_update()
 end
 
-# 14. LOGIC: SYSTEM DIAGNOSTICS & EMERGENCY RECOVERY (GLOBAL)
+# --- System Diagnostics & Emergency Recovery ---
 callback!(app,
     Output("lens-store-diag-force", "data"),
     Output("diag-global-output",    "children"),
@@ -431,10 +431,10 @@ callback!(app,
     
     if trig == "btn-diag-force-unlock"
         (isnothing(n_lock) || n_lock == 0) && return Dash.no_update(), Dash.no_update()
-        # 1. Backend: Clear all reentrant locks
+        # 1. Backend: Reset all reentrant locks
         Sys_Fast.FAST_ForceReleaseAll_DDEF()
         
-        # 2. Frontend: Emit unlock signal (timestamp)
+        # 2. Frontend: Emit synchronisation signal (timestamp)
         new_force = Int(round(time()))
         
         msg = html_div([
@@ -451,7 +451,7 @@ callback!(app,
         
         msg = html_div([
             html_span("✅ Clear Temporary Files: SUCCESS", className="fw-bold colourtx-c4tg d-block text-center"),
-            html_span("Transient workforce bunker has been scavenged and cleared.", className="x-small colourtx-v4dh d-block text-center")
+            html_span("Transient storage directory successfully cleared and reset.", className="x-small colourtx-v4dh d-block text-center")
         ], className="mt-2")
         
         return Dash.no_update(), msg
@@ -463,7 +463,7 @@ end
 # Loading overlay dismiss callback (polls until warmup completes)
 """
     APP_HandleLoadingOverlay_DDEF(n::Any) -> Tuple{Any, Bool}
-Manages the visibility of the initial loading screen based on background JIT warmup status.
+Manages the visibility of the initial loading screen based on background JIT pre-compilation status.
 """
 function APP_HandleLoadingOverlay_DDEF(n::Any)
     ready::Bool = APP_SystemReady_DDEC[]
@@ -471,7 +471,7 @@ function APP_HandleLoadingOverlay_DDEF(n::Any)
 
     # Only log status if NOT ready, reduce frequency to ~1 min
     if !ready && n_val % 30 == 0
-        Sys_Fast.FAST_Log_DDEF("BOOT", "UI_SYNC", "Status Check: Waiting for System Warmup... (Poll #$n_val)", "INFO")
+        Sys_Fast.FAST_Log_DDEF("BOOT", "UI_SYNC", "Status Check: Waiting for System Pre-compilation... (Poll #$n_val)", "INFO")
     end
 
     if ready
@@ -497,14 +497,10 @@ LENS_RegisterCallbacks_DDEF(app)
 # --- JIT WARMUP ROUTINE ---
 # --------------------------------------------------------------------------------------
 
-# --------------------------------------------------------------------------------------
-# --- SERVER EXECUTION & WARMUP ---
-# --------------------------------------------------------------------------------------
-
 # Lightweight warmup for HF Spaces to avoid startup timeout
 """
     APP_Warmup_DDEF() -> Nothing
-Orchestrates JIT pre-compilation. Skips heavy lifting in Local Dev mode.
+Orchestrates Just-In-Time (JIT) pre-compilation. Prioritises speed in local development environments.
 """
 function APP_Warmup_DDEF()::Nothing
     t0     = time()
@@ -521,7 +517,7 @@ function APP_Warmup_DDEF()::Nothing
         return nothing
     end
 
-    FAST_Log_DDEF("BOOT", "Warmup", "Initiating Scientific JIT Pulse...", "WAIT")
+    FAST_Log_DDEF("BOOT", "Pre-compilation", "Initiating Scientific JIT Pulse...", "WAIT")
 
     try
         # 1. Type system & Core Logic
@@ -546,7 +542,7 @@ function APP_Warmup_DDEF()::Nothing
     APP_SystemReady_DDEC[] = true
     elapsed                = round(time() - t0; digits=2)
     
-    FAST_Log_DDEF("BOOT", "Warmup", "JIT complete ($(elapsed)s) — System Ready.", "OK")
+    FAST_Log_DDEF("BOOT", "Pre-compilation", "JIT complete ($(elapsed)s) — System Ready.", "OK")
     return nothing
 end
 
