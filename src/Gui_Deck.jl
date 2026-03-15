@@ -82,7 +82,7 @@ function DECK_ModalChemical_DDEF()
 
             dbc_row([
                 dbc_col(dbc_label("Molecular Weight (g/mol)", className="small mb-1"), xs=12),
-                dbc_col(dbc_input(id="deck-prop-mw", type="number", min=0, step="any", placeholder="e.g. 386.65", size="sm", className="mb-3"), xs=12),
+                dbc_col(dbc_input(id="deck-prop-mw", type="number", min=0, step="any", placeholder="", size="sm", className="mb-3"), xs=12),
             ], className="mb-2 border-bottom pb-2"),
 
             html_div("Radioactivity & Decay", 
@@ -92,7 +92,7 @@ function DECK_ModalChemical_DDEF()
             dbc_row([
                 dbc_col(dbc_label("Half-Life (T½)", className="small mb-1"), xs=12, sm=6),
                 dbc_col(dbc_label("Unit", className="small mb-1"), xs=12, sm=6),
-                dbc_col(dbc_input(id="deck-prop-hl", type="number", min=0, step="any", placeholder="e.g. 6.0", size="sm", className="mb-3"), xs=12, sm=6),
+                dbc_col(dbc_input(id="deck-prop-hl", type="number", min=0, step="any", placeholder="", size="sm", className="mb-3"), xs=12, sm=6),
                 dbc_col(dbc_select(
                     id="deck-prop-hl-unit",
                     options=[
@@ -184,7 +184,7 @@ function DECK_ModalStoch_DDEF()
                 ], xs=12, sm=6),
                 dbc_col([
                     dbc_label("Filler MW (g/mol)", className="small mb-1"),
-                    dbc_input(id="deck-stoch-filler-mw", type="number", min=0, step="any", placeholder="e.g. 734.05", size="sm", className="mb-2"),
+                    dbc_input(id="deck-stoch-filler-mw", type="number", min=0, step="any", placeholder="", size="sm", className="mb-2"),
                 ], xs=12, sm=6),
             ], className="mb-2 border-bottom pb-2"),
 
@@ -195,11 +195,11 @@ function DECK_ModalStoch_DDEF()
             dbc_row([
                 dbc_col([
                     dbc_label("Volume (mL)", className="small mb-1"),
-                    dbc_input(id="deck-stoch-vol", type="number", min=0, step="any", placeholder="e.g. 5.0", size="sm", className="mb-2"),
+                    dbc_input(id="deck-stoch-vol", type="number", min=0, step="any", placeholder="", size="sm", className="mb-2"),
                 ], xs=12, sm=6),
                 dbc_col([
                     dbc_label("Concentration (mM)", className="small mb-1"),
-                    dbc_input(id="deck-stoch-conc", type="number", min=0, step="any", placeholder="e.g. 20.0", size="sm", className="mb-2"),
+                    dbc_input(id="deck-stoch-conc", type="number", min=0, step="any", placeholder="", size="sm", className="mb-2"),
                 ], xs=12, sm=6),
             ]),
 
@@ -1220,22 +1220,55 @@ function DECK_RegisterCallbacks_DDEF(app)
                     return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, err_lbl, NO, NO, NO, fill(NO, 6), NO)
                 end
 
-            # --- C2. LOAD TEMPLATE ---
+            # --- C2. LOAD TEMPLATE (from Memo_DDE.json) ---
             elseif trig == "deck-btn-template"
-                loaded_rows = [
-                    Dict("Name" => "Chol", "Role" => "Variable", "L1" => 10.0, "L2" => 20.0, "L3" => 30.0, "Min" => 0.0, "Max" => 40.0, "MW" => 386.65, "Unit" => "%M", "IsRadioactive" => false, "HalfLife" => 0.0, "HalfLifeUnit" => "Hours"),
-                    Dict("Name" => "PEG", "Role" => "Variable", "L1" => 1.0, "L2" => 3.0, "L3" => 5.0, "Min" => 0.0, "Max" => 10.0, "MW" => 2808.74, "Unit" => "%M", "IsRadioactive" => false, "HalfLife" => 0.0, "HalfLifeUnit" => "Hours"),
-                    Dict("Name" => "Temperature", "Role" => "Variable", "L1" => 25.0, "L2" => 45.0, "L3" => 65.0, "Min" => 25.0, "Max" => 100.0, "MW" => 0.0, "Unit" => "°C", "IsRadioactive" => false, "HalfLife" => 0.0, "HalfLifeUnit" => "Hours"),
-                    Dict("Name" => "DPPC", "Role" => "Fixed", "L1" => 0.0, "L2" => 0.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 734.05, "Unit" => "%M", "IsRadioactive" => false, "HalfLife" => 0.0, "HalfLifeUnit" => "Hours"),
-                    Dict("Name" => "DOTA", "Role" => "Fixed", "L1" => 0.0, "L2" => 1.0, "L3" => 0.0, "Min" => 0.0, "Max" => 0.0, "MW" => 3184.84, "Unit" => "%M", "IsRadioactive" => false, "HalfLife" => 0.0, "HalfLifeUnit" => "Hours"),
-                ]
-                lbl = html_div([html_i(className="fas fa-book-medical me-2"), "Template Applied"],
+                memo = Sys_Fast.FAST_LoadMemoFile_DDEF("Memo_DDE.json")
+                
+                if isempty(memo)
+                    lbl = html_div([html_i(className="fas fa-exclamation-circle me-2"), "Error: Memo_DDE.json not found"],
+                                   className="badge p-2 w-100", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)", "fontSize" =>"0.85rem"))
+                    return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, lbl, NO, NO, NO, fill(NO, 6), NO)
+                end
+
+                loaded_rows = map(enumerate(DECK_GetSafeKey_DDEF(memo, "Inputs", []))) do (i, m)
+                    Dict("Name" => DECK_GetSafeKey_DDEF(m, "Name", ""), 
+                        "Role" => (i <= 3 ? "Variable" : "Fixed"),
+                        "L1" => DECK_GetSafeKey_DDEF(m, "L1", 0.0), "L2" => DECK_GetSafeKey_DDEF(m, "L2", 0.0),
+                        "L3" => DECK_GetSafeKey_DDEF(m, "L3", 0.0), "Min" => DECK_GetSafeKey_DDEF(m, "Min", 0.0),
+                        "Max" => DECK_GetSafeKey_DDEF(m, "Max", 0.0), "MW" => DECK_GetSafeKey_DDEF(m, "MW", 0.0),
+                        "Unit" => DECK_GetSafeKey_DDEF(m, "Unit", "-"),
+                        "IsRadioactive" => DECK_GetSafeKey_DDEF(m, "IsRadioactive", false),
+                        "HalfLife" => Float64(DECK_GetSafeKey_DDEF(m, "HalfLife", 0.0)),
+                        "HalfLifeUnit" => string(DECK_GetSafeKey_DDEF(m, "HalfLifeUnit", "Hours")))
+                end
+
+                lbl = html_div([html_i(className="fas fa-book-medical me-2"), "Sample Applied (JSON)"],
                                className="badge p-2 w-100", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr1-shamag)", "fontSize" =>"0.85rem","boxShadow" =>"0 2px 5px var(--colour-val3-darlow)"))
-                sample_stoch = Dict("FillerName" => "DPPC", "FillerMW" => 734.05, "Volume" => 5.0, "Conc" => 20.0)
-                nc = min(length(loaded_rows), DECK_MaxRows_DDEC)
-                def_outs = Sys_Fast.FAST_GetLabDefaults_DDEF()["Outputs"]
-                out_vals = vcat([i <= length(def_outs) ? def_outs[i]["Name"] : "" for i in 1:3], [i <= length(def_outs) ? def_outs[i]["Unit"] : "-" for i in 1:3])
-                return DECK_Return_DDEF(Dict("rows" => loaded_rows[1:nc], "count" => nc), loaded_rows[1:nc], [Dict("label" => "Phase 1", "value" => "Phase1")], 5.0, 20.0, "Sample_Project", "BoxBehnken", lbl, NO, "Ready", "Phase1", out_vals, sample_stoch)
+                
+                real_count = 0
+                for (i, r) in enumerate(loaded_rows)
+                    if !isempty(strip(string(get(r, "Name", ""))))
+                        real_count = i
+                    end
+                end
+                nc = max(6, real_count)
+                
+                # Padding
+                while length(loaded_rows) < DECK_MaxRows_DDEC
+                    push!(loaded_rows, DECK_GetDefaultRow_DDEF(length(loaded_rows) + 1))
+                end
+
+                g = get(memo, "Global", Dict())
+                vol_v = get(g, "Volume", 0.0); conc_v = get(g, "Conc", 0.0)
+                proj_v = string(get(g, "ProjectName", "Daisho"))
+                method_v = string(get(g, "Method", "BB15"))
+
+                loaded_stoch = Dict("FillerName" => string(get(g, "FillerName", "")), "FillerMW" => Float64(get(g, "FillerMW", 0.0)), "Volume" => Float64(vol_v), "Conc" => Float64(conc_v))
+                
+                memo_outs = get(memo, "Outputs", [])
+                out_vals = vcat([i <= length(memo_outs) ? get(memo_outs[i], "Name", "") : "" for i in 1:3], [i <= length(memo_outs) ? get(memo_outs[i], "Unit", "-") : "-" for i in 1:3])
+                
+                return DECK_Return_DDEF(Dict("rows" => loaded_rows[1:DECK_MaxRows_DDEC], "count" => nc), loaded_rows[1:DECK_MaxRows_DDEC], [Dict("label" => "Phase 1", "value" => "Phase1")], vol_v, conc_v, proj_v, method_v, lbl, NO, "Ready", "Phase1", out_vals, loaded_stoch)
             elseif trig == "deck-btn-save-memo"
                 try
                     stoch_store = args[idx_gl+6]

@@ -34,7 +34,11 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
     FAST_CleanHeader_DDEF,
     FAST_InitialiseWorkforce_DDEF, FAST_CleanWorkforce_DDEF,
     FAST_Data_DDEC,
-    FAST_SanitiseFilename_DDEF
+    FAST_SanitiseFilename_DDEF,
+    FAST_LoadMemoFile_DDEF
+
+# --------------------------------------------------------------------------------------
+# --- CONSTANTS & CONFIGURATION ---
 
 # --------------------------------------------------------------------------------------
 # --- CONSTANTS & CONFIGURATION ---
@@ -796,6 +800,26 @@ function FAST_GetThreadInfo_DDEF()::Tuple{Int,String,String}
     n::Int = Threads.nthreads()
     # High-performance status reporting
     n > 1 ? (n, "var(--colour-chr4-tongre)", "$n Threads [OPTIMAL]") : (n, "var(--colour-chr5-hueyel)", "1 Thread [SUB-OPTIMAL]")
+end
+
+"""
+    FAST_LoadMemoFile_DDEF(FilePath::String) -> Dict{String, Any}
+Loads a standardized DDE Memo file (JSON) from the local filesystem.
+Returns an empty dictionary if the file is not found or is corrupt.
+"""
+function FAST_LoadMemoFile_DDEF(FilePath::String)::Dict{String,Any}
+    try
+        if !isfile(FilePath)
+            FAST_Log_DDEF("FAST", "MEMO_NOT_FOUND", "Project reference $FilePath missing.", "WARN")
+            return Dict{String,Any}()
+        end
+        
+        json_str = read(FilePath, String)
+        return JSON3.read(json_str, Dict{String,Any})
+    catch e
+        FAST_Log_DDEF("FAST", "MEMO_LOAD_FAIL", "Corruption in $FilePath: $e", "FAIL")
+        return Dict{String,Any}()
+    end
 end
 
 # --------------------------------------------------------------------------------------
