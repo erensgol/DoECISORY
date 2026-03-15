@@ -1366,7 +1366,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 layout_obj = Layout(fig_dict["layout"])
                 p          = Plot(traces, layout_obj)
 
-                savefig(p, filepath; width=1200, height=800, scale=2)
+                savefig(p, filepath; width=1000, height=1000, scale=1)
                 count += 1
             end
 

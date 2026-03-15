@@ -663,11 +663,11 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
     
     # 1. Determine Capacity Limit & Base Resolution (N)
     # Level 1 (Entry): ≤ 4 cores, 250k pts, N=25
-    # Level 2 (Pro): > 4 cores, 700k pts, N=35
+    # Level 2 (Pro): > 4 cores, 750k pts, N=25
     cap_limit, base_n = if compute_threads <= 4
         250_000, 25
     else
-        700_000, 35
+        750_000, 25
     end
 
     # 2. Adjust steps dynamically to stay within cap
