@@ -324,13 +324,18 @@ function FAST_SafeExcelWrite_DDEF(File::Union{String,Nothing}, Updates::Dict{Str
 
     if isfile(File)
         try
-            xf = XLSX.readxlsx(File)
-            for sn in XLSX.sheetnames(xf)
-                push!(sheet_order, sn)
-                all_data[sn] = try
-                    DataFrame(XLSX.readtable(File, sn))
-                catch
-                    DataFrame()
+            XLSX.openxlsx(File) do xf
+                for sn in XLSX.sheetnames(xf)
+                    push!(sheet_order, sn)
+                    if haskey(Updates, sn)
+                        all_data[sn] = Updates[sn]
+                    else
+                        all_data[sn] = try
+                            DataFrame(XLSX.gettable(xf[sn]))
+                        catch
+                            DataFrame()
+                        end
+                    end
                 end
             end
         catch e
@@ -338,14 +343,29 @@ function FAST_SafeExcelWrite_DDEF(File::Union{String,Nothing}, Updates::Dict{Str
         end
     end
 
-    foreach(keys(Updates)) do k
-        k ∉ sheet_order && push!(sheet_order, k)
-        all_data[k] = Updates[k]
+    # Add new sheets or update existing ones not found in the file
+    for (k, df) in Updates
+        if !haskey(all_data, k)
+            push!(sheet_order, k)
+            all_data[k] = df
+        else
+            all_data[k] = df
+        end
     end
 
-    valid_pairs = [sn => all_data[sn] for sn in sheet_order if !isempty(all_data[sn]) || sn == "CONFIG"]
+    # Filter out empty dataframes or those with no columns to prevent XLSX errors
+    valid_pairs = Pair{String, DataFrame}[]
+    for sn in sheet_order
+        df = all_data[sn]
+        if ncol(df) > 0 && (nrow(df) > 0 || sn == "CONFIG")
+            push!(valid_pairs, sn => df)
+        elseif ncol(df) == 0
+            FAST_Log_DDEF("FAST", "IO_WARN", "Skipping sheet [$sn] - No columns defined.", "WARN")
+        end
+    end
 
     if !isempty(valid_pairs)
+        # Force overwrite while preserving other sheets already in all_data
         XLSX.writetable(File, valid_pairs...; overwrite=true)
     end
     

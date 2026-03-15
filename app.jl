@@ -522,16 +522,30 @@ function APP_Warmup_DDEF()::Nothing
     try
         # 1. Type system & Core Logic
         Sys_Fast.FAST_SafeNum_DDEF("42.0")
-        dummy_rows = [Dict{String,Any}("Name" => "A", "Role" => "Variable", "L1" => 1, "L2" => 2, "L3" => 3, "MW" => 100, "Unit" => "mg")]
         
         # 2. Physics & Chemistry
-        Lib_Mole.MOLE_ParseTable_DDEF(dummy_rows)
-        Lib_Mole.MOLE_CalcMass_DDEF(String["A"], Float64[100.0], Float64[100.0], 5.0, 10.0)
+        # Mock data for CalcMass
+        names_mock  = String["A"]
+        mw_mock     = Float64[100.0]
+        ratios_mock = Float64[100.0]
+        units_mock  = String["mg"]
+        Lib_Mole.MOLE_CalcMass_DDEF(names_mock, mw_mock, ratios_mock, 5.0, 10.0, units_mock)
+        
+        # Dummy table data for AuditBatch
+        table_mock = [Dict("Name"=>"A", "MW"=>100.0, "Unit"=>"mg", "Type"=>"Variable", "Min"=>0.0, "Max"=>100.0, "Mid"=>50.0, "Rows"=>[[Dict("Unit"=>"mg")]]),
+                     Dict("Name"=>"W", "MW"=>18.0, "Unit"=>"%", "Type"=>"Filler", "Min"=>0.0, "Max"=>100.0, "Mid"=>50.0)]
+        design_mock = rand(10, 1)
+        Lib_Mole.MOLE_AuditBatch_DDEF(table_mock, design_mock, 5.0, 10.0)
 
-        # 3. Analytics (Basic Regress only, no plotting/heavy rendering)
-        X_dummy = Float64[1 2; 3 4; 5 6; 7 8]
-        Y_dummy = Float64[10, 20, 30, 40]
-        Lib_Vise.VISE_Regress_DDEF(X_dummy, Y_dummy, "linear")
+        # 3. Analytics (Grid Search & Regression)
+        X_dummy = rand(11, 3) # Use 3 vars for standard compatibility
+        Y_dummy = rand(11, 1)
+        mod_dummy = Lib_Vise.VISE_Regress_DDEF(X_dummy, vec(Y_dummy), "quadratic")
+        
+        goals_dummy = [Dict("Type"=>"Maximise", "Weight"=>1.0)]
+        bounds_dummy = [0.0 1.0; 0.0 1.0; 0.0 1.0]
+        
+        Lib_Vise.VISE_GridSearch_DDEF([mod_dummy], goals_dummy, bounds_dummy)
         
         # Memory Housekeeping
         GC.gc()

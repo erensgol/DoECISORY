@@ -405,7 +405,11 @@ Renders a 3D Response Surface (RSM) for two selected variables.
 function ARTS_RenderSurface_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int},
     Lbls::Vector{String}, OutName::String)
     ix, iy = Idx[1], Idx[2]
-    N_Grid = 100
+    # Dynamic Hardware Scaling: Level 1 (25->75) vs Level 2 (35->105)
+    threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
+    n_base  = threads <= 4 ? 25 : 35
+    N_Grid  = n_base * 3 # Harmonised Grid Rule
+    
     x1, x2, Grid = ARTS_BuildGrid_DDEF(X, ix, iy, N_Grid)
 
     Z = reshape(ARTS_Predict_DDEF(Model, Grid), N_Grid, N_Grid)'
@@ -447,7 +451,11 @@ Renders a 2D Contour map (Heatmap) with labeled isolating lines.
 function ARTS_RenderContour_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int},
     Lbls::Vector{String}, OutName::String)
     ix, iy = Idx[1], Idx[2]
-    N      = 100
+    # Dynamic Hardware Scaling: Level 1 (25->75) vs Level 2 (35->105)
+    threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
+    n_base  = threads <= 4 ? 25 : 35
+    N       = n_base * 3 # Harmonised Grid Rule
+    
     x1, x2, Grid = ARTS_BuildGrid_DDEF(X, ix, iy, N)
 
     Z = reshape(ARTS_Predict_DDEF(Model, Grid), N, N)'
@@ -489,8 +497,12 @@ function ARTS_RenderSlice_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int}
     Lbls::Vector{String}, OutName::String)
     ix, iy = Idx[1], Idx[2]
     K      = 3 # Fixed 3-variable system
+    # Dynamic Hardware Scaling: Level 1 (25->75) vs Level 2 (35->105)
+    threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
+    n_base  = threads <= 4 ? 25 : 35
+    N_Slice = n_base * 3 # Harmonised Grid Rule
 
-    x1      = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=100))
+    x1      = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N_Slice))
     y_vals  = (minimum(view(X, :, iy)), mean(view(X, :, iy)), maximum(view(X, :, iy)))
     y_names = ("Min", "Mean", "Max")
     styles  = ("solid", "dash", "solid")

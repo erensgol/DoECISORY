@@ -603,7 +603,7 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
     idx_fill = D["Idx_Fill"]
 
     masses = Vector{Float64}(undef, R)
-    for i in 1:R
+    Threads.@threads for i in 1:R
         # Initialise full ratio vector for the current run
         ratios_full = zeros(length(D["Names"]))
         for (j, v_idx) in enumerate(idx_var)
@@ -638,6 +638,7 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
         if isempty(idx_chem)
             masses[i] = 0.0
         else
+            # Pass SuppressLog=true to avoid IO contention in parallel threads
             df        = MOLE_CalcMass_DDEF(n_chem, w_chem, r_chem, Vol, Conc, u_chem; SuppressLog=true)
             masses[i] = sum(df.TARGET_MASS_mg)
         end

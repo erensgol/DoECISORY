@@ -16,7 +16,8 @@ using Main.Lib_Arts
 using Main.Gui_Base
 using DataFrames
 using Printf
-using PlotlyJS: JSON, savefig, Plot, GenericTrace, Layout
+using PlotlyJS
+using PlotlyJS: savefig, Plot, GenericTrace, Layout
 using ZipFile
 using Base64
 using XLSX
@@ -560,9 +561,9 @@ function LENS_RegisterCallbacks_DDEF(app)
             # Generate and capture Scientific Report
             sci_report = Lib_Vise.VISE_GenerateScientificReport_DDEF(res)
 
-            # Serialise PlotlyJS objects to JSON for Dash
+            # Serialise PlotlyJS objects to Dict for Dash 
             graphs = [
-                Dict("figure" => JSON.parse(JSON.json(g["Plot"])), "title" => g["Title"])
+                Dict("figure" => PlotlyJS.JSON.parse(PlotlyJS.JSON.json(g["Plot"])), "title" => g["Title"])
                 for g in res["Graphs"]
             ]
 
@@ -1369,7 +1370,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 
             count = 0
             for (i, g) in enumerate(graphs)
-                fig_dict = JSON.parse(JSON.json(g["figure"]))
+                fig_dict = PlotlyJS.JSON.parse(PlotlyJS.JSON.json(g["figure"]))
                 title    = get(g, "title", "Plot_$i")
 
                 # Apply Light Theme via BASE function

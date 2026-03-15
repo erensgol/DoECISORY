@@ -177,39 +177,51 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
     end
     pow_factor = weight_sum > 0.0 ? (1.0 / weight_sum) : 1.0
 
-    # Build predictive closures
+    # Build high-performance predictive closures
     closures = Any[nothing for _ in 1:NumModels]
     for m in 1:NumModels
-        # OLS closure for Linear/Quadratic GLM models
-        beta     = Models[m]["Coefs"]::Vector{Float64}
-        mod_type = Models[m]["ModelType"]
-        closures[m] = (x_tup) -> begin
-            # Single point expansion
-            x_vec = collect(x_tup)
-            X_mat = reshape(x_vec, 1, Dim)
-            Xd    = Main.Lib_Vise.VISE_ExpandDesign_DDEF(X_mat, mod_type)
-            return (Xd * beta)[1]
+        # Skip failed models to prevent KeyErrors on Coefs
+        get(Models[m], "Status", "") != "OK" && continue
+
+        beta     = collect(Float64, Models[m]["Coefs"])
+        mod_type = lowercase(get(Models[m], "ModelType", "quadratic"))
+        
+        if occursin("linear", mod_type)
+            # Allocation-free linear expansion
+            closures[m] = (x) -> beta[1] + beta[2]*x[1] + beta[3]*x[2] + beta[4]*x[3]
+        else
+            # Allocation-free quadratic expansion
+            # Order: Int, A, B, C, AB, AC, BC, A2, B2, C2
+            # Indices: 1, 2, 3, 4, 5,  6,  7,  8,  9,  10
+            closures[m] = (x) -> begin
+                @inbounds (beta[1] + 
+                 beta[2]*x[1] + beta[3]*x[2] + beta[4]*x[3] + 
+                 beta[5]*x[1]*x[2] + beta[6]*x[1]*x[3] + beta[7]*x[2]*x[3] +
+                 beta[8]*x[1]*x[1] + beta[9]*x[2]*x[2] + beta[10]*x[3]*x[3])
+            end
         end
     end
 
-    # Define the Objective Function (BBO Minimises, so we return -Score)
+    # Define the Objective Function (BBO Minimises, so return -Score)
     function CORE_CalcObjective_DDEF(x)
         s     = 1.0
-        x_tup = ntuple(i -> x[i], Dim)
+        # x is already an AbstractVector from BBO
         for m in 1:NumModels
-            val = closures[m](x_tup)
+            c = closures[m]
+            isnothing(c) && continue # Skip models that failed or weren't initialised
+
+            val = c(x)
             if isnan(val) || isinf(val)
-                return 0.0 # Extreme penalty, Desirability 0.0
+                return 0.0 
             end
             gtup = parsed_goals[m]
             d    = Main.Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
-            s   *= d^gtup[6]
+            s   *= (d^gtup[6])
         end
         score = clamp(s^pow_factor, 0.0, 1.0)
 
-        # Apply external scientific constraints (Penalties)
         if PenaltyFn !== nothing
-            score *= PenaltyFn(x_tup)
+            score *= PenaltyFn(x)
         end
 
         return -score
@@ -384,8 +396,10 @@ function CORE_D_Efficiency_DDEF(X::AbstractMatrix)
     R, C = size(X)
     R < C && return 0.0
     try
+        # Normalise columns to [-1, 1] range to calculate coded D-Efficiency
+        X_sc = X ./ max.(maximum(abs, X; dims=1), 1e-9)
         # Normalised Fisher Information Determinant: (det(X'X) / R^p)^(1/p)
-        return (det(X' * X) / (R^C))^(1 / C)
+        return (det(X_sc' * X_sc) / (R^C))^(1 / C)
     catch
         return 0.0
     end

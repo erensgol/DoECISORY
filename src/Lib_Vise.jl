@@ -141,7 +141,7 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
 
         # Condition number assessment for numerical stability
         if cond(X_Design) > 1e10
-            return Dict(
+            return Dict{String, Any}(
                 "Status" => "FAIL", 
                 "Error"  => "Pre-Flight Matrix Health Check Failed: Design matrix condition number > 1e10. Potential multicollinearity detected."
             )
@@ -193,7 +193,7 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
         TNames   = VISE_GetTermNames_DDEF(InNames, ModelType)
         cond_num = cond(X_Design)
 
-        return Dict(
+        return Dict{String, Any}(
             "Coefs"     => Beta, 
             "TermNames" => TNames,
             "R2"        => R2, 
@@ -213,7 +213,7 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
         )
     catch e
         Main.Sys_Fast.FAST_Log_DDEF("VISE", "MODELLING", sprint(showerror, e, catch_backtrace()), "FAIL")
-        return Dict("Status" => "FAIL", "Error" => string(e))
+        return Dict{String, Any}("Status" => "FAIL", "Error" => string(e))
     end
 end
 
@@ -602,7 +602,7 @@ function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector
     end
 
     if isnothing(best_mod)
-        best_mod = Dict(
+        best_mod = Dict{String, Any}(
             "Status"    => "FAIL", 
             "Error"     => "All candidate models failed (collinear design or flat response variation).", 
             "ModelType" => "linear"
@@ -658,16 +658,26 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
     X_Bounds::AbstractMatrix{Float64}; Steps::Int=41)
     Dim = 3
 
-    # Thread-aware density balancing
+    # Dynamic Hardware-Aware Scaling (Dual Level Architecture)
     compute_threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
-    max_pts         = compute_threads >= 4 ? 2_000_000 : 500_000  # Smaller grids on fewer threads
+    
+    # 1. Determine Capacity Limit & Base Resolution (N)
+    # Level 1 (Entry): ≤ 4 cores, 250k pts, N=25
+    # Level 2 (Pro): > 4 cores, 700k pts, N=35
+    cap_limit, base_n = if compute_threads <= 4
+        250_000, 25
+    else
+        700_000, 35
+    end
 
-    eff_steps = Steps
-    while eff_steps^Dim > max_pts && eff_steps > 3
+    # 2. Adjust steps dynamically to stay within cap
+    eff_steps = base_n
+    while eff_steps^Dim > cap_limit && eff_steps > 3
         eff_steps -= 2
     end
+
     Main.Sys_Fast.FAST_Log_DDEF("VISE", "OPTIMISATION",
-        "Grid: $(eff_steps)^$Dim = $(eff_steps^Dim) pts | Compute threads: $compute_threads", "INFO")
+        "Grid Harmony: $(eff_steps)^$Dim | Limit: $(cap_limit÷1000)k | Threads: $compute_threads", "INFO")
 
     # Generate coordinate ranges
     Ranges = [range(X_Bounds[i, 1], X_Bounds[i, 2]; length=eff_steps) for i in 1:Dim]
