@@ -145,7 +145,7 @@ function LENS_Layout_DDEF()
                 dbc_row(dbc_col(html_div([
                     dbc_button(html_i(className="fas fa-chevron-left"),
                         id="lens-btn-prev", outline=false, size="sm", className="me-1 px-2 py-1 btn-white-bg"),
-                    dcc_input(id="lens-graph-input", type="number", min=1, step=1, value=1, className="form-control form-control-sm mx-1 text-center colourtx-v5pb", style=Dict("backgroundColor" => "transparent", "borderColor" => "var(--colour-val3-darlow)", "width" => "60px", "height" => "28px", "fontSize" => "12px")),
+                    dcc_input(id="lens-graph-input", type="number", min=1, step=1, value=1, debounce=true, className="form-control form-control-sm mx-1 text-center colourtx-v5pb", style=Dict("backgroundColor" => "transparent", "borderColor" => "var(--colour-val3-darlow)", "width" => "60px", "height" => "28px", "fontSize" => "12px")),
                     html_span(id="lens-graph-counter", className="small mx-1 colourtx-v4dh"),
                     dbc_button(html_i(className="fas fa-chevron-right"),
                         id="lens-btn-next", outline=false, size="sm", className="ms-1 px-2 py-1 btn-white-bg"),
@@ -846,8 +846,8 @@ function LENS_RegisterCallbacks_DDEF(app)
         return ntuple(_ -> true, 6)
     end
 
-    # --- 3. UI ARCHITECTURE: VISUALISATION INDEX MANAGEMENT ---
-    callback!(app,
+    # --- 3. CLIENTSIDE ACCELERATION: VISUALISATION INDEX MANAGEMENT ---
+    callback!(ClientsideFunction("clientside", "update_index"), app,
         Output("lens-store-index", "data"),
         Output("lens-graph-input", "value"),
         Output("lens-graph-input", "max"),
@@ -857,40 +857,25 @@ function LENS_RegisterCallbacks_DDEF(app)
         Input("lens-graph-input",   "value"),
         State("lens-store-index",   "data"),
         prevent_initial_call=true
-    ) do g, n_nxt, n_prv, val_inp, i
-        trig = BASE_GetTrigger_DDEF(callback_context())
+    )
 
-        tot = isnothing(g) ? 0 : length(g)
-        if trig == "lens-store-graphs" || tot == 0
-            return 0, 1, max(1, tot)
-        end
-
-        idx = isnothing(i) ? 0 : i
-
-        if trig == "lens-btn-next"
-            idx = (idx + 1) % tot
-        elseif trig == "lens-btn-prev"
-            idx = (idx - 1 + tot) % tot
-        elseif trig == "lens-graph-input"
-            if !isnothing(val_inp) && val_inp >= 1 && val_inp <= tot
-                idx = val_inp - 1
-            end
-        end
-
-        return idx, idx + 1, max(1, tot)
-    end
-
-    # --- 4. UI ARCHITECTURE: VISUALISATION RENDERING SYNCHRONISATION ---
-    callback!(app,
+    # --- 4. CLIENTSIDE ACCELERATION: INSTANT RENDERING ---
+    callback!(ClientsideFunction("clientside", "render_graph"), app,
         Output("lens-graph-main",    "figure"),
         Output("lens-graph-title",   "children"),
         Output("lens-graph-counter", "children"),
-        Output("lens-graph-info",    "children"),
         Input("lens-store-index",    "data"),
         State("lens-store-graphs",   "data")
-    ) do i, g
-        (isnothing(g) || isempty(g)) && return Dict(), "No Visualisation Data", "/ 0", ""
-        idx = (i % length(g)) + 1
+    )
+
+    # --- 4B. SERVER-SIDE: METADATA SYNCHRONISATION ---
+    # Re-calculates Categorization (Index Info) only when the graph store is updated.
+    callback!(app,
+        Output("lens-graph-info", "children"),
+        Input("lens-store-graphs", "data"),
+        prevent_initial_call=true
+    ) do g
+        (isnothing(g) || isempty(g)) && return ""
 
         counts = Dict{String,Int}()
         order = String[]
@@ -924,13 +909,11 @@ function LENS_RegisterCallbacks_DDEF(app)
             ], style=Dict("display" => "flex", "width" => "100%", "justifyContent" => "space-around"))
         end
 
-        info_html = html_div([
+        return html_div([
             LENS_FormatLine_DDEF(info_parts[1:min(length(info_parts), 3)]),
             length(info_parts) > 3 ? LENS_FormatLine_DDEF(info_parts[4:min(length(info_parts), 6)]) : html_div(),
             length(info_parts) > 6 ? LENS_FormatLine_DDEF(info_parts[7:min(length(info_parts), 9)]) : html_div()
         ], style=Dict("display" => "flex", "flexDirection" => "column", "width" => "100%", "padding" => "2px 0"))
-
-        return g[idx]["figure"], g[idx]["title"], "/ $(length(g))", info_html
     end
 
     # --- 7. UI ARCHITECTURE: SEQUENTIAL PHASE EVOLUTION WIZARD ---
