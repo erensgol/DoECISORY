@@ -1,12 +1,12 @@
 module Lib_Arts
 
-# ======================================================================================
+# ==============================================================================
 # DAISHODOE PROJECT - LIB ARTS
-# ======================================================================================
+# ==============================================================================
 # Description: Visualisation and graphics engine for high-fidelity scientific 
 #              data representation and response surface mapping.
 # Module Tag:  ARTS
-# ======================================================================================
+# ==============================================================================
 
 using Base.Threads
 using PlotlyJS
@@ -25,12 +25,16 @@ export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
     ARTS_BaseLayout_DDEF, ARTS_Predict_DDEF, ARTS_BuildGrid_DDEF,
     ARTS_AdaptiveGridN_DDEF, ARTS_RenderSpaceImpl_DDEF
 
-# --------------------------------------------------------------------------------------
-# INTERFACE LAYOUT & GRAPHICAL THEME
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART A: VISUAL CORE & INFRASTRUCTURE
+# ==============================================================================
 
-# Theme as a module-level const for zero-alloc access
-# Theme linked to Main.Sys_Fast constants for single-source-of-truth
+# ------------------------------------------------------------------------------
+# SECTION 1: VISUAL THEME & COLOUR PALETTES
+# ------------------------------------------------------------------------------
+
+# Establishment of visual themes as module-level constants for zero-allocation access.
+# Direct linkage to global system constants for architectural synchronisation.
 const ARTS_Theme_DDEC = let C = Main.Sys_Fast.FAST_Data_DDEC
     (
         PURWHI = C.COLOUR_PURWHI,
@@ -49,7 +53,7 @@ const ARTS_Theme_DDEC = let C = Main.Sys_Fast.FAST_Data_DDEC
     )
 end
 
-# Viridis colour mapping for surfaces and heatmaps
+# Definition of Viridis-compliant colour mapping for multidimensional surface representations.
 const ARTS_ViridisScale_DDEC = let C = Main.Sys_Fast.FAST_Data_DDEC
     [
         [0.00, C.COLOUR_SHAMAG],
@@ -60,11 +64,16 @@ const ARTS_ViridisScale_DDEC = let C = Main.Sys_Fast.FAST_Data_DDEC
     ]
 end
 
-# --- GRAPHICAL STANDARD SCALES ---
+# ------------------------------------------------------------------------------
+# SECTION 2: GRAPHICAL STANDARD SCALES
+# ------------------------------------------------------------------------------
 
 const ARTS_StandardHeight_DDEC = 500
 const ARTS_SceneHeight_DDEC = 500
 
+# ------------------------------------------------------------------------------
+# SECTION 3: BASE LAYOUT FACTORY
+# ------------------------------------------------------------------------------
 """
     ARTS_BaseLayout_DDEF(title; [height]) -> Layout
 Generates a standardised PlotlyJS layout with light theme support.
@@ -73,6 +82,7 @@ function ARTS_BaseLayout_DDEF(title::String; height=ARTS_StandardHeight_DDEC)
     return Layout(;
         title=attr(
             text=title,
+            # Font configuration utilizing project theme and academic sizing.
             font=attr(size=12, family=ARTS_Theme_DDEC.FONT, color=ARTS_Theme_DDEC.PURBLA),
             x=0.02, 
             y=0.98
@@ -118,13 +128,19 @@ function ARTS_BaseLayout_DDEF(title::String; height=ARTS_StandardHeight_DDEC)
     )
 end
 
-# High-fidelity Viridis colour mapping for surfaces and heatmaps
+# Resolution limit for grid points to ensure optimal browser rendering performance.
 
-# --- SMART DOWNSAMPLING & GRID LIMITER ---
+# ------------------------------------------------------------------------------
+# SECTION 4: SMART DOWNSAMPLING & GRID LIMITER CONSTANTS
+# ------------------------------------------------------------------------------
 
-# Maximum safe grid points for browser rendering (N×N per plot)
-const ARTS_MaxGridPoints_DDEC = 40000   # 200×200 = 40,000 points per surface
+# Resolution limit for grid points to ensure optimal browser rendering performance.
+const ARTS_MaxGridPoints_DDEC = 40000
 
+
+# ------------------------------------------------------------------------------
+# SECTION 5: ADAPTIVE GRID RESOLUTION LOGIC
+# ------------------------------------------------------------------------------
 """
     ARTS_AdaptiveGridN_DDEF(preferred, [max_total]) -> Int
 Returns a grid resolution N such that N×N ≤ max_total.
@@ -137,6 +153,9 @@ function ARTS_AdaptiveGridN_DDEF(preferred::Int, max_total::Int=ARTS_MaxGridPoin
     return N
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 6: MATRIX DOWNSAMPLING ENGINE
+# ------------------------------------------------------------------------------
 """
     ARTS_Downsample_DDEF(Z, target_rows, target_cols) -> Matrix
 Sub-samples oversized matrices using strided decimation for optimal browser performance.
@@ -151,7 +170,7 @@ function ARTS_Downsample_DDEF(Z::Matrix{T}, target_rows::Int, target_cols::Int) 
     row_idx = 1:row_stride:nr
     col_idx = 1:col_stride:nc
 
-    # Preserve boundary behaviour
+    # Execution of boundary preservation logic for decimation.
     row_idx = unique([collect(row_idx); nr])
     col_idx = unique([collect(col_idx); nc])
 
@@ -160,6 +179,13 @@ function ARTS_Downsample_DDEF(Z::Matrix{T}, target_rows::Int, target_cols::Int) 
     return Z[row_idx, col_idx]
 end
 
+# ==============================================================================
+# PART B: MULTI-OBJECTIVE DESIRABILITY ENGINE
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 7: MULTI-OBJECTIVE GOAL PARSING
+# ------------------------------------------------------------------------------
 """
     ARTS_ExtractGoal_DDEF(Goal) -> Tuple
 Extracts and normalises goal parameters from an objective dictionary.
@@ -167,17 +193,18 @@ Extracts and normalises goal parameters from an objective dictionary.
 function ARTS_ExtractGoal_DDEF(Goal::AbstractDict)
     G_Min = Float64(get(Goal, "Min", -Inf))
     G_Max = Float64(get(Goal, "Max", Inf))
-    # Safety: Handle cases where Min/Max are -Inf/Inf to avoid NaN Target
+    # Implementation of safety protocols for infinite bounds to prevent undefined targets.
     G_Tgt_Raw = get(Goal, "Target", nothing)
     G_Tgt = if !isnothing(G_Tgt_Raw)
         Float64(G_Tgt_Raw)
     elseif isfinite(G_Min) && isfinite(G_Max)
         (G_Min + G_Max) / 2
     else
-        0.0 # Default fallback
+        # Default fallback target
+        0.0
     end
     Type = string(get(Goal, "Type", "Nominal"))
-    # Weight must be non-negative for mathematical stability
+    # Enforcement of non-negativity constraint on desirability weights for statistical stability.
     Weight = max(0.0, Float64(get(Goal, "Weight", 1.0)))
     is_max = occursin("Maximise", Type)
     is_min = occursin("Minimise", Type)
@@ -188,6 +215,9 @@ function ARTS_CalcDesirability_DDEF(Val::Float64, Goal::AbstractDict)
     return ARTS_CalcDesirability_DDEF(Val, ARTS_ExtractGoal_DDEF(Goal))
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 8: HARRINGTON DESIRABILITY SCORING
+# ------------------------------------------------------------------------------
 """
     ARTS_CalcDesirability_DDEF(Val, GoalTup) -> Float64
 Calculates desirability scores using Harrington's function for multi-objective mapping.
@@ -214,7 +244,8 @@ function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
             denom = G_Max - G_Tgt
             res   = denom > 1e-9 ? (G_Max - Val) / denom : 1.0
         end
-    else # Nominal
+    # Nominal
+    else
         if Val <= G_Min || Val >= G_Max
             res = 0.0
         elseif abs(Val - G_Tgt) < 1e-12
@@ -222,7 +253,8 @@ function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
         elseif Val < G_Tgt
             denom = G_Tgt - G_Min
             res   = denom > 1e-9 ? (Val - G_Min) / denom : 1.0
-        else # Val > G_Tgt
+        # Val > G_Tgt
+        else
             denom = G_Max - G_Tgt
             res   = denom > 1e-9 ? (G_Max - Val) / denom : 1.0
         end
@@ -231,9 +263,13 @@ function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
     # Scientific Safeguard: NaN or Inf should be 0.0, others clamped to [0, 1]
     return (isnan(res) || isinf(res)) ? 0.0 : clamp(res, 0.0, 1.0)
 end
-# --------------------------------------------------------------------------------------
-# LINEAR PLOTS (Pareto, Predicted vs Actual)
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART C: ACADEMIC DIAGNOSTICS & PLOTTING
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 9: PARETO ANALYSIS VISUALISER
+# ------------------------------------------------------------------------------
 
 """
     ARTS_RenderPareto_DDEF(Model, OutName, R2_Adj, Q2) -> Plot
@@ -242,10 +278,12 @@ Renders a horizontal bar chart showing standardised effects of factors.
 function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R2_Pred::Float64)
     Coefs = Model["Coefs"]
     Names = get(Model, "TermNames", ["T$i" for i in eachindex(Coefs)])
-    t_Stats = get(Model, "t_Stats", Coefs) # Fallback to coefs if missing
+    # Model t-statistics retrieval with coefficients as fallback in case of null diagnostics.
+    t_Stats = get(Model, "t_Stats", Coefs) 
+
     N_Samples = get(Model, "N_Samples", length(Coefs) + 5)
 
-    # Exclude Intercept (Index 1)
+    # Exclusion of the intercept term from the effects analysis.
     clean_eff = @view t_Stats[2:end]
     clean_nms = @view Names[2:end]
     clean_signs = any(isnan, clean_eff) ? sign.(@view Coefs[2:end]) : sign.(clean_eff)
@@ -258,7 +296,7 @@ function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R
 
     traces = GenericTrace[]
 
-    # Negative Effects
+    # Determination of factor segments exhibiting negative statistical effects.
     neg_idx = findall(x -> x < 0, sorted_sgn)
     if !isempty(neg_idx)
         push!(traces, bar(;
@@ -272,7 +310,7 @@ function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R
         ))
     end
 
-    # Positive Effects
+    # Determination of factor segments exhibiting positive statistical effects.
     pos_idx = findall(x -> x >= 0, sorted_sgn)
     if !isempty(pos_idx)
         push!(traces, bar(;
@@ -295,7 +333,7 @@ function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R
     layout[:showlegend]    = true
     layout[:legend]        = attr(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
 
-    # Bonferroni Limit (t-critical for alpha = 0.05 / n_terms)
+    # Calculation of the Bonferroni-corrected significance threshold for effect validation.
     df              = max(1, N_Samples - length(Coefs))
     alpha_corrected = 0.05 / length(clean_eff)
     t_crit          = quantile(TDist(df), 1.0 - alpha_corrected / 2)
@@ -314,6 +352,9 @@ function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R
     return Plot(traces, layout)
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 10: PREDICTION ACCURACY PLOTS
+# ------------------------------------------------------------------------------
 """
     ARTS_RenderFit_DDEF(Y_Real, Y_Pred, OutName) -> Plot
 Compares experimental results with model predictions via scatter plot.
@@ -347,9 +388,13 @@ function ARTS_RenderFit_DDEF(Y_Real::Vector{Float64}, Y_Pred::Vector{Float64}, O
     return Plot([t_data, t_ideal], layout)
 end
 
-# --------------------------------------------------------------------------------------
-# RSM VISUALISATION (Surface & Contour)
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART D: RESPONSE SURFACE METHODOLOGY (RSM) ANALYTICS
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 11: RSM INTERNAL PREDICTION GATEWAY
+# ------------------------------------------------------------------------------
 
 """
     ARTS_Predict_DDEF(Model, X) -> Vector{Float64}
@@ -361,10 +406,12 @@ function ARTS_Predict_DDEF(Model, X)
     Beta = Model["Coefs"]
     N    = size(X, 1)
     K    = 3
+    # Implementation of prediction logic across model type topologies (Linear vs. Quadratic).
     if occursin("linear", ModelType)
         Xd = hcat(ones(N), X)
         return Xd * Beta
     else
+        # Generation of multidimensional factor combinations for interaction expansion.
         combos  = collect(combinations(1:K, 2))
         n_inter = length(combos)
         Xd      = Matrix{Float64}(undef, N, 1 + K + n_inter + K)
@@ -375,17 +422,21 @@ function ARTS_Predict_DDEF(Model, X)
         @inbounds for (i, (c1, c2)) in enumerate(combos)
             Xd[:, K+1+i] .= view(X, :, c1) .* view(X, :, c2)
         end
+        # Execution of vectorised squared-order expansion for quadratic modelling.
         @views @. Xd[:, K+n_inter+2:end] = abs2(X)
         return Xd * Beta
     end
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 12: PREDICTION GRID CONSTRUCTOR
+# ------------------------------------------------------------------------------
 """
     ARTS_BuildGrid_DDEF(X, ix, iy, N_requested) -> (x1, x2, Grid)
 Constructs a prediction grid for surface and contour plots centred on factor means.
 """
 function ARTS_BuildGrid_DDEF(X::Matrix{Float64}, ix::Int, iy::Int, N_requested::Int)
-    # Adaptive grid limiter
+    # Implementation of automated grid resolution limiting.
     N  = ARTS_AdaptiveGridN_DDEF(N_requested)
     x1 = range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N)
     x2 = range(minimum(view(X, :, iy)), maximum(view(X, :, iy)); length=N)
@@ -398,6 +449,9 @@ function ARTS_BuildGrid_DDEF(X::Matrix{Float64}, ix::Int, iy::Int, N_requested::
     return x1, x2, Grid
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 13: 3D RESPONSE SURFACE RENDERER
+# ------------------------------------------------------------------------------
 """
     ARTS_RenderSurface_DDEF(Model, X_Train, Idx, Lbls, OutName) -> Plot
 Renders a 3D Response Surface (RSM) for two selected variables.
@@ -405,7 +459,7 @@ Renders a 3D Response Surface (RSM) for two selected variables.
 function ARTS_RenderSurface_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int},
     Lbls::Vector{String}, OutName::String)
     ix, iy = Idx[1], Idx[2]
-    # Dynamic Hardware Scaling: Level 1 (21->61) vs Level 2 (21->101)
+    # Execution of dynamic hardware scaling for grid resolution density.
     threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
     n_base  = 21
     N_Grid  = threads <= 4 ? 61 : 101
@@ -444,6 +498,9 @@ function ARTS_RenderSurface_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
     return Plot(trace, layout)
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 14: 2D CONTOUR PROJECTION RENDERER
+# ------------------------------------------------------------------------------
 """
     ARTS_RenderContour_DDEF(Model, X_Train, Idx, Lbls, OutName) -> Plot
 Renders a 2D Contour map (Heatmap) with labeled isolating lines.
@@ -451,7 +508,7 @@ Renders a 2D Contour map (Heatmap) with labeled isolating lines.
 function ARTS_RenderContour_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int},
     Lbls::Vector{String}, OutName::String)
     ix, iy = Idx[1], Idx[2]
-    # Dynamic Hardware Scaling: Level 1 (21->61) vs Level 2 (21->101)
+    # Execution of dynamic hardware scaling for contour resolution density.
     threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
     n_base  = 21
     N       = threads <= 4 ? 61 : 101
@@ -485,9 +542,13 @@ function ARTS_RenderContour_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
     return Plot(trace, layout)
 end
 
-# --------------------------------------------------------------------------------------
-# ADVANCED ANALYTICS (Slices, Trends, Design Space)
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART E: SOLUTION SPACE MAPPING & OPTIMISATION
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 15: INTERACTION SLICE ANALYSER
+# ------------------------------------------------------------------------------
 
 """
     ARTS_RenderSlice_DDEF(Model, X, Idx, Lbls, OutName) -> Plot
@@ -496,7 +557,9 @@ Renders interaction slices for two variables (Min/Mean/Max levels).
 function ARTS_RenderSlice_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int},
     Lbls::Vector{String}, OutName::String)
     ix, iy = Idx[1], Idx[2]
-    K      = 3 # Fixed 3-variable system
+    # Fixed 3-variable system
+    K      = 3 
+
     # Dynamic Hardware Scaling: Level 1 (21->61) vs Level 2 (21->101)
     threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
     n_base  = 21
@@ -533,6 +596,9 @@ function ARTS_RenderSlice_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int}
     return Plot(traces, layout)
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 16: MAIN EFFECT TREND VISUALISER
+# ------------------------------------------------------------------------------
 """
     ARTS_RenderTrend_DDEF(Model, X, Y_Real, Idx, Lbls, OutName) -> Plot
 Renders main effect trend line with experimental scatter points.
@@ -543,6 +609,7 @@ function ARTS_RenderTrend_DDEF(Model::Dict, X::Matrix{Float64}, Y_Real::Vector{F
     N  = 100
 
     xr   = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N))
+    # Generation of a baseline design matrix utilizing factor arithmetic means.
     Grid = repeat(mean(X; dims=1), N)
     Grid[:, ix] .= xr
 
@@ -571,6 +638,9 @@ function ARTS_RenderTrend_DDEF(Model::Dict, X::Matrix{Float64}, Y_Real::Vector{F
     return Plot([t_line, t_data], layout)
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 17: DESIRABILITY SPACE EXPLORER
+# ------------------------------------------------------------------------------
 """
     ARTS_RenderSpace_DDEF(Models, Goals, X, Idx, Lbls, [Best_Point]) -> Plot
 Visualises the multi-objective desirability space.
@@ -580,6 +650,9 @@ function ARTS_RenderSpace_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vector{In
     return ARTS_RenderSpaceImpl_DDEF(Models, Goals, X, Idx, Lbls, Leaders_DF, false)[1]
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 18: OPTIMAL SOLUTION SPACE MAPPING
+# ------------------------------------------------------------------------------
 """
     ARTS_RenderCandidates_DDEF(Models, Goals, X, Idx, Lbls, [Best_Point]) -> (Plot, PctString)
 Visualises the top quartile of the desirability space (Optimal Solution Space).
@@ -590,6 +663,9 @@ function ARTS_RenderCandidates_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vect
     return p, pct_str
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 19: CORE DESIRABILITY RENDERING LOGIC
+# ------------------------------------------------------------------------------
 """
     ARTS_RenderSpaceImpl_DDEF(Models, Goals, X, Idx, Lbls, Best_Point, is_candidate) -> (Plot, PctString)
 Core rendering logic for desirability-based solution spaces.
@@ -599,12 +675,13 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
     ix, iy = Idx[1], Idx[2]
 
     N = ARTS_AdaptiveGridN_DDEF(200, 40000)
+    # Variable dimensionality constant.
     K = 3
 
     x1 = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N))
     x2 = collect(range(minimum(view(X, :, iy)), maximum(view(X, :, iy)); length=N))
 
-    # --- CROSS-SECTION LOGIC (CENTRING) ---
+    # Execution of coordinate centring for desirability cross-section analysis.
     col_ref = vec(mean(X; dims=1))
     if nrow(Leaders_DF) > 0
         C       = Main.Sys_Fast.FAST_Data_DDEC
@@ -622,12 +699,12 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
         end
     end
 
-    # iz is always the 3rd variable not being used for the 2D slice
+    # Determination of the tertiary coordinate for multidimensional slice projection.
     iz    = first(setdiff(1:3, Idx))
     z_min = minimum(view(X, :, iz))
     z_max = maximum(view(X, :, iz))
 
-    # Use the iz-th component of our reference centre
+    # Selection of the tertiary component from the reference centre for slice projection.
     z_mid = col_ref[iz]
 
     # Scientific Safeguard: Ensure Z-dimension has depth even if variable is constant
@@ -642,9 +719,9 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
     global_min = 1.0
     all_scores = Vector{Matrix{Float64}}(undef, length(z_vals))
 
-    col_means = col_ref # Use the calculated reference for naming consistency below
-
-    # Prioritize goals attached to the models themselves for robustness
+    # Utilisation of the calculated reference for consistent coordinate mapping.
+    col_means = col_ref
+    # Prioritisation of goals embedded within specific models to ensure analytical robustness.
     parsed_goals = [ARTS_ExtractGoal_DDEF(get(Models[m], "Goal", Goals[m])) for m in eachindex(Models)]
 
     for (s, zv) in enumerate(z_vals)
@@ -655,10 +732,12 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
             iz > 0 && (Grid[k, iz] = zv)
         end
 
+        # Initialisation of score vectors for multi-objective optimisation aggregation.
         Scores     = ones(N * N)
         weight_sum = sum([g[6] for g in parsed_goals])
         pow_factor = weight_sum > 0.0 ? (1.0 / weight_sum) : 1.0
 
+        # Execution of objective-wise desirability assessment across the grid.
         for m in eachindex(Models)
             preds    = ARTS_Predict_DDEF(Models[m], Grid)
             goal_tup = parsed_goals[m]
@@ -674,7 +753,7 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
         ScoreMat[isnan.(ScoreMat)] .= 0.0
         all_scores[s] = ScoreMat
 
-        # Robust min/max ignoring NaNs for colorbar stability
+        # Robust min/max ignoring NaNs for colourbar stability
         valid_scores_mat = filter(!isnan, ScoreMat)
         if !isempty(valid_scores_mat)
             global_max = max(global_max, maximum(valid_scores_mat))
@@ -693,7 +772,7 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
         thresh = 1.0
         pct = 0.0
     else
-        # Top quartile of scores
+        # Determination of the top quartile score threshold for optimal zone identification.
         thresh = quantile(all_non_zero, 0.75)
         total_pts = length(z_vals) * N * N
         pct = (0.25 * length(all_non_zero) / total_pts) * 100.0
@@ -701,6 +780,7 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
     pct_str = @sprintf("%.2f", pct)
 
     for (s, zv) in enumerate(z_vals)
+        # Structural duplication of score matrices for threshold masking.
         Masked = copy(all_scores[s])
         if is_candidate
             Masked[Masked .< thresh] .= NaN
@@ -708,18 +788,20 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
 
         Z_layer = fill(iz > 0 ? zv : 0.0, N, N)
 
-        # Draw if there's data OR if it's a boundary layer (to preserve 3D volume structure)
+        # Execution of conditional drawing for boundary layers to preserve volumetric structure.
         if any(!isnan, Masked) || s == 1 || s == 3
-            # If a boundary layer is empty, show a ultra-faint ghost surface to avoid visual collapse
+            # Resolve ghost surface transparency for empty boundary layers.
             is_empty_layer = !any(!isnan, Masked)
             if is_empty_layer
-                Masked = fill(0.0, N, N) # Show as zero/min color
+                # Show as zero/min colour
+                Masked = fill(0.0, N, N) 
+
             end
 
             alpha_val = (s == 2 || iz == 0) ? (is_candidate ? 0.85 : 0.70) : (is_candidate ? 0.35 : 0.20)
             if is_empty_layer
                 alpha_val = 0.05
-            end # Ghost mode
+            end
             trace_name = (s == 2 && K > 2 && nrow(Leaders_DF) > 0) ? "Level: $(round(zv; digits=2))" : "Slice $s"
 
             push!(traces, surface(;
@@ -728,8 +810,8 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
                 z            = Z_layer,
                 surfacecolor = Masked,
                 colorscale   = ARTS_ViridisScale_DDEC,
-                cmin         = 0.0, # Hard Lockdown
-                cmax         = 1.0, # Hard Lockdown
+                cmin         = 0.0, 
+                cmax         = 1.0, 
                 showscale    = (s == 1),
                 opacity      = alpha_val,
                 name         = trace_name,
@@ -750,19 +832,17 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
     if nrow(Leaders_DF) > 0
         C = Main.Sys_Fast.FAST_Data_DDEC
         th = ARTS_Theme_DDEC
-        # Extract variable columns (Case-Insensitive)
         in_cols = filter(n -> startswith(uppercase(string(n)), uppercase(C.PRE_INPUT)), names(Leaders_DF))
         id_col = findfirst(c -> uppercase(c) == "ID" || uppercase(c) == "EXP_ID", names(Leaders_DF))
         score_col = findfirst(c -> uppercase(c) == "SCORE", names(Leaders_DF))
 
-        # Limits based on plot type: Candidates (14 mixed) vs Design Space (8 Top only)
+        # Application of threshold limits dependent on specific plot typology (Candidates/Space).
         top_limit = 8
         inp_limit = is_candidate ? 3 : 0
         out_limit = is_candidate ? 3 : 0
 
         added_top, added_in, added_out = 0, 0, 0
         for r in 1:nrow(Leaders_DF)
-            # Find candidate type from ID (using standardised prefixes)
             id_val = !isnothing(id_col) ? string(Leaders_DF[r, id_col]) : "L$r"
             id_upper = uppercase(id_val)
 
@@ -781,14 +861,15 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
                 added_out += 1
                 marker_type = "OUT"
             else
-                continue # Skip extra candidates
+                # Skip extra candidates
+                continue
             end
 
+            # Extraction of candidate coordinates from the reference leader dataset.
             bx = Leaders_DF[r, Symbol(in_cols[ix])]
             by = Leaders_DF[r, Symbol(in_cols[iy])]
             bz = iz > 0 ? Leaders_DF[r, Symbol(in_cols[iz])] : 0.0
-
-            # Colour coding: Red (Global), White (Input Diversity), Black (Output Diversity)
+            
             marker_colour = marker_type == "TOP" ? th.HUERED : (marker_type == "INP" ? th.PURWHI : th.PURBLA)
             marker_name = marker_type == "TOP" ? "Global Leader ($id_val)" :
                           (marker_type == "INP" ? "Input-Based Leader ($id_val)" : "Output-Based Leader ($id_val)")
@@ -807,6 +888,7 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
         end
     end
 
+    # Automated generation of plot titles based on the active selection mode (Candidates vs. Space).
     plot_title = is_candidate ? "Candidates ($pct_str%)" : "Design Space: $(Lbls[1]) vs $(Lbls[2])"
     layout     = ARTS_BaseLayout_DDEF(plot_title; height=ARTS_SceneHeight_DDEC)
     
@@ -826,12 +908,17 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
     return Plot(traces, layout), pct_str
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 20: 3D OPTIMAL ZONE VOLUME RENDERER
+# ------------------------------------------------------------------------------
 """
     ARTS_RenderOptimalZone_DDEF(Models, Goals, X, InNames) -> (Plot, PctString)
 Renders a 3D isometric volume of the 'Optimal Zone' based on desirability criteria (Top 10% Desirability).
 """
 function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames::Vector{String})
-    N      = 50 # High-fidelity grid for volume stability (50^3 = 125,000 pts)
+    # Definition of volumetric grid resolution for optimal zone rendering.
+    N      = 50 
+
     ranges = [range(minimum(view(X, :, i)), maximum(view(X, :, i)); length=N) for i in 1:3]
     Grid   = Matrix{Float64}(undef, N^3, 3)
 
@@ -843,13 +930,12 @@ function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames:
         idx += 1
     end
 
-    # Composite desirability calculation
     Scores       = ones(N^3)
-    # Prioritize goals attached to the models themselves for robustness
     parsed_goals = [ARTS_ExtractGoal_DDEF(get(Models[m], "Goal", Goals[m])) for m in eachindex(Models)]
     weight_sum   = sum([g[6] for g in parsed_goals])
     pow          = weight_sum > 0.0 ? (1.0 / weight_sum) : 1.0
 
+    # Execution of model-based predictions for volumetric desirability mapping.
     for m in eachindex(Models)
         preds = ARTS_Predict_DDEF(Models[m], Grid)
         for i in eachindex(preds)
@@ -859,11 +945,10 @@ function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames:
     end
     Scores = clamp.(Scores .^ pow, 0.0, 1.0)
 
-    # Target the top 10% desirable space (NaN-safe)
+    # Application of desirability filtering focusing on top-tier scenarios.
     valid_scores = filter(s -> !isnan(s) && s > 1e-6, Scores)
     thresh       = isempty(valid_scores) ? 0.9 : quantile(valid_scores, 0.90)
 
-    # Calculate Volume Percentage for Optimal Zone
     pts_above = count(s -> !isnan(s) && s >= thresh, Scores)
     pct       = (pts_above / length(Scores)) * 100.0
     pct_str   = @sprintf("%.2f", pct)
@@ -874,7 +959,7 @@ function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames:
         z             = Grid[:, 3],
         value         = Scores,
         isomin        = thresh,
-        isomax        = 1.0, # Hard Lockdown
+        isomax        = 1.0, 
         opacity       = 0.3,
         surface_count = 5,
         colorscale    = ARTS_ViridisScale_DDEC,
@@ -899,6 +984,9 @@ function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames:
     return Plot(trace, layout), pct_str
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 21: INTERACTION LANDSCAPE HEATMAP
+# ------------------------------------------------------------------------------
 """
     ARTS_RenderInteractionMatrix_DDEF(Model, InNames, OutName) -> Plot
 Renders a heatmap matrix illustrating factor interaction strengths and types.
@@ -930,6 +1018,13 @@ function ARTS_RenderInteractionMatrix_DDEF(Model::Dict, InNames::Vector{String},
     return Plot(trace, layout)
 end
 
+# ==============================================================================
+# PART F: ADVANCED DIAGNOSTIC VALIDATION
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 22: NORMAL PROBABILITY DIAGNOSTICS (Q-Q Plot)
+# ------------------------------------------------------------------------------
 """
     ARTS_RenderQQPlot_DDEF(Residuals, OutName) -> Plot
 Renders a Q-Q plot (Normal Probability Plot) for residual diagnostic validation.
@@ -938,10 +1033,9 @@ function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::Str
     n          = length(Residuals)
     sorted_res = sort(Residuals)
 
-    # Standardise residuals
     z_res = (sorted_res .- mean(sorted_res)) ./ std(sorted_res)
 
-    # Theoretical quantiles for normal distribution
+    # Determination of theoretical quantiles for Gaussian distribution comparison.
     p_vals      = [(i - 0.5) / n for i in 1:n]
     theoretical = quantile.(Normal(0, 1), p_vals)
 
@@ -953,7 +1047,6 @@ function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::Str
         name   = "Residuals"
     )
 
-    # Reference Line (y=x)
     lims       = [minimum([theoretical; z_res]), maximum([theoretical; z_res])]
     trace_line = scatter(; 
         x    = lims, 
@@ -970,6 +1063,9 @@ function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::Str
     return Plot([trace_pts, trace_line], layout)
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 23: RESIDUAL HOMOSCEDASTICITY ANALYSIS
+# ------------------------------------------------------------------------------
 """
     ARTS_RenderResidualsVsPred_DDEF(Y_Pred, Residuals, OutName) -> Plot
 Renders Residuals vs. Predicted plot to assess variance homogeneity (homoscedasticity).
@@ -983,7 +1079,6 @@ function ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residu
         name   = "Residuals"
     )
 
-    # zero line
     trace_zero = scatter(; 
         x          = [minimum(Y_Pred), maximum(Y_Pred)], 
         y          = [0, 0], 
@@ -999,6 +1094,9 @@ function ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residu
     return Plot([trace_pts, trace_zero], layout)
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 24: LOCAL SENSITIVITY INDEXING
+# ------------------------------------------------------------------------------
 """
     ARTS_RenderSensitivityPlot_DDEF(Sens, InNames, OutName) -> Plot
 Renders factor sensitivity contributions at the identified optimal coordinates.
@@ -1008,7 +1106,7 @@ function ARTS_RenderSensitivityPlot_DDEF(Sens::AbstractVector{Float64}, InNames:
         x      = InNames, 
         y      = Sens .* 100.0,
         marker = attr(
-            color = [ARTS_Theme_DDEC.SHAMAG, ARTS_Theme_DDEC.TONGRE, ARTS_Theme_DDEC.HUEYEL], # High-fidelity palette
+            color = [ARTS_Theme_DDEC.SHAMAG, ARTS_Theme_DDEC.TONGRE, ARTS_Theme_DDEC.HUEYEL], 
             line  = attr(width = 1.5, color = ARTS_Theme_DDEC.PURWHI)
         ),
         textposition = "auto",
@@ -1022,8 +1120,12 @@ function ARTS_RenderSensitivityPlot_DDEF(Sens::AbstractVector{Float64}, InNames:
     return Plot(trace, layout)
 end
 
+# ==============================================================================
+# PART G: SYSTEM ORCHESTRATION & DISPATCH
+# ==============================================================================
+
 # --------------------------------------------------------------------------------------
-# --- MASTER RENDERER DISPATCHER ---
+# SECTION 25: MASTER RENDERER DISPATCHER
 # --------------------------------------------------------------------------------------
 
 """
@@ -1052,7 +1154,6 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
         Models[m]["Status"] != "OK" && continue
         name = OutNames[m]
 
-        # 1. Statistical Diagnostics
         if get(Opts, "Pareto", true)
             push!(tasks, Threads.@spawn begin
                 try
@@ -1065,7 +1166,6 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                         push!(graphs, Dict("Type" => "Fit",    "Title" => "Fit: $name",         "Plot" => p2))
                     end
 
-                    # Academic Diagnostics
                     if m <= length(Residuals) && !isempty(Residuals[m])
                         p_qq  = ARTS_RenderQQPlot_DDEF(Residuals[m], name)
                         p_res = ARTS_RenderResidualsVsPred_DDEF(y_pred, Residuals[m], name)
@@ -1075,7 +1175,6 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                         end
                     end
 
-                    # Sensitivity bar chart
                     if m <= length(Sens) && !isempty(Sens[m])
                         p_sens = ARTS_RenderSensitivityPlot_DDEF(Sens[m], InNames, name)
                         lock(graphs_lock) do
@@ -1088,7 +1187,6 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
             end)
         end
 
-        # 2. Variable Interactions & Surface Mapping
         for c in Combos
             lbls = [InNames[c[1]], InNames[c[2]]]
             tag  = "$(lbls[1])-$(lbls[2])"
@@ -1125,11 +1223,10 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
         end
     end
 
-    # 3. Composite Sustainability & Design Space
     if get(Opts, "DesignSpace", true) && !isempty(Combos)
         for c in Combos
             lbls = [InNames[c[1]], InNames[c[2]]]
-            # 3 variables means iz is always the one not in c
+            # Calculation of the tertiary exclusion index for 3D coordinate identification.
             iz = first(setdiff(1:3, c))
             push!(lbls, InNames[iz])
 
@@ -1147,7 +1244,6 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
             end)
         end
 
-        # --- THE OPTIMAL ZONE ---
         if get(Opts, "GoldenZone", true) && NumVars >= 3
             push!(tasks, Threads.@spawn begin
                 try
@@ -1162,11 +1258,14 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
         end
     end
 
-    # Wait for all plotting threads to compute
     for t in tasks
         wait(t)
     end
 
+# ------------------------------------------------------------------------------
+# SECTION 26: RENDER ORDERING & PRIORITY LOGIC
+# ------------------------------------------------------------------------------
+    # Definition of render ordering and priority hierarchy for analytical report clarity.
     TypePriority = Dict(
         "Pareto"      => 1,
         "Fit"         => 2,
@@ -1187,4 +1286,4 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
     return graphs
 end
 
-end # module Lib_Arts
+end

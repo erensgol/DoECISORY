@@ -1,12 +1,12 @@
 module Lib_Vise
 
-# ======================================================================================
+# ==============================================================================
 # DAISHODOE PROJECT - LIB VISE
-# ======================================================================================
+# ==============================================================================
 # Description: Statistical analysis engine for modelling (GLM), sensitivity 
 #              analysis, and multi-objective optimisation tasks.
 # Module Tag:  VISE
-# ======================================================================================
+# ==============================================================================
 
 using GLM
 using DataFrames
@@ -23,21 +23,23 @@ using Main.Lib_Arts
 using Main.Lib_Mole
 using Main.Lib_Core
 using Main.Sys_Flow
-
 using HypothesisTests
 
 export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
     VISE_Predict_DDEF, VISE_Execute_DDEF, VISE_CrossValidate_DDEF,
     VISE_GetTermNames_DDEF, VISE_ClampIndex_DDEF,
-
     VISE_SelectBestModel_DDEF, VISE_CalcMetrics_DDEF,
     VISE_SensitivityAnalysis_DDEF, VISE_GenerateScientificReport_DDEF,
     VISE_CalcVIF_DDEF, VISE_LackOfFit_DDEF, VISE_GenerateAnovaTable_DDEF,
     VISE_PerformNormalityTest_DDEF, VISE_ExportToExcel_DDEF
 
-# --------------------------------------------------------------------------------------
-# TERM GENERATION & DESIGN EXPANSION
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART A: MODELLING ARCHITECTURE & DESIGN EXPANSION
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 1: REGRESSION TERM GENERATOR
+# ------------------------------------------------------------------------------
 
 """
     VISE_GetTermNames_DDEF(InNames, ModelType) -> Vector{String}
@@ -51,17 +53,19 @@ function VISE_GetTermNames_DDEF(InNames::Vector{String}, ModelType::String)
 
     occursin("linear", lowercase(ModelType)) && return names
 
-    # Quadratic: interactions then squared terms
+    # Quadratic formulation: execute interaction terms followed by polynomial squared terms.
     for (c1, c2) in combinations(1:K, 2)
         push!(names, "$(InNames[c1]) × $(InNames[c2])")
     end
     for n in InNames
         push!(names, "$(n)²")
     end
-    
     return names
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 2: DESIGN MATRIX EXPANSION ENGINE
+# ------------------------------------------------------------------------------
 """
     VISE_ExpandDesign_DDEF(X, ModelType) -> Matrix{Float64}
 Expands raw factor matrix into a design matrix (intercept + linear + interactions + quadratic).
@@ -73,10 +77,9 @@ function VISE_ExpandDesign_DDEF(X::AbstractMatrix{Float64}, ModelType::String)
 
     occursin("linear", m_type) && return hcat(ones(N), X)
 
-    combos  = [(1, 2), (1, 3), (2, 3)] # combinations(1:3, 2)
+    combos  = [(1, 2), (1, 3), (2, 3)] 
     n_inter = 3
 
-    # Pre-allocate full design matrix: [1 | X | interactions | X²]
     Xd = Matrix{Float64}(undef, N, 1 + K + n_inter + K)
     fill!(view(Xd, :, 1), 1.0)
     copyto!(view(Xd, :, 2:K+1), X)
@@ -97,28 +100,32 @@ function VISE_ExpandDesign_DDEF(X::AbstractMatrix{Float64}, ModelType::String)
     return Xd
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 3: UNIVERSAL PREDICTION GATEWAY
+# ------------------------------------------------------------------------------
 """
     VISE_Predict_DDEF(Model::Dict, X_Raw) -> Vector{Float64}
 Universal prediction gateway for OLS models (Linear / Quadratic).
 """
 function VISE_Predict_DDEF(Model::AbstractDict, X_Raw::Any)
-    # Ensure Matrix format
     X = (X_Raw isa AbstractMatrix) ? Float64.(collect(X_Raw)) : (X_Raw isa AbstractVector && !isempty(X_Raw) && X_Raw[1] isa AbstractVector) ? 
         Float64.(reduce(vcat, transpose.(collect.(X_Raw)))) : (X_Raw isa AbstractVector && length(X_Raw) % 3 == 0) ? 
         reshape(Float64.(collect(X_Raw)), :, 3) : X_Raw
     
     m_type = lowercase(get(Model, "ModelType", "linear"))
 
-    # Standard OLS Prediction
     Xd   = VISE_ExpandDesign_DDEF(X, m_type)
     Beta = collect(Float64, get(Model, "Coefs", zeros(size(Xd, 2))))
     return Xd * Beta
 end
 
-# --------------------------------------------------------------------------------------
-# REGRESSION ENGINE (OLS Core)
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART B: SCIENTIFIC REGRESSION KERNEL (OLS)
+# ==============================================================================
 
+# ------------------------------------------------------------------------------
+# SECTION 4: REGRESSION ENGINE & NUMERICAL CLAMPING
+# ------------------------------------------------------------------------------
 """
     VISE_ClampIndex_DDEF(idx, len) -> Int
 Clamps an index to valid range [1, len] to prevent BoundsError.
@@ -135,15 +142,13 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
     X_Design = VISE_ExpandDesign_DDEF(X_Raw, ModelType)
 
     try
-        # --- STRICT SCIENTIFIC OLS REGRESSION ---
         n = size(X_Design, 1)
         p = size(X_Design, 2)
 
-        # Condition number assessment for numerical stability
         if cond(X_Design) > 1e10
             return Dict{String, Any}(
                 "Status" => "FAIL", 
-                "Error"  => "Pre-Flight Matrix Health Check Failed: Design matrix condition number > 1e10. Potential multicollinearity detected."
+                "Error"  => "Integrated matrix health check failure: Design matrix condition number exceeds stability threshold. Potential multicollinearity detected."
             )
         end
 
@@ -151,7 +156,6 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
             throw(ArgumentError("Insufficient data: Number of observations (\$n) is less than model parameters (\$p)."))
         end
 
-        # Explicit rank check to prevent near-singular matrix inversion
         if rank(X_Design) < p
             throw(ArgumentError("Design matrix is linearly dependent (Singular/Collinear)."))
         end
@@ -178,10 +182,12 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
                     F_Stat  = MSR / MSE
                     P_Value = 1.0 - cdf(FDist(max(1, p - 1), n - p), F_Stat)
 
-                    # Strict Matrix Inversion for Standard Errors
+                    # Model variance-covariance matrix derivation for standard error estimation.
                     Var_Beta = MSE * inv(X_Design' * X_Design)
                     SE_Coefs = sqrt.(max.(0.0, diag(Var_Beta)))
-                    t_Stats  = Beta ./ max.(SE_Coefs, 1e-15)   # Guard /0
+                    # Guard against zero-division to ensure numerical safety.
+                    t_Stats  = Beta ./ max.(SE_Coefs, 1e-15)   
+
                     P_Coefs  = 2.0 .* (1.0 .- cdf.(TDist(n - p), abs.(t_Stats)))
                 end
             end
@@ -217,6 +223,9 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
     end
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 5: MULTICOLLINEARITY DIAGNOSTICS (VIF)
+# ------------------------------------------------------------------------------
 """
     VISE_CalcVIF_DDEF(X_Design) -> Vector{Float64}
 Calculates Variance Inflation Factors (VIF) to detect multicollinearity.
@@ -225,27 +234,28 @@ function VISE_CalcVIF_DDEF(X_Design::AbstractMatrix)
     n, p = size(X_Design)
     p <= 1 && return Float64[]
 
-    # Exclude intercept for VIF
+    # Isolate independent variables and initialize variance inflation vector.
     X     = X_Design[:, 2:end]
     p_eff = p - 1
-    vifs  = fill(1.0, p) # Intercept VIF is 1.0 by convention
-
+    vifs  = fill(1.0, p)
     try
-        # Correlation matrix method
         C = cor(X)
         if cond(C) > 1e12
-            # Use ridge-like regularisation for stability in degenerate designs
+            # Apply Tikhonov-style regularisation to maintain stability in degenerate designs.
             C += I * 1e-6
         end
         v_diag       = diag(inv(C))
         vifs[2:end] .= v_diag
     catch
-        vifs[2:end] .= 999.0 # Indicator of extreme collinearity
+        # Assign extreme fallback values for non-invertible or ill-conditioned matrices.
+        vifs[2:end] .= 999.0 
     end
-    
     return vifs
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 6: LACK-OF-FIT STATISTICAL TEST
+# ------------------------------------------------------------------------------
 """
     VISE_LackOfFit_DDEF(X_Design, Y) -> (F_Stat, P_Value)
 Performs Lack-of-Fit test to determine if model structure is adequate (requires replicates).
@@ -253,7 +263,7 @@ Performs Lack-of-Fit test to determine if model structure is adequate (requires 
 function VISE_LackOfFit_DDEF(X_Design::AbstractMatrix, Y::AbstractVector)
     n, p = size(X_Design)
 
-    # Identify unique rows (experimental settings)
+    # Execution of coordinate mapping to identify unique experimental settings.
     unique_rows = Dict{Vector{Float64},Vector{Float64}}()
     for i in 1:n
         row = X_Design[i, :]
@@ -264,7 +274,7 @@ function VISE_LackOfFit_DDEF(X_Design::AbstractMatrix, Y::AbstractVector)
         end
     end
 
-    # SS_PureError
+    # Determination of Pure Error sum of squares.
     ss_pe = 0.0
     df_pe = 0
     for (row, vals) in unique_rows
@@ -274,37 +284,45 @@ function VISE_LackOfFit_DDEF(X_Design::AbstractMatrix, Y::AbstractVector)
         end
     end
 
-    df_pe == 0 && return (NaN, NaN) # No replicates
-
-    # SS_Residual from OLS
+    # Identify datasets lacking requisite replicates for lack-of-fit testing.
+    df_pe == 0 && return (NaN, NaN)
+    # Determination of Residual sum of squares via OLS estimation.
     Beta   = X_Design \ Y
     Resid  = Y .- (X_Design * Beta)
     ss_res = sum(abs2, Resid)
     df_res = n - p
 
-    # SS_LackOfFit
+    # Partitioning of residual variance into Lack-of-Fit components.
     ss_lof = max(0.0, ss_res - ss_pe)
     df_lof = df_res - df_pe
 
+    # Validate existence of degrees of freedom to avoid undefined statistical p-values.
     df_lof <= 0 && return (NaN, NaN)
 
     ms_lof = ss_lof / df_lof
     ms_pe  = ss_pe / df_pe
 
-    ms_pe < 1e-12 && return (999.0, 0.0) # Perfect replicates, any deviation is LOF
-
+    # Guard against zero pure-error variance to prevent infinity in the F-test.
+    ms_pe < 1e-12 && return (999.0, 0.0)
     f_stat = ms_lof / ms_pe
     p_val  = 1.0 - cdf(FDist(df_lof, df_pe), f_stat)
 
     return (f_stat, p_val)
 end
 
+# ==============================================================================
+# PART C: ACADEMIC VALIDATION & ANOVA
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 7: ANOVA TABLE CONSTRUCTOR
+# ------------------------------------------------------------------------------
 """
     VISE_GenerateAnovaTable_DDEF(Model::Dict, X::AbstractMatrix, Y::AbstractVector) -> DataFrame
 Constructs a comprehensive ANOVA table for experimental validation.
 """
 function VISE_GenerateAnovaTable_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::Any)
-    # Ensure Matrix/Vector format (handles JSON deserialization artifacts)
+    # Standardise input formats to resolve potential deserialisation artifacts.
     X = (X_Raw isa AbstractMatrix) ? Float64.(collect(X_Raw)) : (X_Raw isa AbstractVector && !isempty(X_Raw) && X_Raw[1] isa AbstractVector) ?
         Float64.(reduce(vcat, transpose.(collect.(X_Raw)))) : (X_Raw isa AbstractVector && length(X_Raw) % 3 == 0) ?
         reshape(Float64.(collect(X_Raw)), :, 3) : X_Raw
@@ -313,26 +331,23 @@ function VISE_GenerateAnovaTable_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::An
     n      = length(Y)
     m_type = lowercase(get(Model, "ModelType", "linear"))
 
-    # Calculate p (number of parameters/degrees of freedom)
-    # For OLS, p is derived from the design matrix expansion
     Xd_temp = VISE_ExpandDesign_DDEF(zeros(1, 3), m_type)
     p       = size(Xd_temp, 2)
 
-    # Use VISE_Predict_DDEF for consistency
     Y_Pred = VISE_Predict_DDEF(Model, convert(Matrix{Float64}, X))
     Resid  = Y .- Y_Pred
 
-    # 1. SS Calculations
+    # Execution of Sum of Squares (SS) partitions for variance analysis.
     SS_Total = var(Y) * (n - 1)
     SS_Resid = sum(abs2, Resid)
     SS_Reg   = max(0.0, SS_Total - SS_Resid)
 
-    # 2. DF Calculations
+    # Determination of degrees of freedom across structural model components.
     DF_Total = n - 1
     DF_Reg   = max(1, p - 1)
     DF_Resid = max(0, n - p)
 
-    # 3. Lack-of-Fit Logic
+    # Implementation of Lack-of-Fit verification logic based on coordinate replicates.
     unique_rows = Dict{Vector{Float64},Vector{Float64}}()
     for i in 1:n
         row = X[i, :]
@@ -355,7 +370,7 @@ function VISE_GenerateAnovaTable_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::An
     SS_LOF = max(0.0, SS_Resid - SS_PE)
     DF_LOF = DF_Resid - DF_PE
 
-    # 4. Assembly
+    # Integration of partitioned variance components into a final summary table.
     sources = ["Model", "Residual", "Total"]
     ss_vals = [SS_Reg, SS_Resid, SS_Total]
     df_vals = [DF_Reg, DF_Resid, DF_Total]
@@ -379,14 +394,14 @@ function VISE_GenerateAnovaTable_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::An
         P      = fill(NaN, length(sources))
     )
 
-    # Calculate MS, F, P
+    # Resolve derived metrics including Mean Squares, F-Statistics, and P-Values.
     for i in 1:nrow(df_anova)
         if df_anova.df[i] > 0
             df_anova.MS[i] = round(df_anova.SS[i] / df_anova.df[i]; digits=4)
         end
     end
 
-    # Model F-Test
+    # Execution of model significance F-Test.
     idx_mod = findfirst(==("Model"), sources)
     idx_res = findfirst(==("Residual"), sources)
 
@@ -398,7 +413,7 @@ function VISE_GenerateAnovaTable_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::An
         end
     end
 
-    # LOF F-Test
+    # Execution of Lack-of-Fit significance verification.
     idx_lof = findfirst(==("Lack of Fit"), sources)
     idx_pe = findfirst(==("Pure Error"), sources)
     if !isnothing(idx_lof) && !isnothing(idx_pe)
@@ -412,12 +427,15 @@ function VISE_GenerateAnovaTable_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::An
     return df_anova
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 8: RESIDUAL NORMALITY ASSESSMENT (Shapiro-Wilk)
+# ------------------------------------------------------------------------------
 """
     VISE_PerformNormalityTest_DDEF(Model, X, Y) -> Dict
 Executes the Shapiro-Wilk test on model residuals for normality assessment.
 """
 function VISE_PerformNormalityTest_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::Any)
-    # Ensure Matrix/Vector format (handles JSON deserialization artifacts)
+    # Ensure numerical consistency and resolve deserialisation artifacts.
     X      = (X_Raw isa AbstractMatrix) ? Float64.(collect(X_Raw)) : (X_Raw isa AbstractVector && !isempty(X_Raw) && X_Raw[1] isa AbstractVector) ? 
              Float64.(reduce(vcat, transpose.(collect.(X_Raw)))) : (X_Raw isa AbstractVector && length(X_Raw) % 3 == 0) ? 
              reshape(Float64.(collect(X_Raw)), :, 3) : X_Raw
@@ -444,6 +462,9 @@ function VISE_PerformNormalityTest_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::
     end
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 9: CORE STATISTICAL METRICS (R2, AIC, RMSE)
+# ------------------------------------------------------------------------------
 """
     VISE_CalcMetrics_DDEF(Y_Real, Y_Pred, p) -> (R2, R2_Adj, RMSE, AIC)
 Calculates core statistical metrics (R², Adjusted R², RMSE, AIC).
@@ -458,12 +479,15 @@ function VISE_CalcMetrics_DDEF(Y_Real::AbstractVector{Float64}, Y_Pred::Abstract
     R2_Adj = n > p ? 1.0 - (1.0 - R2) * ((n - 1) / (n - p)) : 0.0
     RMSE   = n > p ? sqrt(SSE / (n - p)) : 0.0
 
-    # Akaike Information Criterion (Assuming normal residuals)
+    # Determine information criteria assuming normality of residual distribution.
     AIC = n > 0 && SSE > 0 ? n * log(SSE / n) + 2p : Inf
 
     return (R2, R2_Adj, RMSE, AIC)
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 10: XLSX EXPORT ENGINE
+# ------------------------------------------------------------------------------
 """
     VISE_ExportToExcel_DDEF(FilePath::String, Results::Dict) -> Bool
 Exports all statistical models, ANOVA tables, and metrics to a professional XLSX file.
@@ -471,17 +495,15 @@ Exports all statistical models, ANOVA tables, and metrics to a professional XLSX
 function VISE_ExportToExcel_DDEF(FilePath::String, Results::AbstractDict)
     try
         XLSX.openxlsx(FilePath, mode="w") do xf
-            # 1. Overview Sheet
+            # Integrated summary documentation for scientific intelligence.
             sheet_ov       = xf[1]
             XLSX.rename!(sheet_ov, "Summary")
             sheet_ov["A1"] = "DaishoDoE Scientific Intelligence Report"
             sheet_ov["A2"] = "Generated: $(Dates.now())"
 
-            # 2. Models Sheet
             sheet_mod       = XLSX.addsheet!(xf, "Model_Statistics")
             sheet_mod["A1"] = ["Response", "Model Type", "R2", "R2_Adj", "RMSE", "P-Value", "Normality (p)"]
 
-            # Ensure Matrix format for consistency across JSON/Store transfers
             X_Clean = Results["X_Clean"]
             if !(X_Clean isa AbstractMatrix)
                 if X_Clean isa AbstractVector && !isempty(X_Clean) && X_Clean[1] isa AbstractVector
@@ -512,17 +534,17 @@ function VISE_ExportToExcel_DDEF(FilePath::String, Results::AbstractDict)
                 row_idx += 1
             end
 
-            # 3. ANOVA & Coefficients (Specific sheets per output)
+            # Detailed ANOVA and Coefficient analysis documentation per specific output stream.
             for (i, out_name) in enumerate(get(Results, "OutNames", []))
                 m         = Results["Models"][i]
                 safe_name = first(replace(out_name, r"[^\w]" => "_"), 25)
 
-                # ANOVA Sheet
+                # Execution of Analysis of Variance (ANOVA) documentation.
                 sh_ano   = XLSX.addsheet!(xf, "ANOVA_$(safe_name)")
                 df_anova = VISE_GenerateAnovaTable_DDEF(m, X_Clean, Y_Clean[:, i])
                 XLSX.writetable!(sh_ano, df_anova; anchor_cell=XLSX.CellRef("A1"))
 
-                # Coefficients Sheet
+                # Tabulation of model coefficients and diagnostic metrics.
                 sh_coef = XLSX.addsheet!(xf, "Coefs_$(safe_name)")
                 terms   = get(m, "TermNames", [])
                 coefs   = get(m, "Coefs", [])
@@ -539,7 +561,7 @@ function VISE_ExportToExcel_DDEF(FilePath::String, Results::AbstractDict)
                 end
             end
 
-            # 4. Radiation & Decay Correction Sheet (If applicable)
+            # Integrated radiation and isothermal decay correction registry.
             if haskey(Results, "RadioCorrection")
                 sh_rad       = XLSX.addsheet!(xf, "Radiation_Decay_Correction")
                 sh_rad["A1"] = ["Component", "Half-Life", "Unit", "Avg Delta-T (Hours)", "Avg Decay Factor", "Correction Applied"]
@@ -561,6 +583,9 @@ function VISE_ExportToExcel_DDEF(FilePath::String, Results::AbstractDict)
     end
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 11: PRIMARY TOURNAMENT MODEL SELECTION
+# ------------------------------------------------------------------------------
 """
     VISE_SelectBestModel_DDEF(X, Y, InNames) -> (BestModel, LogMsg)
 Evaluates multiple model structures and selects the optimal winner.
@@ -568,9 +593,9 @@ Evaluates multiple model structures and selects the optimal winner.
 function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, InNames::Vector{String})
     n      = size(X, 1)
     k      = 3
-    p_quad = 10 # 1 + 2*3 + 3*(3-1)/2 = 10
-
-    # Candidates: Linear, Quadratic (if N permits)
+    # 1 + 2*3 + 3*(3-1)/2 = 10
+    p_quad = 10
+    # Evaluate candidate model structures including linear and quadratic variations.
     candidates = ["linear"]
     n > p_quad + 2 && push!(candidates, "quadratic")
 
@@ -585,11 +610,10 @@ function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector
         q2  = VISE_CrossValidate_DDEF(X, Y, type)
         r2a = get(mod, "R2_Adj", 0.0)
         
-        # Treat NaN as 0.0 for stable tournament scoring
         q2_safe  = isnan(q2) ? 0.0 : q2
         r2a_safe = isnan(r2a) ? 0.0 : r2a
 
-        # Tournament Score: Q2 is weighted higher to prevent over-fitting
+        # Execution of tournament scoring weighted towards predictive stability (Q²).
         score = 0.6 * q2_safe + 0.4 * r2a_safe
 
         push!(log_details, "$(uppercasefirst(type)): R²Adj=$(round(r2a_safe, digits=3)), Q²=$(round(q2_safe, digits=3))")
@@ -615,9 +639,13 @@ function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector
     return (best_mod, msg)
 end
 
-# --------------------------------------------------------------------------------------
-# --- VALIDATION (CROSS-VALIDATION & Q²) ---
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART D: DYNAMIC OPTIMISATION & EXPLORATION
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 12: CROSS-VALIDATION & PRESS STATISTIC
+# ------------------------------------------------------------------------------
 
 """
     VISE_CrossValidate_DDEF(X, Y, ModelType) -> Float64
@@ -646,10 +674,9 @@ function VISE_CrossValidate_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVect
     end
 end
 
-# --------------------------------------------------------------------------------------
-# --- MULTITHREADED GRID SEARCH OPTIMISATION ---
-# --------------------------------------------------------------------------------------
-
+# ------------------------------------------------------------------------------
+# SECTION 13: MULTITHREADED GRID SEARCH ENGINE
+# ------------------------------------------------------------------------------
 """
     VISE_GridSearch_DDEF(Models, Goals, Bounds; [Steps]) -> (X, Y_Pred, Scores)
 Performs high-density grid search across factor space for desirability exploration.
@@ -661,16 +688,13 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
     # Dynamic Hardware-Aware Scaling (Dual Level Architecture)
     compute_threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
     
-    # 1. Determine Capacity Limit & Base Resolution (N)
-    # Level 1 (Entry): ≤ 4 cores, 300k pts, N=21
-    # Level 2 (Pro): > 4 cores, 500k pts, N=21
+    # Determine capacity limits and baseline resolutions based on detected hardware profile.
     cap_limit, base_n = if compute_threads <= 4
         300_000, 21
     else
         500_000, 21
     end
 
-    # 2. Adjust steps dynamically to stay within cap
     eff_steps = base_n
     while eff_steps^Dim > cap_limit && eff_steps > 3
         eff_steps -= 2
@@ -682,7 +706,7 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
     # Generate coordinate ranges
     Ranges = [range(X_Bounds[i, 1], X_Bounds[i, 2]; length=eff_steps) for i in 1:Dim]
 
-    # 1. Point Collection (vectorized via product iterator)
+    # Coordinate collection via multidimensional product iteration.
     Iter       = Iterators.product(Ranges...)
     NumPoints  = length(Iter)
     Candidates = Matrix{Float64}(undef, NumPoints, Dim)
@@ -693,7 +717,7 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
         end
     end
 
-    # 2. Design Matrix (computed once for the reference model type)
+    # Structural design matrix generation for the primary reference model.
     RefType  = isempty(Models) ? "quadratic" : get(Models[1], "ModelType", "quadratic")
     X_Design = VISE_ExpandDesign_DDEF(Candidates, RefType)
 
@@ -701,9 +725,7 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
     Predictions  = zeros(Float64, NumPoints, NumModels)
     Active_Flags = falses(NumModels)
 
-
-    # 3. Parallel Prediction (BLAS + thread-level)
-    # Use capped compute thread pool
+    # Multithreaded prediction execution utilising BLAS integration.
     Threads.@threads for m in 1:NumModels
         Mod  = Models[m]
         Goal = m <= length(Goals) ? Goals[m] : Dict{String, Any}("Type" => "Nominal", "Target" => 0.0, "Weight" => 1.0)
@@ -724,7 +746,7 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
         Active_Flags[m] = true
     end
 
-    # 4. Multi-threaded Composite Scoring (Point-level Parallelism)
+    # High-fidelity composite scoring via point-level parallel execution.
     active_idx = findall(Active_Flags)
     if isempty(active_idx)
         Scores = ones(NumPoints)
@@ -757,12 +779,17 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
     return Candidates, Predictions, Scores
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 14: LOCAL GRADIENT SENSITIVITY ANALYSIS
+# ------------------------------------------------------------------------------
 """
     VISE_SensitivityAnalysis_DDEF(Model, X_Point; [delta]) -> Vector{Float64}
 Calculates local sensitivity (gradients) at a specific coordinate.
 """
 function VISE_SensitivityAnalysis_DDEF(Model::AbstractDict, X_Point::Vector{Float64}; delta=1e-4)
-    Dim       = 3 # Fixed constant
+    # Implementation of local gradient sensitivity analysis.
+    Dim       = 3 
+
     gradients = zeros(3)
 
     base_pred = VISE_Predict_DDEF(Model, reshape(X_Point, 1, Dim))[1]
@@ -779,6 +806,13 @@ function VISE_SensitivityAnalysis_DDEF(Model::AbstractDict, X_Point::Vector{Floa
     return total > 0.0 ? gradients ./ total : fill(1.0 / Dim, Dim)
 end
 
+# ==============================================================================
+# PART E: EDITORIAL & REPORTING INFRASTRUCTURE
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 15: SCIENTIFIC REPORT GENERATOR
+# ------------------------------------------------------------------------------
 """
     VISE_GenerateScientificReport_DDEF(Res) -> String
 Generates an academic report following rigorous editorial and scientific standards.
@@ -789,7 +823,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     write(io, Printf.@sprintf("*Protocol Execution: %s | High-Fidelity Research Tier*\n", Dates.format(now(), "yyyy-mm-dd HH:MM")))
     write(io, "---\n\n")
 
-    # --- Section: Global Design Vitals ---
+    # Integrated analysis of experimental design vitals and design topology.
     if haskey(Res, "Vitals") && !isnothing(Res["Vitals"])
         v = Res["Vitals"]
         write(io, "### I. Experimental Design Vitals\n")
@@ -811,7 +845,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         write(io, "\n")
     end
 
-    # --- Section: Radioactive Decay Correction ---
+    # Integrated analysis of radioactive decay correction protocols.
     if haskey(Res, "RadioCorrection") && !isempty(Res["RadioCorrection"])
         write(io, "### II. Radioactive Decay Correction (Audit)\n")
         write(io, "Row-based dynamic correction applied to compensate for isothermal decay between calibration and experimental execution.\n\n")
@@ -843,7 +877,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
             write(io, Printf.@sprintf("- **Information Criterion**: \$AIC = %.4f\$ (Akaike Information Criterion)\n", aic))
         end
 
-        # Reliability Interpretation
+        # Execution of predictive reliability classification.
         quality = q2 > 0.85 ? "SUPERIOR" : q2 > 0.7 ? "ROBUST" : q2 > 0.4 ? "FORMATIVE" : "TENTATIVE"
         write(io, "- **Inference Reliability**: `$quality` profile. ")
         if q2 > 0.7
@@ -862,9 +896,10 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
             end
         end
 
-        # VIF Check
+        # Integrated variance inflation assessment (VIF).
         write(io, "\n#### III. Orthogonality & Collinearity Diagnostics\n")
         vifs    = get(mod, "VIFs", Float64[])
+        # Determination of multicollinearity severity based on VIF thresholds.
         max_vif = isempty(vifs) ? 0.0 : maximum(vifs)
         if max_vif > 10.0
             @printf(io, "- **Multicollinearity Trace**: `WARNING` (Max VIF: %.2f). Parameters show significant correlation.\n", max_vif)
@@ -872,7 +907,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
             @printf(io, "- **Multicollinearity Trace**: `CLEAN` (Max VIF: %.2f). The design preserves factor orthogonality.\n", max_vif)
         end
 
-        # Driver Analysis
+        # Assessment of primary factor impact and directional synergy.
         write(io, "\n#### IV. Principal Factor Topology\n")
         coefs   = mod["Coefs"]
         t_stats = get(mod, "t_Stats", Float64[])
@@ -912,9 +947,9 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     return String(take!(io))
 end
 
-# --------------------------------------------------------------------------------------
-# --- EXECUTION ORCHESTRATOR ---
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 16: EXECUTION ORCHESTRATOR (Main Gateway)
+# ------------------------------------------------------------------------------
 
 """
     VISE_Execute_DDEF(DataFile, Phase, Goals, [ModelType]; [Opts]) -> Dict
@@ -933,12 +968,10 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     isempty(df_raw) && (df_raw = Sys_Fast.FAST_ReadExcel_DDEF(DataFile, "DATA_RECORDS"))
     isempty(df_raw) && return Dict("Status" => "FAIL", "Message" => "Source data is unreadable or empty.")
 
-    # Pre-flight data quality validation (Sys_Fast -> Lib_Vise bridge)
     valid, issues = Sys_Fast.FAST_ValidateDataFrame_DDEF(df_raw, [C.COL_PHASE])
     if !valid
         Log("VISE", "INITIALISATION", "Pre-flight issues: $(join(issues, " | "))", "WARN")
     end
-
     Sys_Fast.FAST_NormaliseCols_DDEF!(df_raw)
     col_phase_name = Sys_Fast.FAST_GetCol_DDEF(df_raw, C.COL_PHASE)
     if isempty(col_phase_name)
@@ -949,17 +982,17 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         )
     end
     
-    # Define phase symbol for functional filtering (Case-Insensitive alignment)
+    # Implementation of case-insensitive alignment for phase-based filtering.
     col_phase = Symbol(col_phase_name)
     df_train  = filter(r -> strip(uppercase(string(r[col_phase]))) == strip(uppercase(Phase)), df_raw)
 
     nrow(df_train) < 3 && return Dict("Status" => "FAIL", "Message" => "Insufficient data points (N < 3).")
 
-    # Prefix-based search (Case-Insensitive)
+    # Execution of case-insensitive prefix searches for factor identification.
     in_cols  = filter(n -> startswith(uppercase(n), C.PRE_INPUT), names(df_train))
     out_cols = filter(n -> startswith(uppercase(n), C.PRE_RESULT), names(df_train))
 
-    # Construct numeric matrices from DataFrame robustly
+    # Resolution of structured numeric matrices from dimensional datasets.
     nr      = nrow(df_train)
     num_in  = max(3, length(in_cols))
     num_out = max(1, length(out_cols))
@@ -973,7 +1006,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         Y_Raw[r, ci] = Sys_Fast.FAST_SafeNum_DDEF(df_train[r, c])
     end
 
-    # Only validate against actual outputs, immune to missing columns
+    # Execute validation protocol against actual result vectors.
     valid_mask = vec(all(!isnan, view(Y_Raw, :, 1:length(out_cols)); dims=2))
     X_Clean    = X_Raw[valid_mask, 1:3]
     Y_Clean    = Y_Raw[valid_mask, 1:length(out_cols)]
@@ -1076,7 +1109,9 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     end
 
     # Zero Variance Check (Flat Line Detector)
-    P_quad    = 10 # 1 + 2*3 + 3*(3-1)/2 = 10
+    # 1 + 2*3 + 3*(3-1)/2 = 10
+    P_quad    = 10 
+
     eff_model = ModelType == "Auto" ? (N > P_quad + 2 ? "quadratic" : "linear") : lowercase(ModelType)
 
     Log("VISE", "MODEL_SETUP", "Using '$eff_model' model for $N samples.", "OK")
@@ -1105,40 +1140,40 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     Best_Point = Float64[]
     Leaders_DF = DataFrame()
 
-    # Ensure Goals are correctly populated for multi-objective engine
+    # Integrated resolution of multi-objective optimisation goals.
     active_goals = isempty(Goals) ? [get(m, "Goal", Dict{String, Any}()) for m in models] : Goals
 
     if get(Opts, "Optim", true) && K >= 2
         bounds = hcat(minimum(X_Clean; dims=1)', maximum(X_Clean; dims=1)')
 
-        # 1. Grid Search for Density Exploration & Leaders
+        # Execution of high-density density exploration protocols.
         XT, YP, SC = VISE_GridSearch_DDEF(models, active_goals, bounds)
 
         num_candidates = length(SC)
 
-        # 2. BlackBoxOptim for absolute Global Maximum (Best_Point)
+        # Implementation of global desirability maximum search via BlackBoxOptim.
         Best_Point, Best_Score = Lib_Core.CORE_OptimiseDesirability_DDEF(models, active_goals, bounds)
 
-        # --- Leader Candidate Selection (Diversity-Focused) ---
+        # Execution of diversity-focused candidate selection logic based on multidimensional coverage.
         used_indices = Int[]
         cand_indices = Int[]
         cand_tags    = String[]
         cand_count   = 0
 
         top_indices = partialsortperm(SC, 1:min(8, num_candidates); rev=true)
-        # Benchmark score is the score of the 8th leader (or the last of what we have)
+        # Benchmark score determination for tier-based selection.
         bench_score = SC[top_indices[end]]
         score_limit = bench_score * 0.90
 
-        # Candidate pool: All points strictly within 10% of the top-8 benchmark
+        # Determination of candidate pool boundaries based on a defined proximity to the benchmark score.
         tier_indices = findall(>=(score_limit), SC)
 
-        # 1. Top 8 Global Leaders (Already identified)
+        # Integration of primary global leaders previously identified during tournament selection.
         top_idx = top_indices[1]
         for i in 1:3
             val          = XT[top_idx, i]
             b_min, b_max = bounds[i, 1], bounds[i, 2]
-            # AskLeader expects [min, target, max]
+            # Determination of physical feasibility and boundary adherence for leader coordinates.
             v_range       = [b_min, (b_min + b_max) / 2, b_max]
             is_valid, msg = Main.Sys_Flow.FLOW_AskLeader_DDEF(val, v_range)
             if !is_valid
@@ -1154,11 +1189,11 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
             push!(used_indices, p_idx)
         end
 
-        # 2. Input-Based Diversity: Seek MINIMUM use of factors within the top tier
+        # Selection of diversity candidates focusing on factor-level minimisation strategies.
         for i in 1:min(3, size(XT, 2))
             tag_pre = i <= length(InNames) ? first(InNames[i] * "   ", 3) : "IN$i"
 
-            # Find the best point in the tier that MINIMIZES this input
+            # Identification of the optimal tier point for specific input minimisation.
             best_idx = -1
             min_val  = Inf
             for idx in tier_indices
@@ -1178,13 +1213,13 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
             end
         end
 
-        # 3. Output-Based Diversity: Seek BEST desirability for specific outputs within top tier
+        # Selection of diversity candidates focusing on output-specific target maximisation.
         for i in 1:min(3, size(YP, 2))
             tag_pre  = i <= length(OutNames) ? first(OutNames[i] * "   ", 3) : "OUT$i"
             mod_goal = get(models[i], "Goal", Dict())
             gtup     = Lib_Arts.ARTS_ExtractGoal_DDEF(mod_goal)
 
-            # Find the best point in the tier that MAXIMIZES desirability for this specific output
+            # Identification of the optimal tier point for specific output desirability.
             best_idx = -1
             max_d    = -Inf
             for idx in tier_indices
@@ -1205,11 +1240,10 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
             end
         end
 
-        # --- CONSTRUCT CONSISTENT LEADERS_DF ---
-        # Requirement: MATCH THE COLUMN STRUCTURE OF THE ORIGINAL DATA SHEET
+        # Execution of structurally consistent DataFrame extraction for leader candidates.
         Leaders_DF = DataFrame()
 
-        # Use primary headers from df_raw to maintain order
+        # Utilisation of primary dataset headers to maintain structural and ordinal integrity.
         main_headers = names(df_raw)
 
         for h in main_headers
@@ -1223,7 +1257,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
             elseif h == C.COL_SCORE
                 Leaders_DF[!, h_sym] = round.(SC[cand_indices]; digits=4)
             elseif startswith(h, C.PRE_INPUT)
-                # Robust index matching: Header might be 'VARIA_Name_unit' while InNames has 'Name'
+                # Execution of robust column name matching for input factor mapping.
                 clean_n = replace(h, C.PRE_INPUT => "")
                 ki      = findfirst(n -> (clean_n == n || startswith(clean_n, n * "_")), InNames)
                 if !isnothing(ki)
@@ -1240,19 +1274,18 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
                     Leaders_DF[!, h_sym] = fill(missing, length(cand_indices))
                 end
             elseif startswith(h, C.PRE_RESULT)
-                # Candidates don't have results yet
+                # Placeholder assignments for result columns in candidate sets.
                 Leaders_DF[!, h_sym] = fill(missing, length(cand_indices))
             else
-                # Other columns (ID, Notes, etc.) fill with defaults or missing
+                # Default assignments for metadata and auxiliary columns.
                 Leaders_DF[!, h_sym] = fill(missing, length(cand_indices))
             end
         end
 
         # Write candidate sets to the transient file for FLOW leader extraction
-        # --- SAVE LEADERS (MOVED TO Sys_Flow) ---
         Main.Sys_Flow.FLOW_WriteLeaders_DDEF(DataFile, Phase, Leaders_DF)
 
-        # 3. Physical Feasibility Bridge (The Golden Bridge)
+        # Integrated stoichiometric verification for physical run feasibility.
         config  = Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
         ingreds = get(config, "Ingredients", [])
         if !isempty(ingreds)
@@ -1270,13 +1303,13 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         Log("VISE", "OPTIMISATION", "Candidate pool (N=14 Diversity-Focussed) generated and saved.", "OK")
     end
 
-    # Calculate predictions for actual experimental points
+    # Execution of model predictions for existing experimental data points.
     Y_Pred = Matrix{Float64}(undef, N, length(out_cols))
     for m in eachindex(out_cols)
         Y_Pred[:, m] = VISE_Predict_DDEF(models[m], X_Clean)
     end
 
-    # Calculate scores for actual experimental points
+    # Execution of desirability scoring for existing experimental data points.
     parsed_goals = [Lib_Arts.ARTS_ExtractGoal_DDEF(models[m]["Goal"]) for m in eachindex(out_cols)]
     active_idx   = findall(m -> get(models[m], "Status", "") == "OK", 1:length(out_cols))
 
@@ -1301,7 +1334,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     # Standardise phase name for robust comparison
     target_phase_stripped = strip(uppercase(Phase))
 
-    # Locate row indices that belong to the current phase by searching for normalised match
+    # Determination of row indices corresponding to the active experimental phase.
     row_idx_in_raw = Int[]
     if hasproperty(df_raw, col_phase)
         for (idx, row) in enumerate(eachrow(df_raw))
@@ -1320,7 +1353,6 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         )
     end
 
-
     pred_idx = 1
     for (i, raw_idx) in enumerate(row_idx_in_raw)
         if valid_mask[i]
@@ -1338,11 +1370,12 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
             end
             df_raw[raw_idx, score_col] = round(Actual_Scores[pred_idx]; digits=4)
 
+            # Increment prediction index to maintain alignment.
             pred_idx += 1
         end
     end
 
-    # --- Persist Predictions Back to Excel ---
+    # Integrated persistence of predictions back to the repository.
     try
         target_sheet = C.SHEET_DATA
         if isfile(DataFile)
@@ -1360,14 +1393,13 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         Log("VISE", "PERSIST_FAIL", "Failed to save predictions: $e", "WARN")
     end
 
-
     graphs = Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, InNames, OutNames,
         Goals, r2_vec, r2_pred_vec, Opts, Leaders_DF)
 
-    # --- Scientific Vitals (Mathematical Health Check) ---
+    # Execution of mathematical health audit on experimental design topology.
     vitals = Dict("D" => 0.0, "Condition" => Inf, "MaxVIF" => 0.0, "LOF" => 1.0)
     try
-        # Pick the most complex model's design matrix for the global health check
+        # Selection of the most appropriate model for global health assessment.
         best_m = findfirst(m -> get(m, "ModelType", "") == "quadratic", models)
         isnothing(best_m) && (best_m = 1)
 
@@ -1378,11 +1410,11 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         vitals["D"]         = m_health["D"]
         vitals["Condition"] = m_health["Condition"]
 
-        # Calculate max VIF across all valid linear/quadratic models
+        # Determination of maximum variance inflation across the model ensemble.
         vif_list         = [maximum(get(m, "VIFs", [0.0])) for m in models if haskey(m, "VIFs")]
         vitals["MaxVIF"] = isempty(vif_list) ? 1.0 : maximum(vif_list)
 
-        # Quick Lack-of-Fit check for the first response
+        # Execution of Lack-of-Fit verification for the primary response stream.
         if N > size(Xd_health, 2) + 2
             _, p_lof      = VISE_LackOfFit_DDEF(Xd_health, view(Y_Clean, :, 1))
             vitals["LOF"] = p_lof
@@ -1390,7 +1422,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     catch e
         Log("VISE", "VITALS_WARN", "Health diagnostics incomplete: $e", "WARN")
     end
-    # --- Sensitivity Analysis at Optimal Point ---
+    # Execution of sensitivity analysis at the identified desirability optimum.
     sens_list = Vector{Float64}[]
     if !isempty(Best_Point)
         for m in models
@@ -1398,7 +1430,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         end
     end
 
-    # --- Academic Tier Diagnostics ---
+    # Execution of advanced analytical diagnostics including ANOVA and normality testing.
     anova_tables      = []
     normality_results = []
     residuals_list    = []
@@ -1407,7 +1439,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
             push!(anova_tables, VISE_GenerateAnovaTable_DDEF(m, X_Clean, Y_Clean[:, i]))
             push!(normality_results, VISE_PerformNormalityTest_DDEF(m, X_Clean, Y_Clean[:, i]))
 
-            # Residuals for Q-Q plot
+            # Extraction of residuals for quantile-quantile (Q-Q) distribution analysis.
             yp = VISE_Predict_DDEF(m, X_Clean)
             push!(residuals_list, Y_Clean[:, i] .- yp)
         else
@@ -1417,8 +1449,7 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         end
     end
 
-    # --- Strip Closures for JSON Safety ---
-    # Dash callbacks fail if dictionaries contain non-serializable objects (functions)
+    # Ensure serialisability of model objects by removing function closures before UI transmission.
     ui_models = deepcopy(models)
     for m in ui_models
         delete!(m, "_Closure")
@@ -1453,4 +1484,4 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     )
 end
 
-end # module Lib_Vise
+end

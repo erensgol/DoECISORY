@@ -1,11 +1,12 @@
 module Sys_Flow
 
-# ======================================================================================
-# DAISHODOE - SYSTEM FLOW (PROCESS & STATE)
-# ======================================================================================
-# Description: Experimental phase management, transition logic, and state synchronisation bus.
+# ==============================================================================
+# DAISHODOE PROJECT - SYSTEM FLOW (PROCESS & STATE)
+# ==============================================================================
+# Description: Experimental phase management, transition logic, and state 
+#              synchronisation bus.
 # Module Tag:  FLOW
-# ======================================================================================
+# ==============================================================================
 
 using JSON3
 using DataFrames
@@ -18,9 +19,13 @@ export FLOW_AskLeader_DDEF, FLOW_NextPhase_DDEF, FLOW_GetCandidates_DDEF,
     FLOW_BuildNextPhase_DDEF, FLOW_CalcNextRange_DDEF, FLOW_WriteLeaders_DDEF,
     FLOW_CalcAdaptiveRange_DDEF, FLOW_RenderPhaseTransition_DDEF
 
-# --------------------------------------------------------------------------------------
-# --- PROCESS FLOW LOGIC ---
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART A: PHASE TRANSITION ORCHESTRATION
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 1: PROCESS FLOW LOGIC
+# ------------------------------------------------------------------------------
 
 """
     FLOW_AskLeader_DDEF(LeaderVal, CurrentRange) -> (Valid, Msg)
@@ -49,7 +54,6 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
     (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict("Status" => "FAIL", "Message" => "Invalid master file path provided.")
     (isnothing(CurrentPhase) || isempty(CurrentPhase)) && return Dict("Status" => "FAIL", "Message" => "Current phase not specified.")
     
-    # 1. Synchronise session state from the master record to ensure correct variable ordering
     C         = Sys_Fast.FAST_Data_DDEC
     df_config = Sys_Fast.FAST_ReadExcel_DDEF(MasterFile, C.SHEET_CONFIG)
 
@@ -95,15 +99,12 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
 
     isempty(OldConfig) && return Dict("Status" => "FAIL", "Message" => "Configuration state loss detected.")
 
-    # 2. Extract leader using the strict InNames order
     Leader = Main.Lib_Core.CORE_ExtractLeader_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, InNames)
     isempty(Leader) && return Dict("Status" => "FAIL", "Message" => "Leader extraction failed for $CurrentPhase.")
 
-    # 3. Calculate Adaptive Search Space
     Leader["OldConfig"] = OldConfig
     NewConfig           = FLOW_CalcNextRange_DDEF(Leader, ZoomFactor, ShiftFactor)
 
-    # 4. Phase Sequencing
     p_num        = tryparse(Int, replace(CurrentPhase, "Phase" => ""))
     target_phase = "Phase$(isnothing(p_num) ? 2 : p_num + 1)"
 
@@ -149,20 +150,20 @@ Internal helper for search space adaptation logic.
 function FLOW_CalcAdaptiveRange_DDEF(Val::Float64, L_Old::Vector{Float64}, Zoom::Real, Shift::Real)
     Range = L_Old[3] - L_Old[1]
 
-    # Automatic shift logic for boundary leaders
+    # Execution of the boundary proximity compensation protocol to manage search space clipping.
     Tol      = Range * 0.05
     at_limit = abs(Val - L_Old[1]) < Tol || abs(Val - L_Old[3]) < Tol
 
     New_Range = at_limit ? Range : Range * Zoom
 
-    # Manual Shift applied relative to half of the NEW range
+    # Application of manual translation (Shift) relative to the half-width of the recalibrated range.
     ShiftVal = Shift * (New_Range * 0.5)
     New_Mid  = Val + ShiftVal
 
     New_Min = New_Mid - New_Range / 2
     New_Max = New_Mid + New_Range / 2
 
-    # Boundary clamping with conservation of range
+    # Enforcement of boundary constraint enforcement while maintaining range conservation.
     if New_Min < 0.0
         overshoot = -New_Min
         New_Min   = 0.0
@@ -177,9 +178,9 @@ function FLOW_CalcAdaptiveRange_DDEF(Val::Float64, L_Old::Vector{Float64}, Zoom:
     return Float64[New_Min, New_Mid, New_Max]
 end
 
-# --------------------------------------------------------------------------------------
-# --- EXCEL-CENTRIC PHASE TRANSITION ---
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 2: EXCEL-CENTRIC PHASE TRANSITION
+# ------------------------------------------------------------------------------
 
 """
     FLOW_BuildNextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor, Method, ShiftFactor) -> Dict
@@ -192,7 +193,6 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
     C   = Sys_Fast.FAST_Data_DDEC
     Log = Sys_Fast.FAST_Log_DDEF
 
-    # 1. Orchestrate Adaptive Search Space
     res = FLOW_NextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor, ShiftFactor)
     res["Status"] != "OK" && return res
 
@@ -200,15 +200,12 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
     TargetPhase = res["TargetPhase"]
     Log("FLOW", "PHASE_BUILD", "Designing $TargetPhase search space from $CurrentPhase leader...", "WAIT")
 
-    # 1.5 Stoichiometric Validation Bridge
     GlobalData = get(res, "Global", Dict())
     vol        = Float64(get(GlobalData, "Volume", 5.0))
     conc       = Float64(get(GlobalData, "Concentration", 10.0))
 
-    # Robust key access helper (JSON3 compatibility)
     _get(o, k, d) = haskey(o, string(k)) ? o[string(k)] : (haskey(o, Symbol(k)) ? o[Symbol(k)] : d)
 
-    # Declarative audit row generation
     audit_rows = map(NewConfig) do c
         lvls = _get(c, "Levels", [0.0, 0.0, 0.0])
         Dict(
@@ -230,21 +227,17 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
         Log("FLOW", "CHEM_SKIP", "Stoichiometry not configured or zero mass. Proceeding...", "INFO")
     end
 
-    # 2. Design Matrix Generation
     var_indices = findall(c -> _get(c, "Role", "") == C.ROLE_VAR, NewConfig)
     length(var_indices) != 3 && return Dict("Status" => "FAIL", "Message" => "System requires 3 ingredients for phase transitions.")
 
     design_coded = Main.Lib_Core.CORE_GenDesign_DDEF(Method, 3)
     N_Runs       = size(design_coded, 1)
 
-    # 3. Level Mapping
     configs     = [Dict("Levels" => get(NewConfig[i], "Levels", [0.0, 0.0, 0.0])) for i in var_indices]
     real_matrix = Main.Lib_Core.CORE_MapLevels_DDEF(design_coded, configs)
 
-    # 4. Canonical DataFrame Construction
     p_num = something(tryparse(Int, replace(TargetPhase, "Phase" => "")), 2)
 
-    # 4a. System Meta Data
     df_sys = DataFrame(
         C.COL_EXP_ID    => ["EXP_P$(p_num)_$(lpad(i, 2, '0'))" for i in 1:N_Runs],
         C.COL_PHASE     => fill(TargetPhase, N_Runs),
@@ -252,14 +245,12 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
         C.COL_NOTES     => fill("", N_Runs)
     )
 
-    # 4b. CENTRALIZED STOICHIOMETRY ENGINE (Lib_Mole)
-    # This ensures MASS_ and FILL_ columns are correctly calculated and included in the report.
+    # Execution of the centralised stoichiometry audit engine (Lib_Mole integration).
+    # Verification of MASS_ and FILL_ dimensionality to ensure report integrity.
     df_chem = Main.Lib_Mole.MOLE_ProcessDesign_DDEF(real_matrix, audit_rows, vol, conc)
 
-    # Assemble: System Meta + Chemical Gradient Design
     df = hcat(df_sys, df_chem)
 
-    # result structures
     if haskey(res, "Outputs")
         for o in res["Outputs"]
             n = string(get(o, "Name", ""))
@@ -274,8 +265,6 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
         end
     end
     df[!, C.COL_SCORE] = Vector{Union{Missing,Float64}}(missing, N_Runs)
-
-    # 5. Master record finalisation
     current_config                = Sys_Fast.FAST_ReadConfig_DDEF(MasterFile)
     current_config["Ingredients"] = [Dict{String,Any}(string(k) => v for (k, v) in pairs(c)) for c in NewConfig]
 
@@ -293,9 +282,13 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
     return Dict("Status" => "OK", "TargetPhase" => TargetPhase, "N_Runs" => N_Runs, "LeaderScore" => res["LeaderScore"])
 end
 
-# --------------------------------------------------------------------------------------
-# --- ADAPTIVE SEARCH SPACE ---
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART B: ADAPTIVE RANGE & COMMITMENT BUS
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 3: ADAPTIVE SEARCH SPACE
+# ------------------------------------------------------------------------------
 
 """
     FLOW_CalcNextRange_DDEF(LeaderInfo, ZoomFactor, ShiftFactor) -> Vector{Dict}
@@ -317,14 +310,13 @@ function FLOW_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5, Shif
         Val     = SelVals[j]
         Range   = L_Old[3] - L_Old[1]
 
-        # Automatic shift logic for boundary leaders
+        # Execution of the boundary proximity compensation protocol to manage search space clipping.
         Tol      = Range * 0.05
         at_limit = abs(Val - L_Old[1]) < Tol || abs(Val - L_Old[3]) < Tol
 
         New_Range = at_limit ? Range : Range * ZoomFactor
 
-        # Manual Shift applied relative to half of the NEW range
-        # ShiftFactor = 1 means leader becomes Min, ShiftFactor = -1 means leader becomes Max
+        # Application of manual translation (Shift) relative to the half-width of the recalibrated range.
         ShiftVal = ShiftFactor * (New_Range * 0.5)
         New_Mid  = Val + ShiftVal
 
@@ -334,7 +326,7 @@ function FLOW_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5, Shif
         New_Min = New_Mid - New_Range / 2
         New_Max = New_Mid + New_Range / 2
 
-        # Boundary clamping with conservation of range
+        # Enforcement of boundary constraint enforcement while maintaining range conservation.
         if New_Min < 0.0
             overshoot = -New_Min
             New_Min   = 0.0
@@ -349,12 +341,13 @@ function FLOW_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5, Shif
 
         conf["Levels"] = [New_Min, New_Mid, New_Max]
     end
-
     Sys_Fast.FAST_Log_DDEF("FLOW", "SEARCH_SPACE", "New space configured successfully.", "OK")
     return NewConf
 end
 
-
+# ------------------------------------------------------------------------------
+# SECTION 3: ADAPTIVE SEARCH SPACE
+# ------------------------------------------------------------------------------
 
 """
     FLOW_WriteLeaders_DDEF(File, Phase, LeadersDF) -> Bool
@@ -377,23 +370,25 @@ function FLOW_WriteLeaders_DDEF(File::Union{String,Nothing}, Phase::Union{String
     end
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 4: PHASE TRANSITION VISUALISATION
+# ------------------------------------------------------------------------------
+
 """
     FLOW_RenderPhaseTransition_DDEF(OldConfig, NewConfig, LeaderVals) -> Dict
 Visualises the adaptation of search space boundaries between sequential experimental phases.
 Standardised Coded Scale: Current boundaries are mapped to [-1, 1].
 """
 function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVector, LeaderVals::AbstractVector)
-    # Premium Palette - Strict binding to Sys_Fast standard constants
+    # Integration of the Daisho palette via synchronised binding to Sys_Fast standards for consistent visualisation.
     FD = Sys_Fast.FAST_Data_DDEC
 
-    # 1. Identify variables and ensure strict ordering (A-B-C)
     vars = [(i, c) for (i, c) in enumerate(OldConfig) if get(c, "Role", "Variable") == FD.ROLE_VAR]
     n_vars = length(vars)
     if n_vars == 0
         return Dict("data" => [], "layout" => Layout(title="No variables detected."))
     end
 
-    # --- Standardised Coded Range: [-2.0, 2.0] ---
     AXIS_LO = -2.0
     AXIS_HI = 2.0
 
@@ -404,18 +399,16 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
     for (j, (i, conf)) in enumerate(vars)
         L_Old = Float64.(get(conf, "Levels", [0.0, 0.0, 0.0]))
         
-        # Robust lookup in NewConfig (Proposed)
         v_name = get(conf, "Name", "")
         n_idx  = findfirst(c -> get(c, "Name", "") == v_name, NewConfig)
         L_New  = !isnothing(n_idx) ? Float64.(get(NewConfig[n_idx], "Levels", L_Old)) : L_Old
 
-        # Variable Mapping: First variable at top
         y_pos = n_vars - j + 1
 
-        # Leader mapping - ensure Val is extracted from the correct index
+        # Formal mapping of selected leader coordinates across the adaptive space.
         Val = (j <= length(LeaderVals)) ? Float64(LeaderVals[j]) : L_Old[2]
         
-        # NORMALISATION: Map Current [Min, Max] → [-1.0, 1.0]
+        # NORMALISATION PROTOCOL: Implementation of coordinate mapping from Current [Min, Max] to the standardised range of [-1.0, 1.0].
         base_mid  = (L_Old[1] + L_Old[3]) / 2.0
         base_span = max(L_Old[3] - L_Old[1], 1e-5)
         norm(v)   = (v - base_mid) / (base_span / 2.0)
@@ -424,7 +417,6 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
         n_new_max = norm(L_New[3])
         n_leader  = norm(Val)
 
-        # 1. Current (Old Space) — always [-1.0, 1.0]
         push!(traces, scatter(; 
             x=[-1.0, 1.0], y=[y_pos, y_pos], mode="lines",
             name="Current", 
@@ -434,7 +426,6 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
             hoverinfo="skip"
         ))
 
-        # 2. Target Space (New Boundaries)
         push!(traces, scatter(; 
             x=[n_new_min, n_new_max], y=[y_pos, y_pos], mode="lines",
             name="Target", 
@@ -444,8 +435,7 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
             hoverinfo="text",
             hovertext="New: $(round(L_New[1]; digits=2)) → $(round(L_New[3]; digits=2))"
         ))
-
-        # --- Boundary Annotations (Raw Values) ---
+        # Provision of raw boundary annotations for experimental clarity.
         y_ann = y_pos - 0.35
         push!(annotations, Dict(
             "x" => n_new_min, "y" => y_ann, "xref" => "x", "yref" => "y",
@@ -460,7 +450,6 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
             "font" => Dict("size" => 8, "color" => FD.COLOUR_DARHIG),
         ))
 
-        # 3. Leader Point Fix
         push!(traces, scatter(; 
             x=[n_leader], y=[y_pos], mode="markers", 
             name="Leader",
@@ -474,7 +463,6 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
             hovertext="Leader: $(round(Val; digits=2))"
         ))
 
-        # Annotations for Old Space (Current) - Top boundaries
         push!(annotations, Dict(
             "x" => -1.0, "y" => y_pos + 0.35, "xref" => "x", "yref" => "y",
             "text" => string(round(L_Old[1]; digits=1)),
@@ -492,7 +480,6 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
     ticks_vals = collect(AXIS_LO:0.5:AXIS_HI)
     ticks_text = [v == 0 ? "0" : (v == -1.0 ? "-1.0 (Lower)" : (v == 1.0 ? "+1.0 (Upper)" : Printf.@sprintf("%+.1f", v))) for v in ticks_vals]
 
-    # Map labels to the correct Y positions (A=Top, C=Bottom)
     y_tick_vals = collect(n_vars:-1:1)
 
     layout = Layout(;
@@ -521,7 +508,6 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
         legend      = attr(orientation="h", y=-0.4, x=0.5, xanchor="center", font=attr(size=9)),
         annotations = annotations,
         shapes      = [
-            # Scientific Boundary Walls at -2.0 and 2.0
             attr(type="line", x0=AXIS_LO, x1=AXIS_LO, y0=0, y1=1, yref="paper", line=attr(color=FD.COLOUR_HUERED, width=1.5, dash="dash")),
             attr(type="line", x0=AXIS_HI, x1=AXIS_HI, y0=0, y1=1, yref="paper", line=attr(color=FD.COLOUR_HUERED, width=1.5, dash="dash"))
         ]
@@ -539,4 +525,4 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
     )
 end
 
-end # module Sys_Flow
+end

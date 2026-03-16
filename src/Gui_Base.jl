@@ -1,11 +1,12 @@
 module Gui_Base
 
-# ======================================================================================
-# DAISHODOE - GUI BASE (SHARED COMPONENTS)
-# ======================================================================================
-# Description: Reusable Dash-Bootstrap components and high-fidelity styling tokens.
+# ==============================================================================
+# DAISHODOE PROJECT - GUI BASE (SHARED COMPONENTS)
+# ==============================================================================
+# Description: Reusable Dash-Bootstrap components and high-fidelity styling 
+#              tokens.
 # Module Tag:  BASE
-# ======================================================================================
+# ==============================================================================
 
 using Dash
 using DashBootstrapComponents
@@ -21,9 +22,13 @@ export BASE_StatusIcon_DDEF, BASE_IconButton_DDEF, BASE_TableHeader_DDEF, BASE_C
 export BASE_Separator_DDEF, BASE_SidebarHeader_DDEF, BASE_Upload_DDEF, BASE_NextButton_DDEF
 export BASE_BuildIdRow_DDEF, BASE_BuildLevelRow_DDEF, BASE_BuildLimitsRow_DDEF, BASE_BuildGoalRow_DDEF
 
-# --------------------------------------------------------------------------------------
-# --- SHARED STYLE CONSTANTS ---
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART A: DESIGN SYSTEM & ATOMIC WIDGETS
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 1: DATATABLE AESTHETICS & GRID TOKENS
+# ------------------------------------------------------------------------------
 
 const BASE_StyleCell_DDEC = Dict(
     "backgroundColor" => "var(--colour-val0-purwhi)",
@@ -45,6 +50,7 @@ const BASE_StyleInput_DDEC = Dict(
 const BASE_StyleInputCentre_DDEC = merge(BASE_StyleInput_DDEC, Dict("textAlign" => "center"))
 
 const BASE_StyleHeader_DDEC = Dict(
+    # Orchestration of the header background colour with standardised padding.
     "backgroundColor" => "var(--colour-val0-purwhi)", 
     "color"           => "var(--colour-val4-darhig)",
     "borderBottom"    => "2px solid var(--colour-val1-lighig)",
@@ -54,11 +60,13 @@ const BASE_StyleHeader_DDEC = Dict(
 )
 
 const BASE_StyleDatatableCell_DDEC = Dict(
+    # Standardised background colour for data-focused components.
     "backgroundColor" => "var(--colour-val0-purwhi)", 
     "color"           => "var(--colour-val5-purbla)",
     "border"          => "none",
     "borderBottom"    => "none",
     "fontFamily"      => "var(--font-sans)", 
+    # Execution of high-fidelity typography for cell data.
     "fontSize"        => "10px", 
     "padding"         => "6px 5px",
 )
@@ -87,6 +95,7 @@ const BASE_EmptyFigure_DDEC = Dict(
             Dict(
                 "text"      => "<b>No Visualisation Data</b><br><span style='font-size:12px'>Run analysis to generate plots</span>",
                 "showarrow" => false,
+                # Orchestration of the paper coordinate reference system.
                 "xref"      => "paper", 
                 "yref"      => "paper", 
                 "x"         => 0.5, 
@@ -97,9 +106,9 @@ const BASE_EmptyFigure_DDEC = Dict(
     ),
 )
 
-# --------------------------------------------------------------------------------------
-# --- UI WIDGET BUILDERS ---
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 2: GENERAL COMPONENT CONSTRUCTORS
+# ------------------------------------------------------------------------------
 
 """
     BASE_PageHeader_DDEF(title, subtitle) -> Row
@@ -112,6 +121,7 @@ function BASE_PageHeader_DDEF(title::String, subtitle::String)
             subtitle,
             html_br(),
             html_span([
+                # System alert for stateless operational constraints.
                 html_i(className="fas fa-exclamation-triangle me-1"), 
                 " Stateless architecture: Refreshing the browser will clear all inputted parameters and unsaved analyses."
             ], className="small fst-italic colourtx-v4dh", style=Dict("fontSize" => "0.75rem"))
@@ -165,9 +175,13 @@ function BASE_Modal_DDEF(id::String, title, body, footer; size="lg", is_open=fal
     ]; id=id, is_open=is_open, size=size, centered=centred, kwargs...)
 end
 
-# --------------------------------------------------------------------------------------
-# --- SHARED HELPER FUNCTIONS ---
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART B: SHARED HELPERS & DYNAMIC BUILDERS
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 3: CALLBACK CONTEXT & DATA TRANSLATION
+# ------------------------------------------------------------------------------
 
 """
     BASE_SafeRows_DDEF(d) -> Vector{Dict{String,Any}}
@@ -254,13 +268,11 @@ function BASE_StatusIcon_DDEF(symbol::String, id::String; color_class::String="c
         s["fontWeight"] = "bold"
     end
     
-    # Unique ID for the target to ensure Dash identifies it correctly
     target_id = id
     icon = html_span(symbol, id=target_id, className=color_class, style=s)
     
     isnothing(tip) && return icon
     
-    # Use a unique ID for the tooltip as well to prevent DOM pollution
     tip_id = "tip-" * id
     return html_span([
         icon, 
@@ -285,7 +297,6 @@ end
 Standardised table header cell with consistent typography and padding.
 """
 function BASE_TableHeader_DDEF(label::String; width="auto", textAlign="center", padding="2px", kwargs...)
-    # Start with themed foundation from design system
     style_payload = copy(BASE_StyleInlineHeader_DDEC)
     
     # Apply standard overrides from defaults
@@ -293,10 +304,8 @@ function BASE_TableHeader_DDEF(label::String; width="auto", textAlign="center", 
     style_payload["textAlign"] = textAlign
     style_payload["padding"] = padding
     
-    # Extract and merge extra styles if provided via kwargs
     args = Dict(kwargs)
     if haskey(args, :style)
-        # Deep merge/override of style dictionary
         merge!(style_payload, args[:style])
         delete!(args, :style)
     end
@@ -360,9 +369,9 @@ function BASE_Upload_DDEF(id::String, label::String, icon::String; multiple=fals
     return dbc_row(dbc_col(dcc_upload(id=id, children=BASE_ActionButton_DDEF(id * "-btn", label, icon; class=class, kwargs...), multiple=multiple), xs=12))
 end
 
-# --------------------------------------------------------------------------------------
-# --- UI BUILDERS ---
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 4: UI BUILDERS (DECK & LENS)
+# ------------------------------------------------------------------------------
 
 """
     BASE_BuildIdRow_DDEF(i, row, visible, [show_del]) -> Tr
@@ -374,7 +383,6 @@ function BASE_BuildIdRow_DDEF(i, row, visible, show_del=false)
 
     name_input_style = Dict{String, Any}()
 
-    # Ensure delete button ID always exists in layout for callback stability
     del_btn = html_button("×", id="deck-del-$i", n_clicks=0,
         className = "colourtx-v4dh",
         style = Dict(
@@ -389,13 +397,12 @@ function BASE_BuildIdRow_DDEF(i, row, visible, show_del=false)
         )
     )
 
-    # Automatic radioactive flag for UI (syncs with data logic)
+    # Automated determination of radioactivity status for UI synchronisation.
     hl_v     = Float64(get(row, "HalfLife", 0.0))
     is_radio = (get(row, "IsRadioactive", false) == true) || (hl_v > 0.0)
 
-    # MW indicator (Chemical) -> Blue (c2sb)
-    # Half-life indicator (Radioactivity) -> Green (c4tg)
     mw_v        = Float64(get(row, "MW", 0.0))
+    # Chromatic orchestration for molecular weight and radioactivity indicators.
     dot1_class  = mw_v > 0.0 ? "colourtx-c2sb" : "colourtx-v4dh" 
     dot2_class  = hl_v > 0.0 ? "colourtx-c4tg" : "colourtx-v4dh"
 
@@ -493,6 +500,13 @@ function BASE_BuildGoalRow_DDEF(i)
     ])
 end
 
+# ==============================================================================
+# PART C: SYSTEM DIAGNOSTICS & INTEGRITY
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 5: SYSTEM AUDIT UI (HARDWARE MONITOR)
+# ------------------------------------------------------------------------------
 """
     BASE_SystemAuditUI_DDEF() -> Container
 Generates the technical diagnostic interface for monitoring system health and resources.
@@ -548,6 +562,9 @@ function BASE_SystemAuditUI_DDEF()
     ], fluid=true, className="overflow-hidden p-0")
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 6: SCIENTIFIC INTEGRITY CERTIFICATE
+# ------------------------------------------------------------------------------
 """
     BASE_ScientificAuditUI_DDEF() -> Container
 Generates the integrity certificate interface to verify architectural consistency.
@@ -570,8 +587,8 @@ function BASE_ScientificAuditUI_DDEF()
     metrics_colour = has_metrics ? "var(--colour-chr4-tongre)" : "var(--colour-chr0-huered)"
 
     is_passed = isempty(missing_mods) && isempty(broken_bridges) && has_metrics
-
-    # Safely convert to strings before passing to Dash
+ 
+    # Execution of the string-conversion protocol for architectural compatibility with the Dash interface.
     stat_mod = isempty(missing_mods) ? "ALL LOADED" : "MISSING"
     stat_bridge = isempty(broken_bridges) ? "CONNECTED" : "BROKEN"
     stat_metrics = has_metrics ? "ACTIVE" : "MISSING"
@@ -596,4 +613,4 @@ function BASE_ScientificAuditUI_DDEF()
     ], fluid=true, className="overflow-hidden p-0")
 end
 
-end # module Gui_Base
+end

@@ -1,29 +1,39 @@
+# ==============================================================================
+# DAISHODOE PROJECT - APP MAIN
+# ==============================================================================
 # Description: Primary application entry point, routing orchestrator, and UI layout definition.
-# Version:     v1.0-dev 
 # Author:      Ecz. Eren Selim GÖL
+# Version:     v1.0-dev
+# Module Tag:  APP
+# ==============================================================================
 
-# --- Environment & Stability Configurations ---
-# These overrides must be established prior to initialising graphical libraries
+# ==============================================================================
+# PART A: SYSTEM ARCHITECTURE & INITIALISATION
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 1: ENVIRONMENT & STABILITY CONFIGURATIONS
+# ------------------------------------------------------------------------------
 ENV["GKSwstype"]               = "100"
 ENV["JULIA_WEBIO_NOT_AVAILABLE"] = "1"
 ENV["PLOTLY_KALEIDO_NO_SANDBOX"] = "1"
 
-# --- Core Dependencies ---
 using Dash
 using DashBootstrapComponents
 using Pkg
 using DataFrames
 using PlotlyJS
 
-# --- HuggingFace Spaces Detection ---
+# ------------------------------------------------------------------------------
+# SECTION 2: INFRASTRUCTURE DETECTION
+# ------------------------------------------------------------------------------
 const APP_IsHfSpaces_DDEC = haskey(ENV, "SPACE_ID")
 const APP_Port_DDEC       = if APP_IsHfSpaces_DDEC
     parse(Int, get(ENV, "PORT", "7860"))
 else
-    8060 # Local standard port
+    8060 
 end
 
-# --- Hot Reload Functionality (Local Deployment) ---
 const APP_HasRevise_DDEC = if APP_IsHfSpaces_DDEC
     false
 else
@@ -35,7 +45,9 @@ else
     end
 end
 
-# --- Module Scope Fix ---
+# ------------------------------------------------------------------------------
+# SECTION 3: BOOTSTRAP INCLUDES & MODULE SCOPE
+# ------------------------------------------------------------------------------
 try
     if APP_HasRevise_DDEC && !haskey(ENV, "DASH_DEBUG")
         Revise.includet("src/Sys_Fast.jl")
@@ -47,9 +59,11 @@ catch e
     rethrow(e)
 end
 using Main.Sys_Fast
-Sys_Fast.FAST_InitialiseWorkforce_DDEF() # Initialise transient storage for execution environment
+Sys_Fast.FAST_InitialiseWorkforce_DDEF()
 
-# --- Terminal Identity (Official Julia REPL) ---
+# ------------------------------------------------------------------------------
+# SECTION 4: TERMINAL IDENTITY & SYSTEM REPORTING
+# ------------------------------------------------------------------------------
 println("\e[1m               \e[32m_\e[0m")
 println("\e[1m   \e[34m_\e[0m       _ \e[31m_\e[32m(_)\e[35m_\e[0m     |  \e[1mDaishoDoE Engine\e[0m v1.0-dev")
 println("\e[1m  \e[34m(_)\e[0m     | \e[31m(_)\e[0m \e[35m(_)\e[0m    |  System Status: \e[32m[OPTIMAL]\e[0m")
@@ -57,18 +71,17 @@ println("\e[1m   _ _   _| |_  __ _   |")
 println("\e[1m  | | | | | | |/ _` |  |  Radiopharmacy Research Software")
 println("\e[1m  | | |_| | | | (_| |  |  Author: E.S. GÖL, Pharmacist")
 println("\e[1m _/ |\\__'_|_|_|\\__'_|  |  Department of Radiopharmacy")
-println("\e[1m|__/                   |  Hacettepe University")
+println("\e[1m|__/                   |  Hacettepe University. 2026.")
 
-# System Status Reporting
 let (n_threads, _, _) = Sys_Fast.FAST_GetThreadInfo_DDEF()
     status = n_threads > 1 ? "[OPTIMAL]" : "\e[31m[LIMITED]\e[0m"
     println("\n\e[1m  Computing Core: \e[0m\e[32m$n_threads Threads\e[0m $status")
     println("\e[1m  System Wisdom:  \e[0m\e[36m\"$(Sys_Fast.FAST_GetSystemQuote_DDEF())\"\e[0m\n")
 end
 
-# --------------------------------------------------------------------------------------
-# --- MODULE INTEGRATION ---
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 5: MODULE INTEGRATION BUS
+# ------------------------------------------------------------------------------
 
 for (label, file) in [
     ("Molecule Engine: Lib_Mole",   "src/Lib_Mole.jl"),
@@ -93,7 +106,6 @@ for (label, file) in [
     end
 end
 
-# Explicitly bring all modules into the current namespace
 using Main.Lib_Arts
 using Main.Lib_Core
 using Main.Lib_Mole
@@ -106,14 +118,15 @@ using Main.Gui_Lens
 
 FAST_Log_DDEF("BOOT", "Complete", "All Modules Integrated", "OK")
 
-# --------------------------------------------------------------------------------------
-# --- TRANSIENT HOUSEKEEPING ---
-# --------------------------------------------------------------------------------------
 Sys_Fast.FAST_InitialiseWorkforce_DDEF()
 
-# --------------------------------------------------------------------------------------
-# --- APP CONFIGURATION ---
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART B: UI FRAMEWORK & DASH LAYOUT
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 6: DASH APP INITIALISATION
+# ------------------------------------------------------------------------------
 
 FAST_Log_DDEF("INIT", "Setup", "Configuring Dash Framework...", "WAIT")
 pathname_prefix = get(ENV, "DASH_REQUESTS_PATHNAME_PREFIX", "/")
@@ -153,9 +166,9 @@ app.index_string = """
 </html>
 """
 
-# --------------------------------------------------------------------------------------
-# --- UI COMPONENTS ---
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 7: GLOBAL UI COMPONENTS
+# ------------------------------------------------------------------------------
 
 const APP_Navbar_DDEC = html_div([
     html_div([
@@ -180,7 +193,9 @@ const APP_Navbar_DDEC = html_div([
 
 const APP_Content_DDEC = html_div(id="page-content", className="app-container")
 
-# 3. Main Application Framework
+# ------------------------------------------------------------------------------
+# SECTION 8: APPLICATION PERSISTENCE STORES
+# ------------------------------------------------------------------------------
 const APP_SystemReady_DDEC = Threads.Atomic{Bool}(false)
 
 app.layout = html_div([
@@ -188,15 +203,12 @@ app.layout = html_div([
     APP_Navbar_DDEC,
     APP_Content_DDEC,
 
-    # Global Application State
     dcc_store(id="store-session-config", storage_type="memory"),
     dcc_store(id="store-master-vault",   storage_type="memory"),
-
-    # Component Communication Bus
     dcc_store(id="sync-deck-content",  storage_type="memory"),
     dcc_store(id="sync-lens-content",  storage_type="memory"),
     dcc_store(id="sync-lens-analysis", storage_type="memory"),
-    dcc_store(id="lens-store-diag-force", data=0, storage_type="memory"), # Global Diagnostic Signal
+    dcc_store(id="lens-store-diag-force", data=0, storage_type="memory"),
 
     dbc_toast(id="global-toast",
         header="System Notification", is_open=false, dismissable=true,
@@ -207,7 +219,9 @@ app.layout = html_div([
         )
     ),
 
-    # Comprehensive Diagnostics Modal
+# ------------------------------------------------------------------------------
+# SECTION 9: DIAGNOSTICS MODAL ARCHITECTURE
+# ------------------------------------------------------------------------------
     dbc_modal([
         dbc_modalheader("System Diagnostics & Scientific Integrity"),
         dbc_modalbody([
@@ -223,7 +237,9 @@ app.layout = html_div([
         dbc_modalfooter(dbc_button("Close", id="btn-close-diagnostics", className="ms-auto colourgl-c0hr", n_clicks=0, outline=false))
     ], id="modal-diagnostics", size="xl", is_open=false),
 
-    # System readiness overlay + polling
+# ------------------------------------------------------------------------------
+# SECTION 10: SYSTEM READINESS OVERLAY
+# ------------------------------------------------------------------------------
     dcc_interval(id="sys-ready-poll", interval=500, max_intervals=-1),
     html_div(id="sys-loading-overlay", children=[
         html_div([
@@ -252,11 +268,14 @@ app.layout = html_div([
     )),
 ])
 
-# --------------------------------------------------------------------------------------
-# --- ROUTING & CALLBACK ORCHESTRATION ---
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART C: ORCHESTRATION & CALLBACK BUS
+# ==============================================================================
 
-# 1. Global State Sync Bus
+# ------------------------------------------------------------------------------
+# SECTION 11: GLOBAL STATE SYNC CALLBACKS
+# ------------------------------------------------------------------------------
+
 """
     APP_SyncVault_DDEF(deck, lens, lens_analysis) -> Any
 Synchronises session data between the UI components and the master repository.
@@ -286,7 +305,9 @@ callback!(app,
     return APP_SyncVault_DDEF(deck, lens, lens_analysis)
 end
 
-# 2. Main Navigation Orchestrator
+# ------------------------------------------------------------------------------
+# SECTION 12: TOP-LEVEL ROUTING & NAVIGATION
+# ------------------------------------------------------------------------------
 """
     APP_RoutePage_DDEF(pathname::String) -> Any
 Top-level routing orchestrator for navigating between experimental and analytical modules.
@@ -297,11 +318,11 @@ function APP_RoutePage_DDEF(pathname::String)
     elseif pathname == "/analysis"
         return LENS_Layout_DDEF()
     else
-        # --- PORTAL DASHBOARD ---
+        # Central application portal dashboard interface.
         nt::Int, tstyle::String, tmsg::String = Sys_Fast.FAST_GetThreadInfo_DDEF()
         
         return html_div([
-            # Hero Section
+            # Visual brand identity and scientific mission statement.
             dbc_container([
                 dbc_row(dbc_col([
                     html_h1("DaishoDoE", 
@@ -318,9 +339,7 @@ function APP_RoutePage_DDEF(pathname::String)
                     ),
                 ], xs=12, className="text-center mt-5 pt-4")),
 
-                # Action Cards
                 dbc_row([
-                    # Design Card
                     dbc_col([
                         dcc_link(html_div([
                             html_div(html_i(className="fas fa-flask", style=Dict("color" => "var(--colour-val0-purwhi)")),
@@ -338,7 +357,6 @@ function APP_RoutePage_DDEF(pathname::String)
                         ], className="glass-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")), href="/design", style=Dict("textDecoration" => "none")),
                     ], xs=12, md=6, className="mb-4"),
 
-                    # Analysis Card
                     dbc_col([
                         dcc_link(html_div([
                             html_div(html_i(className="fas fa-chart-line", style=Dict("color" => "var(--colour-val0-purwhi)")),
@@ -357,7 +375,6 @@ function APP_RoutePage_DDEF(pathname::String)
                     ], xs=12, md=6, className="mb-4"),
                 ], className="g-4 mb-5", style=Dict("maxWidth" => "900px", "margin" => "0 auto")),
 
-                # System Diagnostics Footer
                 dbc_row(dbc_col(html_div([
                     html_div([
                         html_div([
@@ -391,6 +408,9 @@ callback!(app, Output("page-content", "children"), Input("url", "pathname")) do 
     return APP_RoutePage_DDEF(isnothing(pathname) ? "/" : pathname)
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 13: DIAGNOSTICS ORCHESTRATOR
+# ------------------------------------------------------------------------------
 callback!(app,
     Output("modal-diagnostics",             "is_open"),
     Output("modal-diagnostics-sys-content", "children"),
@@ -416,7 +436,9 @@ callback!(app,
     return is_open, Dash.no_update(), Dash.no_update()
 end
 
-# --- System Diagnostics & Emergency Recovery ---
+# ------------------------------------------------------------------------------
+# SECTION 14: EMERGENCY RECOVERY & LOCK RELEASE BUS
+# ------------------------------------------------------------------------------
 callback!(app,
     Output("lens-store-diag-force", "data"),
     Output("diag-global-output",    "children"),
@@ -431,10 +453,10 @@ callback!(app,
     
     if trig == "btn-diag-force-unlock"
         (isnothing(n_lock) || n_lock == 0) && return Dash.no_update(), Dash.no_update()
-        # 1. Backend: Reset all reentrant locks
+        # Reset system-wide backend reentrant synchronisation locks.
         Sys_Fast.FAST_ForceReleaseAll_DDEF()
         
-        # 2. Frontend: Emit synchronisation signal (timestamp)
+        # Emit frontend synchronisation signal via system timestamp.
         new_force = Int(round(time()))
         
         msg = html_div([
@@ -446,7 +468,7 @@ callback!(app,
         
     elseif trig == "btn-diag-clear-temp"
         (isnothing(n_temp) || n_temp == 0) && return Dash.no_update(), Dash.no_update()
-        # 1. Backend: Deep clean workforce bunker
+        # Execute comprehensive purge of the backend workforce transient storage.
         Sys_Fast.FAST_CleanWorkforce_DDEF(true)
         
         msg = html_div([
@@ -460,7 +482,9 @@ callback!(app,
     return Dash.no_update(), Dash.no_update()
 end
 
-# Loading overlay dismiss callback (polls until warmup completes)
+# ------------------------------------------------------------------------------
+# SECTION 15: UI LOADING POLISH
+# ------------------------------------------------------------------------------
 """
     APP_HandleLoadingOverlay_DDEF(n::Any) -> Tuple{Any, Bool}
 Manages the visibility of the initial loading screen based on background JIT pre-compilation status.
@@ -469,7 +493,7 @@ function APP_HandleLoadingOverlay_DDEF(n::Any)
     ready::Bool = APP_SystemReady_DDEC[]
     n_val::Int  = isnothing(n) ? 0 : Int(n)
 
-    # Only log status if NOT ready, reduce frequency to ~1 min
+    # Status check logging active during pre-operation phase with regulated polling frequency.
     if !ready && n_val % 30 == 0
         Sys_Fast.FAST_Log_DDEF("BOOT", "UI_SYNC", "Status Check: Waiting for System Pre-compilation... (Poll #$n_val)", "INFO")
     end
@@ -489,15 +513,17 @@ callback!(app,
     return APP_HandleLoadingOverlay_DDEF(n)
 end
 
-# Register Child Callbacks
+# ==============================================================================
+# PART D: JIT PULSE & BOOTSTRAP
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 16: CHILD CALLBACK REGISTRATION & JIT WARMUP ROUTINE
+# ------------------------------------------------------------------------------
 DECK_RegisterCallbacks_DDEF(app)
 LENS_RegisterCallbacks_DDEF(app)
 
-# --------------------------------------------------------------------------------------
-# --- JIT WARMUP ROUTINE ---
-# --------------------------------------------------------------------------------------
-
-# Lightweight warmup for HF Spaces to avoid startup timeout
+# Accelerated warmup sequence configured for cloud deployment stability.
 """
     APP_Warmup_DDEF() -> Nothing
 Orchestrates Just-In-Time (JIT) pre-compilation. Prioritises speed in local development environments.
@@ -506,7 +532,7 @@ function APP_Warmup_DDEF()::Nothing
     t0     = time()
     is_dev = get(ENV, "DAISHO_DEV", "false") == "true"
 
-    # HF Spaces or non-dev environments need thorough warmup for production stability
+    # Production environment integrity ensured through comprehensive scientific warmup.
     if APP_IsHfSpaces_DDEC && !is_dev
         FAST_Log_DDEF("BOOT", "Warmup", "Production Environment Detected (HF Spaces).", "WAIT")
         sleep(2)
@@ -520,24 +546,23 @@ function APP_Warmup_DDEF()::Nothing
     FAST_Log_DDEF("BOOT", "Pre-compilation", "Initiating Scientific JIT Pulse...", "WAIT")
 
     try
-        # 1. Type system & Core Logic
         Sys_Fast.FAST_SafeNum_DDEF("42.0")
         
-        # 2. Physics & Chemistry (Safe Linear Pulse)
-        # Mock data for CalcMass - Balanced to 100% via %M
+        # Simulation mass data balanced to stoichiometric unity via relative mass units.
         names_mock  = String["A"]
         mw_mock     = Float64[100.0]
         ratios_mock = Float64[100.0]
         units_mock  = String["%M"]
         Lib_Mole.MOLE_CalcMass_DDEF(names_mock, mw_mock, ratios_mock, 5.0, 10.0, units_mock, 1.0; SuppressLog=true)
         
-        # Dummy table data for AuditBatch - Include Filler for auto-balance
+        # Synthesised audit batch parameters including auto-balancing filler components.
         table_mock = [Dict("Name"=>"A", "MW"=>100.0, "Unit"=>"%M", "Type"=>"Variable", "Min"=>0.0, "Max"=>50.0, "Mid"=>25.0, "Rows"=>[[Dict("Unit"=>"%M")]]),
                      Dict("Name"=>"W", "MW"=>18.0, "Unit"=>"%", "Type"=>"Filler", "Min"=>0.0, "Max"=>100.0, "Mid"=>50.0)]
-        design_mock = fill(20.0, 5, 1) # 20% A, rest is Filler. Safe.
+        # Safe stochiometric configuration with proportional filler balance.
+        design_mock = fill(20.0, 5, 1) 
+
         Lib_Mole.MOLE_AuditBatch_DDEF(table_mock, design_mock, 5.0, 10.0)
 
-        # 3. Analytics (Safe Linear Pulse)
         X_dummy = rand(11, 3) 
         Y_dummy = rand(11, 1)
         names_in = ["X1", "X2", "X3"]
@@ -550,7 +575,6 @@ function APP_Warmup_DDEF()::Nothing
         bounds_dummy = [0.0 1.0; 0.0 1.0; 0.0 1.0]
         Lib_Vise.VISE_GridSearch_DDEF([mod_dummy], goals_dummy, bounds_dummy)
         
-        # Memory Housekeeping
         GC.gc()
     catch e
         FAST_Log_DDEF("BOOT", "Warmup_Warn", "JIT pulse encountered warnings: $e", "WARN")
@@ -563,7 +587,9 @@ function APP_Warmup_DDEF()::Nothing
     return nothing
 end
 
-# Launch warmup
+# ------------------------------------------------------------------------------
+# SECTION 17: SERVER BOOTSTRAP & ASYNC LAUNCH
+# ------------------------------------------------------------------------------
 Threads.@spawn APP_Warmup_DDEF()
 
 try

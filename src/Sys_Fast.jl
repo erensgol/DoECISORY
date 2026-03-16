@@ -1,11 +1,12 @@
 module Sys_Fast
 
-# ======================================================================================
-# DAISHODOE - SYSTEM FAST (IO & UTILS)
-# ======================================================================================
-# Description: High-speed I/O (Excel/XLSX), system-wide logging, and transient data orchestration.
+# ==============================================================================
+# DAISHODOE PROJECT - SYSTEM FAST (IO & UTILS)
+# ==============================================================================
+# Description: High-speed I/O (Excel/XLSX), system-wide logging, and transient 
+#              data orchestration.
 # Module Tag:  FAST
-# ======================================================================================
+# ==============================================================================
 
 using Dates
 using Printf
@@ -37,12 +38,13 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
     FAST_SanitiseFilename_DDEF,
     FAST_LoadMemoFile_DDEF
 
-# --------------------------------------------------------------------------------------
-# --- CONSTANTS & CONFIGURATION ---
+# ==============================================================================
+# PART A: SYSTEM ARCHITECTURE & TRANSIENT WORKFORCE
+# ==============================================================================
 
-# --------------------------------------------------------------------------------------
-# --- CONSTANTS & CONFIGURATION ---
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 1: SYSTEM-WIDE CONSTANTS & COLOURS
+# ------------------------------------------------------------------------------
 
 """
     FAST_Constants_DDES
@@ -91,9 +93,9 @@ end
 
 const FAST_Data_DDEC = FAST_Constants_DDES()
 
-# --------------------------------------------------------------------------------------
-# --- TRANSIENT STORAGE MANAGEMENT ---
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 2: TRANSIENT STORAGE MANAGEMENT
+# ------------------------------------------------------------------------------
 
 """
     FAST_TempRoot_DDEC
@@ -106,7 +108,6 @@ const FAST_TempRoot_DDEC = joinpath(tempdir(), "DaishoDoE_Workforce")
 Initialises transient directories and clears existing temporary files.
 """
 function FAST_InitialiseWorkforce_DDEF()
-    # PRE-FLIGHT: Force environment variables to trap leaky external libraries (Plotly, Kaleido, etc.)
     ENV["TMP"]    = FAST_TempRoot_DDEC
     ENV["TEMP"]   = FAST_TempRoot_DDEC
     ENV["TMPDIR"] = FAST_TempRoot_DDEC
@@ -125,30 +126,29 @@ function FAST_InitialiseWorkforce_DDEF()
     end
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 3: FILESYSTEM CLEANING & GARDENING
+# ------------------------------------------------------------------------------
 function FAST_CleanWorkforce_DDEF(all::Bool=false)::Nothing
     !isdir(FAST_TempRoot_DDEC) && return nothing
 
     try
-        # Recursive cleaning: get all files and directories
         for (root, dirs, files) in walkdir(FAST_TempRoot_DDEC; topdown=false)
             for f in files
-                # Safety Guard: Never delete files not matching Daisho pattern unless 'all' is true
+                # Integrity Protocol: Enforcement of restricted deletion for files non-compliant with DDE patterns.
                 if all || startswith(f, "DAISHO_TEMP_") || startswith(f, "DDE_")
                     try
                         rm(joinpath(root, f); force=true)
                     catch
-                        # Ignore locked files
                     end
                 end
             end
             for d in dirs
                 try
-                    # Only remove if it's within our root
                     if root != FAST_TempRoot_DDEC || all
                          rm(joinpath(root, d); force=true, recursive=true)
                     end
                 catch
-                    # Ignore locked directories
                 end
             end
         end
@@ -168,7 +168,6 @@ Surgically removes a specific transient file from the workforce.
 function FAST_CleanTransient_DDEF(path::Union{String,Nothing})
     (isnothing(path) || isempty(path) || !isfile(path)) && return nothing
     
-    # Internal path safety check
     if !startswith(abspath(path), abspath(FAST_TempRoot_DDEC))
         FAST_Log_DDEF("FAST", "GUARD_VIOLATION", "Deletion attempt outside transient scope: $path", "FAIL")
         return nothing
@@ -181,11 +180,15 @@ function FAST_CleanTransient_DDEF(path::Union{String,Nothing})
     return nothing
 end
 
-# --------------------------------------------------------------------------------------
-# --- LOGGING SYSTEM ---
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART B: LOGGING & CONSOLE TELEMETRY
+# ==============================================================================
 
-# Pre-computed ANSI colour lookup
+# ------------------------------------------------------------------------------
+# SECTION 4: LOGGING SYSTEM & ANSI COLOURS
+# ------------------------------------------------------------------------------
+
+# Static pre-computation of ANSI escape sequences for synchronised console telemetry.
 const FAST_LogColours_DDEC = (;
     INFO="\e[34m",
     OK="\e[32m",
@@ -208,17 +211,19 @@ function FAST_Log_DDEF(Source::String, Event::String, Detail::Any="", Type::Stri
     
     @printf("\e[34m[%s]%s \e[32m%-12s%s: %s%-15s%s %s%s%s\n",
         ts, FAST_LogReset_DDEC, Source, FAST_LogReset_DDEC, c, Event, FAST_LogReset_DDEC, c, det_str, FAST_LogReset_DDEC)
-    
     flush(stdout)
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 5: FILENAME SANITISATION & COMPATIBILITY
+# ------------------------------------------------------------------------------
 """
     FAST_SanitiseFilename_DDEF(name::String) -> String
 ASCII-safe filename generator. Converts Turkish characters to ASCII and replaces 
 non-alphanumeric characters with underscores. Ensures filesystem compatibility.
 """
 function FAST_SanitiseFilename_DDEF(name::AbstractString)
-    # Mapping table for Turkish characters (UTF-8)
+    # Execution of character normalisation map for Turkish-to-ASCII collation.
     mapping = Dict(
         'ç' => 'c', 'Ç' => 'C',
         'ğ' => 'g', 'Ğ' => 'G',
@@ -228,22 +233,20 @@ function FAST_SanitiseFilename_DDEF(name::AbstractString)
         'ü' => 'u', 'Ü' => 'U'
     )
     
-    # 1. Map special characters
     res = map(c -> get(mapping, c, c), name)
-    
-    # 2. Strict ASCII filter & replace whitespace/symbols with "_"
     res = replace(res, r"[^\w\-_.]" => "_")
-    
-    # 3. Collapse multiple underscores
     res = replace(res, r"_{2,}" => "_")
     
     return strip(res, ['_'])
 end
 
-# --------------------------------------------------------------------------------------
-# --- EXCEL I/O ENGINE ---
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART C: HIGH-FIDELITY I/O & DATA SANITISATION
+# ==============================================================================
 
+# ------------------------------------------------------------------------------
+# SECTION 6: EXCEL I/O & DATA NORMALISATION
+# ------------------------------------------------------------------------------
 """
     FAST_NormaliseCols_DDEF!(df::DataFrame)::DataFrame
 Standardises DataFrame column names: Strips whitespace and forces Uppercase.
@@ -252,6 +255,7 @@ Mutates the DataFrame in-place for performance.
 function FAST_NormaliseCols_DDEF!(df::DataFrame; force_upper::Bool=false)::DataFrame
     isempty(df) && return df
     
+    # Execution of column standardisation protocol: whitespace removal and case-sensitivity normalisation.
     if force_upper
         mapping = [n => Symbol(uppercase(strip(string(n)))) for n in names(df)]
     else
@@ -286,7 +290,8 @@ function FAST_ReadExcel_DDEF(FilePath::Union{String,Nothing}, SheetName::String)
         end
 
         df = DataFrame(XLSX.readtable(FilePath, SheetName))        
-        
+
+        # Identification of data-centric sheets for mandatory schema validation.
         is_data_sheet = SheetName == FAST_Data_DDEC.SHEET_DATA || startswith(SheetName, FAST_Data_DDEC.PREFIX_LEADERS)
         
         if is_data_sheet
@@ -343,17 +348,17 @@ function FAST_SafeExcelWrite_DDEF(File::Union{String,Nothing}, Updates::Dict{Str
                 end
             end
         catch e
+            # Log notification for archival recovery or fresh initialisation requirement.
             FAST_Log_DDEF("FAST", "SAFE_WRITE", "Reference file inaccessible. Initialising fresh.", "WARN")
         end
     end
 
-    # Add new sheets or update existing ones not found in the file
     for (k, df) in Updates
         if !haskey(all_data, k)
             push!(sheet_order, k)
             all_data[k] = df
         else
-            all_data[k] = df
+        all_data[k] = df
         end
     end
 
@@ -369,7 +374,6 @@ function FAST_SafeExcelWrite_DDEF(File::Union{String,Nothing}, Updates::Dict{Str
     end
 
     if !isempty(valid_pairs)
-        # Force overwrite while preserving other sheets already in all_data
         XLSX.writetable(File, valid_pairs...; overwrite=true)
     end
     
@@ -392,6 +396,9 @@ function FAST_RoundCols_DDEF!(df::DataFrame)::DataFrame
     return df
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 7: DOWNLOAD PREPARATION & BINARY EXTRACTION
+# ------------------------------------------------------------------------------
 """
     FAST_PrepareDownload_DDEF(FilePath) -> (Success, Content)
 Reads file contents for web download action.
@@ -405,9 +412,13 @@ function FAST_PrepareDownload_DDEF(FilePath::Union{String,Nothing})
     end
 end
 
-# --------------------------------------------------------------------------------------
-# --- UTILITIES & SYSTEM DEFAULTS ---
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART D: SCIENTIFIC UTILITIES & TYPE SAFETY
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 8: NUMERIC COERCION & COMPATIBILITY
+# ------------------------------------------------------------------------------
 
 """
     FAST_SafeNum_DDEF(Input::Any)::Float64
@@ -423,13 +434,16 @@ function FAST_SafeNum_DDEF(Input::Any)::Float64
     s::String = strip(string(Input))
     (isempty(s) || s == "-" || lowercase(s) == "nan") && return NaN
 
-    # Handle comma/dot ambiguity
+    # Resolution of numeric ambiguity involving localised decimal delimiters (comma-to-dot).
     clean_s = replace(s, ',' => '.')
     res     = tryparse(Float64, clean_s)
     
     return something(res, NaN)
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 9: INPUT SANITISATION ENGINE
+# ------------------------------------------------------------------------------
 """
     FAST_SanitiseInput_DDEF(TableData::AbstractVector)::Tuple{Vector{Dict{String,Any}}, Vector{String}}
 Transforms raw UI Table data into typed scientific Dictionaries.
@@ -438,34 +452,28 @@ Implements automatic feature recognition for radioactivity and filler logic.
 function FAST_SanitiseInput_DDEF(TableData::AbstractVector)::Tuple{Vector{Dict{String,Any}},Vector{String}}
     warnings = String[]
 
-    sanitized = map(enumerate(TableData)) do (idx, raw)
-        # Idiomatic key conversion
+    sanitised = map(enumerate(TableData)) do (idx, raw)
         r = Dict{String,Any}(string(k) => v for (k, v) in raw)
 
-        # 1. Structural Normalisation
         row_name = string(get(r, "Name", "Unnamed_Item_$(idx)"))
         r["Name"] = row_name
         r["Role"] = string(get(r, "Role", "Variable"))
         r["Unit"] = string(get(r, "Unit", ""))
         r["HalfLifeUnit"] = string(get(r, "HalfLifeUnit", "Hours"))
 
-        # Boolean Logic
         r["IsRadioactive"] = get(r, "IsRadioactive", false) == true
 
-        # 2. Safe Numeric Coercion Loop
         num_fields = ("L1", "L2", "L3", "MW", "Min", "Max", "Target", "HalfLife")
         for key in num_fields
             val = get(r, key, nothing)
             clean_val = FAST_SafeNum_DDEF(val)
 
-            # Warn on data loss/corruption
             if isnan(clean_val) && !isnothing(val) && val !== missing && string(val) != ""
                 push!(warnings, "Item '$row_name': Invalid input for '$key' ($val) coerced to 0.0")
             end
             r[key] = isnan(clean_val) ? 0.0 : clean_val
         end
 
-        # 3. Intelligence Layers
         if r["HalfLife"] > 0.0
             r["IsRadioactive"] = true
         end
@@ -477,6 +485,9 @@ function FAST_SanitiseInput_DDEF(TableData::AbstractVector)::Tuple{Vector{Dict{S
     return (sanitized, warnings)
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 10: LAB DEFAULTS & SESSION INCEPTION
+# ------------------------------------------------------------------------------
 """
     FAST_GetLabDefaults_DDEF()::Dict{String,Any}
 Provides the canonical initial state for a fresh Daisho session.
@@ -497,14 +508,16 @@ function FAST_GetLabDefaults_DDEF()::Dict{String,Any}
     )
 end
 
-
+# ------------------------------------------------------------------------------
+# SECTION 11: JSON RECURSIVE SANITISATION
+# ------------------------------------------------------------------------------
 """
     FAST_SanitiseJson_DDEF(x::Any)::Any
 Recursively filters Julia objects into JSON-compliant structures.
 Converts DataFrames to row-dicts and ensures NaNs/Missings map to 'null'.
 """
 function FAST_SanitiseJson_DDEF(x::Any)::Any
-    # Declarative pattern matching for JSON sanitization
+    # Execution of declarative pattern matching for recursive data structure sanitisation.
     if x === missing || x === nothing || (x isa AbstractFloat && isnan(x))
         return nothing
     elseif x isa DataFrame
@@ -523,6 +536,13 @@ function FAST_SanitiseJson_DDEF(x::Any)::Any
     end
 end
 
+# ==============================================================================
+# PART E: CONFIGURATION SYNC & VAULT OPS
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 12: MASTER RECORD INITIALISATION (XLSX)
+# ------------------------------------------------------------------------------
 """
     FAST_InitMaster_DDEF(File, InNames, OutNames, [DesignData], [Config]) -> Bool
 Initialises or updates the primary Excel record with headers and configuration metadata.
@@ -533,10 +553,8 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
         C = FAST_Data_DDEC
         FAST_Log_DDEF("FAST", "Init Master", "Target: $File", "WAIT")
 
-        # 1. Base Meta Columns (Strict Order)
         headers = [C.COL_EXP_ID, C.COL_PHASE, C.COL_STATUS, C.COL_NOTES]
 
-        # 2. Extract and Categorise provided data columns
         if !isnothing(DesignData)
             data_cols = names(DesignData)
             for col in data_cols
@@ -545,8 +563,8 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
                 end
             end
             
-            # Robust mapping for Inputs/Fixed/Fillers that may contain unit suffixes
-            for name in InNames
+                # Execution of robust mapping for Inputs/Fixed/Fillers exhibiting unit suffixes.
+                for name in InNames
                 for pfx in (C.PRE_INPUT, C.PRE_FIXED, C.PRE_FILL)
                     # Find any column that starts with prefix + name
                     target_pfx = pfx * name
@@ -564,7 +582,6 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
             end
         end
 
-        # 3. Append Performance/Result/Prediction/Score
         for n in OutNames
             push!(headers, C.PRE_RESULT * n)
         end
@@ -573,7 +590,6 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
         end
         push!(headers, C.COL_SCORE)
 
-        # 3b. Append Chronological/Radioactivity Columns if present
         if !isnothing(DesignData)
             for chr_col in ("CHRO_HOUR", "CHRO_MIN")
                 if chr_col ∈ names(DesignData) && chr_col ∉ headers
@@ -582,7 +598,6 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
             end
         end
 
-        # 4. Data Integration (Smart Appending)
         df_new = isnothing(DesignData) ? DataFrame(Dict(h => [] for h in headers)) : copy(DesignData)
 
         for col in setdiff(headers, names(df_new))
@@ -594,13 +609,9 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
             try
                 df_old = FAST_ReadExcel_DDEF(File, C.SHEET_DATA)
                 if !isempty(df_old)
-                    # Support legacy files
                     FAST_NormaliseCols_DDEF!(df_old)
-
-                    # Preserve existing column order
                     headers = names(df_old)
 
-                    # Ensure all required new headers are present
                     for h in setdiff(names(df_new), headers)
                         push!(headers, h)
                     end
@@ -621,10 +632,7 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
         end
 
         FAST_RoundCols_DDEF!(df_final_data)
-
-        # 5. File Construction via SafeWrite
         
-        # Build Config
         clean_config = FAST_SanitiseJson_DDEF(Config)
         json_str     = isempty(Config) ? "{}" : JSON3.write(clean_config)
         config_df    = DataFrame(
@@ -648,8 +656,9 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
     end
 end
 
-# --- WRITELEADERS MOVED TO Sys_Flow.jl ---
-
+# ------------------------------------------------------------------------------
+# SECTION 13: FILENAME GENERATION (SMART)
+# ------------------------------------------------------------------------------
 """
     FAST_GenerateSmartName_DDEF(Project, Phase, Tag, [Extension]) -> String
 Generates a unique, descriptive filename according to the project protocol.
@@ -658,8 +667,6 @@ Template: DDE_[Proj]_[Phase]_[Tag]_[Timestamp].[Ext]
 function FAST_GenerateSmartName_DDEF(Project::String, Phase::String, Tag::String, Ext::String="xlsx")::String
     p_raw    = strip(Project)
     p_clean  = (isempty(p_raw) || lowercase(p_raw) == "daisho") ? "Daisho" : FAST_SanitiseFilename_DDEF(p_raw)
-    
-    # Standardise Phase (Phase1 -> P1, P1 -> P1)
     ph_clean = replace(Phase, "Phase" => "P")
     ts       = Dates.format(now(), "yyyy_mmdd_HHMM")
     
@@ -672,18 +679,21 @@ Extracts the project name from a Daisho standard filename.
 Returns empty string if the pattern doesn't match.
 """
 function FAST_ExtractProjectFromFilename_DDEF(Filename::String)::String
-    # Pattern: DDE_ProjectName_Phase_Tag_TS.ext
+    # Formulation of the extraction pattern: DDE_ProjectName_Phase_Tag_TS.ext.
     m = match(r"^DDE_(.*?)_P\d+_", Filename)
     return isnothing(m) ? "" : string(m.captures[1])
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 14: TRANSIENT PATH ORCHESTRATION
+# ------------------------------------------------------------------------------
 """
     FAST_GetTransientPath_DDEF([DataHandle]) -> String
 Creates an identifiable temporary file path within the transient directory.
 If DataHandle is a Hash, it retrieves binary from Vault. If it's Base64, it decodes it.
 """
 function FAST_GetTransientPath_DDEF(DataHandle::Union{String,Nothing}=nothing)::String
-    # Ensure directory exists (failsafe)
+    # Architectural Enforcement: Verification of transient directory existence prior to allocation.
     isdir(FAST_TempRoot_DDEC) || mkpath(FAST_TempRoot_DDEC)
 
     ts       = Dates.format(now(), "HHmmss_SSS")
@@ -691,14 +701,12 @@ function FAST_GetTransientPath_DDEF(DataHandle::Union{String,Nothing}=nothing)::
     tmp_path = joinpath(FAST_TempRoot_DDEC, "DAISHO_TEMP_$(ts)_$(rnd).xlsx")
 
     if !isnothing(DataHandle) && !isempty(DataHandle)
-        # 1. Try Vault Retrieval (Optimised Path)
         vault_binary = FAST_VaultRead_DDEF(DataHandle)
         if !isnothing(vault_binary)
             write(tmp_path, vault_binary)
             return tmp_path
         end
 
-        # 2. Fallback to Base64 Decoding (Legacy Compat)
         if contains(DataHandle, ";base64,")
             write(tmp_path, base64decode(split(DataHandle, ',')[end]))
         end
@@ -717,11 +725,8 @@ function FAST_ReadToStore_DDEF(Path::Union{String,Nothing})::String
         
         binary = read(Path)
         h_val  = string(hash(binary))
-        
-        # Persist to server memory
         FAST_VaultWrite_DDEF(h_val, binary)
         
-        # Return only the handle (h_val) to Dash
         return h_val
     catch
         return ""
@@ -745,7 +750,7 @@ function FAST_ReadConfig_DDEF(File::Union{String,Nothing})::Dict{String,Any}
         isnothing(idx) && return Dict{String,Any}()
 
         json_str = df[idx, :VALUE_JSON]
-        # Robustness: ensure we are not trying to parse a binary/PK stream as JSON
+        # Scientific Integrity Check: Detection of binary/PK signatures in JSON-designated fields.
         js_val = string(json_str)
         if startswith(js_val, "PK")
             FAST_Log_DDEF("FAST", "READ_CONFIG_WARN", "Binary signature detected in JSON field. Aborting parse.", "WARN")
@@ -792,13 +797,16 @@ function FAST_UpdateConfig_DDEF(File::Union{String,Nothing}, Updates::Dict)::Boo
     end
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 15: HARDWARE AUDIT & THREADING
+# ------------------------------------------------------------------------------
 """
     FAST_GetThreadInfo_DDEF()::Tuple{Int, String, String}
 Audit check for CPU concurrency status. Returns (Count, Theme_Colour, Status_Message).
 """
 function FAST_GetThreadInfo_DDEF()::Tuple{Int,String,String}
     n::Int = Threads.nthreads()
-    # High-performance status reporting
+    # Provision of high-performance status telemetry for CPU concurrency.
     n > 1 ? (n, "var(--colour-chr4-tongre)", "$n Threads [OPTIMAL]") : (n, "var(--colour-chr5-hueyel)", "1 Thread [SUB-OPTIMAL]")
 end
 
@@ -822,9 +830,9 @@ function FAST_LoadMemoFile_DDEF(FilePath::String)::Dict{String,Any}
     end
 end
 
-# --------------------------------------------------------------------------------------
-# --- RACE CONDITION LOCK ---
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 16: RACE CONDITION LOCK
+# ------------------------------------------------------------------------------
 
 # Global atomic lock pool — keyed by operation name
 const FAST_OperationLocks_DDEC = Dict{String,ReentrantLock}()
@@ -832,7 +840,7 @@ const FAST_LockGuard_DDEC = ReentrantLock()
 
 """
     FAST_AcquireLock_DDEF(op_name, Reason::String="Unspecified") -> Bool
-Attempts to acquire a named operation lock without blocking. Logs status for system transparency.
+Attempts to acquire a named operation lock without blocking. Status telemetry is documented for system transparency.
 """
 function FAST_AcquireLock_DDEF(op_name::Union{String,Nothing}, Reason::String="Unspecified")::Bool
     (isnothing(op_name) || isempty(op_name)) && return false
@@ -855,7 +863,7 @@ end
 
 """
     FAST_ReleaseLock_DDEF(op_name::Union{String,Nothing})
-Releases the named operation lock safely. Logs release status and handles reentrancy or ownership errors.
+Releases the named operation lock safely. Telemetry records release status and handles reentrancy or ownership violations.
 """
 function FAST_ReleaseLock_DDEF(op_name::Union{String,Nothing})
     (isnothing(op_name) || isempty(op_name)) && return nothing
@@ -866,7 +874,7 @@ function FAST_ReleaseLock_DDEF(op_name::Union{String,Nothing})
     if islocked(lk)
         try
             unlock(lk)
-            # Re-check status for logging
+            # Re-validation of lock status for archival telemetry reporting.
             still_locked = islocked(lk)
             if still_locked
                 FAST_Log_DDEF("SYS", "LOCK_RELEASE_PARTIAL", "Lock: $op_name (Reentrancy Level Decreased)", "INFO")
@@ -877,7 +885,7 @@ function FAST_ReleaseLock_DDEF(op_name::Union{String,Nothing})
             FAST_Log_DDEF("SYS", "LOCK_RELEASE_FAIL", "Lock: $op_name | Error: $(string(e))", "FAIL")
         end
     else
-        # Optional: log if trying to release an already free lock
+        # Provision for logging attempts to release an idle lock state.
         # FAST_Log_DDEF("SYS", "LOCK_RELEASE_IDLE", "Lock: $op_name already free.", "LIST")
     end
     
@@ -886,7 +894,7 @@ end
 
 """
     FAST_ForceReleaseAll_DDEF()
-Clears all operation locks from the global pool. Use only for system recovery.
+Clears all operation locks from the global pool. Reserved exclusively for system recovery protocols.
 """
 function FAST_ForceReleaseAll_DDEF()
     lock(FAST_LockGuard_DDEC) do
@@ -896,11 +904,11 @@ function FAST_ForceReleaseAll_DDEF()
     return nothing
 end
 
-# --------------------------------------------------------------------------------------
-# --- IN-MEMORY TRANSIENT CACHE ---
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 17: IN-MEMORY TRANSIENT CACHE
+# ------------------------------------------------------------------------------
 
-# Thread-safe in-memory DataFrame cache
+# Provision of a thread-safe in-memory cache for high-velocity DataFrame access.
 const FAST_CacheStore_DDEC = Dict{String,DataFrame}()
 const FAST_CacheLock_DDEC  = ReentrantLock()
 
@@ -930,11 +938,11 @@ function FAST_CacheWrite_DDEF(key::Union{String,Nothing}, df::DataFrame)::Nothin
     FAST_Log_DDEF("CACHE", "WRITE", "Cached '$(key)' ($(nrow(df)) rows)", "OK")
 end
 
-# --------------------------------------------------------------------------------------
-# --- BINARY VAULT (SERVER-SIDE BLOB STORAGE) ---
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 18: BINARY VAULT (SERVER-SIDE BLOB STORAGE)
+# ------------------------------------------------------------------------------
 
-# Repository for large binary objects (Excel archives) to maintain frontend performance
+# Repository for large-scale binary objects (Excel archives) designed to preserve application performance.
 const FAST_BinaryVault_DDEC = Dict{String, Vector{UInt8}}()
 const FAST_VaultLock_DDEC   = ReentrantLock()
 
@@ -960,13 +968,13 @@ function FAST_VaultRead_DDEF(key::String)::Union{Vector{UInt8}, Nothing}
     end
 end
 
-# --------------------------------------------------------------------------------------
-# --- COMPUTE THREAD POOL LIMITER ---
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 19: COMPUTE RESOURCES & SYSTEM DIAGNOSTICS
+# ------------------------------------------------------------------------------
 
 """
     FAST_GetComputeThreads_DDEF() -> Int
-Returns available threads for computation, reserving 1 for the HTTP loop.
+Returns available threading resources for parallel computation, reserving a primary thread for the HTTP loop.
 """
 function FAST_GetComputeThreads_DDEF()::Int
     total = Threads.nthreads()
@@ -986,14 +994,14 @@ function FAST_ValidateDataFrame_DDEF(df::DataFrame, RequiredCols::Vector{String}
 
     isempty(df) && (push!(issues, "DataFrame is empty."); return (false, issues))
 
-    # Check required columns
+    # Verification of mandatory column presence against experimental schema requirements.
     for c in RequiredCols
         if !hasproperty(df, Symbol(c))
             push!(issues, "Missing required column: '$c'")
         end
     end
 
-    # Check for NaN-saturated numeric columns
+    # Execution of density audits for NaN-saturated numeric columns to ensure data fidelity.
     for col in names(df)
         T = eltype(df[!, col])
         if T <: Union{Missing,Number} || T <: Number
@@ -1017,7 +1025,7 @@ end
 
 """
     FAST_GetSystemQuote_DDEF() -> String
-Returns a random scientific/academic quote to inspire the researcher.
+Provides a stochastic selection of scientific and academic citations to reinforce research focus.
 """
 function FAST_GetSystemQuote_DDEF()::String
     quotes = [
@@ -1047,13 +1055,11 @@ end
 
 """
     FAST_GetCol_DDEF(df::DataFrame, Target::String)::String
-Finds the actual column name in DataFrame that matches Target case-insensitively.
-(Non-destructive: does not modify the DataFrame).
+Identifies the formalised column name in a DataFrame matching the target criterion (Non-destructive operation).
 """
 function FAST_GetCol_DDEF(df::DataFrame, Target::String)::String
     isempty(df) && return ""
     
-    # 1. Direct Match (Case-Insensitive)
     t_up = uppercase(strip(Target))
     for n in names(df)
         n_str = string(n)
@@ -1062,8 +1068,6 @@ function FAST_GetCol_DDEF(df::DataFrame, Target::String)::String
         end
     end
     
-    # 2. Unit-Aware Match (Case-Insensitive)
-    # If Target is "VARIA_A", look for "VARIA_A_unit"
     for n in names(df)
         n_str = string(n)
         n_up = uppercase(strip(n_str))
@@ -1077,14 +1081,12 @@ end
 
 """
     FAST_CleanHeader_DDEF(Header::String) -> String
-Standardises column headers by removing internal prefixes and trailing unit metadata.
-Example: 'VARIA_Component_mg' -> 'VARIA_Component'
+Standardises column headers through the removal of internal prefixes and dimensional unit metadata.
 """
 function FAST_CleanHeader_DDEF(Header::AbstractString)
     h = strip(string(Header))
     isempty(h) && return ""
     
-    # 1. Identify Prefix (VARIA_, FIXED_, FILL_, MASS_, RESULT_, PRED_)
     idx = findlast('_', h)
     isnothing(idx) && return h
     
@@ -1108,4 +1110,4 @@ function FAST_CleanHeader_DDEF(Header::AbstractString)
     return h
 end
 
-end # module Sys_Fast
+end

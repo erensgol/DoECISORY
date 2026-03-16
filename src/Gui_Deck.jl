@@ -1,11 +1,12 @@
 module Gui_Deck
 
-# ======================================================================================
-# DAISHODOE - GUI DECK (EXPERIMENTAL DESIGN)
-# ======================================================================================
-# Description: Experimental design workspace, matrix generation, and protocol export.
+# ==============================================================================
+# DAISHODOE PROJECT - GUI DECK (EXPERIMENTAL DESIGN)
+# ==============================================================================
+# Description: Experimental design workspace, matrix generation, and protocol 
+#              export.
 # Module Tag:  DECK
-# ======================================================================================
+# ==============================================================================
 
 using Dash
 using DashBootstrapComponents
@@ -21,9 +22,13 @@ using Dates
 
 export DECK_Layout_DDEF, DECK_RegisterCallbacks_DDEF
 
-# --------------------------------------------------------------------------------------
-# SECTION 0: CONSTANTS
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART A: SYSTEM CONSTANTS, DATA STRUCTURES & LAYOUT
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 1: SYSTEM CONSTANTS
+# ------------------------------------------------------------------------------
 
 const DECK_MaxRows_DDEC = 15
 
@@ -31,7 +36,6 @@ const DECK_RoleOptions_DDEC = [
     Dict("label" => "Variable", "value" => "Variable"),
     Dict("label" => "Fixed", "value" => "Fixed"),
 ]
-
 
 """
     DECK_GetDefaultRow_DDEF(i) -> Dict
@@ -47,9 +51,9 @@ function DECK_GetDefaultRow_DDEF(i::Int)
     )
 end
 
-# --------------------------------------------------------------------------------------
-# SECTION 1: LAYOUT HELPERS
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 2: LAYOUT HELPERS
+# ------------------------------------------------------------------------------
 
 """
     DECK_BuildOutRow_DDEF(i, def_name, def_unit) -> Tr
@@ -59,13 +63,12 @@ function DECK_BuildOutRow_DDEF(i, def_name, def_unit)
     return html_tr([
         html_td(dcc_input(id="deck-out-name-$i", type="text", value=def_name, style=merge(BASE_StyleInputCentre_DDEC, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_StyleCell_DDEC, Dict("width" => "50%")), className="p-0"),
         html_td(dcc_input(id="deck-out-unit-$i", type="text", value=def_unit, style=merge(BASE_StyleInputCentre_DDEC, Dict("fontSize" => "10px")), className="px-1 py-0"), style=merge(BASE_StyleCell_DDEC, Dict("width" => "50%")), className="p-0"),
-        # REMOVED: Decay correction indicator and settings button for dependent variables as per user request.
     ])
 end
 
-# --------------------------------------------------------------------------------------
-# SECTION 1.2: MODAL WINDOWS
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 3: MODAL WINDOWS
+# ------------------------------------------------------------------------------
 function DECK_ModalChemical_DDEF()
     return dbc_modal([
         dbc_modalheader(dbc_modaltitle([
@@ -226,10 +229,10 @@ function DECK_ModalAudit_DDEF()
             dbc_button("Close", id="deck-btn-sci-audit-close", className="ms-auto colourgl-c0hr", outline=false))
     ])
 end
+# ------------------------------------------------------------------------------
+# SECTION 4: UI ELEMENTS & TABLE BUILDERS
+# ------------------------------------------------------------------------------
 
-# --------------------------------------------------------------------------------------
-# SECTION 1.1: LOCAL TABLE BUILDERS
-# --------------------------------------------------------------------------------------
 
 """
     DECK_BuildIdTable_DDEF(rows_range, initial_rows, active_count, show_del) -> Table
@@ -299,7 +302,6 @@ function DECK_Layout_DDEF()
         active_count = 6
 
         return dbc_container([
-            # Persistent Application State & Data Storage
             dbc_row(dbc_col([
                 dcc_store(
                     id           = "deck-store-factors",
@@ -335,15 +337,11 @@ function DECK_Layout_DDEF()
                         ], style=Dict("display" => "none"))
                 ], style=Dict("display" => "none"))
             ], xs=12)),
+            BASE_PageHeader_DDEF("Experimental Design and Protocol Management", "The system is architected to operate with 3 independent (x) and 3 dependent (y) variables, functioning with 5 degrees of freedom (df)."),
 
-                # Page Header
-                BASE_PageHeader_DDEF("Experimental Design and Protocol Management", "The system is architected to operate with 3 independent (x) and 3 dependent (y) variables, functioning with 5 degrees of freedom (df)."),
-
-                # Main Workspace
                 dbc_row([
-                    # --- LEFT COLUMN ---
+                    # Initialisation of the Left Interface Column for factor definition.
                     dbc_col([
-                        # Variable Windows
                         dbc_row(dbc_col(BASE_GlassPanel_DDEF(
                             [
                                 html_i(className="fas fa-layer-group me-2"),
@@ -362,7 +360,6 @@ function DECK_Layout_DDEF()
                             content_class = "p-2"
                         ), xs=12), className="mb-3"),
 
-                        # Constant Windows
                         dbc_row(dbc_col(BASE_GlassPanel_DDEF(
                             [
                                 html_i(className="fas fa-thumbtack me-2"),
@@ -382,7 +379,6 @@ function DECK_Layout_DDEF()
                             content_class = "p-2"
                         ), xs=12), className="mb-3"),
 
-                        # Row 2: Response Metrics & Stoichiometric Components
                         dbc_row([
                             dbc_col(BASE_GlassPanel_DDEF(
                                 [
@@ -423,7 +419,7 @@ function DECK_Layout_DDEF()
                         ], className="g-3 mb-3 d-flex align-items-stretch"),
                     ], xs=12, md=9, className="mb-3 mb-md-0"),
 
-                    # --- RIGHT COLUMN ---
+                    # Initialisation of the Right Interface Column for system configuration and orchestration.
                     dbc_col(
                         BASE_GlassPanel_DDEF(
                             [html_i(className="fas fa-cogs me-2"), "SYSTEM CONFIGURATION"], 
@@ -470,7 +466,6 @@ function DECK_Layout_DDEF()
                                 
                                 BASE_Separator_DDEF(),
                                 
-                                # Stoichiometry Settings Button
                                 BASE_ActionButton_DDEF("deck-btn-stoch-settings", "Stoichiometry Settings", "fas fa-flask",      class="w-100 mb-2"),
                                 BASE_ActionButton_DDEF("deck-btn-audit",          "Quick Audit",            "fas fa-vial",       class="w-100 mb-2"),
                                 BASE_ActionButton_DDEF("deck-btn-sci-audit",      "Scientific Audit",       "fas fa-microscope", class="w-100 mb-2"),
@@ -478,22 +473,18 @@ function DECK_Layout_DDEF()
                                 BASE_Loading_DDEF("deck-run-output", ""),
                                 BASE_NextButton_DDEF("deck-btn-run", "Generate Protocol"),
                             ]; panel_class = "mb-3 h-auto"
-                        ),
-                        xs=12, md=3
-                    ),
+                        ), xs=12, md=3),
+
                 ], className="g-3"),
 
-                # Download components
                 dcc_download(id="deck-download-xlsx"),
                 dcc_download(id="deck-download-memo"),
 
-                # Stoichiometry Settings Store
                 dcc_store(id="deck-store-stoch-settings",
                     data=Dict("FillerName" => "", "FillerMW" => 0.0, "Volume" => 0.0, "Conc" => 0.0),
                     storage_type="memory"),
                 dcc_store(id="deck-stoch-trigger-unit", data=0, storage_type="memory"),
 
-                # Modals
                 DECK_ModalChemical_DDEF(),
                 DECK_ModalStoch_DDEF(),
                 DECK_ModalAudit_DDEF()
@@ -504,9 +495,13 @@ function DECK_Layout_DDEF()
     end
 end
 
-# --------------------------------------------------------------------------------------
-# SECTION 2: CORE PROTOCOL LOGIC
-# --------------------------------------------------------------------------------------
+# ==============================================================================
+# PART B: ORCHESTRATION, LAYOUT & CALLBACKS
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 5: PROTOCOL ORCHESTRATION ENGINE
+# ------------------------------------------------------------------------------
 
 """
     DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method) -> (Success, Message)
@@ -514,7 +509,7 @@ Orchestrates the generation and validation of an experimental protocol Excel doc
 """
 function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, stoch_data, project="Daisho")
     C = Sys_Fast.FAST_Data_DDEC
-    # Local aliases for scoping
+    # Local alias definitions for architectural scoping.
     L_PT   = Main.Lib_Mole.MOLE_ParseTable_DDEF
     L_VDF  = Main.Lib_Mole.MOLE_ValidateDesignFeasibility_DDEF
     L_AMM  = Main.Lib_Mole.MOLE_AuditMatrix_DDEF
@@ -522,7 +517,6 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
     L_VPU  = Main.Lib_Mole.MOLE_ValidatePhysicalUnit_DDEF
     
     try
-        # 0. Virtual Filler Injection
         raw_rows       = BASE_SafeRows_DDEF(in_data)
         processed_rows = filter(r -> get(r, "Role", get(r, :Role, "")) != "Filler", raw_rows)
         
@@ -545,7 +539,6 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
         num_vars != 3 && return (false, "Requires exactly 3 Variable ingredients (Found: $num_vars).")
         num_fills > 1 && return (false, "Maximum 1 Filler allowed (Found: $num_fills).")
         
-        # 1. Name Validity and Uniqueness Check
         all_names = String[]
         for (i, r) in enumerate(D["Rows"])
             n = strip(string(get(r, "Name", "")))
@@ -557,7 +550,6 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
             end
             push!(all_names, n)
 
-            # 2b. Unit Validation Check
             unit = string(get(r, "Unit", ""))
             mw   = Float64(get(r, "MW", 0.0))
             if mw > 0.0 && !isempty(unit) && unit != "-" && unit != "%M" && unit != "MR"
@@ -568,7 +560,6 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
                 end
             end
 
-            # 2c. Strict Level Increase Rule (L1 < L2 < L3)
             role = get(r, "Role", "")
             if role == "Variable"
                 l1 = Sys_Fast.FAST_SafeNum_DDEF(get(r, "L1", 0.0))
@@ -580,7 +571,6 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
             end
         end
 
-        # 3. Stoichiometry Sum Check (Max Limit 100%)
         if !isempty(D["Idx_Chem"]) || !isempty(D["Idx_Fill"])
             sum_max_pct = 0.0
             sv = Sys_Fast.FAST_SafeNum_DDEF(vol)
@@ -593,7 +583,6 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
                     role = get(r, "Role", "")
                     val  = (role == "Variable") ? Sys_Fast.FAST_SafeNum_DDEF(get(r, "L3", 0.0)) : Sys_Fast.FAST_SafeNum_DDEF(get(r, "L2", 0.0))
                     
-                    # Convert this component's value to its percentage equivalent in the system
                     pct_eq = Main.Lib_Mole.MOLE_GetPercentageEquivalent_DDEF(val, unit, mw, sv, sc)
                     sum_max_pct += pct_eq
                 end
@@ -604,7 +593,6 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
             end
         end
 
-        # 4. Mandatory Response Validation
         output_data = BASE_SafeRows_DDEF(out_data)
         if length(output_data) != 3
             return (false, "Systematic Error: Exactly 3 Responses (Outputs) must be defined.")
@@ -621,13 +609,11 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
             push!(all_out_names, n)
         end
 
-        # 5. Core Matrix Generation
         design_coded = Lib_Core.CORE_GenDesign_DDEF(method, num_vars)
         N_Runs       = size(design_coded, 1)
         configs      = [Dict("Levels" => [D["Rows"][i]["L1"], D["Rows"][i]["L2"], D["Rows"][i]["L3"]]) for i in D["Idx_Var"]]
         real_matrix  = Lib_Core.CORE_MapLevels_DDEF(design_coded, configs)
 
-        # 5b. Matrix Validation (Det-Check)
         valid_dsgn, dsgn_issues = Lib_Core.CORE_ValidateDesign_DDEF(real_matrix, configs)
         if !valid_dsgn
             return (false, "Validation Error: " * dsgn_issues)
@@ -635,7 +621,6 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
 
         d_eff = Lib_Core.CORE_D_Efficiency_DDEF(real_matrix)
 
-        # 5c. Stoichiometric Feasibility Check
         sv = Sys_Fast.FAST_SafeNum_DDEF(vol)
         sc = Sys_Fast.FAST_SafeNum_DDEF(conc)
         valid_stoi, stoi_issues = L_VDF(real_matrix, D["Rows"], sv, sc)
@@ -643,7 +628,6 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
             return (false, "Stoichiometric Error: " * stoi_issues)
         end
 
-        # 5d. Total Mass Audit
         chem_indices = D["Idx_Chem"]
         chem_units = [string(get(r, "Unit", "-")) for r in D["Rows"][chem_indices]]
         run_masses = L_AMM(real_matrix, D["Names"][chem_indices], D["MWs"][chem_indices], Sys_Fast.FAST_SafeNum_DDEF(vol), Sys_Fast.FAST_SafeNum_DDEF(conc), chem_units)
@@ -651,7 +635,6 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
             return (false, "Mass Calculation Error: One or more runs resulted in invalid chemical mass. Please check your MW and Concentration values.")
         end
 
-        # 6. Session & Phase Logic
         phase_num     = 1
         current_phase = "Phase1"
         try
@@ -668,10 +651,8 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
         catch
         end
 
-        # 7. CENTRALIZED STOICHIOMETRY ENGINE (Lib_Mole)
         df_chem = Lib_Mole.MOLE_ProcessDesign_DDEF(real_matrix, processed_rows, sv, sc)
 
-        # 8. FINAL PROTOCOL INTEGRITY (Merging System Metadata with Chemical Logic)
         df_sys = DataFrame(
             C.COL_EXP_ID    => ["EXP_P$(phase_num)_$(lpad(i, 2, '0'))" for i in 1:N_Runs],
             C.COL_PHASE     => fill(current_phase, N_Runs),
@@ -679,10 +660,8 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
             C.COL_STATUS    => fill("Pending", N_Runs),
         )
 
-        # Assemble: System Meta + Chemical Gradient Design
         df = hcat(df_sys, df_chem)
 
-        # Add Response/Prediction placeholders
         for r in output_data
             n = string(get(r, "Name", "Unknown"))
             u = string(get(r, "Unit", ""))
@@ -695,13 +674,11 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
         df[!, C.COL_SCORE] = fill(missing, N_Runs)
         df[!, C.COL_NOTES] = fill("", N_Runs)
 
-        # CHRO (Chronological/Radioactivity) Management
         if any(r -> get(r, "IsRadioactive", false), D["Rows"])
             df[!, "CHRO_HOUR"] = fill(0.0, N_Runs)
             df[!, "CHRO_MIN"]  = fill(0.0, N_Runs)
         end
 
-        # Extract Filler Metadata for Master Config
         f_name = ""; f_mw = 0.0
         if !isempty(D["Idx_Fill"])
             f_row = D["Rows"][D["Idx_Fill"][1]]
@@ -729,16 +706,15 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
     end
 end
 
-# --------------------------------------------------------------------------------------
-# SECTION 3: CALLBACK BUS
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 6: REACTIVE ARCHITECTURE (CALLBACK REGISTRY)
+# ------------------------------------------------------------------------------
 
 """
     DECK_RegisterCallbacks_DDEF(app) -> Nothing
 Initialises the callback registry for the Design Deck workspace.
 """
 function DECK_RegisterCallbacks_DDEF(app)
-    # --- Reference Aliases for Scoped Execution ---
     Lib_Mole_PT  = Main.Lib_Mole.MOLE_ParseTable_DDEF
     Lib_Mole_VPU = Main.Lib_Mole.MOLE_ValidatePhysicalUnit_DDEF
     Lib_Mole_AMM = Main.Lib_Mole.MOLE_AuditMatrix_DDEF
@@ -747,7 +723,6 @@ function DECK_RegisterCallbacks_DDEF(app)
     Lib_Mole_VDF  = Main.Lib_Mole.MOLE_ValidateDesignFeasibility_DDEF
     Lib_Mole_AB   = Main.Lib_Mole.MOLE_AuditBatch_DDEF
     
-    # --- UI SYNCHRONISATION (Updates interface from persistent state) ---
     callback!(app,
         [Output("deck-row-id-$i",     "style") for i in 1:DECK_MaxRows_DDEC]...,
         [Output("deck-row-level-$i",  "style") for i in 1:DECK_MaxRows_DDEC]...,
@@ -761,7 +736,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         [Output("deck-max-$i",        "value") for i in 1:DECK_MaxRows_DDEC]...,
         [Output("deck-mw-$i",         "value") for i in 1:DECK_MaxRows_DDEC]...,
         [Output("deck-unit-$i",       "value") for i in 1:DECK_MaxRows_DDEC]...,
-        # Indicator dot styles (chemical + radioactive)
+        # Orchestration of visual parameter indicator styles for chemical and radioactive synchronisation.
         [Output("deck-dot1-$i",       "className") for i in 1:DECK_MaxRows_DDEC]...,
         [Output("deck-dot2-$i",       "className") for i in 1:DECK_MaxRows_DDEC]...,
         [Output("deck-unit-$i",       "style") for i in 1:DECK_MaxRows_DDEC]...,
@@ -774,8 +749,6 @@ function DECK_RegisterCallbacks_DDEF(app)
         rows  = get(stored, "rows", [])
         count = get(stored, "count", 0)
 
-
-        # All rows are now table-rows (ID, Level, Limits all use html_table)
         out_styles = [Dict("display" => (i <= 3 || i <= count) ? "table-row" : "none") for i in 1:DECK_MaxRows_DDEC]
         out_names  = [i <= length(rows) ? string(get(rows[i], "Name", "")) : "" for i in 1:DECK_MaxRows_DDEC]
         out_roles  = [(i <= 3 ? "Variable" : "Fixed") for i in 1:DECK_MaxRows_DDEC]
@@ -797,7 +770,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             for i in 1:DECK_MaxRows_DDEC
         ]
 
-        # Dynamic tooltips
+        # Generation of dynamic contextual tooltips for scientific parameter transparency.
         dot1_tips = [
             (let r = (i <= length(rows) ? rows[i] : Dict()); Float64(get(r, "MW", get(r, :MW, 0.0))) > 0.0 ? "Molecular Weight defined (Scientific context ACTIVE)" : "No Molecular Weight defined" end)
             for i in 1:DECK_MaxRows_DDEC
@@ -807,8 +780,8 @@ function DECK_RegisterCallbacks_DDEF(app)
             for i in 1:DECK_MaxRows_DDEC
         ]
 
-        # Real-time unit & MW validation styles
-        # Capture functions in local scope for robust closure access
+        # Implementation of real-time architectural validation styles for units and molecular weights.
+        # Architectural capture of function references for robust closure orchestration.
         vpu_func = Main.Lib_Mole.MOLE_ValidatePhysicalUnit_DDEF
         unit_styles = [
             let
@@ -817,7 +790,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     u  = lowercase(strip(string(get(rows[i], "Unit", ""))))
                     mw = Float64(get(rows[i], "MW", 0.0))
                     
-                    # High-priority validation: MW missing for relational & absolute molarity (M)
+                    # Execution of high-priority validation for molarity requirements (M) and molecular weight dependencies.
                     if (u == "%m" || u == "mr" || u == "ratio" || u == "m") && mw <= 0.0
                         s["backgroundColor"] = "var(--colour-chr0-huered)"
                         s["color"]           = "white"
@@ -825,7 +798,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                         s["border"]          = "2px solid white"
                         s["boxShadow"]       = "0 0 15px rgba(255, 0, 0, 0.6)"
                     elseif mw > 0.0 && !isempty(u) && u != "-" && u != "%m" && u != "mr" && u != "ratio"
-                        # Use captured function reference
+                        # Utilisation of the captured function reference for stoichiometric validation.
                         ok_m, _, _ = Lib_Mole_VPU(u, "Mass")
                         ok_c, _, _ = Lib_Mole_VPU(u, "Concentration")
                         if !ok_m && !ok_c
@@ -851,7 +824,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         )
     end
 
-    # --- 2. APPLICATION STATE ORCHESTRATOR ---
+    # Execution of the primary Application State Orchestration Engine.
     callback!(app,
         Output("deck-store-factors", "data"),
         Output("deck-table-in",      "data"),
@@ -868,7 +841,6 @@ function DECK_RegisterCallbacks_DDEF(app)
         [Output("deck-out-unit-$i",  "value") for i in 1:3]...,
         Output("deck-store-stoch-settings", "data"),
         
-        # Triggers
         Input("deck-btn-add-row",        "n_clicks"),
         Input("deck-btn-clear",          "n_clicks"),
         Input("deck-upload-memo",        "contents"),
@@ -880,10 +852,8 @@ function DECK_RegisterCallbacks_DDEF(app)
         Input("deck-stoch-trigger-unit", "data"),
         Input("deck-btn-stoch-save",     "n_clicks"),
         
-        # Delete buttons as Inputs
         [Input("deck-del-$i", "n_clicks") for i in 1:DECK_MaxRows_DDEC]...,
         
-        # States
         State("deck-store-factors",        "data"),
         State("deck-upload",               "filename"),
         [State("deck-name-$i",             "value") for i in 1:DECK_MaxRows_DDEC]...,
@@ -913,17 +883,17 @@ function DECK_RegisterCallbacks_DDEF(app)
         State("deck-dd-method",            "value"),
         prevent_initial_call=false
     ) do args...
-        try  # Global error guard for main orchestrator callback
-            # --- ARGUMENT MAPPING (LEGACY INDEXING) ---
+        # Implementation of a global exception guard to maintain orchestration engine stability.
+        try
             trig      = Dash.callback_context().triggered
             trig      = isempty(trig) ? "" : split(string(trig[1].prop_id), ".")[1]
             
-            # 1..10: Core Action Triggers (Buttons, Stores, Uploads)
-            # 11..11+DECK_MaxRows_DDEC-1: Delete Button Triggers (ndels)
-            # 11+DECK_MaxRows_DDEC: Factor Store (store_data)
-            # 11+DECK_MaxRows_DDEC+1: Upload Filename (fname)
-            # 11+DECK_MaxRows_DDEC+2.. (+ 9*DECK_MaxRows_DDEC): Row States
-            # Post Row States: Global Vol/Conc, Property Modal States, Stoch Settings, Response Table/Store, Modal Inputs, Project/Phase.
+            # Integration of primary action triggers spanning core system components (Buttons, Stores, Uploads).
+            # Integration of row-level deletion triggers within the experimental workspace.
+            # Synchronisation with the primary factor persistence store.
+            # Extraction of the current transient filename from the data stream.
+            # Mapping of multidimensional row states for factor property management.
+            # Orchestration of supplementary global parameters and modal interface states (Vol/Conc, Project/Phase).
 
             n_add, n_clear, up_memo, n_temp, n_save, session, up_cont = args[1:7]
             save_prop_trig = args[8]
@@ -944,7 +914,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             all_mws = collect(args[offset+7DECK_MaxRows_DDEC:offset+8DECK_MaxRows_DDEC-1])
             all_units = collect(args[offset+8DECK_MaxRows_DDEC:offset+9DECK_MaxRows_DDEC-1])
 
-            # Explicitly utilise Dash.callback_context() for state stability.
+            # Explicit utilisation of internal Dash context for architectural state stability.
             ctx = Dash.callback_context()
             trig = ""
             if isempty(ctx.triggered)
@@ -969,20 +939,20 @@ function DECK_RegisterCallbacks_DDEF(app)
                 Sys_Fast.FAST_Log_DDEF("DECK", "Callback", "Triggered by: $trig", "INFO")
             end
 
-            # --- 0. COMMON RETURN HELPER ---
+            # Orchestration of the standardised callback return protocol.
             function DECK_Return_DDEF(store, table, ph_opts, vol, conc, proj, method, msg, dl, up_stat, ph_val, out_vals, stoch)
-                # Strict arity check: we must return 18 items (11 + 6 + 1)
+                # Execution of strict arity verification for the orchestration return protocol (11 + 6 + 1).
                 return (store, table, ph_opts, vol, conc, proj, method, msg, dl, up_stat, ph_val, out_vals..., stoch)
             end
             RET_NO = ntuple(_ -> Dash.no_update(), 18)
 
-            # Robust Key Access Helper: handles string or symbol keys and NEVER returns nothing if default is provided
+            # Implementation of a robust key-access mechanism for polymorphic dictionary synchronisation.
             function DECK_GetSafeKey_DDEF(d, k, def)
                 isnothing(d) && return def
-                # Check string key
+                # Verification of primary string-based key existence.
                 v = get(d, string(k), nothing)
                 !isnothing(v) && return v
-                # Check symbol key
+                # Verification of secondary symbol-based key existence.
                 v = get(d, Symbol(k), nothing)
                 !isnothing(v) && return v
                 return def
@@ -990,7 +960,7 @@ function DECK_RegisterCallbacks_DDEF(app)
 
             DECK_SafeNumZero_DDEF(x) = (v = Sys_Fast.FAST_SafeNum_DDEF(x); isnan(v) ? 0.0 : v)
 
-            # --- GLOBALS EXTRACTION (Consistent across all branches) ---
+            # Extraction and normalisation of global system parameters.
             idx_gl = 11 + DECK_MaxRows_DDEC + 2 + 9 * DECK_MaxRows_DDEC
             vol_v    = DECK_SafeNumZero_DDEF(args[idx_gl])
             conc_v   = DECK_SafeNumZero_DDEF(args[idx_gl+1])
@@ -998,8 +968,8 @@ function DECK_RegisterCallbacks_DDEF(app)
             phase_v  = isnothing(args[idx_gl+18]) ? "Phase1" : string(args[idx_gl+18])
             method_v = isnothing(args[idx_gl+19]) ? "BB15" : string(args[idx_gl+19])
             
-            # Robust Data Capture Logic: trust DOM but sync with Store for properties
-            # This is CRITICAL for data persistence during property/stoch changes.
+            # Implementation of robust data-capture logic synchronising DOM states with the persistence store.
+            # This synchronisation is critical for ensuring data integrity during reconfigurations.
             DECK_SnapRows_DDEF() = let
                 n = isnothing(store_data) ? 7 : Int(DECK_GetSafeKey_DDEF(store_data, "count", 7))
                 [
@@ -1051,22 +1021,18 @@ function DECK_RegisterCallbacks_DDEF(app)
                 ]
             end
 
-            # --- 6. PROP SAVE LOGIC ---
             if trig == "deck-prop-trigger-save"
                 isnothing(save_prop_trig) && return ntuple(_ -> Dash.no_update(), 18)
                 
-                # GET CURRENT SNAPSHOT TO PRESERVE INTERMEDIATE EDITS
                 current_rows = DECK_SnapRows_DDEF()
 
-                # Modal States extraction (Corrected indices)
-                # Global param offset: idx_gl
-                
-                target   = args[idx_gl+2]    # deck-prop-target-id
-                hl_val   = args[idx_gl+3]    # deck-prop-hl
-                hl_unit  = args[idx_gl+4]    # deck-prop-hl-unit
-                mw_modal = args[idx_gl+5]    # deck-prop-mw
+                # Orchestration of target identification for component property inheritance.
+                target   = args[idx_gl+2]
+                hl_val   = args[idx_gl+3]
+                hl_unit  = args[idx_gl+4]
+                # Verification of molecular weight parameters from the property modal.
+                mw_modal = args[idx_gl+5]
 
-                # Automatic Radioactive Check
                 is_rad = !isnothing(hl_val) && Sys_Fast.FAST_SafeNum_DDEF(hl_val) > 0.0
 
                 t_type = string(get(target, "type", get(target, :type, "")))
@@ -1106,9 +1072,8 @@ function DECK_RegisterCallbacks_DDEF(app)
                 return ntuple(_ -> Dash.no_update(), 18)
             end
 
-            # --- 6b. UNIT AUTO-LOGIC (Internal Refinement) ---
+            # Automated Unit Synchronisation Protocol for stoichiometric consistency.
             if trig == "deck-stoch-trigger-unit"
-                # Extraction Modal Values from args (indices verified)
                 st_data = args[idx_gl+6] 
                 isnothing(st_data) && return ntuple(_ -> Dash.no_update(), 18)
 
@@ -1135,7 +1100,7 @@ function DECK_RegisterCallbacks_DDEF(app)
 
             NO = Dash.no_update()
 
-            # --- A. DELETE ROW ---
+            # Execution of the Row Deletion Protocol for experimental matrix maintenance.
             del_ids = ["deck-del-$i" for i in 1:DECK_MaxRows_DDEC]
             if trig in del_ids
                 rows = DECK_SnapRows_DDEF()
@@ -1146,7 +1111,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 nc = length(rows)
                 return DECK_Return_DDEF(Dict("rows" => rows, "count" => nc), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO, fill(NO, 6), NO)
 
-            # --- B. ADD ROW ---
+            # Execution of the Row Extension Protocol to accommodate additional experimental factors.
             elseif trig == "deck-btn-add-row"
                 rows = DECK_SnapRows_DDEF()
                 current_count = isnothing(store_data) ? length(rows) : get(store_data, "count", get(store_data, :count, length(rows)))
@@ -1160,7 +1125,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 end
                 return DECK_Return_DDEF(Dict("rows" => rows, "count" => new_count), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO, fill(NO, 6), NO)
 
-            # --- C0. CLEAR CANVAS ---
+            # Reset of the design canvas and state initialisation.
             elseif trig == "deck-btn-clear"
                 rows = [DECK_GetDefaultRow_DDEF(i) for i in 1:6]
                 lbl = html_div([html_i(className="fas fa-trash-alt me-2"), "Canvas Cleared"],
@@ -1168,7 +1133,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 empty_stoch = Dict("FillerName" => "", "FillerMW" => 0.0, "Volume" => 0.0, "Conc" => 0.0)
                 return DECK_Return_DDEF(Dict("rows" => rows, "count" => 6), rows, [Dict("label" => "Phase 1", "value" => "Phase1")], 0.0, 0.0, "", "BoxBehnken", lbl, NO, "No data source", "Phase1", vcat(["", "", ""], ["-", "-", "-"]), empty_stoch)
 
-            # --- C1. LOAD USER PROFILE ---
+            # Import of high-fidelity user profiles via JSON deserialisation.
             elseif trig == "deck-upload-memo" && !isnothing(up_memo) && up_memo != ""
                 try
                     base64_data = split(up_memo, ",")[end]
@@ -1196,7 +1161,6 @@ function DECK_RegisterCallbacks_DDEF(app)
                     # Ensure minimum of 6 rows (3 Var + 3 Default Fixed)
                     nc = max(6, real_count)
                     
-                    # Padding to ensure stability in UI hydration
                     while length(loaded_rows) < DECK_MaxRows_DDEC
                         push!(loaded_rows, DECK_GetDefaultRow_DDEF(length(loaded_rows) + 1))
                     end
@@ -1220,7 +1184,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, err_lbl, NO, NO, NO, fill(NO, 6), NO)
                 end
 
-            # --- C2. LOAD TEMPLATE (from Memo_DDE.json) ---
+            # Component template restoration from standardised DDE vault records.
             elseif trig == "deck-btn-template"
                 memo = Sys_Fast.FAST_LoadMemoFile_DDEF("Memo_DDE.json")
                 
@@ -1291,19 +1255,19 @@ function DECK_RegisterCallbacks_DDEF(app)
                     json_str = JSON3.write(Dict("Inputs" => DECK_SnapRows_DDEF(), "Outputs" => out_d, "Global" => g_dict))
                     b64 = base64encode(json_str)
 
-                    # Standardized Naming: Project, Phase, Tag (MEMO), Extension (json)
+                    # Standardised Naming: Project, Phase, Tag (MEMO), Extension (json)
                     fname = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_v, phase_v, "MEMO", "json")
 
                     dl_dict = Dict("filename" => fname, "content" => b64, "base64" => true)
                     lbl = html_div([html_i(className="fas fa-check-circle me-2"), "Workspace Exported"],
- className="badge p-2 w-100", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr4-tongre)", "fontSize" =>"0.85rem","boxShadow" =>"0 2px 5px var(--colour-val3-darlow)"))
+                    className="badge p-2 w-100", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr4-tongre)", "fontSize" =>"0.85rem","boxShadow" =>"0 2px 5px var(--colour-val3-darlow)"))
                     return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, lbl, dl_dict, NO, NO, fill(NO, 6), NO)
                 catch e
- err_lbl = html_div("❌ Save Error:" * string(e), className="badge w-100 p-2", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)", "fontSize" =>"0.6rem"))
+                    err_lbl = html_div("❌ Save Error:" * string(e), className="badge w-100 p-2", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)", "fontSize" =>"0.6rem"))
                     return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, err_lbl, NO, NO, NO, fill(NO, 6), NO)
                 end
 
-                # --- C3. SAVE STOICHIOMETRY ---
+                # Persistence of stoichiometric parameters to the transient design state.
             elseif trig == "deck-btn-stoch-save"
                 f_name_modal = args[idx_gl+13]
                 f_mw_modal = args[idx_gl+14]
@@ -1317,7 +1281,6 @@ function DECK_RegisterCallbacks_DDEF(app)
                     "Conc" => isnothing(s_conc_modal) ? 0.0 : DECK_SafeNumZero_DDEF(s_conc_modal),
                 )
 
-                # Use Snapshot to capture table state
                 current_rows = DECK_SnapRows_DDEF()
                 
                 new_rs = []
@@ -1337,26 +1300,27 @@ function DECK_RegisterCallbacks_DDEF(app)
                 n_st = Dict{String,Any}("rows" => new_rs, "count" => isnothing(store_data) ? length(new_rs) : DECK_GetSafeKey_DDEF(store_data, "count", length(new_rs)))
                 return DECK_Return_DDEF(n_st, NO, NO, new_stoch["Volume"], new_stoch["Conc"], NO, NO, NO, NO, NO, NO, fill(NO, 6), new_stoch)
 
-                # --- F. IMPORT PROTOCOL (from Smart Vault) ---
+            # Execution of the Unified Import Protocol for cross-platform session synchronisation.
             elseif trig == "deck-upload" && !isnothing(up_cont)
                 try
                     if up_cont == ""
                         rows = [DECK_GetDefaultRow_DDEF(i) for i in 1:5]
+                        # Persistence of state when no content is provided.
                         return DECK_Return_DDEF(Dict("rows" => rows, "count" => 5), rows, [Dict("label" => "Loading...", "value" => "NONE")], 0.0, 0.0, "Daisho", "BoxBehnken", NO, NO, "No data source", "NONE", fill(NO, 6), NO)
                     end
                     
-                    # Project Name Extraction from Filename
+                    # Extraction of the project identifier from the transient filename.
                     extracted_proj = Sys_Fast.FAST_ExtractProjectFromFilename_DDEF(fname)
-                    # If empty, keep current or default to "Daisho"
+                    # Default to the core project identifier if no match is extracted.
                     if extracted_proj != ""
                         proj_v = extracted_proj
                     end
 
-                    # Check extension for JSON support
+                    # Verification of the extension for JSON-based workspace support.
                     is_json = lowercase(splitext(fname)[2]) == ".json"
 
                     if is_json
-                        # Support JSON import (Workspace format)
+                        # Execution of the JSON workspace import protocol.
                         base64_data = split(up_cont, ",")[end]
                         json_str = String(base64decode(base64_data))
                         data = JSON3.read(json_str)
@@ -1407,7 +1371,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                         return DECK_Return_DDEF(Dict("rows" => mapped[1:DECK_MaxRows_DDEC], "count" => nc), mapped[1:DECK_MaxRows_DDEC], ph_opts,
                             get(g, "Volume", 0.0), get(g, "Conc", 0.0), proj_v, method_val, NO, NO, stat_msg, "Phase1", out_vals, loaded_stoch)
                     else
-                        # Protocol import (Excel/Smart Vault format)
+                        # Execution of the Excel/Smart Vault protocol import protocol.
                         tmp = Sys_Fast.FAST_GetTransientPath_DDEF(up_cont)
                         if !isfile(tmp)
                              return DECK_Return_DDEF(NO, NO, NO, NO, NO, proj_v, NO, html_div("❌ Data session stale. Please re-upload.", className="badge w-100 p-2", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)")), NO, NO, NO, fill(NO, 6), NO)
@@ -1479,7 +1443,8 @@ function DECK_RegisterCallbacks_DDEF(app)
 
             return (ntuple(_ -> Dash.no_update(), 18)...,)
 
-        catch e  # Catch-all: surface error to UI instead of silent death
+        # Execution of the fail-safe error handling protocol for analytical transparency.
+        catch e
             bt = sprint(showerror, e, catch_backtrace())
             println("\e[31m[CRITICAL] DECK ORCHESTRATOR ERROR: $e\e[0m")
             println(bt)
@@ -1496,7 +1461,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # --- 3. AUDIT MODAL ORCHESTRATION ---
+    # Execution of the Design Audit Orchestration for stoichiometric and boundary verification.
     callback!(app,
         Output("deck-audit-output", "children"),
         Output("deck-modal-audit", "is_open"),
@@ -1518,7 +1483,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         State("deck-store-stoch-settings", "data"),
         prevent_initial_call=true
     ) do args...
-        try  # Error guard for audit callback
+        try
             n_op, n_cl, is_op, store_data, vol, conc = args[1:6]
             stoch_settings = args[end]
             offset = 7
@@ -1583,7 +1548,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 ))
             end
 
-            # 3. Virtual Filler Injection
+            # Orchestration of the Virtual Filler Inclusion Protocol for stoichiometric integrity.
             processed_rows = filter(r -> get(r, "Role", get(r, :Role, "")) != "Filler", copy(rows))
             
             if !isnothing(stoch_settings)
@@ -1637,8 +1602,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     )), className="mb-3"),
  html_div(msg, className="small fw-bold border-top pt-2", style=Dict("color" => "var(--colour-chr3-toncya)")),
             ]), true
-
-        catch e  # Surface audit errors to modal
+        catch e
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("DECK", "AUDIT_CRASH", bt, "FAIL")
             return html_div([
@@ -1648,7 +1612,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # --- 4. PROTOCOL GENERATION ---
+    # Execution of the Phase Protocol Synthesis Orchestration.
     callback!(app,
         Output("deck-download-xlsx", "data"),
         Output("deck-run-output", "children"),
@@ -1675,7 +1639,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         State("deck-store-stoch-settings", "data"),
         prevent_initial_call=true
     ) do args...
-        try  # Error guard for protocol generation callback
+        try
             n, project = args[1:2]
             out_names = collect(args[3:5])
             out_units = collect(args[6:8])
@@ -1716,10 +1680,10 @@ function DECK_RegisterCallbacks_DDEF(app)
                     mv_raw = Sys_Fast.FAST_SafeNum_DDEF(all_mins[i])
                     xv_raw = Sys_Fast.FAST_SafeNum_DDEF(all_maxs[i])
                     if isempty(name) || isnan(mv_raw) || isnan(xv_raw)
- return Dash.no_update(), html_div([html_i(className="fas fa-exclamation-triangle me-1", style=Dict("color" => "var(--colour-chr0-huered)")),"Error: Variables 1-3 must have Name, Min, and Max properties filled!"], className="fw-bold"), Dash.no_update()
+                        return Dash.no_update(), html_div([html_i(className="fas fa-exclamation-triangle me-1", style=Dict("color" => "var(--colour-chr0-huered)")),"Error: Variables 1-3 must have Name, Min, and Max properties filled!"], className="fw-bold"), Dash.no_update()
                     end
                     if l1val < minval || l3val > maxval || l1val > l2val || l2val > l3val
- return Dash.no_update(), html_div([html_i(className="fas fa-exclamation-triangle me-1", style=Dict("color" => "var(--colour-chr0-huered)")),"Error: Variable '$name' breaks boundary rules (Got: $minval <= $l1val <= $l2val <= $l3val <= $maxval)!"], className="fw-bold"), Dash.no_update()
+                        return Dash.no_update(), html_div([html_i(className="fas fa-exclamation-triangle me-1", style=Dict("color" => "var(--colour-chr0-huered)")),"Error: Variable '$name' breaks boundary rules (Got: $minval <= $l1val <= $l2val <= $l3val <= $maxval)!"], className="fw-bold"), Dash.no_update()
                     end
                 end
 
@@ -1738,7 +1702,8 @@ function DECK_RegisterCallbacks_DDEF(app)
                         is_rad = get(prow, "IsRadioactive", get(prow, :IsRadioactive, false))
                         hl_val = Float64(get(prow, "HalfLife", get(prow, :HalfLife, 0.0)))
                         hl_unit = string(get(prow, "HalfLifeUnit", get(prow, :HalfLifeUnit, "Hours")))
-                        is_fill = false # CRITICAL: No table row can be a filler anymore
+                        # Architectural constraint: table rows are designated as fixed or variable factors only (non-filler).
+                        is_fill = false
                     end
                 end
 
@@ -1758,7 +1723,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 ))
             end
 
-            # Virtual filler is now injected inside DECK_GenerateProtocol_DDEF to avoid duplication.
+            # Implementation of the Virtual Filler Inclusion Protocol inside the protocol synthesis engine to prevent structural duplication.
 
             if !isnothing(session_data) && session_data != "" && !isnothing(master_vault) && master_vault != ""
                 path = Sys_Fast.FAST_GetTransientPath_DDEF(master_vault)
@@ -1766,7 +1731,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 path = Sys_Fast.FAST_GetTransientPath_DDEF()
             end
             ok, msg = DECK_GenerateProtocol_DDEF(path, in_d, out_d, vol, conc, method, stoch_settings, project)
- !ok && return Dash.no_update(), html_div(msg, className="", style=Dict("color" => "var(--colour-chr0-huered)")), Dash.no_update()
+                !ok && return Dash.no_update(), html_div(msg, className="", style=Dict("color" => "var(--colour-chr0-huered)")), Dash.no_update()
 
             store_content = Sys_Fast.FAST_ReadToStore_DDEF(path)
             raw_base64 = base64encode(read(path))
@@ -1778,7 +1743,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 catch
                 end
             end
-            # Standardized Naming: Project, Phase, Tag (DOE), Extension (xlsx)
+            # Standardised Naming: Project, Phase, Tag (DOE), Extension (xlsx)
             fname = Sys_Fast.FAST_GenerateSmartName_DDEF(project, current_phase, "DOE", "xlsx")
             rm(path; force=true)
 
@@ -1788,8 +1753,7 @@ function DECK_RegisterCallbacks_DDEF(app)
 "Protocol generated."], className="", style=Dict("color" => "var(--colour-chr4-tongre)")),
                 store_content,
             )
-
-        catch e  # Surface protocol generation errors
+        catch e
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("DECK", "PROTOCOL_CRASH", bt, "FAIL")
             return Dash.no_update(),
@@ -1798,7 +1762,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # --- 5. INPUT PROPERTIES MODAL ---
+    # Execution of the Input Properties Modal Orchestration for component-level refinement.
     callback!(app,
         Output("deck-modal-prop", "is_open"),
         Output("deck-prop-title", "children"),
@@ -1844,7 +1808,8 @@ function DECK_RegisterCallbacks_DDEF(app)
                     rad_state = get(prow, "IsRadioactive", get(prow, :IsRadioactive, false))
                     hl_state = Sys_Fast.FAST_SafeNum_DDEF(get(prow, "HalfLife", get(prow, :HalfLife, 0.0)))
                     hlu_state = string(get(prow, "HalfLifeUnit", get(prow, :HalfLifeUnit, "Hours")))
-                    fill_state = false # No table row is a filler
+                    # Design constraint: table rows are restricted from filler designation.
+                    fill_state = false
                     cur_name = get(prow, "Name", get(prow, :Name, ""))
                     if cur_name != ""
                         title = "Properties: $cur_name"
@@ -1858,7 +1823,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         return (ntuple(_ -> Dash.no_update(), 9)...,)
     end
 
-    # --- 7. STOICHIOMETRY SETTINGS MODAL ---
+    # Execution of the Stoichiometric Configuration Modal Orchestration.
     callback!(app,
         Output("deck-modal-stoch-settings", "is_open"),
         Output("deck-stoch-filler-name", "value"),
@@ -1886,7 +1851,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         trig = split(ctx.triggered[1].prop_id, ".")[1]
 
         if trig == "deck-btn-stoch-settings"
-            # Open modal and populate from store
+            # Initialisation of the configuration modal with cached stoichiometric data.
             if !isnothing(store_data)
                 return true,
                 string(get(store_data, "FillerName", get(store_data, :FillerName, ""))),
@@ -1901,16 +1866,16 @@ function DECK_RegisterCallbacks_DDEF(app)
             return false, NO, NO, NO, NO
         end
 
-        # Template auto-fills the stoichiometry modal with sample data
+        # Automated population of stoichiometric parameters via standardised template.
         if trig == "deck-btn-template"
             return false, "DPPC", 734.05, 5.0, 20.0
         end
-        # Clear button resets stoichiometry store
+        # Execution of the stoichiometric state reset protocol.
         if trig == "deck-btn-clear"
             return false, "", 0.0, 0.0, 0.0
         end
 
-        # Load from Memo / Uploaded Protocol (Handled by Orchestrator)
+        # Synchronisation of stoichiometric data via imported profiles (managed by the orchestrator).
         if trig in ("deck-upload-memo", "deck-upload")
             return false, NO, NO, NO, NO
         end
@@ -1922,9 +1887,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         return (ntuple(_ -> NO, 5)...,)
     end
 
-    # REMOVED: RESPONSE DOT INDICATOR callback as per user request.
-
-    # --- 9. DETAILED SCIENTIFIC AUDIT MODAL ---
+    # Execution of the Architectural Scientific Audit Orchestration for mathematical and chemical validation.
     callback!(app,
         Output("deck-sci-audit-output", "children"),
         Output("deck-modal-sci-audit", "is_open"),
@@ -1955,7 +1918,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             trig == "deck-btn-sci-audit-close" && return Dash.no_update(), false
             trig != "deck-btn-sci-audit" && return Dash.no_update(), is_op
 
-            # Unpack factors
+            # Decomposition of factor states for analytical processing.
             offset = 8
             all_names = collect(args[offset:offset+DECK_MaxRows_DDEC-1])
             all_roles = collect(args[offset+DECK_MaxRows_DDEC:offset+2DECK_MaxRows_DDEC-1])
@@ -1985,7 +1948,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 ))
             end
 
-            # 3. Virtual Filler Injection
+            # Orchestration of the Virtual Filler Inclusion Protocol during scientific validation.
             processed_rows = filter(r -> get(r, "Role", get(r, :Role, "")) != "Filler", copy(rows))
             
             if !isnothing(stoch_settings)
@@ -2002,18 +1965,18 @@ function DECK_RegisterCallbacks_DDEF(app)
 
             D = Lib_Mole_PT(processed_rows)
             num_vars = length(D["Idx_Var"])
- num_vars != 3 && return html_div("Protocol requires exactly 3 Variables. Detection: $num_vars", className="fw-bold", style=Dict("color" => "var(--colour-chr0-huered)")), true
+            num_vars != 3 && return html_div("Protocol requires exactly 3 Variables. Detection: $num_vars", className="fw-bold", style=Dict("color" => "var(--colour-chr0-huered)")), true
 
             # Generate virtual design for audit
             design_coded = Lib_Core.CORE_GenDesign_DDEF(method, 3)
             configs = [Dict("Levels" => [D["Rows"][i]["L1"], D["Rows"][i]["L2"], D["Rows"][i]["L3"]]) for i in D["Idx_Var"]]
             real_matrix = Lib_Core.CORE_MapLevels_DDEF(design_coded, configs)
-
-            # 1. Mathematical Health
+ 
+            # Analysis Segment 1: Assessment of mathematical design robustness (Efficiency).
             d_eff = Lib_Core.CORE_D_Efficiency_DDEF(real_matrix)
             metrics = Lib_Core.CORE_CalcDesignMetrics_DDEF(real_matrix)
-
-            # 2. Stoichiometry Feasibility (Full Matrix)
+ 
+            # Analysis Segment 2: Assessment of stoichiometric feasibility across the design space.
             sv_raw_sci = Sys_Fast.FAST_SafeNum_DDEF(vol)
             sc_raw_sci = Sys_Fast.FAST_SafeNum_DDEF(conc)
             
@@ -2026,22 +1989,23 @@ function DECK_RegisterCallbacks_DDEF(app)
 
             sv_calc_sci = sv_raw_sci
             sc_calc_sci = sc_raw_sci
-
+ 
+            # Execution of the comprehensive mass inventory audit.
             valid_stoi, stoi_issues = Lib_Mole.MOLE_ValidateDesignFeasibility_DDEF(real_matrix, D["Rows"], sv_calc_sci, sc_calc_sci)
 
-            # 3. Mass Audit (Full Matrix)
+            # Analysis Segment 3: Assessment of total mass inventory feasibility across the matrix.
             audit_res = Lib_Mole.MOLE_AuditBatch_DDEF(processed_rows, real_matrix, sv_calc_sci, sc_calc_sci)
             masses = audit_res["RunMasses"]
             min_mass = isempty(masses) ? 0.0 : minimum(masses)
             max_mass = isempty(masses) ? 0.0 : maximum(masses)
-
-            # Build UI Report
+ 
+            # Generation of the comprehensive design integrity report (UI).
             return html_div([
- html_h5("DESIGN INTEGRITY REPORT", className="fw-bold mb-3", style=Dict("color" => "var(--colour-chr3-toncya)")),
+                html_h5("DESIGN INTEGRITY REPORT", className="fw-bold mb-3", style=Dict("color" => "var(--colour-chr3-toncya)")),
 
                 # Efficiency Section
                 html_div([
- html_div("Mathematical Efficiency", className="small fw-bold mb-1", style=Dict("color" => "var(--colour-val3-darlow)")),
+                    html_div("Mathematical Efficiency", className="small fw-bold mb-1", style=Dict("color" => "var(--colour-val3-darlow)")),
                     dbc_row([
                             dbc_col(Gui_Base.BASE_MiniVitals_DDEF("D-Efficiency", @sprintf("%.1f%%", d_eff * 100), d_eff > 0.6 ? "var(--colour-chr4-tongre)" : "var(--colour-chr5-hueyel)"), xs=6, md=3),
                             dbc_col(Gui_Base.BASE_MiniVitals_DDEF("Condition #", @sprintf("%.1e", metrics["Condition"]), metrics["Condition"] < 1e4 ? "var(--colour-chr4-tongre)" : "var(--colour-chr0-huered)"), xs=6, md=3),
@@ -2052,7 +2016,7 @@ function DECK_RegisterCallbacks_DDEF(app)
 
                 # Stoichiometry Section
                 html_div([
- html_div("Chemical Stoichiometry", className="small fw-bold mb-1", style=Dict("color" => "var(--colour-val3-darlow)")),
+                    html_div("Chemical Stoichiometry", className="small fw-bold mb-1", style=Dict("color" => "var(--colour-val3-darlow)")),
                     dbc_alert([
                             html_i(className="fas $(valid_stoi ? "fa-check-circle" : "fa-exclamation-triangle") me-2"),
                             html_strong(valid_stoi ? "PHASE FEASIBLE: " : "PHASE VIOLATION: "),
@@ -2062,21 +2026,21 @@ function DECK_RegisterCallbacks_DDEF(app)
 
                 # Mass Audit Section
                 html_div([
- html_div("Mass Inventory (per run)", className="small fw-bold mb-1", style=Dict("color" => "var(--colour-val3-darlow)")),
+                    html_div("Mass Inventory (per run)", className="small fw-bold mb-1", style=Dict("color" => "var(--colour-val3-darlow)")),
                     dbc_row([
                             dbc_col(html_div([
- html_span("Min Mass:", className="small", style=Dict("color" => "var(--colour-val4-darhig)")),
-                                    html_span(@sprintf("%.4f mg", min_mass), className="fw-bold")
+                                html_span("Min Mass:", className="small", style=Dict("color" => "var(--colour-val4-darhig)")),
+                                html_span(@sprintf("%.4f mg", min_mass), className="fw-bold")
                                 ]), xs=6),
                             dbc_col(html_div([
- html_span("Max Mass:", className="small", style=Dict("color" => "var(--colour-val4-darhig)")),
-                                    html_span(@sprintf("%.4f mg", max_mass), className="fw-bold")
+                                html_span("Max Mass:", className="small", style=Dict("color" => "var(--colour-val4-darhig)")),
+                                html_span(@sprintf("%.4f mg", max_mass), className="fw-bold")
                                 ]), xs=6),
- ], className="p-2 rounded small mb-3", style=Dict("backgroundColor" => "var(--colour-val0-purwhi)"))
+                    ], className="p-2 rounded small mb-3", style=Dict("backgroundColor" => "var(--colour-val0-purwhi)"))
                 ]), html_div([
                         html_i(className="fas fa-info-circle me-2"),
                         "This audit simulates the full experimental matrix based on your current settings. Passing this check ensures a high probability of successful protocol execution."
- ], className="small italic border-top pt-2", style=Dict("color" => "var(--colour-val3-darlow)"))
+                ], className="small italic border-top pt-2", style=Dict("color" => "var(--colour-val3-darlow)"))
             ]), true
 
         catch e
@@ -2085,7 +2049,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # --- 10. STOICHIOMETRIC COMPONENTS LIST UPDATE ---
+    # Automated refresh of the Stoichiometric Component Inventory display.
     callback!(app,
         Output("deck-stoch-list-display", "children"),
         Input("deck-store-factors", "data"),
@@ -2098,7 +2062,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         # Convert to Any[] to avoid JSON3.Object push! MethodError
         stoch_items = Any[]
         
-        # Collect items from factors table
+        # Aggregation of active components from the primary factor inventory.
         for r in rows_raw
             name = strip(string(get(r, "Name", get(r, :Name, ""))))
             mw   = Sys_Fast.FAST_SafeNum_DDEF(get(r, "MW", get(r, :MW, 0.0)))
@@ -2107,7 +2071,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             end
         end
         
-        # Add virtual filler from modal
+        # Integration of the virtual filler parameter from the stoichiometric configuration.
         if !isnothing(stoch_settings)
             f_name = strip(string(get(stoch_settings, "FillerName", get(stoch_settings, :FillerName, ""))))
             f_mw   = Sys_Fast.FAST_SafeNum_DDEF(get(stoch_settings, "FillerMW", get(stoch_settings, :FillerMW, 0.0)))
@@ -2135,4 +2099,5 @@ function DECK_RegisterCallbacks_DDEF(app)
     end
 
 end
-end # module
+
+end
