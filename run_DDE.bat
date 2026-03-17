@@ -3,22 +3,25 @@ TITLE DaishoDoE
 COLOR 0A
 CLS
 
-ECHO.
-ECHO  [SYSTEM] Booting DaishoDoE Engine...
-ECHO  [STATUS] Verifying Julia Environment...
+set "t=%TIME: =0%"
+set "t=%t:,=.%0"
+echo [%t%] BOOT        : Setup           Booting DaishoDoE Engine...
+echo [%t%] BOOT        : Setup           Verifying Julia Environment...
 
 REM Check if Julia is in PATH
 WHERE julia >nul 2>nul
 IF %ERRORLEVEL% NEQ 0 (
-    COLOR 0C
-    ECHO.
-    ECHO  [ERROR]  Julia engine not found in system PATH.
+    set "t=%TIME: =0%"
+    set "t=%t:,=.%"
+    echo [%t%] BOOT        : FAIL            Julia engine not found in system PATH.
     PAUSE
     EXIT /B
 )
 
-ECHO  [STATUS] Environment Validated.
-ECHO  [SYSTEM] Initializing Core Architecture...
+set "t=%TIME: =0%"
+set "t=%t:,=.%0"
+echo [%t%] BOOT        : Setup           Environment Validated.
+echo [%t%] BOOT        : Setup           Initializing Core Architecture...
 ECHO.
 
 REM Dynamic PowerShell command waiting for server port availability to trigger browser launch.
@@ -28,11 +31,13 @@ REM Run the application
 julia --threads auto -O1 --project=. app.jl
 
 IF %ERRORLEVEL% NEQ 0 (
-    COLOR 0C
-    ECHO.
-    ECHO  [CRITICAL] Application terminated unexpectedly.
+    set "t=%TIME: =0%"
+    set "t=%t:,=.%"
+    echo [%t%] SERVER      : CRITICAL        Application terminated unexpectedly.
     PAUSE
 )
 ECHO.
-ECHO  [SHUTDOWN] System halted.
+set "t=%TIME: =0%"
+set "t=%t:,=.%0"
+echo [%t%] SERVER      : SHUTDOWN        System halted.
 PAUSE

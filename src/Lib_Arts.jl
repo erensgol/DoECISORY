@@ -154,7 +154,7 @@ function ARTS_AdaptiveGridN_DDEF(preferred::Int, max_total::Int=ARTS_MaxGridPoin
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 6: MATRIX DOWNSAMPLING ENGINE
+# SECTION 6: VISUAL MATRIX DOWNSAMPLING ENGINE
 # ------------------------------------------------------------------------------
 """
     ARTS_Downsample_DDEF(Z, target_rows, target_cols) -> Matrix
@@ -177,6 +177,97 @@ function ARTS_Downsample_DDEF(Z::Matrix{T}, target_rows::Int, target_cols::Int) 
     Main.Sys_Fast.FAST_Log_DDEF("ARTS", "DOWNSAMPLE",
         "Reduced $(nr)×$(nc) → $(length(row_idx))×$(length(col_idx))", "INFO")
     return Z[row_idx, col_idx]
+end
+
+"""
+    ARTS_SmoothMatrix_DDEF(Z, [passes]) -> Matrix
+Applies a 3x3 box blur filter to a matrix to reduce visual aliasing (staircase effect).
+Automatically handles NaNs by calculating the mean of valid neighbouring pixels.
+Includes boundary handling for consistent smoothing across the entire surface.
+"""
+function ARTS_SmoothMatrix_DDEF(Z::Matrix{Float64}, passes::Int=1)
+    nr, nc = size(Z)
+    (nr < 2 || nc < 2) && return Z
+    
+    Current = copy(Z)
+    for _ in 1:passes
+        Next = copy(Current)
+        
+        # Execution of a standard 3x3 spatial convolution with boundary padding logic.
+        @inbounds for j in 1:nc
+            for i in 1:nr
+                # Extraction of valid coordinate ranges for the neighbourhood window.
+                r_start, r_end = max(1, i-1), min(nr, i+1)
+                c_start, c_end = max(1, j-1), min(nc, j+1)
+                
+                s_val = 0.0
+                s_cnt = 0
+                
+                # Iteration over local neighbourhood to calculate average signal.
+                for c in c_start:c_end
+                    for r in r_start:r_end
+                        v = Current[r, c]
+                        if !isnan(v)
+                            s_val += v
+                            s_cnt += 1
+                        end
+                    end
+                end
+                
+                if s_cnt > 0
+                    Next[i, j] = s_val / s_cnt
+                end
+            end
+        end
+        Current = Next
+    end
+    
+    return Current
+end
+
+"""
+    ARTS_HexToRGBA_DDEF(hex, alpha) -> String
+Converts hex color strings to RGBA format for Plotly transparency support.
+"""
+function ARTS_HexToRGBA_DDEF(hex::String, alpha::Float64)
+    h = replace(hex, "#" => "")
+    r = parse(Int, h[1:2], base=16)
+    g = parse(Int, h[3:4], base=16)
+    b = parse(Int, h[5:6], base=16)
+    return "rgba($r, $g, $b, $alpha)"
+end
+
+"""
+    ARTS_GenerateAlphaViridis_DDEF(thresh) -> Vector
+Generates a custom Viridis colorscale with a smooth alpha-gradient at the threshold.
+Eliminates aliasing by using fragment-level transparency instead of mesh-level NaN clipping.
+"""
+function ARTS_GenerateAlphaViridis_DDEF(thresh::Float64)
+    C = Main.Sys_Fast.FAST_Data_DDEC
+    # Formulation of the alpha-enabled Viridis palette for optimal candidate mapping.
+    # We use a 10% fade range below the threshold for professional gradient effect.
+    fade_start = max(0.0, thresh - 0.10)
+    
+    base_cols = [
+        C.COLOUR_SHAMAG, C.COLOUR_SHABLU, C.COLOUR_TONCYA, C.COLOUR_TONGRE, C.COLOUR_HUEYEL
+    ]
+    
+    scale = Any[]
+    # Fully transparent zone
+    push!(scale, [0.0, "rgba(255,255,255,0)"])
+    push!(scale, [max(0.0, fade_start - 0.01), "rgba(255,255,255,0)"])
+    
+    # Smooth Alpha Transition Zone
+    push!(scale, [fade_start, ARTS_HexToRGBA_DDEF(base_cols[1], 0.0)])
+    push!(scale, [thresh,     ARTS_HexToRGBA_DDEF(base_cols[1], 1.0)])
+    
+    # Mapped Viridis Zone (Standard Intensity)
+    for i in 2:5
+        val = thresh + (1.0 - thresh) * ((i - 1) / 4)
+        push!(scale, [val, ARTS_HexToRGBA_DDEF(base_cols[i], 1.0)])
+    end
+    
+    return scale
 end
 
 # ==============================================================================
@@ -675,8 +766,7 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
     ix, iy = Idx[1], Idx[2]
 
     threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
-    N = threads <= 4 ? 61 : 101
-    # Variable dimensionality constant.
+    N = (threads <= 4 ? 61 : 101)
     K = 3
 
     x1 = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N))
@@ -784,7 +874,8 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
         # Structural duplication of score matrices for threshold masking.
         Masked = copy(all_scores[s])
         if is_candidate
-            Masked[Masked .< thresh] .= NaN
+            # Execution of anti-aliasing filter to ensure underlying score continuity.
+            Masked = ARTS_SmoothMatrix_DDEF(Masked, 4)
         end
 
         Z_layer = fill(iz > 0 ? zv : 0.0, N, N)
@@ -810,7 +901,7 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
                 y            = x2, 
                 z            = Z_layer,
                 surfacecolor = Masked,
-                colorscale   = ARTS_ViridisScale_DDEC,
+                colorscale   = is_candidate ? ARTS_GenerateAlphaViridis_DDEF(thresh) : ARTS_ViridisScale_DDEC,
                 cmin         = 0.0, 
                 cmax         = 1.0, 
                 showscale    = (s == 1),

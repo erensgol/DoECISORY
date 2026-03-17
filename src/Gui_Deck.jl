@@ -224,7 +224,7 @@ function DECK_ModalAudit_DDEF()
         BASE_Modal_DDEF("deck-modal-audit", "Quick Audit Report",
             dbc_row(dbc_col(html_div(id="deck-audit-output"), xs=12)),
             dbc_button("Close", id="deck-btn-audit-close", className="ms-auto colourgl-c0hr", outline=false)),
- BASE_Modal_DDEF("deck-modal-sci-audit", [html_i(className="fas fa-certificate me-2 colourtx-c1sm"),"Detailed Scientific Audit"],
+ BASE_Modal_DDEF("deck-modal-sci-audit", [html_i(className="fas fa-certificate me-2 colourtx-c1sm"),"Detailed Matrix Audit"],
             dbc_row(dbc_col(dcc_loading(html_div(id="deck-sci-audit-output"), type="default", color="var(--colour-chr1-shamag)"), xs=12)),
             dbc_button("Close", id="deck-btn-sci-audit-close", className="ms-auto colourgl-c0hr", outline=false))
     ])
@@ -425,12 +425,12 @@ function DECK_Layout_DDEF()
                             [html_i(className="fas fa-cogs me-2"), "SYSTEM CONFIGURATION"], 
                             [
                                 BASE_SidebarHeader_DDEF("DATA ACQUISITION", icon="fas fa-database"),
-                                BASE_Upload_DDEF("deck-upload", "Import Dataset", "fas fa-file-import"),
+                                BASE_Upload_DDEF("deck-upload", "Import Dataset (Xlsx)", "fas fa-file-import"),
                                 BASE_Loading_DDEF("deck-upload-status", "No data source", class="glass-loading-status mb-2"),
                                 
                                 BASE_Separator_DDEF(),
                                 
-                                BASE_SidebarHeader_DDEF("PROFILES"),
+                                BASE_SidebarHeader_DDEF("JSON PROFILES"),
                                 dbc_row([
                                     dbc_col(BASE_ActionButton_DDEF("deck-btn-save-memo", "Save",   "fas fa-download", class="w-100 fw-bold"), xs=6, className="pe-1 mb-2"),
                                     dbc_col(dcc_upload(
@@ -468,7 +468,7 @@ function DECK_Layout_DDEF()
                                 
                                 BASE_ActionButton_DDEF("deck-btn-stoch-settings", "Stoichiometry Settings", "fas fa-flask",      class="w-100 mb-2"),
                                 BASE_ActionButton_DDEF("deck-btn-audit",          "Quick Audit",            "fas fa-vial",       class="w-100 mb-2"),
-                                BASE_ActionButton_DDEF("deck-btn-sci-audit",      "Scientific Audit",       "fas fa-microscope", class="w-100 mb-2"),
+                                BASE_ActionButton_DDEF("deck-btn-sci-audit",      "Matrix Audit",           "fas fa-microscope", class="w-100 mb-2"),
                                 
                                 BASE_Loading_DDEF("deck-run-output", ""),
                                 BASE_NextButton_DDEF("deck-btn-run", "Generate Protocol"),
@@ -1887,7 +1887,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         return (ntuple(_ -> NO, 5)...,)
     end
 
-    # Execution of the Architectural Scientific Audit Orchestration for mathematical and chemical validation.
+    # Execution of the Architectural Matrix Audit Orchestration for mathematical and chemical validation.
     callback!(app,
         Output("deck-sci-audit-output", "children"),
         Output("deck-modal-sci-audit", "is_open"),
@@ -1948,7 +1948,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 ))
             end
 
-            # Orchestration of the Virtual Filler Inclusion Protocol during scientific validation.
+            # Orchestration of the Virtual Filler Inclusion Protocol during matrix validation.
             processed_rows = filter(r -> get(r, "Role", get(r, :Role, "")) != "Filler", copy(rows))
             
             if !isnothing(stoch_settings)
@@ -1983,7 +1983,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             if isnan(sv_raw_sci) || sv_raw_sci <= 0 || isnan(sc_raw_sci) || sc_raw_sci <= 0
                 return html_div([
                     html_i(className="fas fa-exclamation-triangle me-2"),
-                    html_span("Scientific Audit Blocked: Global Volume and Concentration must be defined as positive non-zero values.", className="fw-bold"),
+                    html_span("Matrix Audit Blocked: Global Volume and Concentration must be defined as positive non-zero values.", className="fw-bold"),
                 ], className="h6 mb-3", style=Dict("color" => "var(--colour-chr0-huered)")), true
             end
 
@@ -2045,7 +2045,7 @@ function DECK_RegisterCallbacks_DDEF(app)
 
         catch e
             bt = sprint(showerror, e, catch_backtrace())
-            return html_div("Scientific Audit Failed: $e", className="", style=Dict("color" => "var(--colour-chr0-huered)")), true
+            return html_div("Matrix Audit Failed: $e", className="", style=Dict("color" => "var(--colour-chr0-huered)")), true
         end
     end
 

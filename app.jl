@@ -23,6 +23,8 @@ using DashBootstrapComponents
 using Pkg
 using DataFrames
 using PlotlyJS
+using Logging
+using LoggingExtras
 
 # ------------------------------------------------------------------------------
 # SECTION 2: INFRASTRUCTURE DETECTION
@@ -65,13 +67,13 @@ Sys_Fast.FAST_InitialiseWorkforce_DDEF()
 # SECTION 4: TERMINAL IDENTITY & SYSTEM REPORTING
 # ------------------------------------------------------------------------------
 println("\e[1m               \e[32m_\e[0m")
-println("\e[1m   \e[34m_\e[0m       _ \e[31m_\e[32m(_)\e[35m_\e[0m     |  \e[1mDaishoDoE Engine\e[0m v1.0-dev")
+println("\e[1m   \e[34m_\e[0m       _ \e[31m_\e[32m(_)\e[35m_\e[0m     |")
 println("\e[1m  \e[34m(_)\e[0m     | \e[31m(_)\e[0m \e[35m(_)\e[0m    |  System Status: \e[32m[OPTIMAL]\e[0m")
-println("\e[1m   _ _   _| |_  __ _   |")
-println("\e[1m  | | | | | | |/ _` |  |  Radiopharmacy Research Software")
-println("\e[1m  | | |_| | | | (_| |  |  Author: E.S. GÖL, Pharmacist")
-println("\e[1m _/ |\\__'_|_|_|\\__'_|  |  Department of Radiopharmacy")
-println("\e[1m|__/                   |  Hacettepe University. 2026.")
+println("\e[1m   _ _   _| |_  __ _   |  \e[1mDaishoDoE Software\e[0m v1.0-dev")
+println("\e[1m  | | | | | | |/ _` |  |  Author: E.S. GÖL, Pharmacist  ")
+println("\e[1m  | | |_| | | | (_| |  |  Department of Radiopharmacy")
+println("\e[1m _/ |\\__'_|_|_|\\__'_|  |  Hacettepe University. 2026.")
+println("\e[1m|__/                   |")
 
 let (n_threads, _, _) = Sys_Fast.FAST_GetThreadInfo_DDEF()
     status = n_threads > 1 ? "[OPTIMAL]" : "\e[31m[LIMITED]\e[0m"
@@ -148,6 +150,7 @@ app.index_string = """
 <html>
     <head>
         {%metas%}
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>{%title%}</title>
         {%favicon%}
         {%css%}
@@ -569,7 +572,6 @@ function APP_Warmup_DDEF()::Nothing
         mod_dummy = Lib_Vise.VISE_Regress_DDEF(X_dummy, vec(Y_dummy), "linear"; InNames=names_in)
         
         goals_dummy = [Dict("Type"=>"Maximise", "Weight"=>1.0)]
-        # Add explicit Goal key for multi-layered robustness
         mod_dummy["Goal"] = goals_dummy[1]
         
         bounds_dummy = [0.0 1.0; 0.0 1.0; 0.0 1.0]
@@ -596,9 +598,18 @@ try
     env_label = APP_IsHfSpaces_DDEC ? "Cloud (HF Spaces)" : "Local $(Threads.nthreads())T"
     
     Sys_Fast.FAST_Log_DDEF("SERVER", "Ready", "DaishoDoE Engine listening on :$(APP_Port_DDEC) ($env_label)", "OK")
+    custom_logger = EarlyFilteredLogger(current_logger()) do log
+        if log.level == Logging.Error && contains(string(log.message), "operation canceled")
+            Sys_Fast.FAST_Log_DDEF("SERVER", "DISCONNECT", "Connection reset by browser (ECANCELED)", "INFO")
+            return false
+        end
+        return true
+    end
 
-    run_server(app, "0.0.0.0", APP_Port_DDEC; debug=false)
+    with_logger(custom_logger) do
+        run_server(app, "0.0.0.0", APP_Port_DDEC; debug=false)
+    end
 catch e
-    println("\n>>> CRITICAL SERVER ERROR: $e")
+    println("\n>>> CRITICAL SERVER BOOT ERROR: $e")
     rethrow(e)
 end

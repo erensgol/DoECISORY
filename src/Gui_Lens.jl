@@ -46,7 +46,7 @@ function LENS_Layout_DDEF()
             dbc_col([
                 dbc_row(dbc_col(BASE_GlassPanel_DDEF([html_i(className="fas fa-cogs me-2"), "ANALYSIS CONFIGURATION"], [
                     BASE_SidebarHeader_DDEF("DATA ACQUISITION", icon="fas fa-database"),
-                    BASE_Upload_DDEF("lens-upload-data", "Import Dataset", "fas fa-file-import", class="w-100 mb-2 fw-bold pulse-green"),
+                    BASE_Upload_DDEF("lens-upload-data", "Import Dataset (Xlsx)", "fas fa-file-import", class="w-100 mb-2 fw-bold pulse-green"),
                     BASE_Loading_DDEF("lens-upload-status", "No Data Source"; class="glass-loading-status mb-2"),
                     BASE_Separator_DDEF(),
 

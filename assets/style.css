@@ -541,12 +541,17 @@ a:hover {
 }
 
 /* --- 11. UNIFIED RESPONSIVENESS --- */
-@media (min-width: 1272px) and (max-width: 1600px) {
-    .modal-xl, .modal-lg { max-width: 92vw !important; }
+@media (min-width: 1272px) and (max-width: 1358px) {
+    .modal-xl, .modal-lg { max-width: 85vw !important; }
 }
 
+/* Force Column Stacking */
 @media (max-width: 1272px) {
     .row > [class*="col-md-"], .row > [class*="col-lg-"] { flex: 0 0 100% !important; max-width: 100% !important; width: 100% !important; }
+}
+
+/* UI Compact Mode */
+@media (max-width: 960px) {
     .app-container { padding: 0.75rem 1rem; }
     .glass-navbar { margin: 0.5rem 0.75rem; padding: 0 1rem; height: 50px; }
     .nav-links { gap: 4px; padding: 3px; }
@@ -558,5 +563,5 @@ a:hover {
     .glass-command-row { padding: 0.85rem 1rem; }
     .glass-command-icon { margin-right: 0.75rem; width: 30px; height: 30px; font-size: 0.9rem; }
     .glass-command-title { font-size: 0.9rem; }
-    .modal-xl, .modal-lg { max-width: 90vw !important; margin: 0.5rem auto !important; }
+    .modal-xl, .modal-lg { max-width: 85vw !important; margin: 0.5rem auto !important; }
 }

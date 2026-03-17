@@ -1029,26 +1029,16 @@ Provides a stochastic selection of scientific and academic citations to reinforc
 """
 function FAST_GetSystemQuote_DDEF()::String
     quotes = [
-        "Everything should be as simple as possible, but not simpler. - A.E.",
-        "Data is the new oil, but intelligence is the refinery. - C.H.",
-        "The first principle is that you must not fool yourself. - R.F.",
         "Mathematics is the language of the universe. - G.G.",
+        "Everything should be as simple as possible, but not simpler. - A.E.",
         "Errors with data are better than errors without it. - F.N.",
-        "Chance favours only the prepared mind. - L.P.",
-        "In science there is only physics; all the rest is stamp collecting. - E.R.",
         "The best way to predict the future is to create it. - P.D.",
-        "Imagination is more important than knowledge. - A.E.",
         "Measure what is measurable, and make measurable what is not. - G.G.",
         "Science is a way of thinking, not a body of knowledge. - C.S.",
         "All science is the refinement of everyday thinking. - A.E.",
-        "What we know is a drop, what we ignore is an ocean. - I.N.",
         "An investment in knowledge pays the best interest. - B.F.",
         "I have no special talent, I am only passionately curious. - A.E.",
-        "Experiment is the mother of certainty. - L.D.V.",
-        "Science is true whether you believe in it or not. - N.D.T.",
         "The science of today is the technology of tomorrow. - E.T.",
-        "Truth is too complex for anything but approximations. - J.V.N.",
-        "Science is the belief in the ignorance of experts. - R.F."
     ]
     return rand(quotes)
 end
