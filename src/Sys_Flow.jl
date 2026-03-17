@@ -345,10 +345,6 @@ function FLOW_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5, Shif
     return NewConf
 end
 
-# ------------------------------------------------------------------------------
-# SECTION 3: ADAPTIVE SEARCH SPACE
-# ------------------------------------------------------------------------------
-
 """
     FLOW_WriteLeaders_DDEF(File, Phase, LeadersDF) -> Bool
 Persists prioritized candidates for the current phase to the shared master record.

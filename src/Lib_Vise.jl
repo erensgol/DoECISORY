@@ -66,6 +66,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 2: DESIGN MATRIX EXPANSION ENGINE
 # ------------------------------------------------------------------------------
+
 """
     VISE_ExpandDesign_DDEF(X, ModelType) -> Matrix{Float64}
 Expands raw factor matrix into a design matrix (intercept + linear + interactions + quadratic).
@@ -103,6 +104,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 3: UNIVERSAL PREDICTION GATEWAY
 # ------------------------------------------------------------------------------
+
 """
     VISE_Predict_DDEF(Model::Dict, X_Raw) -> Vector{Float64}
 Universal prediction gateway for OLS models (Linear / Quadratic).
@@ -126,6 +128,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 4: REGRESSION ENGINE & NUMERICAL CLAMPING
 # ------------------------------------------------------------------------------
+
 """
     VISE_ClampIndex_DDEF(idx, len) -> Int
 Clamps an index to valid range [1, len] to prevent BoundsError.
@@ -226,6 +229,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 5: MULTICOLLINEARITY DIAGNOSTICS (VIF)
 # ------------------------------------------------------------------------------
+
 """
     VISE_CalcVIF_DDEF(X_Design) -> Vector{Float64}
 Calculates Variance Inflation Factors (VIF) to detect multicollinearity.
@@ -256,6 +260,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 6: LACK-OF-FIT STATISTICAL TEST
 # ------------------------------------------------------------------------------
+
 """
     VISE_LackOfFit_DDEF(X_Design, Y) -> (F_Stat, P_Value)
 Performs Lack-of-Fit test to determine if model structure is adequate (requires replicates).
@@ -317,6 +322,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 7: ANOVA TABLE CONSTRUCTOR
 # ------------------------------------------------------------------------------
+
 """
     VISE_GenerateAnovaTable_DDEF(Model::Dict, X::AbstractMatrix, Y::AbstractVector) -> DataFrame
 Constructs a comprehensive ANOVA table for experimental validation.
@@ -430,6 +436,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 8: RESIDUAL NORMALITY ASSESSMENT (Shapiro-Wilk)
 # ------------------------------------------------------------------------------
+
 """
     VISE_PerformNormalityTest_DDEF(Model, X, Y) -> Dict
 Executes the Shapiro-Wilk test on model residuals for normality assessment.
@@ -465,6 +472,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 9: CORE STATISTICAL METRICS (R2, AIC, RMSE)
 # ------------------------------------------------------------------------------
+
 """
     VISE_CalcMetrics_DDEF(Y_Real, Y_Pred, p) -> (R2, R2_Adj, RMSE, AIC)
 Calculates core statistical metrics (R², Adjusted R², RMSE, AIC).
@@ -488,6 +496,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 10: XLSX EXPORT ENGINE
 # ------------------------------------------------------------------------------
+
 """
     VISE_ExportToExcel_DDEF(FilePath::String, Results::Dict) -> Bool
 Exports all statistical models, ANOVA tables, and metrics to a professional XLSX file.
@@ -586,6 +595,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 11: PRIMARY TOURNAMENT MODEL SELECTION
 # ------------------------------------------------------------------------------
+
 """
     VISE_SelectBestModel_DDEF(X, Y, InNames) -> (BestModel, LogMsg)
 Evaluates multiple model structures and selects the optimal winner.
@@ -677,6 +687,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 13: MULTITHREADED GRID SEARCH ENGINE
 # ------------------------------------------------------------------------------
+
 """
     VISE_GridSearch_DDEF(Models, Goals, Bounds; [Steps]) -> (X, Y_Pred, Scores)
 Performs high-density grid search across factor space for desirability exploration.
@@ -782,6 +793,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 14: LOCAL GRADIENT SENSITIVITY ANALYSIS
 # ------------------------------------------------------------------------------
+
 """
     VISE_SensitivityAnalysis_DDEF(Model, X_Point; [delta]) -> Vector{Float64}
 Calculates local sensitivity (gradients) at a specific coordinate.
@@ -813,6 +825,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 15: SCIENTIFIC REPORT GENERATOR
 # ------------------------------------------------------------------------------
+
 """
     VISE_GenerateScientificReport_DDEF(Res) -> String
 Generates an academic report following rigorous editorial and scientific standards.

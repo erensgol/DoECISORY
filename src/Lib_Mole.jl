@@ -70,6 +70,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 3: ISOTHERMAL RADIO-DECAY CALCULATION
 # ------------------------------------------------------------------------------
+
 """
     MOLE_ApplyRadioDecay_DDEF(RawValue, HalfLife, HalfLifeUnit, DeltaTMinutes) -> Float64
 Calculates effective mass/activity after isothermal decay (Measured * DF).
@@ -198,6 +199,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 7: MOLAR PERCENTAGE EQUIVALENCY ENGINE
 # ------------------------------------------------------------------------------
+
 """
     MOLE_GetPercentageEquivalent_DDEF(Value, UnitStr, MW, Vol, Conc) -> Float64
 Calculates the molar percentage contribution of a component within the system budget.
@@ -452,6 +454,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 9: PRIMARY STOICHIOMETRY ENGINE (Pass 1-3)
 # ------------------------------------------------------------------------------
+
 """
     MOLE_CalcMass_DDEF(Names, MWs, Ratios, Vol, Conc, Units, [Scale]) -> DataFrame
 Universal Stoichiometry Engine utilising a integrated multiple-pass resolution model.
@@ -580,6 +583,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 10: MATRIX AUDIT & IMPOSSIBLE RUN DETECTION
 # ------------------------------------------------------------------------------
+
 """
     MOLE_AuditBatch_DDEF(TableData, Design, Vol, Conc) -> Dict
 Execute comprehensive feasibility analysis for proposed experimental batches.
@@ -667,6 +671,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 11: DESIGN FEASIBILITY VALIDATION
 # ------------------------------------------------------------------------------
+
 """
     MOLE_ValidateDesignFeasibility_DDEF(DesignMatrix, InMeta, [Vol], [Conc]) -> (Bool, String)
 Advanced stoichiometric feasibility check for design matrices. 
@@ -728,6 +733,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 12: DESIGN MATRIX EXPANSION
 # ------------------------------------------------------------------------------
+
 """
     MOLE_ProcessDesign_DDEF(DesignMatrix::AbstractMatrix, TableData::AbstractVector, Vol::Float64, Conc::Float64) -> DataFrame
 Expand design matrices into integrated experimental protocols with mass calculations and stoichiometric consistency.

@@ -507,6 +507,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 5: SYSTEM AUDIT UI (HARDWARE MONITOR)
 # ------------------------------------------------------------------------------
+
 """
     BASE_SystemAuditUI_DDEF() -> Container
 Generates the technical diagnostic interface for monitoring system health and resources.
@@ -565,6 +566,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 6: SCIENTIFIC INTEGRITY CERTIFICATE
 # ------------------------------------------------------------------------------
+
 """
     BASE_ScientificAuditUI_DDEF() -> Container
 Generates the integrity certificate interface to verify architectural consistency.

@@ -74,6 +74,7 @@ const ARTS_SceneHeight_DDEC = 500
 # ------------------------------------------------------------------------------
 # SECTION 3: BASE LAYOUT FACTORY
 # ------------------------------------------------------------------------------
+
 """
     ARTS_BaseLayout_DDEF(title; [height]) -> Layout
 Generates a standardised PlotlyJS layout with light theme support.
@@ -141,6 +142,7 @@ const ARTS_MaxGridPoints_DDEC = 11000
 # ------------------------------------------------------------------------------
 # SECTION 5: ADAPTIVE GRID RESOLUTION LOGIC
 # ------------------------------------------------------------------------------
+
 """
     ARTS_AdaptiveGridN_DDEF(preferred, [max_total]) -> Int
 Returns a grid resolution N such that N×N ≤ max_total.
@@ -156,6 +158,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 6: VISUAL MATRIX DOWNSAMPLING ENGINE
 # ------------------------------------------------------------------------------
+
 """
     ARTS_Downsample_DDEF(Z, target_rows, target_cols) -> Matrix
 Sub-samples oversized matrices using strided decimation for optimal browser performance.
@@ -277,6 +280,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 7: MULTI-OBJECTIVE GOAL PARSING
 # ------------------------------------------------------------------------------
+
 """
     ARTS_ExtractGoal_DDEF(Goal) -> Tuple
 Extracts and normalises goal parameters from an objective dictionary.
@@ -309,6 +313,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 8: HARRINGTON DESIRABILITY SCORING
 # ------------------------------------------------------------------------------
+
 """
     ARTS_CalcDesirability_DDEF(Val, GoalTup) -> Float64
 Calculates desirability scores using Harrington's function for multi-objective mapping.
@@ -354,6 +359,7 @@ function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
     # Scientific Safeguard: NaN or Inf should be 0.0, others clamped to [0, 1]
     return (isnan(res) || isinf(res)) ? 0.0 : clamp(res, 0.0, 1.0)
 end
+
 # ==============================================================================
 # PART C: ACADEMIC DIAGNOSTICS & PLOTTING
 # ==============================================================================
@@ -446,6 +452,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 10: PREDICTION ACCURACY PLOTS
 # ------------------------------------------------------------------------------
+
 """
     ARTS_RenderFit_DDEF(Y_Real, Y_Pred, OutName) -> Plot
 Compares experimental results with model predictions via scatter plot.
@@ -522,6 +529,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 12: PREDICTION GRID CONSTRUCTOR
 # ------------------------------------------------------------------------------
+
 """
     ARTS_BuildGrid_DDEF(X, ix, iy, N_requested) -> (x1, x2, Grid)
 Constructs a prediction grid for surface and contour plots centred on factor means.
@@ -543,6 +551,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 13: 3D RESPONSE SURFACE RENDERER
 # ------------------------------------------------------------------------------
+
 """
     ARTS_RenderSurface_DDEF(Model, X_Train, Idx, Lbls, OutName) -> Plot
 Renders a 3D Response Surface (RSM) for two selected variables.
@@ -592,6 +601,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 14: 2D CONTOUR PROJECTION RENDERER
 # ------------------------------------------------------------------------------
+
 """
     ARTS_RenderContour_DDEF(Model, X_Train, Idx, Lbls, OutName) -> Plot
 Renders a 2D Contour map (Heatmap) with labeled isolating lines.
@@ -690,6 +700,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 16: MAIN EFFECT TREND VISUALISER
 # ------------------------------------------------------------------------------
+
 """
     ARTS_RenderTrend_DDEF(Model, X, Y_Real, Idx, Lbls, OutName) -> Plot
 Renders main effect trend line with experimental scatter points.
@@ -732,6 +743,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 17: DESIRABILITY SPACE EXPLORER
 # ------------------------------------------------------------------------------
+
 """
     ARTS_RenderSpace_DDEF(Models, Goals, X, Idx, Lbls, [Best_Point]) -> Plot
 Visualises the multi-objective desirability space.
@@ -744,6 +756,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 18: OPTIMAL SOLUTION SPACE MAPPING
 # ------------------------------------------------------------------------------
+
 """
     ARTS_RenderCandidates_DDEF(Models, Goals, X, Idx, Lbls, [Best_Point]) -> (Plot, PctString)
 Visualises the top quartile of the desirability space (Optimal Solution Space).
@@ -757,6 +770,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 19: CORE DESIRABILITY RENDERING LOGIC
 # ------------------------------------------------------------------------------
+
 """
     ARTS_RenderSpaceImpl_DDEF(Models, Goals, X, Idx, Lbls, Best_Point, is_candidate) -> (Plot, PctString)
 Core rendering logic for desirability-based solution spaces.
@@ -1003,6 +1017,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 20: 3D OPTIMAL ZONE VOLUME RENDERER
 # ------------------------------------------------------------------------------
+
 """
     ARTS_RenderOptimalZone_DDEF(Models, Goals, X, InNames) -> (Plot, PctString)
 Renders a 3D isometric volume of the 'Optimal Zone' based on desirability criteria (Top 10% Desirability).
@@ -1079,6 +1094,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 21: INTERACTION LANDSCAPE HEATMAP
 # ------------------------------------------------------------------------------
+
 """
     ARTS_RenderInteractionMatrix_DDEF(Model, InNames, OutName) -> Plot
 Renders a heatmap matrix illustrating factor interaction strengths and types.
@@ -1117,6 +1133,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 22: NORMAL PROBABILITY DIAGNOSTICS (Q-Q Plot)
 # ------------------------------------------------------------------------------
+
 """
     ARTS_RenderQQPlot_DDEF(Residuals, OutName) -> Plot
 Renders a Q-Q plot (Normal Probability Plot) for residual diagnostic validation.
@@ -1158,6 +1175,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 23: RESIDUAL HOMOSCEDASTICITY ANALYSIS
 # ------------------------------------------------------------------------------
+
 """
     ARTS_RenderResidualsVsPred_DDEF(Y_Pred, Residuals, OutName) -> Plot
 Renders Residuals vs. Predicted plot to assess variance homogeneity (homoscedasticity).
@@ -1189,6 +1207,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 24: LOCAL SENSITIVITY INDEXING
 # ------------------------------------------------------------------------------
+
 """
     ARTS_RenderSensitivityPlot_DDEF(Sens, InNames, OutName) -> Plot
 Renders factor sensitivity contributions at the identified optimal coordinates.
@@ -1216,9 +1235,9 @@ end
 # PART G: SYSTEM ORCHESTRATION & DISPATCH
 # ==============================================================================
 
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # SECTION 25: MASTER RENDERER DISPATCHER
-# --------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 
 """
     ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, Leaders_DF, Sens, Residuals) -> Vector{Dict}
@@ -1357,6 +1376,7 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
 # ------------------------------------------------------------------------------
 # SECTION 26: RENDER ORDERING & PRIORITY LOGIC
 # ------------------------------------------------------------------------------
+
     # Definition of render ordering and priority hierarchy for analytical report clarity.
     TypePriority = Dict(
         "Pareto"      => 1,

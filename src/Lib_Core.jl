@@ -31,6 +31,7 @@ export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF,
 # ------------------------------------------------------------------------------
 # SECTION 1: CONSTANTS - Pre-allocated design matrices
 # ------------------------------------------------------------------------------
+
 const CORE_Bb15Design_DDEC = Int8[
     -1 -1 0; -1 1 0; 1 -1 0; 1 1 0;
     -1 0 -1; -1 0 1; 1 0 -1; 1 0 1;

@@ -129,6 +129,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 3: FILESYSTEM CLEANING & GARDENING
 # ------------------------------------------------------------------------------
+
 function FAST_CleanWorkforce_DDEF(all::Bool=false)::Nothing
     !isdir(FAST_TempRoot_DDEC) && return nothing
 
@@ -217,6 +218,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 5: FILENAME SANITISATION & COMPATIBILITY
 # ------------------------------------------------------------------------------
+
 """
     FAST_SanitiseFilename_DDEF(name::String) -> String
 ASCII-safe filename generator. Converts Turkish characters to ASCII and replaces 
@@ -247,6 +249,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 6: EXCEL I/O & DATA NORMALISATION
 # ------------------------------------------------------------------------------
+
 """
     FAST_NormaliseCols_DDEF!(df::DataFrame)::DataFrame
 Standardises DataFrame column names: Strips whitespace and forces Uppercase.
@@ -399,6 +402,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 7: DOWNLOAD PREPARATION & BINARY EXTRACTION
 # ------------------------------------------------------------------------------
+
 """
     FAST_PrepareDownload_DDEF(FilePath) -> (Success, Content)
 Reads file contents for web download action.
@@ -444,6 +448,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 9: INPUT SANITISATION ENGINE
 # ------------------------------------------------------------------------------
+
 """
     FAST_SanitiseInput_DDEF(TableData::AbstractVector)::Tuple{Vector{Dict{String,Any}}, Vector{String}}
 Transforms raw UI Table data into typed scientific Dictionaries.
@@ -488,6 +493,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 10: LAB DEFAULTS & SESSION INCEPTION
 # ------------------------------------------------------------------------------
+
 """
     FAST_GetLabDefaults_DDEF()::Dict{String,Any}
 Provides the canonical initial state for a fresh Daisho session.
@@ -511,6 +517,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 11: JSON RECURSIVE SANITISATION
 # ------------------------------------------------------------------------------
+
 """
     FAST_SanitiseJson_DDEF(x::Any)::Any
 Recursively filters Julia objects into JSON-compliant structures.
@@ -543,6 +550,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 12: MASTER RECORD INITIALISATION (XLSX)
 # ------------------------------------------------------------------------------
+
 """
     FAST_InitMaster_DDEF(File, InNames, OutNames, [DesignData], [Config]) -> Bool
 Initialises or updates the primary Excel record with headers and configuration metadata.
@@ -659,6 +667,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 13: FILENAME GENERATION (SMART)
 # ------------------------------------------------------------------------------
+
 """
     FAST_GenerateSmartName_DDEF(Project, Phase, Tag, [Extension]) -> String
 Generates a unique, descriptive filename according to the project protocol.
@@ -687,6 +696,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 14: TRANSIENT PATH ORCHESTRATION
 # ------------------------------------------------------------------------------
+
 """
     FAST_GetTransientPath_DDEF([DataHandle]) -> String
 Creates an identifiable temporary file path within the transient directory.
@@ -800,6 +810,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 15: HARDWARE AUDIT & THREADING
 # ------------------------------------------------------------------------------
+
 """
     FAST_GetThreadInfo_DDEF()::Tuple{Int, String, String}
 Audit check for CPU concurrency status. Returns (Count, Theme_Colour, Status_Message).

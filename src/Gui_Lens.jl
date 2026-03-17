@@ -155,6 +155,11 @@ function LENS_Layout_DDEF()
                 dcc_store(id="lens-store-diag-force",    data=0),
             ]; xs=12, md=9),
         ], className="g-3"),
+
+# ------------------------------------------------------------------------------
+# SECTION 2: SYSTEM MODALS & DIALOGUES
+# ------------------------------------------------------------------------------
+
         # Interface orchestration for system modal dialogues and user interactions.
         BASE_Modal_DDEF("lens-modal-report", "DaishoDoE Scientific Intelligence Report",
             html_pre(id="lens-report-content", className="p-4 rounded small academic-report", style=Dict("whiteSpace" => "pre-wrap", "fontFamily" => "monospace", "maxHeight" => "600px", "overflowY" => "auto")),
@@ -252,8 +257,12 @@ function LENS_Layout_DDEF()
     ], fluid=true, className="px-4 py-3")
 end
 
+# ==============================================================================
+# PART B: REACTIVE ARCHITECTURE & ANALYSIS
+# ==============================================================================
+
 # ------------------------------------------------------------------------------
-# SECTION 2: CALLBACK REGISTRY GATEWAY
+# SECTION 3: CALLBACK REGISTRY GATEWAY
 # ------------------------------------------------------------------------------
 
 """
@@ -272,6 +281,11 @@ function LENS_RegisterCallbacks_DDEF(app)
         (isnothing(cont) || cont == "") && return Dash.no_update()
         return Dict("content" => cont, "filename" => fname)
     end
+
+# ------------------------------------------------------------------------------
+# SECTION 4: UPLOAD & SYNC PIPELINES
+# ------------------------------------------------------------------------------
+
     # Pipeline Orchestration Stage 1B: Global session synchronisation and objective initialisation.
     callback!(app,
         Output("lens-dd-phase",       "options"),
@@ -445,12 +459,13 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
 # ==============================================================================
-# PART B: ANALYSIS ENGINE & RESULTS
+# PART C: ANALYSIS ENGINE & RESULTS
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 3: STATISTICAL ANALYSIS ENGINE
+# SECTION 5: STATISTICAL ANALYSIS ENGINE
 # ------------------------------------------------------------------------------
+
     callback!(app,
         Output("lens-store-graphs",    "data"),
         Output("lens-results-text",    "children"),
@@ -573,9 +588,10 @@ function LENS_RegisterCallbacks_DDEF(app)
                         html_tbody(summary_rows, style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)")),
                     ], className="table table-sm table-borderless caption-top mb-1 mx-auto", style=Dict("width" => "95%", "marginTop" => "5px")),
 
-                # ------------------------------------------------------------------------------
-                # SECTION 4: SCIENTIFIC VITALS TABLE
-                # ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# SECTION 6: MODEL PERFORMANCE & DIAGNOSTICS
+# ------------------------------------------------------------------------------
+
                 (haskey(res, "Vitals") ? html_div([
                     html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px dashed var(--colour-val1-lighig)", "margin" => "10px 0")),
                     html_div([
@@ -598,9 +614,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                     ], className="d-flex justify-content-center small py-1 rounded colourbg-v0pw")
                 ]) : html_div()),
 
-                # ------------------------------------------------------------------------------
-                # SECTION 5: FACTOR SENSITIVITY MAPPING
-                # ------------------------------------------------------------------------------
+                # Implementation of the factor sensitivity mapping for optimization results.
                 (haskey(res, "Sensitivities") && !isempty(res["Sensitivities"]) ? html_div([
                     html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px dashed var(--colour-val1-lighig)", "margin" => "10px 0")),
                     html_h6("Factor Sensitivity (at Optimum)", className="fw-bold small text-center mb-2 colourtx-c1sm"),
@@ -621,9 +635,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                     ], className="table table-sm table-borderless small mx-auto", style=Dict("width" => "90%"))
                 ]) : html_div()),
 
-                # ------------------------------------------------------------------------------
-                # SECTION 6: ACADEMIC ANOVA & COEFFICIENTS
-                # ------------------------------------------------------------------------------
+                # Implementation of the academic ANOVA & coefficients for regression analysis.
                 html_div([
                     html_hr(style=Dict("height" => "2px", "border" => "none", "borderTop" => "2px solid var(--colour-chr3-toncya)", "margin" => "15px 0")),
                     html_h6("ACADEMIC DIAGNOSTICS", className="fw-bold text-center mb-3 colourtx-c1sm", style=Dict("letterSpacing" => "1px")),
@@ -770,6 +782,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         # ------------------------------------------------------------------------------
         # SECTION 7: ANALYSIS ERROR GUARD & CLEANUP
         # ------------------------------------------------------------------------------
+
         catch e
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "ANALYSIS_CRASH", bt, "FAIL")
@@ -785,6 +798,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 # ------------------------------------------------------------------------------
 # SECTION 8: UI ORCHESTRATED ACTION CONTROLLER
 # ------------------------------------------------------------------------------
+
     callback!(app,
         [Output("lens-btn-$id", "disabled") for id in ["run", "view-report", "next-phase", "export-plots", "download-report", "export-excel"]]...,
         Input("store-master-vault",   "data"),
@@ -828,8 +842,9 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 9: CLIENTSIDE INDEX MANAGEMENT
+# SECTION 9: GRAPH RENDERING & METADATA
 # ------------------------------------------------------------------------------
+
     callback!(ClientsideFunction("clientside", "update_index"), app,
         Output("lens-store-index", "data"),
         Output("lens-graph-input", "value"),
@@ -842,9 +857,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         prevent_initial_call=true
     )
 
-# ------------------------------------------------------------------------------
-# SECTION 10: CLIENTSIDE INSTANT RENDERING
-# ------------------------------------------------------------------------------
+    # Clientside instant rendering and metadata synchronisation.
     callback!(ClientsideFunction("clientside", "render_graph"), app,
         Output("lens-graph-main",    "figure"),
         Output("lens-graph-title",   "children"),
@@ -853,9 +866,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         State("lens-store-graphs",   "data")
     )
 
-# ------------------------------------------------------------------------------
-# SECTION 11: METADATA SYNCHRONISATION
-# ------------------------------------------------------------------------------
+    # Metadata synchronisation for graph descriptive index panel.
     callback!(app,
         Output("lens-graph-info", "children"),
         Input("lens-store-graphs", "data"),
@@ -903,8 +914,9 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 12: PHASE EVOLUTION WIZARD
+# SECTION 10: PHASE EVOLUTION WIZARD (MODAL)
 # ------------------------------------------------------------------------------
+
     callback!(app,
         Output("lens-modal-wizard",  "is_open"),
         Output("lens-modal-leader",  "is_open"),
@@ -953,8 +965,9 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 13: REPORT MODAL CONTROL
+# SECTION 11: SCIENTIFIC REPORT & DOWNLOAD
 # ------------------------------------------------------------------------------
+
     callback!(app,
         Output("lens-modal-report",   "is_open"),
         Output("lens-report-content", "children"),
@@ -966,9 +979,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return false, ""
     end
 
-# ------------------------------------------------------------------------------
-# SECTION 14: SCIENTIFIC REPORT DOWNLOAD (TXT)
-# ------------------------------------------------------------------------------
+    # Scientific report download in TXT format.
     callback!(app,
         Output("lens-download-report-file", "data"),
         Input("lens-btn-download-txt", "n_clicks"),
@@ -991,8 +1002,9 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 15: CONDITIONAL ACTION REGULATION
+# SECTION 12: PHASE EVOLUTION WIZARD (LOGIC)
 # ------------------------------------------------------------------------------
+
     callback!(app,
         Output("lens-lead-btn-confirm", "disabled"),
         Output("lens-lead-btn-confirm", "className"),
@@ -1003,9 +1015,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return is_disabled, btn_class
     end
 
-# ------------------------------------------------------------------------------
-# SECTION 16: PHASE WIZARD DATA INITIALISATION
-# ------------------------------------------------------------------------------
+    # Phase wizard data initialisation.
     callback!(app,
         Output("lens-wiz-dd-source",    "options"),
         Output("lens-wiz-dd-source",    "value"),
@@ -1023,9 +1033,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return [Dict("label" => src_phase, "value" => src_phase)], src_phase, "Phase$next_val"
     end
 
-# ------------------------------------------------------------------------------
-# SECTION 17: CANDIDATE DATA LOADER
-# ------------------------------------------------------------------------------
+    # Candidate data loader.
     callback!(app,
         Output("lens-table-candidates", "data"),
         Output("lens-table-candidates", "columns"),
@@ -1093,9 +1101,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return data, columns
     end
 
-# ------------------------------------------------------------------------------
-# SECTION 18: PHASE PROPOSAL GENERATOR
-# ------------------------------------------------------------------------------
+    # Phase proposal generator.
     callback!(app,
         Output("lens-store-next-phase-proposal", "data"),
         Output("lens-prev-slider-zoom",  "value"),
@@ -1157,9 +1163,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return res, ret_idx, s, m
     end
 
-# ------------------------------------------------------------------------------
-# SECTION 19: RENDER PREVIEW CONTENT
-# ------------------------------------------------------------------------------
+    # Render preview content for phase evolution.
     callback!(app,
         Output("lens-container-preview-table", "children"),
         Output("lens-container-preview-audit", "children"),
@@ -1262,9 +1266,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return tbl, [audit_html, radio_warn], fig
     end
 
-# ------------------------------------------------------------------------------
-# SECTION 20: COMMIT PHASE TO EXCEL
-# ------------------------------------------------------------------------------
+    # Commit phase to Excel.
     callback!(app,
         Output("lens-download-phase", "data"),
         Output("lens-signal-process", "data"),
@@ -1316,8 +1318,9 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 21: VISUALISATION EXPORT
+# SECTION 13: DATA & PLOT EXPORT
 # ------------------------------------------------------------------------------
+
     callback!(app,
         Output("lens-download-plots",        "data"),
         Output("lens-export-plots-status", "children"),
@@ -1384,9 +1387,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
     end
 
-# ------------------------------------------------------------------------------
-# SECTION 22: SCIENTIFIC DATA EXPORT
-# ------------------------------------------------------------------------------
+    # Scientific data export in XLSX format.
     callback!(app,
         Output("lens-download-analysis",     "data"),
         Output("lens-export-excel-status", "children"),
@@ -1432,8 +1433,9 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 23: RADIOACTIVITY CORRECTION ARCHITECTURE
+# SECTION 14: RADIOACTIVITY CORRECTION ARCHITECTURE
 # ------------------------------------------------------------------------------
+
     callback!(app,
         Output("lens-store-radio-correct", "data"),
         Output("lens-btn-radio-correct",   "className"),

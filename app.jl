@@ -14,6 +14,7 @@
 # ------------------------------------------------------------------------------
 # SECTION 1: ENVIRONMENT & STABILITY CONFIGURATIONS
 # ------------------------------------------------------------------------------
+
 ENV["GKSwstype"]               = "100"
 ENV["JULIA_WEBIO_NOT_AVAILABLE"] = "1"
 ENV["PLOTLY_KALEIDO_NO_SANDBOX"] = "1"
@@ -29,6 +30,7 @@ using LoggingExtras
 # ------------------------------------------------------------------------------
 # SECTION 2: INFRASTRUCTURE DETECTION
 # ------------------------------------------------------------------------------
+
 const APP_IsHfSpaces_DDEC = haskey(ENV, "SPACE_ID")
 const APP_Port_DDEC       = if APP_IsHfSpaces_DDEC
     parse(Int, get(ENV, "PORT", "7860"))
@@ -50,6 +52,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 3: BOOTSTRAP INCLUDES & MODULE SCOPE
 # ------------------------------------------------------------------------------
+
 try
     if APP_HasRevise_DDEC && !haskey(ENV, "DASH_DEBUG")
         Revise.includet("src/Sys_Fast.jl")
@@ -66,6 +69,7 @@ Sys_Fast.FAST_InitialiseWorkforce_DDEF()
 # ------------------------------------------------------------------------------
 # SECTION 4: TERMINAL IDENTITY & SYSTEM REPORTING
 # ------------------------------------------------------------------------------
+
 println("\e[1m               \e[32m_\e[0m")
 println("\e[1m   \e[34m_\e[0m       _ \e[31m_\e[32m(_)\e[35m_\e[0m     |")
 println("\e[1m  \e[34m(_)\e[0m     | \e[31m(_)\e[0m \e[35m(_)\e[0m    |  System Status: \e[32m[OPTIMAL]\e[0m")
@@ -199,6 +203,7 @@ const APP_Content_DDEC = html_div(id="page-content", className="app-container")
 # ------------------------------------------------------------------------------
 # SECTION 8: APPLICATION PERSISTENCE STORES
 # ------------------------------------------------------------------------------
+
 const APP_SystemReady_DDEC = Threads.Atomic{Bool}(false)
 
 app.layout = html_div([
@@ -225,6 +230,7 @@ app.layout = html_div([
 # ------------------------------------------------------------------------------
 # SECTION 9: DIAGNOSTICS MODAL ARCHITECTURE
 # ------------------------------------------------------------------------------
+
     dbc_modal([
         dbc_modalheader("System Diagnostics & Scientific Integrity"),
         dbc_modalbody([
@@ -243,6 +249,7 @@ app.layout = html_div([
 # ------------------------------------------------------------------------------
 # SECTION 10: SYSTEM READINESS OVERLAY
 # ------------------------------------------------------------------------------
+
     dcc_interval(id="sys-ready-poll", interval=500, max_intervals=-1),
     html_div(id="sys-loading-overlay", children=[
         html_div([
@@ -311,6 +318,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 12: TOP-LEVEL ROUTING & NAVIGATION
 # ------------------------------------------------------------------------------
+
 """
     APP_RoutePage_DDEF(pathname::String) -> Any
 Top-level routing orchestrator for navigating between experimental and analytical modules.
@@ -414,6 +422,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 13: DIAGNOSTICS ORCHESTRATOR
 # ------------------------------------------------------------------------------
+
 callback!(app,
     Output("modal-diagnostics",             "is_open"),
     Output("modal-diagnostics-sys-content", "children"),
@@ -442,6 +451,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 14: EMERGENCY RECOVERY & LOCK RELEASE BUS
 # ------------------------------------------------------------------------------
+
 callback!(app,
     Output("lens-store-diag-force", "data"),
     Output("diag-global-output",    "children"),
@@ -488,6 +498,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 15: UI LOADING POLISH
 # ------------------------------------------------------------------------------
+
 """
     APP_HandleLoadingOverlay_DDEF(n::Any) -> Tuple{Any, Bool}
 Manages the visibility of the initial loading screen based on background JIT pre-compilation status.
@@ -523,6 +534,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 16: CHILD CALLBACK REGISTRATION & JIT WARMUP ROUTINE
 # ------------------------------------------------------------------------------
+
 DECK_RegisterCallbacks_DDEF(app)
 LENS_RegisterCallbacks_DDEF(app)
 
@@ -592,6 +604,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 17: SERVER BOOTSTRAP & ASYNC LAUNCH
 # ------------------------------------------------------------------------------
+
 Threads.@spawn APP_Warmup_DDEF()
 
 try

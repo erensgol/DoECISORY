@@ -23,7 +23,7 @@ using Dates
 export DECK_Layout_DDEF, DECK_RegisterCallbacks_DDEF
 
 # ==============================================================================
-# PART A: SYSTEM CONSTANTS, DATA STRUCTURES & LAYOUT
+# PART A: UI LAYOUT & COMPONENTS
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -229,10 +229,10 @@ function DECK_ModalAudit_DDEF()
             dbc_button("Close", id="deck-btn-sci-audit-close", className="ms-auto colourgl-c0hr", outline=false))
     ])
 end
+
 # ------------------------------------------------------------------------------
 # SECTION 4: UI ELEMENTS & TABLE BUILDERS
 # ------------------------------------------------------------------------------
-
 
 """
     DECK_BuildIdTable_DDEF(rows_range, initial_rows, active_count, show_del) -> Table
@@ -288,6 +288,10 @@ function DECK_BuildLimitsTable_DDEF(rows_range, initial_rows, active_count)
             ]),
         ]; className="colourtx-v5pb", style=Dict("width" => "100%", "borderCollapse" => "collapse", "fontSize" => "10px", "tableLayout" => "fixed", "marginBottom" => "0"))
 end
+
+# ------------------------------------------------------------------------------
+# SECTION 5: PRIMARY INTERFACE LAYOUT
+# ------------------------------------------------------------------------------
 
 """
     DECK_Layout_DDEF() -> Container
@@ -496,11 +500,11 @@ function DECK_Layout_DDEF()
 end
 
 # ==============================================================================
-# PART B: ORCHESTRATION, LAYOUT & CALLBACKS
+# PART B: CORE LOGIC & ORCHESTRATION
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 5: PROTOCOL ORCHESTRATION ENGINE
+# SECTION 6: PROTOCOL ORCHESTRATION ENGINE
 # ------------------------------------------------------------------------------
 
 """
@@ -517,6 +521,11 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
     L_VPU  = Main.Lib_Mole.MOLE_ValidatePhysicalUnit_DDEF
     
     try
+
+        # ------------------------------------------------------------------------------
+        # SECTION 7: DATA PRE-PROCESSING & VALIDATION
+        # ------------------------------------------------------------------------------
+
         raw_rows       = BASE_SafeRows_DDEF(in_data)
         processed_rows = filter(r -> get(r, "Role", get(r, :Role, "")) != "Filler", raw_rows)
         
@@ -692,6 +701,10 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
             "Outputs"     => output_data,
         )
         
+        # ------------------------------------------------------------------------------
+        # SECTION 8: EXPORT & PERSISTENCE SERVICES
+        # ------------------------------------------------------------------------------
+
         success = Sys_Fast.FAST_InitMaster_DDEF(path,
             [string(get(r, "Name", "")) for r in BASE_SafeRows_DDEF(in_data)],
             [string(get(r, "Name", "")) for r in output_data],
@@ -706,8 +719,12 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
     end
 end
 
+# ==============================================================================
+# PART C: REACTIVE ARCHITECTURE
+# ==============================================================================
+
 # ------------------------------------------------------------------------------
-# SECTION 6: REACTIVE ARCHITECTURE (CALLBACK REGISTRY)
+# SECTION 9: CALLBACK REGISTRY GATEWAY
 # ------------------------------------------------------------------------------
 
 """
@@ -723,6 +740,10 @@ function DECK_RegisterCallbacks_DDEF(app)
     Lib_Mole_VDF  = Main.Lib_Mole.MOLE_ValidateDesignFeasibility_DDEF
     Lib_Mole_AB   = Main.Lib_Mole.MOLE_AuditBatch_DDEF
     
+# ------------------------------------------------------------------------------
+# SECTION 10: INTERFACE & STATE CALLBACKS
+# ------------------------------------------------------------------------------
+
     callback!(app,
         [Output("deck-row-id-$i",     "style") for i in 1:DECK_MaxRows_DDEC]...,
         [Output("deck-row-level-$i",  "style") for i in 1:DECK_MaxRows_DDEC]...,
@@ -945,6 +966,10 @@ function DECK_RegisterCallbacks_DDEF(app)
                 return (store, table, ph_opts, vol, conc, proj, method, msg, dl, up_stat, ph_val, out_vals..., stoch)
             end
             RET_NO = ntuple(_ -> Dash.no_update(), 18)
+
+# ------------------------------------------------------------------------------
+# SECTION 11: SYSTEM LEVEL HELPERS (POLYMORPHIC)
+# ------------------------------------------------------------------------------
 
             # Implementation of a robust key-access mechanism for polymorphic dictionary synchronisation.
             function DECK_GetSafeKey_DDEF(d, k, def)
@@ -1461,6 +1486,10 @@ function DECK_RegisterCallbacks_DDEF(app)
         end
     end
 
+# ------------------------------------------------------------------------------
+# SECTION 12: STOICHIOMETRY & AUDIT CALLBACKS
+# ------------------------------------------------------------------------------
+
     # Execution of the Design Audit Orchestration for stoichiometric and boundary verification.
     callback!(app,
         Output("deck-audit-output", "children"),
@@ -1750,7 +1779,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             return (
                 Dict("filename" => fname, "content" => raw_base64, "base64" => true),
                 html_span([html_i(className="fas fa-check-circle me-1"),
-"Protocol generated."], className="", style=Dict("color" => "var(--colour-chr4-tongre)")),
+                "Protocol generated."], className="", style=Dict("color" => "var(--colour-chr4-tongre)")),
                 store_content,
             )
         catch e
@@ -1887,6 +1916,10 @@ function DECK_RegisterCallbacks_DDEF(app)
         return (ntuple(_ -> NO, 5)...,)
     end
 
+# ------------------------------------------------------------------------------
+# SECTION 13: SCIENTIFIC AUDIT & MATRIX CALLBACKS
+# ------------------------------------------------------------------------------
+
     # Execution of the Architectural Matrix Audit Orchestration for mathematical and chemical validation.
     callback!(app,
         Output("deck-sci-audit-output", "children"),
@@ -2003,7 +2036,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             return html_div([
                 html_h5("DESIGN INTEGRITY REPORT", className="fw-bold mb-3", style=Dict("color" => "var(--colour-chr3-toncya)")),
 
-                # Efficiency Section
+                # Efficiency
                 html_div([
                     html_div("Mathematical Efficiency", className="small fw-bold mb-1", style=Dict("color" => "var(--colour-val3-darlow)")),
                     dbc_row([
@@ -2014,7 +2047,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                         ], className="mb-3 g-2")
                 ]),
 
-                # Stoichiometry Section
+                # Stoichiometry
                 html_div([
                     html_div("Chemical Stoichiometry", className="small fw-bold mb-1", style=Dict("color" => "var(--colour-val3-darlow)")),
                     dbc_alert([
@@ -2024,7 +2057,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                         ], style=Dict("backgroundColor" => valid_stoi ? "var(--colour-chr4-tongre)" : "var(--colour-chr0-huered)", "color" => "var(--colour-val0-purwhi)"), className="py-2 small mb-3")
                 ]),
 
-                # Mass Audit Section
+                # Mass Audit
                 html_div([
                     html_div("Mass Inventory (per run)", className="small fw-bold mb-1", style=Dict("color" => "var(--colour-val3-darlow)")),
                     dbc_row([
@@ -2048,6 +2081,10 @@ function DECK_RegisterCallbacks_DDEF(app)
             return html_div("Matrix Audit Failed: $e", className="", style=Dict("color" => "var(--colour-chr0-huered)")), true
         end
     end
+
+# ------------------------------------------------------------------------------
+# SECTION 14: DYNAMIC UI COMPONENT REFRESH
+# ------------------------------------------------------------------------------
 
     # Automated refresh of the Stoichiometric Component Inventory display.
     callback!(app,
