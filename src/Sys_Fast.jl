@@ -482,7 +482,7 @@ function FAST_SanitiseInput_DDEF(TableData::AbstractVector)::Tuple{Vector{Dict{S
     end
 
     !isempty(warnings) && FAST_Log_DDEF("FAST", "SANITY", "Resolved $(length(warnings)) data anomalies.", "WARN")
-    return (sanitized, warnings)
+    return (sanitised, warnings)
 end
 
 # ------------------------------------------------------------------------------

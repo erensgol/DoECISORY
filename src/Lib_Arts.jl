@@ -135,7 +135,7 @@ end
 # ------------------------------------------------------------------------------
 
 # Resolution limit for grid points to ensure optimal browser rendering performance.
-const ARTS_MaxGridPoints_DDEC = 40000
+const ARTS_MaxGridPoints_DDEC = 11000
 
 
 # ------------------------------------------------------------------------------
@@ -606,7 +606,7 @@ Renders main effect trend line with experimental scatter points.
 function ARTS_RenderTrend_DDEF(Model::Dict, X::Matrix{Float64}, Y_Real::Vector{Float64},
     Idx::Vector{Int}, Lbls::Vector{String}, OutName::String)
     ix = Idx[1]
-    N  = 100
+    N  = 101
 
     xr   = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N))
     # Generation of a baseline design matrix utilizing factor arithmetic means.
@@ -674,7 +674,8 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
     Leaders_DF::AbstractDataFrame, is_candidate::Bool)
     ix, iy = Idx[1], Idx[2]
 
-    N = ARTS_AdaptiveGridN_DDEF(200, 40000)
+    threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
+    N = threads <= 4 ? 61 : 101
     # Variable dimensionality constant.
     K = 3
 
@@ -917,7 +918,7 @@ Renders a 3D isometric volume of the 'Optimal Zone' based on desirability criter
 """
 function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames::Vector{String})
     # Definition of volumetric grid resolution for optimal zone rendering.
-    N      = 50 
+    N      = 41 
 
     ranges = [range(minimum(view(X, :, i)), maximum(view(X, :, i)); length=N) for i in 1:3]
     Grid   = Matrix{Float64}(undef, N^3, 3)

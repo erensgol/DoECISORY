@@ -690,9 +690,9 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
     
     # Determine capacity limits and baseline resolutions based on detected hardware profile.
     cap_limit, base_n = if compute_threads <= 4
-        300_000, 21
+        11_000, 21
     else
-        500_000, 21
+        69_000, 21
     end
 
     eff_steps = base_n
