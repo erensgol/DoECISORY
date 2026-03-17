@@ -560,21 +560,21 @@ a:hover {
     50% { box-shadow: 0 0 0 8px rgba(94, 201, 98, 0.1); }
 }
 
-/* --- 11. UNIFIED RESPONSIVENESS (MOBILE SWEEP) --- */
+/* --- 11. UNIFIED RESPONSIVENESS --- */
 
 /* Desktop Refinements (1280px - 1440px) */
 @media (min-width: 1280px) and (max-width: 1440px) {
     .modal-xl, .modal-lg { max-width: 85vw !important; }
 }
 
-/* Base Mobile & Phablet Standardization (The 1264px User Breakpoint) */
+/* Base Mobile & Phablet Standardization */
 @media (max-width: 1280px) {
     /* 1. Global Width & Centering */
     .app-container { 
         max-width: 90% !important; 
         width: 90% !important; 
         margin: 0 auto !important;
-        padding: 0.75rem 0 !important; 
+        padding: 0.5rem 0 !important; 
     }
     
     /* 2. Full-Width Stacking */
@@ -592,34 +592,26 @@ a:hover {
     }
     
     .glass-panel { 
-        margin-bottom: 1rem !important; 
+        margin-bottom: 0.85rem !important; 
         border-radius: var(--rad-sm) !important;
     }
+    .glass-header { padding: 0.55rem 0.8rem; }
+    .glass-content { padding: 0.65rem 0.8rem; }
 
     /* 4. Font & Density Scaling */
     body { font-size: 0.88rem; }
-    .glass-header { padding: 0.6rem 0.85rem; }
-    .glass-content { padding: 0.75rem 0.85rem; }
     .glass-caption { font-size: 0.65rem; }
-    .nav-item { padding: 0.4rem 0.8rem; font-size: 0.82rem; }
+    .nav-item { padding: 0.35rem 0.75rem; font-size: 0.81rem; }
 
-    /* 5. Headings & Spacing */
-    .glass-panel h1, .glass-panel h2, .glass-panel h3 { font-size: 1.15rem; line-height: 1.3; margin-bottom: 0.5rem; }
-    .glass-panel p { font-size: 0.82rem; }
-    
-    /* 6. Plotly Visibility */
-    .js-plotly-plot { min-height: 500px !important; }
 }
 
 /* Extra Compact Mode (Small Screens < 768px) */
 @media (max-width: 768px) {
     .app-container { max-width: 95% !important; width: 95% !important; }
     .glass-navbar { height: 48px; }
-    .nav-item { padding: 0.35rem 0.6rem; font-size: 0.78rem; gap: 4px; }
-    .glass-header { padding: 0.5rem 0.75rem; }
-    .glass-content { padding: 0.6rem 0.75rem; }
+    .nav-item { padding: 0.3rem 0.5rem; font-size: 0.78rem; gap: 4px; }
     
-    .glass-command-row { padding: 0.75rem 0.85rem; }
+    .glass-command-row { padding: 0.7rem 0.8rem; }
     .glass-command-icon { width: 28px; height: 28px; font-size: 0.85rem; }
     .glass-command-title { font-size: 0.85rem; }
     
