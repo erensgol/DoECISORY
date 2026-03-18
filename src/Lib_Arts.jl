@@ -66,7 +66,8 @@ end
 # SECTION 2: GRAPHICAL STANDARD SCALES
 # ------------------------------------------------------------------------------
 
-const ARTS_PlotSize_DDEC     = 480
+const ARTS_PlotWidth_DDEC    = 320
+const ARTS_PlotHeight_DDEC   = 400
 const ARTS_SizeTitle_DDEC    = 14
 const ARTS_SizeLabel_DDEC    = 11
 const ARTS_SizeTick_DDEC     = 9
@@ -74,7 +75,7 @@ const ARTS_SizeLegend_DDEC   = 9
 const ARTS_SizeAnnot_DDEC    = 9
 const ARTS_SizeColorbar_DDEC = 8
 const ARTS_SizeMarker_DDEC   = 7
-const ARTS_SizeLeader_DDEC   = 4
+const ARTS_SizeLeader_DDEC   = 2
 const ARTS_WidthLine_DDEC    = 1.5
 const ARTS_WidthGrid_DDEC    = 0.5
 
@@ -86,7 +87,7 @@ const ARTS_WidthGrid_DDEC    = 0.5
     ARTS_BaseLayout_DDEF(title; [height]) -> Layout
 Generates a standardised PlotlyJS layout with fixed square canvas.
 """
-function ARTS_BaseLayout_DDEF(title::String; height=ARTS_PlotSize_DDEC)
+function ARTS_BaseLayout_DDEF(title::String; height=ARTS_PlotHeight_DDEC)
     return Layout(;
         title=attr(
             text=title,
@@ -97,9 +98,9 @@ function ARTS_BaseLayout_DDEF(title::String; height=ARTS_PlotSize_DDEC)
             ),
             x=0.5,
             xanchor="center",
-            y=0.97
+            y=0.92
         ),
-        width=ARTS_PlotSize_DDEC,
+        width=ARTS_PlotWidth_DDEC,
         height=height,
         autosize=true,
         paper_bgcolor=ARTS_Theme_DDEC.PURWHI,
@@ -109,12 +110,12 @@ function ARTS_BaseLayout_DDEF(title::String; height=ARTS_PlotSize_DDEC)
             color=ARTS_Theme_DDEC.DARHIG,
             size=ARTS_SizeLabel_DDEC
         ),
-        margin=attr(l=55, r=20, t=45, b=85),
+        margin=attr(l=65, r=35, t=65, b=115),
         showlegend=true,
         legend=attr(
             orientation="h",
             yanchor="top",
-            y=-0.16,
+            y=-0.28,
             xanchor="center",
             x=0.5,
             font=attr(size=ARTS_SizeLegend_DDEC),
@@ -465,8 +466,8 @@ function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R
     r2_str = isnan(R2_Adj)  ? "N/A" : @sprintf("%.3f", R2_Adj)
     q2_str = isnan(R2_Pred) ? "N/A" : @sprintf("%.3f", R2_Pred)
 
-    layout = ARTS_BaseLayout_DDEF("Factor Importance: $OutName (R²Adj: $r2_str | Q²: $q2_str)")
-    layout[:xaxis][:title] = "Magnitude of Standardised Effect (t-value)"
+    layout = ARTS_BaseLayout_DDEF("Pareto: $OutName (R²Adj: $r2_str | Q²: $q2_str)")
+    layout[:xaxis][:title] = "Standardised Effect (|t-value|)"
     layout[:barmode]       = "stack"
 
     # Calculation of the Bonferroni-corrected significance threshold for effect validation.
@@ -623,7 +624,7 @@ function ARTS_RenderSurface_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
             orientation = "h",
             x           = 0.5,
             xanchor     = "center",
-            y           = -0.12,
+            y           = -0.24,
             yanchor     = "top",
             thickness   = 15,
             len         = 0.6,
@@ -636,9 +637,10 @@ function ARTS_RenderSurface_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
         xaxis  = attr(title=Lbls[1]),
         yaxis  = attr(title=Lbls[2]),
         zaxis  = attr(title=OutName),
-        camera = attr(eye=attr(x=1.2, y=1.2, z=0.6))
+        camera = attr(eye=attr(x=1.65, y=1.65, z=0.9)),
+        aspectmode = "cube"
     )
-    layout[:margin] = attr(l=0, r=0, t=45, b=70)
+    layout[:margin] = attr(l=5, r=5, t=65, b=100)
 
     return Plot(trace, layout)
 end
@@ -680,7 +682,7 @@ function ARTS_RenderContour_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
             orientation = "h",
             x           = 0.5,
             xanchor     = "center",
-            y           = -0.12,
+            y           = -0.24,
             yanchor     = "top",
             thickness   = 15,
             len         = 0.6,
@@ -1035,7 +1037,7 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
                     orientation = "h",
                     x           = 0.5,
                     xanchor     = "center",
-                    y           = -0.12,
+                    y           = -0.24,
                     yanchor     = "top",
                     thickness   = 15,
                     len         = 0.6,
@@ -1059,10 +1061,10 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
             title = iz > 0 ? (length(Lbls) > 2 ? Lbls[3] : "Z-Axis") : "Level",
             range = abs(z_vals[3] - z_vals[1]) < 1e-6 ? [z_vals[1] - 0.5, z_vals[1] + 0.5] : nothing
         ),
-        camera     = attr(eye=attr(x=1.2, y=1.2, z=0.6)),
+        camera     = attr(eye=attr(x=1.65, y=1.65, z=0.9)),
         aspectmode = "cube"
     )
-    layout[:margin] = attr(l=0, r=0, t=45, b=70)
+    layout[:margin] = attr(l=5, r=5, t=65, b=100)
     
     return Plot(traces, layout), pct_str
 end
@@ -1131,7 +1133,7 @@ function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames:
             orientation = "h",
             x           = 0.5,
             xanchor     = "center",
-            y           = -0.12,
+            y           = -0.24,
             yanchor     = "top",
             thickness   = 15,
             len         = 0.6,
@@ -1146,9 +1148,10 @@ function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames:
         xaxis  = attr(title=InNames[1]),
         yaxis  = attr(title=InNames[2]),
         zaxis  = attr(title=InNames[3]),
-        camera = attr(eye=attr(x=1.2, y=1.2, z=0.6))
+        camera = attr(eye=attr(x=1.65, y=1.65, z=0.9)),
+        aspectmode = "cube"
     )
-    layout[:margin] = attr(l=0, r=0, t=45, b=70)
+    layout[:margin] = attr(l=5, r=5, t=65, b=100)
     
     traces = GenericTrace[trace]
     ARTS_AddLeaderMarkers_DDEF(traces, Leaders_DF, 1, 2, 3)
@@ -1189,7 +1192,7 @@ function ARTS_RenderInteractionMatrix_DDEF(Model::Dict, InNames::Vector{String},
             orientation = "h",
             x           = 0.5,
             xanchor     = "center",
-            y           = -0.12,
+            y           = -0.24,
             yanchor     = "top",
             thickness   = 15,
             len         = 0.6,

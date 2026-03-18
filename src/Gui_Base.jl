@@ -86,8 +86,8 @@ const BASE_StyleHr_DDEC = Dict("borderColor" => "var(--colour-val1-lighig)", "ma
 const BASE_EmptyFigure_DDEC = Dict(
     "data"   => [],
     "layout" => Dict(
-        "width"          => 480,
-        "height"         => 480,
+        "width"          => 320,
+        "height"         => 400,
         "autosize"       => false,
         "paper_bgcolor"  => "var(--colour-val0-purwhi)",
         "plot_bgcolor"   => "var(--colour-val2-liglow)",

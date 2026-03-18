@@ -129,7 +129,7 @@ function LENS_Layout_DDEF()
                     BASE_Loading_DDEF("lens-graph-loading",
                         dcc_graph(
                             id     = "lens-graph-main",
-                            style  = Dict("width" => "100%", "maxWidth" => "480px", "margin" => "0 auto"),
+                            style  = Dict("width" => "100%", "maxWidth" => "320px", "height" => "400px", "margin" => "0 auto"),
                             config = Dict("displayModeBar" => "hover", "displaylogo" => false, "responsive" => true),
                             figure = BASE_EmptyFigure_DDEC,
                         )),
@@ -1356,7 +1356,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 layout_obj = Layout(fig_dict["layout"])
                 p          = Plot(traces, layout_obj)
 
-                savefig(p, filepath; width=480, height=480, scale=1.0)
+                savefig(p, filepath; width=320, height=400, scale=1.0)
                 count += 1
             end
 
