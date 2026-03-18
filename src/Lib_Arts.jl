@@ -23,7 +23,8 @@ export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
     ARTS_CalcDesirability_DDEF, ARTS_ExtractGoal_DDEF,
     ARTS_Downsample_DDEF, ARTS_RenderOptimalZone_DDEF, ARTS_RenderInteractionMatrix_DDEF,
     ARTS_BaseLayout_DDEF, ARTS_Predict_DDEF, ARTS_BuildGrid_DDEF,
-    ARTS_AdaptiveGridN_DDEF, ARTS_RenderSpaceImpl_DDEF
+    ARTS_AdaptiveGridN_DDEF, ARTS_RenderSpaceImpl_DDEF,
+    ARTS_GetDynamicN_DDEF
 
 # ==============================================================================
 # PART A: VISUAL CORE & INFRASTRUCTURE
@@ -33,8 +34,6 @@ export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
 # SECTION 1: VISUAL THEME & COLOUR PALETTES
 # ------------------------------------------------------------------------------
 
-# Establishment of visual themes as module-level constants for zero-allocation access.
-# Direct linkage to global system constants for architectural synchronisation.
 const ARTS_Theme_DDEC = let C = Main.Sys_Fast.FAST_Data_DDEC
     (
         PURWHI = C.COLOUR_PURWHI,
@@ -53,7 +52,6 @@ const ARTS_Theme_DDEC = let C = Main.Sys_Fast.FAST_Data_DDEC
     )
 end
 
-# Definition of Viridis-compliant colour mapping for multidimensional surface representations.
 const ARTS_ViridisScale_DDEC = let C = Main.Sys_Fast.FAST_Data_DDEC
     [
         [0.00, C.COLOUR_SHAMAG],
@@ -68,8 +66,17 @@ end
 # SECTION 2: GRAPHICAL STANDARD SCALES
 # ------------------------------------------------------------------------------
 
-const ARTS_StandardHeight_DDEC = 500
-const ARTS_SceneHeight_DDEC = 500
+const ARTS_PlotSize_DDEC     = 480
+const ARTS_SizeTitle_DDEC    = 14
+const ARTS_SizeLabel_DDEC    = 11
+const ARTS_SizeTick_DDEC     = 9
+const ARTS_SizeLegend_DDEC   = 9
+const ARTS_SizeAnnot_DDEC    = 9
+const ARTS_SizeColorbar_DDEC = 8
+const ARTS_SizeMarker_DDEC   = 7
+const ARTS_SizeLeader_DDEC   = 4
+const ARTS_WidthLine_DDEC    = 1.5
+const ARTS_WidthGrid_DDEC    = 0.5
 
 # ------------------------------------------------------------------------------
 # SECTION 3: BASE LAYOUT FACTORY
@@ -77,51 +84,75 @@ const ARTS_SceneHeight_DDEC = 500
 
 """
     ARTS_BaseLayout_DDEF(title; [height]) -> Layout
-Generates a standardised PlotlyJS layout with light theme support.
+Generates a standardised PlotlyJS layout with fixed square canvas.
 """
-function ARTS_BaseLayout_DDEF(title::String; height=ARTS_StandardHeight_DDEC)
+function ARTS_BaseLayout_DDEF(title::String; height=ARTS_PlotSize_DDEC)
     return Layout(;
         title=attr(
             text=title,
-            # Font configuration utilizing project theme and academic sizing.
-            font=attr(size=12, family=ARTS_Theme_DDEC.FONT, color=ARTS_Theme_DDEC.PURBLA),
-            x=0.02, 
-            y=0.98
+            font=attr(
+                size=ARTS_SizeTitle_DDEC,
+                family=ARTS_Theme_DDEC.FONT,
+                color=ARTS_Theme_DDEC.PURBLA
+            ),
+            x=0.5,
+            xanchor="center",
+            y=0.97
         ),
+        width=ARTS_PlotSize_DDEC,
+        height=height,
+        autosize=true,
         paper_bgcolor=ARTS_Theme_DDEC.PURWHI,
         plot_bgcolor=ARTS_Theme_DDEC.PURWHI,
-        font=attr(family=ARTS_Theme_DDEC.FONT, color=ARTS_Theme_DDEC.DARHIG, size=10),
-        margin=attr(l=70, r=40, t=70, b=80),
-        height=height,
+        font=attr(
+            family=ARTS_Theme_DDEC.FONT,
+            color=ARTS_Theme_DDEC.DARHIG,
+            size=ARTS_SizeLabel_DDEC
+        ),
+        margin=attr(l=55, r=20, t=45, b=85),
+        showlegend=true,
+        legend=attr(
+            orientation="h",
+            yanchor="top",
+            y=-0.16,
+            xanchor="center",
+            x=0.5,
+            font=attr(size=ARTS_SizeLegend_DDEC),
+            tracegroupgap=5
+        ),
         xaxis=attr(
-            showline=true, 
+            showline=true,
             showgrid=true,
-            gridcolor=ARTS_Theme_DDEC.LIGHIG, 
-            gridwidth=1, 
+            gridcolor=ARTS_Theme_DDEC.LIGHIG,
+            gridwidth=ARTS_WidthGrid_DDEC,
             griddash="dash",
-            zeroline=false, 
-            linecolor=ARTS_Theme_DDEC.LIGHIG, 
-            linewidth=1, 
-            mirror=true, 
-            ticks="outside"
+            zeroline=false,
+            linecolor=ARTS_Theme_DDEC.LIGHIG,
+            linewidth=ARTS_WidthGrid_DDEC,
+            mirror=true,
+            ticks="outside",
+            tickfont=attr(size=ARTS_SizeTick_DDEC),
+            automargin=true
         ),
         yaxis=attr(
-            showline=true, 
+            showline=true,
             showgrid=true,
-            gridcolor=ARTS_Theme_DDEC.LIGHIG, 
-            gridwidth=1, 
+            gridcolor=ARTS_Theme_DDEC.LIGHIG,
+            gridwidth=ARTS_WidthGrid_DDEC,
             griddash="dash",
-            zeroline=false, 
-            linecolor=ARTS_Theme_DDEC.LIGHIG, 
-            linewidth=1, 
-            mirror=true, 
-            ticks="outside"
+            zeroline=false,
+            linecolor=ARTS_Theme_DDEC.LIGHIG,
+            linewidth=ARTS_WidthGrid_DDEC,
+            mirror=true,
+            ticks="outside",
+            tickfont=attr(size=ARTS_SizeTick_DDEC),
+            automargin=true
         ),
         colorway=[
-            ARTS_Theme_DDEC.SHAMAG, 
-            ARTS_Theme_DDEC.TONGRE, 
-            ARTS_Theme_DDEC.HUEYEL, 
-            ARTS_Theme_DDEC.SHABLU, 
+            ARTS_Theme_DDEC.SHAMAG,
+            ARTS_Theme_DDEC.TONGRE,
+            ARTS_Theme_DDEC.HUEYEL,
+            ARTS_Theme_DDEC.SHABLU,
             ARTS_Theme_DDEC.TONCYA
         ],
         hovermode="closest",
@@ -129,15 +160,13 @@ function ARTS_BaseLayout_DDEF(title::String; height=ARTS_StandardHeight_DDEC)
     )
 end
 
-# Resolution limit for grid points to ensure optimal browser rendering performance.
+
 
 # ------------------------------------------------------------------------------
 # SECTION 4: SMART DOWNSAMPLING & GRID LIMITER CONSTANTS
 # ------------------------------------------------------------------------------
 
-# Resolution limit for grid points to ensure optimal browser rendering performance.
 const ARTS_MaxGridPoints_DDEC = 11000
-
 
 # ------------------------------------------------------------------------------
 # SECTION 5: ADAPTIVE GRID RESOLUTION LOGIC
@@ -156,8 +185,18 @@ function ARTS_AdaptiveGridN_DDEF(preferred::Int, max_total::Int=ARTS_MaxGridPoin
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 6: VISUAL MATRIX DOWNSAMPLING ENGINE
+# SECTION 6: DYNAMIC HARDWARE RESOLUTION & DOWNSAMPLING
 # ------------------------------------------------------------------------------
+
+"""
+    ARTS_GetDynamicN_DDEF() -> Int
+Returns a dynamic grid resolution (N) based on available system hardware threads.
+Rule: N=61 for ≤4 threads, N=101 for >4 threads.
+"""
+function ARTS_GetDynamicN_DDEF()::Int
+    threads = Main.Sys_Fast.FAST_GetComputeThreads_DDEF()
+    return (threads <= 4 ? 61 : 101)
+end
 
 """
     ARTS_Downsample_DDEF(Z, target_rows, target_cols) -> Matrix
@@ -403,7 +442,8 @@ function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R
             name         = "Negative Effect",
             marker       = attr(color=ARTS_Theme_DDEC.SHAMAG, line=attr(width=0)),
             text         = [@sprintf("%.2f", m) for m in sorted_mag[neg_idx]],
-            textposition = "auto"
+            textposition = "auto",
+            textfont     = attr(size=ARTS_SizeAnnot_DDEC)
         ))
     end
 
@@ -417,7 +457,8 @@ function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R
             name         = "Positive Effect",
             marker       = attr(color=ARTS_Theme_DDEC.HUEYEL, line=attr(width=0)),
             text         = [@sprintf("%.2f", m) for m in sorted_mag[pos_idx]],
-            textposition = "auto"
+            textposition = "auto",
+            textfont     = attr(size=ARTS_SizeAnnot_DDEC)
         ))
     end
 
@@ -427,8 +468,6 @@ function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R
     layout = ARTS_BaseLayout_DDEF("Factor Importance: $OutName (R²Adj: $r2_str | Q²: $q2_str)")
     layout[:xaxis][:title] = "Magnitude of Standardised Effect (t-value)"
     layout[:barmode]       = "stack"
-    layout[:showlegend]    = true
-    layout[:legend]        = attr(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
 
     # Calculation of the Bonferroni-corrected significance threshold for effect validation.
     df              = max(1, N_Samples - length(Coefs))
@@ -466,7 +505,7 @@ function ARTS_RenderFit_DDEF(Y_Real::Vector{Float64}, Y_Pred::Vector{Float64}, O
         x      = Y_Real, 
         y      = Y_Pred, 
         mode   = "markers",
-        marker = attr(size=8, color=ARTS_Theme_DDEC.TONGRE, line=attr(width=1, color=ARTS_Theme_DDEC.PURBLA)), 
+        marker = attr(size=ARTS_SizeMarker_DDEC, color=ARTS_Theme_DDEC.TONGRE, line=attr(width=1, color=ARTS_Theme_DDEC.PURBLA)), 
         name   = "Data"
     )
 
@@ -474,14 +513,13 @@ function ARTS_RenderFit_DDEF(Y_Real::Vector{Float64}, Y_Pred::Vector{Float64}, O
         x    = [mn - margin, mx + margin], 
         y    = [mn - margin, mx + margin],
         mode = "lines", 
-        line = attr(color=ARTS_Theme_DDEC.DARHIG, dash="dash", width=1), 
+        line = attr(color=ARTS_Theme_DDEC.DARHIG, dash="dash", width=ARTS_WidthLine_DDEC), 
         name = "Ideal"
     )
 
     layout = ARTS_BaseLayout_DDEF("Prediction Accuracy: $OutName")
     layout[:xaxis][:title] = "Experimental (Recorded)"
     layout[:yaxis][:title] = "Predicted (Model)"
-    layout[:showlegend]    = false
     
     return Plot([t_data, t_ideal], layout)
 end
@@ -560,9 +598,7 @@ function ARTS_RenderSurface_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
     Lbls::Vector{String}, OutName::String)
     ix, iy = Idx[1], Idx[2]
     # Execution of dynamic hardware scaling for grid resolution density.
-    threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
-    n_base  = 21
-    N_Grid  = threads <= 4 ? 61 : 101
+    N_Grid  = ARTS_GetDynamicN_DDEF()
     
     x1, x2, Grid = ARTS_BuildGrid_DDEF(X, ix, iy, N_Grid)
 
@@ -583,18 +619,27 @@ function ARTS_RenderSurface_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
         z          = Z, 
         colorscale = ARTS_ViridisScale_DDEC,
         contours   = attr(z=attr(show=true, usecolormap=true, project_z=true)),
-        colorbar   = attr(len=0.6, thickness=15, x=1.02)
+        colorbar   = attr(
+            orientation = "h",
+            x           = 0.5,
+            xanchor     = "center",
+            y           = -0.12,
+            yanchor     = "top",
+            thickness   = 15,
+            len         = 0.6,
+            tickfont    = attr(size=ARTS_SizeColorbar_DDEC)
+        )
     )
 
-    layout = ARTS_BaseLayout_DDEF("Response Surface: $OutName"; height=ARTS_SceneHeight_DDEC)
+    layout = ARTS_BaseLayout_DDEF("Response Surface: $OutName")
     layout[:scene] = attr(
         xaxis  = attr(title=Lbls[1]),
         yaxis  = attr(title=Lbls[2]),
         zaxis  = attr(title=OutName),
-        domain = attr(x=[0.0, 0.88], y=[0.0, 1.0])
+        camera = attr(eye=attr(x=1.2, y=1.2, z=0.6))
     )
-    layout[:margin] = attr(l=10, r=80, b=10, t=40)
-    
+    layout[:margin] = attr(l=0, r=0, t=45, b=70)
+
     return Plot(trace, layout)
 end
 
@@ -610,9 +655,7 @@ function ARTS_RenderContour_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
     Lbls::Vector{String}, OutName::String)
     ix, iy = Idx[1], Idx[2]
     # Execution of dynamic hardware scaling for contour resolution density.
-    threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
-    n_base  = 21
-    N       = threads <= 4 ? 61 : 101
+    N       = ARTS_GetDynamicN_DDEF()
     
     x1, x2, Grid = ARTS_BuildGrid_DDEF(X, ix, iy, N)
 
@@ -632,8 +675,17 @@ function ARTS_RenderContour_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{In
         y          = collect(x2), 
         z          = Z, 
         colorscale = ARTS_ViridisScale_DDEC,
-        contours   = attr(coloring="heatmap", showlabels=true),
-        colorbar   = attr(len=0.6, thickness=15, x=1.02)
+        contours   = attr(coloring="heatmap", showlabels=true, labelfont=attr(size=ARTS_SizeTick_DDEC)),
+        colorbar   = attr(
+            orientation = "h",
+            x           = 0.5,
+            xanchor     = "center",
+            y           = -0.12,
+            yanchor     = "top",
+            thickness   = 15,
+            len         = 0.6,
+            tickfont    = attr(size=ARTS_SizeColorbar_DDEC)
+        )
     )
 
     layout = ARTS_BaseLayout_DDEF("Contour Projection: $OutName")
@@ -662,9 +714,7 @@ function ARTS_RenderSlice_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int}
     K      = 3 
 
     # Dynamic Hardware Scaling: Level 1 (21->61) vs Level 2 (21->101)
-    threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
-    n_base  = 21
-    N_Slice = threads <= 4 ? 61 : 101
+    N_Slice = ARTS_GetDynamicN_DDEF()
 
     x1      = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N_Slice))
     y_vals  = (minimum(view(X, :, iy)), mean(view(X, :, iy)), maximum(view(X, :, iy)))
@@ -686,7 +736,7 @@ function ARTS_RenderSlice_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int}
             y    = z, 
             mode = "lines",
             name = "$(Lbls[2]) = $(y_names[i])",
-            line = attr(color=colours[i], dash=styles[i], width=2)
+            line = attr(color=colours[i], dash=styles[i], width=ARTS_WidthLine_DDEC)
         ))
     end
 
@@ -708,9 +758,9 @@ Renders main effect trend line with experimental scatter points.
 function ARTS_RenderTrend_DDEF(Model::Dict, X::Matrix{Float64}, Y_Real::Vector{Float64},
     Idx::Vector{Int}, Lbls::Vector{String}, OutName::String)
     ix = Idx[1]
-    N  = 101
+    N  = ARTS_GetDynamicN_DDEF()
 
-    xr   = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N))
+    xr   = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length = N))
     # Generation of a baseline design matrix utilizing factor arithmetic means.
     Grid = repeat(mean(X; dims=1), N)
     Grid[:, ix] .= xr
@@ -722,7 +772,7 @@ function ARTS_RenderTrend_DDEF(Model::Dict, X::Matrix{Float64}, Y_Real::Vector{F
         y    = y_trend, 
         mode = "lines", 
         name = "Model Trend",
-        line = attr(color=ARTS_Theme_DDEC.DARHIG, dash="dash")
+        line = attr(color=ARTS_Theme_DDEC.DARHIG, dash="dash", width=ARTS_WidthLine_DDEC)
     )
 
     t_data = scatter(; 
@@ -730,7 +780,7 @@ function ARTS_RenderTrend_DDEF(Model::Dict, X::Matrix{Float64}, Y_Real::Vector{F
         y      = Y_Real, 
         mode   = "markers", 
         name   = "Experimental",
-        marker = attr(color=ARTS_Theme_DDEC.TONGRE, size=8, line=attr(width=1, color=ARTS_Theme_DDEC.PURBLA))
+        marker = attr(color=ARTS_Theme_DDEC.TONGRE, size=ARTS_SizeMarker_DDEC, line=attr(width=1, color=ARTS_Theme_DDEC.PURBLA))
     )
 
     layout = ARTS_BaseLayout_DDEF("Main Effect: $(Lbls[1]) -> $OutName")
@@ -820,7 +870,7 @@ function ARTS_AddLeaderMarkers_DDEF(traces::Vector{GenericTrace}, Leaders_DF::Ab
             y         = [by], 
             z         = [bz],
             mode      = "markers",
-            marker    = attr(size=2, color=marker_colour, symbol="diamond", line=attr(color=th.PURBLA, width=1)),
+            marker    = attr(size=ARTS_SizeLeader_DDEC, color=marker_colour, symbol="diamond", line=attr(color=th.PURBLA, width=1)),
             showlegend = false,
             name      = marker_name,
             hovertext = ["$marker_name<br>Score: $(round(Leaders_DF[r, score_col], digits=3))"],
@@ -837,8 +887,7 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
     Leaders_DF::AbstractDataFrame, is_candidate::Bool)
     ix, iy = Idx[1], Idx[2]
 
-    threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
-    N = (threads <= 4 ? 61 : 101)
+    N = ARTS_GetDynamicN_DDEF()
     K = 3
 
     x1 = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N))
@@ -982,12 +1031,17 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
                 showlegend   = false,
                 contours     = attr(z=attr(show=true, usecolormap=true, width=3)),
                 colorbar     = attr(
-                    title     = "Desirability",
-                    len       = 0.6, 
-                    thickness = 15, 
-                    x         = 1.02,
-                    tickvals  = [0, 0.2, 0.4, 0.6, 0.8, 1.0],
-                    ticktext  = ["0.0", "0.2", "0.4", "0.6", "0.8", "1.0"]
+                    title       = "Desirability",
+                    orientation = "h",
+                    x           = 0.5,
+                    xanchor     = "center",
+                    y           = -0.12,
+                    yanchor     = "top",
+                    thickness   = 15,
+                    len         = 0.6,
+                    tickvals    = [0, 0.2, 0.4, 0.6, 0.8, 1.0],
+                    ticktext    = ["0.0", "0.2", "0.4", "0.6", "0.8", "1.0"],
+                    tickfont    = attr(size=ARTS_SizeColorbar_DDEC)
                 )
             ))
         end
@@ -995,10 +1049,9 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
 
     ARTS_AddLeaderMarkers_DDEF(traces, Leaders_DF, ix, iy, iz)
 
-    # Automated generation of plot titles based on the active selection mode (Candidates vs. Space).
     plot_title = is_candidate ? "Candidates ($pct_str%)" : "Design Space: $(Lbls[1]) vs $(Lbls[2])"
-    layout     = ARTS_BaseLayout_DDEF(plot_title; height=ARTS_SceneHeight_DDEC)
-    
+    layout     = ARTS_BaseLayout_DDEF(plot_title)
+
     layout[:scene] = attr(
         xaxis  = attr(title=Lbls[1]),
         yaxis  = attr(title=Lbls[2]),
@@ -1006,11 +1059,10 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
             title = iz > 0 ? (length(Lbls) > 2 ? Lbls[3] : "Z-Axis") : "Level",
             range = abs(z_vals[3] - z_vals[1]) < 1e-6 ? [z_vals[1] - 0.5, z_vals[1] + 0.5] : nothing
         ),
-        camera     = attr(eye=attr(x=1.6, y=1.6, z=0.8)),
-        aspectmode = "cube",
-        domain     = attr(x=[0.0, 0.88], y=[0.0, 1.0])
+        camera     = attr(eye=attr(x=1.2, y=1.2, z=0.6)),
+        aspectmode = "cube"
     )
-    layout[:margin] = attr(l=10, r=80, b=10, t=40)
+    layout[:margin] = attr(l=0, r=0, t=45, b=70)
     
     return Plot(traces, layout), pct_str
 end
@@ -1075,20 +1127,28 @@ function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames:
         cmin          = 0.0,
         cmax          = 1.0,
         colorbar      = attr(
-            title    = "Quality Index",
-            len      = 0.6,
-            tickvals = [0, 0.2, 0.4, 0.6, 0.8, 1.0],
-            ticktext = ["0.0", "0.2", "0.4", "0.6", "0.8", "1.0"]
+            title       = "Quality Index",
+            orientation = "h",
+            x           = 0.5,
+            xanchor     = "center",
+            y           = -0.12,
+            yanchor     = "top",
+            thickness   = 15,
+            len         = 0.6,
+            tickvals    = [0, 0.2, 0.4, 0.6, 0.8, 1.0],
+            ticktext    = ["0.0", "0.2", "0.4", "0.6", "0.8", "1.0"],
+            tickfont    = attr(size=ARTS_SizeColorbar_DDEC)
         )
     )
 
     layout = ARTS_BaseLayout_DDEF("Optimal Solution Volume ($pct_str%)")
     layout[:scene] = attr(
-        xaxis = attr(title=InNames[1]),
-        yaxis = attr(title=InNames[2]),
-        zaxis = attr(title=InNames[3]),
-        camera = attr(eye=attr(x=1.8, y=1.8, z=0.9))
+        xaxis  = attr(title=InNames[1]),
+        yaxis  = attr(title=InNames[2]),
+        zaxis  = attr(title=InNames[3]),
+        camera = attr(eye=attr(x=1.2, y=1.2, z=0.6))
     )
+    layout[:margin] = attr(l=0, r=0, t=45, b=70)
     
     traces = GenericTrace[trace]
     ARTS_AddLeaderMarkers_DDEF(traces, Leaders_DF, 1, 2, 3)
@@ -1124,7 +1184,17 @@ function ARTS_RenderInteractionMatrix_DDEF(Model::Dict, InNames::Vector{String},
         x = InNames, 
         y = InNames, 
         colorscale = [[0, ARTS_Theme_DDEC.SHAMAG], [0.5, ARTS_Theme_DDEC.PURWHI], [1, ARTS_Theme_DDEC.HUEYEL]], 
-        zmid = 0
+        zmid = 0,
+        colorbar = attr(
+            orientation = "h",
+            x           = 0.5,
+            xanchor     = "center",
+            y           = -0.12,
+            yanchor     = "top",
+            thickness   = 15,
+            len         = 0.6,
+            tickfont    = attr(size=ARTS_SizeColorbar_DDEC)
+        )
     )
     layout = ARTS_BaseLayout_DDEF("Interaction Landscape: $OutName")
     
@@ -1157,7 +1227,7 @@ function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::Str
         x      = theoretical, 
         y      = z_res, 
         mode   = "markers",
-        marker = attr(color=ARTS_Theme_DDEC.SHAMAG, size=8, opacity=0.7, line=attr(width=1, color=ARTS_Theme_DDEC.PURBLA)),
+        marker = attr(color=ARTS_Theme_DDEC.SHAMAG, size=ARTS_SizeMarker_DDEC, opacity=0.7, line=attr(width=1, color=ARTS_Theme_DDEC.PURBLA)),
         name   = "Residuals"
     )
 
@@ -1166,7 +1236,7 @@ function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::Str
         x    = lims, 
         y    = lims, 
         mode = "lines",
-        line = attr(color=ARTS_Theme_DDEC.HUEYEL, width=2, dash="dash"),
+        line = attr(color=ARTS_Theme_DDEC.HUEYEL, width=ARTS_WidthLine_DDEC, dash="dash"),
         name = "Normal Dist"
     )
 
@@ -1190,7 +1260,7 @@ function ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residu
         x      = Y_Pred, 
         y      = Residuals, 
         mode   = "markers",
-        marker = attr(color = ARTS_Theme_DDEC.SHAMAG, size = 9, opacity = 0.7, line = attr(width = 1, color = ARTS_Theme_DDEC.PURWHI)),
+        marker = attr(color = ARTS_Theme_DDEC.SHAMAG, size = ARTS_SizeMarker_DDEC, opacity = 0.7, line = attr(width = 1, color = ARTS_Theme_DDEC.PURWHI)),
         name   = "Residuals"
     )
 
@@ -1198,7 +1268,7 @@ function ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residu
         x          = [minimum(Y_Pred), maximum(Y_Pred)], 
         y          = [0, 0], 
         mode       = "lines",
-        line       = attr(color = ARTS_Theme_DDEC.HUEYEL, width = 2, dash = "solid"),
+        line       = attr(color = ARTS_Theme_DDEC.HUEYEL, width = ARTS_WidthLine_DDEC, dash = "solid"),
         showlegend = false
     )
 

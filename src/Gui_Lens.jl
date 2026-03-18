@@ -129,8 +129,8 @@ function LENS_Layout_DDEF()
                     BASE_Loading_DDEF("lens-graph-loading",
                         dcc_graph(
                             id     = "lens-graph-main",
-                            style  = Dict("minHeight" => "500px"),
-                            config = Dict("displayModeBar" => true, "displaylogo" => false, "responsive" => true),
+                            style  = Dict("width" => "100%", "maxWidth" => "480px", "margin" => "0 auto"),
+                            config = Dict("displayModeBar" => "hover", "displaylogo" => false, "responsive" => true),
                             figure = BASE_EmptyFigure_DDEC,
                         )),
                 ]; panel_class="mb-2", content_class="glass-content p-2"),
@@ -1349,9 +1349,6 @@ function LENS_RegisterCallbacks_DDEF(app)
                 fig_dict = PlotlyJS.JSON.parse(PlotlyJS.JSON.json(g["figure"]))
                 title    = get(g, "title", "Plot_$i")
  
-                # Orchestration of the Light Theme conversion via the BASE architectural function.
-                fig_dict = BASE_ConvertThemePlotlyWhite!_DDEF(fig_dict)
-
                 safe_title = Sys_Fast.FAST_SanitiseFilename_DDEF(title)
                 filepath   = joinpath(export_dir, "$(safe_title).png")
 
@@ -1359,7 +1356,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 layout_obj = Layout(fig_dict["layout"])
                 p          = Plot(traces, layout_obj)
 
-                savefig(p, filepath; width=1000, height=1000, scale=1)
+                savefig(p, filepath; width=480, height=480, scale=1.0)
                 count += 1
             end
 

@@ -86,19 +86,21 @@ const BASE_StyleHr_DDEC = Dict("borderColor" => "var(--colour-val1-lighig)", "ma
 const BASE_EmptyFigure_DDEC = Dict(
     "data"   => [],
     "layout" => Dict(
-        "paper_bgcolor" => "var(--colour-val0-purwhi)",
-        "plot_bgcolor"  => "var(--colour-val2-liglow)",
-        "xaxis"         => Dict("visible" => false, "showgrid" => false, "zeroline" => false),
-        "yaxis"         => Dict("visible" => false, "showgrid" => false, "zeroline" => false),
-        "margin"        => Dict("l" => 0, "r" => 0, "t" => 0, "b" => 0),
-        "annotations"   => [
+        "width"          => 480,
+        "height"         => 480,
+        "autosize"       => false,
+        "paper_bgcolor"  => "var(--colour-val0-purwhi)",
+        "plot_bgcolor"   => "var(--colour-val2-liglow)",
+        "xaxis"          => Dict("visible" => false, "showgrid" => false, "zeroline" => false),
+        "yaxis"          => Dict("visible" => false, "showgrid" => false, "zeroline" => false),
+        "margin"         => Dict("l" => 0, "r" => 0, "t" => 0, "b" => 0),
+        "annotations"    => [
             Dict(
                 "text"      => "<b>No Visualisation Data</b><br><span style='font-size:12px'>Run analysis to generate plots</span>",
                 "showarrow" => false,
-                # Orchestration of the paper coordinate reference system.
-                "xref"      => "paper", 
-                "yref"      => "paper", 
-                "x"         => 0.5, 
+                "xref"      => "paper",
+                "yref"      => "paper",
+                "x"         => 0.5,
                 "y"         => 0.5,
                 "font"      => Dict("color" => "var(--colour-val4-darhig)", "size" => 16, "family" => "var(--font-sans)"),
             )

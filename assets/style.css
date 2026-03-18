@@ -532,6 +532,7 @@ a:hover {
     display: block;
 }
 
+#lens-graph-main { display: block; margin: 0 auto; max-width: 480px; width: 100%; aspect-ratio: 1; }
 #lens-graph-main._dash-loading::after, #deck-run-output._dash-loading::after { width: 40px; height: 40px; border-width: 3px; margin: 100px auto; }
 
 @keyframes daisho-spin {
