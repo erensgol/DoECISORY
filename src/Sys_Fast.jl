@@ -51,7 +51,7 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
 System-wide configuration, metadata structure, and primary colour palettes.
 """
 Base.@kwdef struct FAST_Constants_DDES
-    VERSION::String        = "v1.0 In Dev."
+    VERSION::String        = "v1.0-dev"
     COLOUR_PURWHI::String  = "#FFFFFF"
     COLOUR_LIGHIG::String  = "#E6E6E6"
     COLOUR_LIGLOW::String  = "#DCDCDC"

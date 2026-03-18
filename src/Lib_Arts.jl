@@ -771,6 +771,64 @@ end
 # SECTION 19: CORE DESIRABILITY RENDERING LOGIC
 # ------------------------------------------------------------------------------
 
+function ARTS_AddLeaderMarkers_DDEF(traces::Vector{GenericTrace}, Leaders_DF::AbstractDataFrame, ix::Int, iy::Int, iz::Int)
+    nrow(Leaders_DF) == 0 && return
+    
+    C = Main.Sys_Fast.FAST_Data_DDEC
+    th = ARTS_Theme_DDEC
+    in_cols = filter(n -> startswith(uppercase(string(n)), uppercase(C.PRE_INPUT)), names(Leaders_DF))
+    id_col = findfirst(c -> uppercase(c) == "ID" || uppercase(c) == "EXP_ID", names(Leaders_DF))
+    score_col = findfirst(c -> uppercase(c) == "SCORE", names(Leaders_DF))
+
+    top_limit = 8
+    inp_limit = 3
+    out_limit = 3
+
+    added_top, added_in, added_out = 0, 0, 0
+    for r in 1:nrow(Leaders_DF)
+        id_val = !isnothing(id_col) ? string(Leaders_DF[r, id_col]) : "L$r"
+        id_upper = uppercase(id_val)
+
+        is_top = occursin("TOP", id_upper)
+        is_in = occursin("INP", id_upper)
+        is_out = occursin("OUT", id_upper)
+
+        marker_type = ""
+        if is_top && added_top < top_limit
+            added_top += 1
+            marker_type = "TOP"
+        elseif is_in && added_in < inp_limit
+            added_in += 1
+            marker_type = "INP"
+        elseif is_out && added_out < out_limit
+            added_out += 1
+            marker_type = "OUT"
+        else
+            continue
+        end
+
+        bx = Leaders_DF[r, Symbol(in_cols[ix])]
+        by = Leaders_DF[r, Symbol(in_cols[iy])]
+        bz = iz > 0 ? Leaders_DF[r, Symbol(in_cols[iz])] : 0.0
+        
+        marker_colour = marker_type == "TOP" ? th.HUERED : (marker_type == "INP" ? th.PURWHI : th.PURBLA)
+        marker_name = marker_type == "TOP" ? "Global Leader ($id_val)" :
+                      (marker_type == "INP" ? "Input-Based Leader ($id_val)" : "Output-Based Leader ($id_val)")
+
+        push!(traces, scatter3d(;
+            x         = [bx], 
+            y         = [by], 
+            z         = [bz],
+            mode      = "markers",
+            marker    = attr(size=2, color=marker_colour, symbol="diamond", line=attr(color=th.PURBLA, width=1)),
+            showlegend = false,
+            name      = marker_name,
+            hovertext = ["$marker_name<br>Score: $(round(Leaders_DF[r, score_col], digits=3))"],
+            hoverinfo = "text"
+        ))
+    end
+end
+
 """
     ARTS_RenderSpaceImpl_DDEF(Models, Goals, X, Idx, Lbls, Best_Point, is_candidate) -> (Plot, PctString)
 Core rendering logic for desirability-based solution spaces.
@@ -935,64 +993,7 @@ function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vecto
         end
     end
 
-    if nrow(Leaders_DF) > 0
-        C = Main.Sys_Fast.FAST_Data_DDEC
-        th = ARTS_Theme_DDEC
-        in_cols = filter(n -> startswith(uppercase(string(n)), uppercase(C.PRE_INPUT)), names(Leaders_DF))
-        id_col = findfirst(c -> uppercase(c) == "ID" || uppercase(c) == "EXP_ID", names(Leaders_DF))
-        score_col = findfirst(c -> uppercase(c) == "SCORE", names(Leaders_DF))
-
-        # Application of threshold limits dependent on specific plot typology (Candidates/Space).
-        top_limit = 8
-        inp_limit = is_candidate ? 3 : 0
-        out_limit = is_candidate ? 3 : 0
-
-        added_top, added_in, added_out = 0, 0, 0
-        for r in 1:nrow(Leaders_DF)
-            id_val = !isnothing(id_col) ? string(Leaders_DF[r, id_col]) : "L$r"
-            id_upper = uppercase(id_val)
-
-            is_top = occursin("TOP", id_upper)
-            is_in = occursin("INP", id_upper)
-            is_out = occursin("OUT", id_upper)
-
-            marker_type = ""
-            if is_top && added_top < top_limit
-                added_top += 1
-                marker_type = "TOP"
-            elseif is_in && added_in < inp_limit
-                added_in += 1
-                marker_type = "INP"
-            elseif is_out && added_out < out_limit
-                added_out += 1
-                marker_type = "OUT"
-            else
-                # Skip extra candidates
-                continue
-            end
-
-            # Extraction of candidate coordinates from the reference leader dataset.
-            bx = Leaders_DF[r, Symbol(in_cols[ix])]
-            by = Leaders_DF[r, Symbol(in_cols[iy])]
-            bz = iz > 0 ? Leaders_DF[r, Symbol(in_cols[iz])] : 0.0
-            
-            marker_colour = marker_type == "TOP" ? th.HUERED : (marker_type == "INP" ? th.PURWHI : th.PURBLA)
-            marker_name = marker_type == "TOP" ? "Global Leader ($id_val)" :
-                          (marker_type == "INP" ? "Input-Based Leader ($id_val)" : "Output-Based Leader ($id_val)")
-
-            push!(traces, scatter3d(;
-                x         = [bx], 
-                y         = [by], 
-                z         = [bz],
-                mode      = "markers",
-                marker    = attr(size=2, color=marker_colour, symbol="diamond", line=attr(color=th.PURBLA, width=1)),
-                showlegend = false,
-                name      = marker_name,
-                hovertext = ["$marker_name<br>Score: $(round(Leaders_DF[r, score_col], digits=3))"],
-                hoverinfo = "text"
-            ))
-        end
-    end
+    ARTS_AddLeaderMarkers_DDEF(traces, Leaders_DF, ix, iy, iz)
 
     # Automated generation of plot titles based on the active selection mode (Candidates vs. Space).
     plot_title = is_candidate ? "Candidates ($pct_str%)" : "Design Space: $(Lbls[1]) vs $(Lbls[2])"
@@ -1019,10 +1020,11 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    ARTS_RenderOptimalZone_DDEF(Models, Goals, X, InNames) -> (Plot, PctString)
+    ARTS_RenderOptimalZone_DDEF(Models, Goals, X, InNames, [Leaders_DF]) -> (Plot, PctString)
 Renders a 3D isometric volume of the 'Optimal Zone' based on desirability criteria (Top 10% Desirability).
 """
-function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames::Vector{String})
+function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames::Vector{String},
+    Leaders_DF::AbstractDataFrame=DataFrame())
     # Definition of volumetric grid resolution for optimal zone rendering.
     N      = 41 
 
@@ -1088,7 +1090,10 @@ function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames:
         camera = attr(eye=attr(x=1.8, y=1.8, z=0.9))
     )
     
-    return Plot(trace, layout), pct_str
+    traces = GenericTrace[trace]
+    ARTS_AddLeaderMarkers_DDEF(traces, Leaders_DF, 1, 2, 3)
+
+    return Plot(traces, layout), pct_str
 end
 
 # ------------------------------------------------------------------------------
@@ -1265,6 +1270,25 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
         Models[m]["Status"] != "OK" && continue
         name = OutNames[m]
 
+        for v in 1:NumVars
+            push!(tasks, Threads.@spawn begin
+                try
+                    p = ARTS_RenderTrend_DDEF(Models[m], X, Y[:, m], [v], [InNames[v]], name)
+                    lock(graphs_lock) do
+                        push!(graphs, Dict(
+                            "Type"      => "Trend",
+                            "Title"     => "Trend: $name ($(InNames[v]))",
+                            "Plot"      => p,
+                            "OutputIdx" => m,
+                            "SubIdx"    => v
+                        ))
+                    end
+                catch e
+                    Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_ERR", "Trend plot failed for $(InNames[v]): $e", "WARN")
+                end
+            end)
+        end
+
         if get(Opts, "Pareto", true)
             push!(tasks, Threads.@spawn begin
                 try
@@ -1273,23 +1297,23 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                     p2     = ARTS_RenderFit_DDEF(Y[:, m], y_pred, name)
 
                     lock(graphs_lock) do
-                        push!(graphs, Dict("Type" => "Pareto", "Title" => "Pareto: $name",      "Plot" => p1))
-                        push!(graphs, Dict("Type" => "Fit",    "Title" => "Fit: $name",         "Plot" => p2))
+                        push!(graphs, Dict("Type" => "Pareto", "Title" => "Pareto: $name",      "Plot" => p1, "OutputIdx" => m, "SubIdx" => 0))
+                        push!(graphs, Dict("Type" => "Fit",    "Title" => "Fit: $name",         "Plot" => p2, "OutputIdx" => m, "SubIdx" => 0))
                     end
 
                     if m <= length(Residuals) && !isempty(Residuals[m])
                         p_qq  = ARTS_RenderQQPlot_DDEF(Residuals[m], name)
                         p_res = ARTS_RenderResidualsVsPred_DDEF(y_pred, Residuals[m], name)
                         lock(graphs_lock) do
-                            push!(graphs, Dict("Type" => "QQ",        "Title" => "Q-Q Plot: $name", "Plot" => p_qq))
-                            push!(graphs, Dict("Type" => "Residuals", "Title" => "Residuals: $name", "Plot" => p_res))
+                            push!(graphs, Dict("Type" => "QQ",        "Title" => "Q-Q Plot: $name", "Plot" => p_qq,  "OutputIdx" => m, "SubIdx" => 0))
+                            push!(graphs, Dict("Type" => "Residuals", "Title" => "Residuals: $name", "Plot" => p_res, "OutputIdx" => m, "SubIdx" => 0))
                         end
                     end
 
                     if m <= length(Sens) && !isempty(Sens[m])
                         p_sens = ARTS_RenderSensitivityPlot_DDEF(Sens[m], InNames, name)
                         lock(graphs_lock) do
-                            push!(graphs, Dict("Type" => "Sensitivity", "Title" => "Sensitivity: $name", "Plot" => p_sens))
+                            push!(graphs, Dict("Type" => "Sensitivity", "Title" => "Sensitivity: $name", "Plot" => p_sens, "OutputIdx" => m, "SubIdx" => 0))
                         end
                     end
                 catch e
@@ -1308,23 +1332,32 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                         p1 = ARTS_RenderSurface_DDEF(Models[m], X, c, lbls, name)
                         p2 = ARTS_RenderContour_DDEF(Models[m], X, c, lbls, name)
                         lock(graphs_lock) do
-                            push!(graphs, Dict("Type" => "Surface", "Title" => "RSM: $name ($tag)",     "Plot" => p1))
-                            push!(graphs, Dict("Type" => "Contour", "Title" => "Contour: $name ($tag)",   "Plot" => p2))
+                            ix = findfirst(==(c), Combos)
+                            push!(graphs, Dict("Type" => "Surface", "Title" => "RSM: $name ($tag)",     "Plot" => p1, "OutputIdx" => m, "SubIdx" => ix))
+                            push!(graphs, Dict("Type" => "Contour", "Title" => "Contour: $name ($tag)",   "Plot" => p2, "OutputIdx" => m, "SubIdx" => ix))
                         end
                     catch e
                          Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_ERR", "Surface/Contour plot failed for $name: $e", "WARN")
                     end
                 end)
             end
+        end
 
+        perms = NumVars >= 2 ? collect(permutations(1:NumVars, 2)) : Vector{Int}[]
+        for (ix, c) in enumerate(perms)
             if get(Opts, "Interaction", true)
                 push!(tasks, Threads.@spawn begin
                     try
-                        p1 = ARTS_RenderSlice_DDEF(Models[m], X, c, lbls, name)
-                        p2 = ARTS_RenderTrend_DDEF(Models[m], X, Y[:, m], c, lbls, name)
+                        lbls = [InNames[c[1]], InNames[c[2]]]
+                        p = ARTS_RenderSlice_DDEF(Models[m], X, c, lbls, name)
                         lock(graphs_lock) do
-                            push!(graphs, Dict("Type" => "Slice", "Title" => "Interact: $name ($tag)", "Plot" => p1))
-                            push!(graphs, Dict("Type" => "Trend", "Title" => "Trend: $name ($tag)",    "Plot" => p2))
+                            push!(graphs, Dict(
+                                "Type"      => "Slice",
+                                "Title"     => "Interact: $name ($(lbls[1]) vs $(lbls[2]))",
+                                "Plot"      => p,
+                                "OutputIdx" => m,
+                                "SubIdx"    => ix
+                            ))
                         end
                     catch e
                         Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_ERR", "Interaction plot failed for $name: $e", "WARN")
@@ -1332,6 +1365,24 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                 end)
             end
         end
+
+        # Execution of the global Interaction Landscape (Heatmap) for the current response variable.
+        push!(tasks, Threads.@spawn begin
+            try
+                p = ARTS_RenderInteractionMatrix_DDEF(Models[m], InNames, name)
+                lock(graphs_lock) do
+                    push!(graphs, Dict(
+                        "Type"      => "IntMatrix",
+                        "Title"     => "Int. Matrix: $name",
+                        "Plot"      => p,
+                        "OutputIdx" => m,
+                        "SubIdx"    => 0
+                    ))
+                end
+            catch e
+                Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_ERR", "Interaction Matrix plot failed for $name: $e", "WARN")
+            end
+        end)
     end
 
     if get(Opts, "DesignSpace", true) && !isempty(Combos)
@@ -1346,8 +1397,9 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                     p1                  = ARTS_RenderSpace_DDEF(Models, Goals, X, c, lbls, Leaders_DF)
                     cand_plot, cand_pct = ARTS_RenderCandidates_DDEF(Models, Goals, X, c, lbls, Leaders_DF)
                     lock(graphs_lock) do
-                        push!(graphs, Dict("Type" => "DesignSpace", "Title" => "Design Space: $(lbls[1])-$(lbls[2])", "Plot" => p1))
-                        push!(graphs, Dict("Type" => "Candidates",  "Title" => "Candidates: $(lbls[1])-$(lbls[2])",  "Plot" => cand_plot))
+                        ix = findfirst(==(c), Combos)
+                        push!(graphs, Dict("Type" => "DesignSpace", "Title" => "Design Space: $(lbls[1])-$(lbls[2])", "Plot" => p1, "OutputIdx" => NumOut + 1, "SubIdx" => ix))
+                        push!(graphs, Dict("Type" => "Candidates",  "Title" => "Candidates: $(lbls[1])-$(lbls[2])",  "Plot" => cand_plot, "OutputIdx" => NumOut + 1, "SubIdx" => ix))
                     end
                 catch e
                     Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_ERR", "Design Space plot failed for $(lbls[1])-$(lbls[2]): $e", "WARN")
@@ -1358,9 +1410,9 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
         if get(Opts, "GoldenZone", true) && NumVars >= 3
             push!(tasks, Threads.@spawn begin
                 try
-                    p_gz, gz_pct = ARTS_RenderOptimalZone_DDEF(Models, Goals, X, InNames)
+                    p_gz, gz_pct = ARTS_RenderOptimalZone_DDEF(Models, Goals, X, InNames, Leaders_DF)
                     lock(graphs_lock) do
-                        push!(graphs, Dict("Type" => "OptimalZone", "Title" => "Optimal Zone", "Plot" => p_gz))
+                        push!(graphs, Dict("Type" => "OptimalZone", "Title" => "Optimal Zone", "Plot" => p_gz, "OutputIdx" => NumOut + 1, "SubIdx" => 0))
                     end
                 catch e
                     Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_ERR", "Optimal Zone plot failed: $e", "WARN")
@@ -1381,19 +1433,23 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
     TypePriority = Dict(
         "Pareto"      => 1,
         "Fit"         => 2,
-        "QQ"          => 3,
-        "Residuals"   => 4,
-        "Surface"     => 5,
-        "Contour"     => 6,
-        "Slice"       => 7,
-        "Trend"       => 8,
-        "IntMatrix"   => 9,
+        "Trend"       => 3,
+        "Slice"       => 4,
+        "IntMatrix"   => 5,
+        "Surface"     => 6,
+        "Contour"     => 7,
+        "QQ"          => 8,
+        "Residuals"   => 9,
         "Sensitivity" => 10,
         "DesignSpace" => 11,
         "Candidates"  => 12,
         "OptimalZone" => 13
     )
-    sort!(graphs, by=g -> get(TypePriority, g["Type"], 99))
+    sort!(graphs, by=g -> (
+        get(TypePriority, g["Type"], 99),
+        get(g, "OutputIdx", 99),
+        get(g, "SubIdx", 0)
+    ))
 
     return graphs
 end

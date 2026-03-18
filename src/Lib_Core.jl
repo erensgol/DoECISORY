@@ -22,7 +22,7 @@ using Main.Lib_Arts
 export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF,
     CORE_ExtractLeader_DDEF, CORE_GenerateOptimalDesign_DDEF,
     CORE_OptimiseDesirability_DDEF, CORE_ValidateDesign_DDEF,
-    CORE_D_Efficiency_DDEF, CORE_CalcDesignMetrics_DDEF
+    CORE_D_Efficiency_DDEF, CORE_CalcDesignMetrics_DDEF, CORE_CodeMatrix_DDEF
 
 # ==============================================================================
 # PART A: DESIGN MATRIX & COORDINATE GENERATION
@@ -374,12 +374,49 @@ function CORE_D_Efficiency_DDEF(X::AbstractMatrix)
     R, C = size(X)
     R < C && return 0.0
     try
-        X_sc = X ./ max.(maximum(abs, X; dims=1), 1e-9)
+        # Automated coding of the matrix to [-1, 1] range to ensure scale-invariant efficiency.
+        X_sc = CORE_CodeMatrix_DDEF(X)
         # Normalised Fisher Information Determinant: (det(X'X) / R^p)^(1/p)
-        return (det(X_sc' * X_sc) / (R^C))^(1 / C)
+        det_val = det(X_sc' * X_sc)
+        return (max(det_val, 0.0) / (R^C))^(1 / C)
     catch
         return 0.0
     end
+end
+
+"""
+    CORE_CodeMatrix_DDEF(X::Matrix, [Bounds]) -> Matrix{Float64}
+
+Codes a physical matrix into the [-1, 1] interval for scale-invariant mathematical analysis.
+"""
+function CORE_CodeMatrix_DDEF(X::AbstractMatrix, Bounds::Union{AbstractMatrix, Nothing}=nothing)
+    R, C = size(X)
+    X_coded = Matrix{Float64}(undef, R, C)
+    
+    for j in 1:C
+        col = X[:, j]
+        c_min, c_max = minimum(col), maximum(col)
+        
+        if Bounds !== nothing
+            b_min, b_max = Bounds[j, 1], Bounds[j, 2]
+        else
+            b_min, b_max = c_min, c_max
+        end
+        
+        range_val = b_max - b_min
+        
+        if range_val < 1e-9
+            # Preserve constant columns (e.g. intercept) instead of zeroing them.
+            X_coded[:, j] .= col
+        elseif b_min >= -1.0001 && b_max <= 1.0001 && abs(b_min + b_max) < 1e-3
+            # Already coded to [-1, 1], preserve.
+            X_coded[:, j] .= col
+        else
+            # Linear transformation: x_coded = 2 * (x - min) / (max - min) - 1
+            X_coded[:, j] .= 2.0 .* (col .- b_min) ./ range_val .- 1.0
+        end
+    end
+    return X_coded
 end
 
 """
@@ -393,26 +430,31 @@ function CORE_CalcDesignMetrics_DDEF(X::AbstractMatrix)
     R < C && return res
 
     try
-        XtX              = X' * X
+        # Automated coding to [-1, 1] to ensure metrics adhere to standard DoE benchmarks.
+        X_sc = CORE_CodeMatrix_DDEF(X)
+        XtX  = X_sc' * X_sc
+        
         res["Condition"] = cond(XtX)
 
         # D-Efficiency representing the determinant-based design quality metric.
-        res["D"] = (det(XtX) / (R^C))^(1 / C)
+        det_val  = det(XtX)
+        res["D"] = (max(det_val, 0.0) / (R^C))^(1 / C)
 
         # A-Efficiency representing the average variance-based design quality metric.
-        inv_XtX  = inv(XtX)
+        # Stabilised inversion via pseudo-inverse for near-singular designs.
+        inv_XtX  = pinv(XtX)
         res["A"] = C / (R * tr(inv_XtX))
 
         # G-Efficiency representing the maximum variance-based design quality metric.
-        lev     = diag(X * inv_XtX * X')
-        max_var = maximum(lev)
+        lev      = diag(X_sc * inv_XtX * X_sc')
+        max_var  = maximum(lev)
         res["G"] = C / (R * max_var)
 
         # I-Efficiency representing the integrated variance-based design quality metric.
         res["I"] = C / (R * mean(lev))
 
     catch e
-        Sys_Fast.FAST_Log_DDEF("CORE", "METRICS_ERR", "Stability error in design metrics: $e", "WARN")
+        Main.Sys_Fast.FAST_Log_DDEF("CORE", "METRICS_ERR", "Stability error in design metrics: $e", "WARN")
     end
     return res
 end

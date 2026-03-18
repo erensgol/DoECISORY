@@ -832,8 +832,8 @@ Generates an academic report following rigorous editorial and scientific standar
 """
 function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     io = IOBuffer()
-    write(io, "## [ACADEMIC COMPENDIUM] DAISHODOE ANALYTICAL REPORT\n")
-    write(io, Printf.@sprintf("*Protocol Execution: %s | High-Fidelity Research Tier*\n", Dates.format(now(), "yyyy-mm-dd HH:MM")))
+    write(io, "## DAISHODOE ANALYTICAL REPORT\n")
+    write(io, Printf.@sprintf("*Protocol Execution: %s | [ACADEMIC COMPENDIUM] *\n", Dates.format(now(), "yyyy-mm-dd HH:MM")))
     write(io, "---\n\n")
 
     # Integrated analysis of experimental design vitals and design topology.
@@ -883,11 +883,11 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
 
         write(io, "### Dimension Analysis: **$(name)**\n")
         write(io, "#### II. Statistical Fidelity & Variance Explanation\n")
-        write(io, Printf.@sprintf("- **Objective Metric**: \$R^2_{Adj} = %.4f\$ (Adjusted for degrees of freedom)\n", r2a))
-        write(io, Printf.@sprintf("- **Predictive Stability**: \$Q^2_{Pred} = %.4f\$ (Leave-one-out cross-validation)\n", q2))
-        write(io, Printf.@sprintf("- **Residual Magnitude**: \$RMSE = %.4f\$ (Root Mean Squared Error)\n", rmse))
+        write(io, Printf.@sprintf("- **Objective Metric**: Adjusted R-Squared = %.4f (Adjusted for degrees of freedom)\n", r2a))
+        write(io, Printf.@sprintf("- **Predictive Stability**: Predicted R-Squared = %.4f (Leave-one-out cross-validation)\n", q2))
+        write(io, Printf.@sprintf("- **Residual Magnitude**: RMSE = %.4f (Root Mean Squared Error)\n", rmse))
         if !isnan(aic) && !isinf(aic)
-            write(io, Printf.@sprintf("- **Information Criterion**: \$AIC = %.4f\$ (Akaike Information Criterion)\n", aic))
+            write(io, Printf.@sprintf("- **Information Criterion**: AIC = %.4f (Akaike Information Criterion)\n", aic))
         end
 
         # Execution of predictive reliability classification.
@@ -932,7 +932,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
                 top_term = mod["TermNames"][top_idx]
                 top_t    = t_stats[top_idx]
                 impact   = top_t > 0 ? "positive (synergistic)" : "inverse (antagonistic)"
-                @printf(io, "- **Primary Driver**: `%s` is the dominant factor (\$t = %.2f\$), manifesting a clear *%s* impact.\n", top_term, top_t, impact)
+                @printf(io, "- **Primary Driver**: `%s` is the dominant factor (t-value = %.2f), manifesting a clear *%s* impact.\n", top_term, top_t, impact)
             else
                 write(io, "- **Primary Driver**: Statistical inference inconclusive for this model profile.\n")
             end
@@ -955,7 +955,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         write(io, "\n*Stability analysis suggests these coordinates reside within a high-confidence 'Optimal Zone' for experimental reproducibility.*\n\n")
     end
 
-    write(io, "*Generated via DaishoDoE Engine v$(Sys_Fast.FAST_Data_DDEC.VERSION) — High-Fidelity Academic Module. Optimised for publication in high-impact scientific journals.*\n")
+    write(io, "*Generated via DaishoDoE $(Sys_Fast.FAST_Data_DDEC.VERSION) Academic Module. Optimised for publication in scientific journals.*\n")
 
     return String(take!(io))
 end
@@ -1406,8 +1406,35 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         Log("VISE", "PERSIST_FAIL", "Failed to save predictions: $e", "WARN")
     end
 
+    # Execution of sensitivity analysis at the identified desirability optimum.
+    sens_list = Vector{Float64}[]
+    if !isempty(Best_Point)
+        for m in models
+            push!(sens_list, VISE_SensitivityAnalysis_DDEF(m, Best_Point))
+        end
+    end
+
+    # Execution of advanced analytical diagnostics including ANOVA and normality testing.
+    anova_tables      = []
+    normality_results = Dict[]
+    residuals_list    = Vector{Float64}[]
+    for (i, m) in enumerate(models)
+        if get(m, "Status", "") == "OK"
+            push!(anova_tables, VISE_GenerateAnovaTable_DDEF(m, X_Clean, Y_Clean[:, i]))
+            push!(normality_results, VISE_PerformNormalityTest_DDEF(m, X_Clean, Y_Clean[:, i]))
+
+            # Extraction of residuals for quantile-quantile (Q-Q) distribution analysis.
+            yp = VISE_Predict_DDEF(m, X_Clean)
+            push!(residuals_list, Y_Clean[:, i] .- yp)
+        else
+            push!(anova_tables, DataFrame())
+            push!(normality_results, Dict("p" => NaN, "IsNormal" => false))
+            push!(residuals_list, Float64[])
+        end
+    end
+
     graphs = Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, InNames, OutNames,
-        Goals, r2_vec, r2_pred_vec, Opts, Leaders_DF)
+        Goals, r2_vec, r2_pred_vec, Opts, Leaders_DF, sens_list, residuals_list)
 
     # Execution of mathematical health audit on experimental design topology.
     vitals = Dict("D" => 0.0, "Condition" => Inf, "MaxVIF" => 0.0, "LOF" => 1.0)
@@ -1417,7 +1444,8 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         isnothing(best_m) && (best_m = 1)
 
         m_type    = get(models[best_m], "ModelType", "linear")
-        Xd_health = VISE_ExpandDesign_DDEF(X_Clean, m_type)
+        X_Clean_Coded = Lib_Core.CORE_CodeMatrix_DDEF(X_Clean)
+        Xd_health = VISE_ExpandDesign_DDEF(X_Clean_Coded, m_type)
         m_health  = Lib_Core.CORE_CalcDesignMetrics_DDEF(Xd_health)
 
         vitals["D"]         = m_health["D"]
@@ -1434,32 +1462,6 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         end
     catch e
         Log("VISE", "VITALS_WARN", "Health diagnostics incomplete: $e", "WARN")
-    end
-    # Execution of sensitivity analysis at the identified desirability optimum.
-    sens_list = Vector{Float64}[]
-    if !isempty(Best_Point)
-        for m in models
-            push!(sens_list, VISE_SensitivityAnalysis_DDEF(m, Best_Point))
-        end
-    end
-
-    # Execution of advanced analytical diagnostics including ANOVA and normality testing.
-    anova_tables      = []
-    normality_results = []
-    residuals_list    = []
-    for (i, m) in enumerate(models)
-        if get(m, "Status", "") == "OK"
-            push!(anova_tables, VISE_GenerateAnovaTable_DDEF(m, X_Clean, Y_Clean[:, i]))
-            push!(normality_results, VISE_PerformNormalityTest_DDEF(m, X_Clean, Y_Clean[:, i]))
-
-            # Extraction of residuals for quantile-quantile (Q-Q) distribution analysis.
-            yp = VISE_Predict_DDEF(m, X_Clean)
-            push!(residuals_list, Y_Clean[:, i] .- yp)
-        else
-            push!(anova_tables, DataFrame())
-            push!(normality_results, Dict("p" => NaN, "IsNormal" => false))
-            push!(residuals_list, Float64[])
-        end
     end
 
     # Ensure serialisability of model objects by removing function closures before UI transmission.

@@ -906,11 +906,12 @@ function LENS_RegisterCallbacks_DDEF(app)
             ], style=Dict("display" => "flex", "width" => "100%", "justifyContent" => "space-around"))
         end
 
-        return html_div([
-            LENS_FormatLine_DDEF(info_parts[1:min(length(info_parts), 3)]),
-            length(info_parts) > 3 ? LENS_FormatLine_DDEF(info_parts[4:min(length(info_parts), 6)]) : html_div(),
-            length(info_parts) > 6 ? LENS_FormatLine_DDEF(info_parts[7:min(length(info_parts), 9)]) : html_div()
-        ], style=Dict("display" => "flex", "flexDirection" => "column", "width" => "100%", "padding" => "2px 0"))
+        rows_html = [
+            LENS_FormatLine_DDEF(info_parts[i:min(i+2, length(info_parts))])
+            for i in 1:3:length(info_parts)
+        ]
+
+        return html_div(rows_html, style=Dict("display" => "flex", "flexDirection" => "column", "width" => "100%", "padding" => "2px 0"))
     end
 
 # ------------------------------------------------------------------------------

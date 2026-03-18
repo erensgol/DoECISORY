@@ -628,7 +628,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
             return (false, "Validation Error: " * dsgn_issues)
         end
 
-        d_eff = Lib_Core.CORE_D_Efficiency_DDEF(real_matrix)
+        d_eff = Lib_Core.CORE_D_Efficiency_DDEF(design_coded)
 
         sv = Sys_Fast.FAST_SafeNum_DDEF(vol)
         sc = Sys_Fast.FAST_SafeNum_DDEF(conc)
@@ -2006,8 +2006,8 @@ function DECK_RegisterCallbacks_DDEF(app)
             real_matrix = Lib_Core.CORE_MapLevels_DDEF(design_coded, configs)
  
             # Analysis Segment 1: Assessment of mathematical design robustness (Efficiency).
-            d_eff = Lib_Core.CORE_D_Efficiency_DDEF(real_matrix)
-            metrics = Lib_Core.CORE_CalcDesignMetrics_DDEF(real_matrix)
+            d_eff = Lib_Core.CORE_D_Efficiency_DDEF(design_coded)
+            metrics = Lib_Core.CORE_CalcDesignMetrics_DDEF(design_coded)
  
             # Analysis Segment 2: Assessment of stoichiometric feasibility across the design space.
             sv_raw_sci = Sys_Fast.FAST_SafeNum_DDEF(vol)
