@@ -1352,11 +1352,17 @@ function LENS_RegisterCallbacks_DDEF(app)
                 safe_title = Sys_Fast.FAST_SanitiseFilename_DDEF(title)
                 filepath   = joinpath(export_dir, "$(safe_title).png")
 
+                # Execution of the high-resolution export protocol specifically for ZIP archival.
+                # Title and plotting area coordinates are adjusted to avoid overlap at 640x800 resolution.
+                fig_dict["layout"]["width"]  = 640
+                fig_dict["layout"]["height"] = 800
+                fig_dict["layout"]["margin"]["t"] = 130
+
                 traces     = [GenericTrace(d) for d in fig_dict["data"]]
                 layout_obj = Layout(fig_dict["layout"])
                 p          = Plot(traces, layout_obj)
 
-                savefig(p, filepath; width=320, height=400, scale=1.0)
+                savefig(p, filepath; width=640, height=800, scale=1.0)
                 count += 1
             end
 
