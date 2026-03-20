@@ -1256,7 +1256,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 memo_outs = get(memo, "Outputs", [])
                 out_vals = vcat([i <= length(memo_outs) ? get(memo_outs[i], "Name", "") : "" for i in 1:3], [i <= length(memo_outs) ? get(memo_outs[i], "Unit", "-") : "-" for i in 1:3])
                 
-                return DECK_Return_DDEF(Dict("rows" => loaded_rows[1:DECK_MaxRows_DDEC], "count" => nc), loaded_rows[1:DECK_MaxRows_DDEC], [Dict("label" => "Phase 1", "value" => "Phase1")], vol_v, conc_v, proj_v, method_v, lbl, NO, "Ready", "Phase1", out_vals, loaded_stoch)
+                return DECK_Return_DDEF(Dict("rows" => loaded_rows[1:DECK_MaxRows_DDEC], "count" => nc), loaded_rows[1:DECK_MaxRows_DDEC], [Dict("label" => "Phase 1", "value" => "Phase1")], vol_v, conc_v, proj_v, method_v, lbl, NO, "Ready", "Phase1", loaded_stoch, out_vals)
             elseif trig == "deck-btn-save-memo"
                 try
                     stoch_store = args[idx_gl+6]
@@ -1285,10 +1285,10 @@ function DECK_RegisterCallbacks_DDEF(app)
                     dl_dict = Dict("filename" => fname, "content" => b64, "base64" => true)
                     lbl = html_div([html_i(className="fas fa-check-circle me-2"), "Workspace Exported"],
                     className="badge p-2 w-100", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr4-tongre)", "fontSize" =>"0.85rem","boxShadow" =>"0 2px 5px var(--colour-val3-darlow)"))
-                    return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, lbl, dl_dict, NO, NO, fill(NO, 6), NO)
+                    return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, lbl, dl_dict, NO, NO, NO, fill(NO, 6))
                 catch e
                     err_lbl = html_div("❌ Save Error:" * string(e), className="badge w-100 p-2", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)", "fontSize" =>"0.6rem"))
-                    return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, err_lbl, NO, NO, NO, fill(NO, 6), NO)
+                    return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, err_lbl, NO, NO, NO, NO, fill(NO, 6))
                 end
 
                 # Persistence of stoichiometric parameters to the transient design state.
@@ -1322,7 +1322,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 end
                 
                 n_st = Dict{String,Any}("rows" => new_rs, "count" => isnothing(store_data) ? length(new_rs) : DECK_GetSafeKey_DDEF(store_data, "count", length(new_rs)))
-                return DECK_Return_DDEF(n_st, NO, NO, new_stoch["Volume"], new_stoch["Conc"], NO, NO, NO, NO, NO, NO, fill(NO, 6), new_stoch)
+                return DECK_Return_DDEF(n_st, NO, NO, new_stoch["Volume"], new_stoch["Conc"], NO, NO, NO, NO, NO, NO, new_stoch, fill(NO, 6))
 
             # Execution of the Unified Import Protocol for cross-platform session synchronisation.
             elseif trig == "deck-upload" && !isnothing(up_cont)
@@ -1330,7 +1330,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     if up_cont == ""
                         rows = [DECK_GetDefaultRow_DDEF(i) for i in 1:5]
                         # Persistence of state when no content is provided.
-                        return DECK_Return_DDEF(Dict("rows" => rows, "count" => 5), rows, [Dict("label" => "Loading...", "value" => "NONE")], 0.0, 0.0, "Daisho", "BoxBehnken", NO, NO, "No data source", "NONE", fill(NO, 6), NO)
+                        return DECK_Return_DDEF(Dict("rows" => rows, "count" => 5), rows, [Dict("label" => "Loading...", "value" => "NONE")], 0.0, 0.0, "Daisho", "BoxBehnken", NO, NO, "No data source", "NONE", NO, fill(NO, 6))
                     end
                     
                     # Extraction of the project identifier from the transient filename.
@@ -1393,12 +1393,12 @@ function DECK_RegisterCallbacks_DDEF(app)
                             "Conc" => Float64(get(g, "Conc", 0.0))
                         )
                         return DECK_Return_DDEF(Dict("rows" => mapped[1:DECK_MaxRows_DDEC], "count" => nc), mapped[1:DECK_MaxRows_DDEC], ph_opts,
-                            get(g, "Volume", 0.0), get(g, "Conc", 0.0), proj_v, method_val, NO, NO, stat_msg, "Phase1", out_vals, loaded_stoch)
+                            get(g, "Volume", 0.0), get(g, "Conc", 0.0), proj_v, method_val, NO, NO, stat_msg, "Phase1", loaded_stoch, out_vals)
                     else
                         # Execution of the Excel/Smart Vault protocol import protocol.
                         tmp = Sys_Fast.FAST_GetTransientPath_DDEF(up_cont)
                         if !isfile(tmp)
-                             return DECK_Return_DDEF(NO, NO, NO, NO, NO, proj_v, NO, html_div("❌ Data session stale. Please re-upload.", className="badge w-100 p-2", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)")), NO, NO, NO, fill(NO, 6), NO)
+                             return DECK_Return_DDEF(NO, NO, NO, NO, NO, proj_v, NO, html_div("❌ Data session stale. Please re-upload.", className="badge w-100 p-2", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)")), NO, NO, NO, NO, fill(NO, 6))
                         end
 
                         cfg = Sys_Fast.FAST_ReadConfig_DDEF(tmp)
@@ -1481,7 +1481,7 @@ function DECK_RegisterCallbacks_DDEF(app)
 
             return (Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(),
                 Dash.no_update(), Dash.no_update(), err_msg, Dash.no_update(), Dash.no_update(),
-                Dash.no_update(), ntuple(_ -> Dash.no_update(), 6)..., Dash.no_update())
+                Dash.no_update(), Dash.no_update(), ntuple(_ -> Dash.no_update(), 6)...)
         end
     end
 
