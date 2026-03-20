@@ -858,9 +858,9 @@ function DECK_RegisterCallbacks_DDEF(app)
         Output("deck-download-memo", "data"),
         Output("deck-upload-status", "children"),
         Output("deck-dd-phase",      "value"),
+        Output("deck-store-stoch-settings", "data"),
         [Output("deck-out-name-$i",  "value") for i in 1:3]...,
         [Output("deck-out-unit-$i",  "value") for i in 1:3]...,
-        Output("deck-store-stoch-settings", "data"),
         
         Input("deck-btn-add-row",        "n_clicks"),
         Input("deck-btn-clear",          "n_clicks"),
@@ -961,9 +961,8 @@ function DECK_RegisterCallbacks_DDEF(app)
             end
 
             # Orchestration of the standardised callback return protocol.
-            function DECK_Return_DDEF(store, table, ph_opts, vol, conc, proj, method, msg, dl, up_stat, ph_val, out_vals, stoch)
-                # Execution of strict arity verification for the orchestration return protocol (11 + 6 + 1).
-                return (store, table, ph_opts, vol, conc, proj, method, msg, dl, up_stat, ph_val, out_vals..., stoch)
+            function DECK_Return_DDEF(store, table, ph_opts, vol, conc, proj, method, msg, dl, up_stat, ph_val, stoch, out_vals)
+                return (store, table, ph_opts, vol, conc, proj, method, msg, dl, up_stat, ph_val, stoch, out_vals...)
             end
             RET_NO = ntuple(_ -> Dash.no_update(), 18)
 
@@ -1134,7 +1133,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     deleteat!(rows, ri)
                 end
                 nc = length(rows)
-                return DECK_Return_DDEF(Dict("rows" => rows, "count" => nc), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO, fill(NO, 6), NO)
+                return DECK_Return_DDEF(Dict("rows" => rows, "count" => nc), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, fill(NO, 6))
 
             # Execution of the Row Extension Protocol to accommodate additional experimental factors.
             elseif trig == "deck-btn-add-row"
@@ -1148,7 +1147,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 else
                     new_count = current_count 
                 end
-                return DECK_Return_DDEF(Dict("rows" => rows, "count" => new_count), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO, fill(NO, 6), NO)
+                return DECK_Return_DDEF(Dict("rows" => rows, "count" => new_count), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, fill(NO, 6))
 
             # Reset of the design canvas and state initialisation.
             elseif trig == "deck-btn-clear"
@@ -1156,7 +1155,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 lbl = html_div([html_i(className="fas fa-trash-alt me-2"), "Canvas Cleared"],
                                className="badge p-2 w-100", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)", "fontSize" =>"0.85rem"))
                 empty_stoch = Dict("FillerName" => "", "FillerMW" => 0.0, "Volume" => 0.0, "Conc" => 0.0)
-                return DECK_Return_DDEF(Dict("rows" => rows, "count" => 6), rows, [Dict("label" => "Phase 1", "value" => "Phase1")], 0.0, 0.0, "", "BoxBehnken", lbl, NO, "No data source", "Phase1", vcat(["", "", ""], ["-", "-", "-"]), empty_stoch)
+                return DECK_Return_DDEF(Dict("rows" => rows, "count" => 6), rows, [Dict("label" => "Phase 1", "value" => "Phase1")], 0.0, 0.0, "", "BoxBehnken", lbl, NO, "No data source", "Phase1", empty_stoch, vcat(["", "", ""], ["-", "-", "-"]))
 
             # Import of high-fidelity user profiles via JSON deserialisation.
             elseif trig == "deck-upload-memo" && !isnothing(up_memo) && up_memo != ""
@@ -1203,10 +1202,10 @@ function DECK_RegisterCallbacks_DDEF(app)
                     loaded_stoch = Dict("FillerName" => string(get(g, "FillerName", "")), "FillerMW" => Float64(get(g, "FillerMW", 0.0)), "Volume" => Float64(vol_v), "Conc" => Float64(conc_v))
                     memo_outs = get(memo, "Outputs", [])
                     out_vals = vcat([i <= length(memo_outs) ? get(memo_outs[i], "Name", "") : "" for i in 1:3], [i <= length(memo_outs) ? get(memo_outs[i], "Unit", "-") : "-" for i in 1:3])
-                    return DECK_Return_DDEF(Dict("rows" => loaded_rows[1:DECK_MaxRows_DDEC], "count" => nc), loaded_rows[1:DECK_MaxRows_DDEC], NO, vol_v, conc_v, proj_v, method_v, lbl, NO, NO, NO, out_vals, loaded_stoch)
+                    return DECK_Return_DDEF(Dict("rows" => loaded_rows[1:DECK_MaxRows_DDEC], "count" => nc), loaded_rows[1:DECK_MaxRows_DDEC], NO, vol_v, conc_v, proj_v, method_v, lbl, NO, NO, NO, loaded_stoch, out_vals)
                 catch e
                     err_lbl = html_div("❌ Load Error: $e", className="badge w-100 p-2", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)"))
-                    return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, err_lbl, NO, NO, NO, fill(NO, 6), NO)
+                    return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, err_lbl, NO, NO, NO, NO, fill(NO, 6))
                 end
 
             # Component template restoration from standardised DDE vault records.
@@ -1216,7 +1215,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 if isempty(memo)
                     lbl = html_div([html_i(className="fas fa-exclamation-circle me-2"), "Error: Memo_DDE.json not found"],
                                    className="badge p-2 w-100", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)", "fontSize" =>"0.85rem"))
-                    return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, lbl, NO, NO, NO, fill(NO, 6), NO)
+                    return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, lbl, NO, NO, NO, NO, fill(NO, 6))
                 end
 
                 loaded_rows = map(enumerate(DECK_GetSafeKey_DDEF(memo, "Inputs", []))) do (i, m)
@@ -1453,17 +1452,17 @@ function DECK_RegisterCallbacks_DDEF(app)
                             )
 
                             return DECK_Return_DDEF(Dict("rows" => mapped[1:DECK_MaxRows_DDEC], "count" => nc), mapped[1:DECK_MaxRows_DDEC], ph_opts,
-                                get(g, "Volume", 0.0), get(g, "Conc", 0.0), proj_v, method_val, NO, NO, stat_msg, "Phase1", out_vals, loaded_stoch)
+                                get(g, "Volume", 0.0), get(g, "Conc", 0.0), proj_v, method_val, NO, NO, stat_msg, "Phase1", loaded_stoch, out_vals)
                         end
                     end
                 catch e
                     @error "Import failed" exception = (e, catch_backtrace())
-                    return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, html_div("❌ Import Failed: $e", className="badge w-100 p-2", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)")), NO, NO, NO, fill(NO, 6), NO)
+                    return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, html_div("❌ Import Failed: $e", className="badge w-100 p-2", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)")), NO, NO, NO, NO, fill(NO, 6))
                 end
             end
 
             if trig == "deck-upload" && (isnothing(up_cont) || up_cont == "")
-                return DECK_Return_DDEF(NO, NO, [Dict("label" => "Loading...", "value" => "NONE")], NO, NO, NO, NO, NO, NO, "No data source", "NONE", fill(NO, 6), NO)
+                return DECK_Return_DDEF(NO, NO, [Dict("label" => "Loading...", "value" => "NONE")], NO, NO, NO, NO, NO, NO, "No data source", "NONE", NO, fill(NO, 6))
             end
 
             return (ntuple(_ -> Dash.no_update(), 18)...,)

@@ -1124,13 +1124,17 @@ function LENS_RegisterCallbacks_DDEF(app)
         zoom_map = Float64[1.0, 0.75, 0.5, 0.25, 0.1]
         z_idx = isnothing(zoom_p) ? 3 : clamp(round(Int, zoom_p), 1, 5)
 
-        z = (trig == "lens-lead-btn-confirm") ? 0.5 : zoom_map[z_idx]
-        ret_idx = (trig == "lens-lead-btn-confirm") ? 3 : z_idx
+        is_reset = (trig == "lens-lead-btn-confirm")
+        
+        z = is_reset ? 0.5 : zoom_map[z_idx]
+        s = is_reset ? 0.0 : Float64(isnothing(shift_p) ? 0.0 : shift_p)
+        m = is_reset ? "TL09" : meth_p
+        
+        ret_z = is_reset ? 3 : Dash.no_update()
+        ret_s = is_reset ? 0.0 : Dash.no_update()
+        ret_m = is_reset ? "TL09" : Dash.no_update()
 
-        s = 0.0
-        m = (trig == "lens-lead-btn-confirm") ? "TL09" : meth_p
-
-        (isnothing(base64_file) || isnothing(sel_rows) || isempty(sel_rows)) && return Dict(), ret_idx, s, m
+        (isnothing(base64_file) || isnothing(sel_rows) || isempty(sel_rows)) && return Dict(), ret_z, ret_s, ret_m
 
         row_sel = cand_data[sel_rows[1]+1]
         sel_id = haskey(row_sel, "EXP_ID") ? string(row_sel["EXP_ID"]) :
@@ -1161,7 +1165,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         # Synchronisation of radio-correction status for architectural UI warning triggers.
         res["IsRadioCorrected"] = !isnothing(results) && haskey(results, "RadioCorrection") && !isempty(results["RadioCorrection"])
         
-        return res, ret_idx, s, m
+        return res, ret_z, ret_s, ret_m
     end
 
     # Render preview content for phase evolution.

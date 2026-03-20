@@ -949,6 +949,14 @@ function FAST_CacheWrite_DDEF(key::Union{String,Nothing}, df::DataFrame)::Nothin
     FAST_Log_DDEF("CACHE", "WRITE", "Cached '$(key)' ($(nrow(df)) rows)", "OK")
 end
 
+function FAST_CacheEvict_DDEF()
+    lock(FAST_CacheLock_DDEC) do
+        empty!(FAST_CacheStore_DDEC)
+    end
+    FAST_Log_DDEF("CACHE", "EVICT", "All in-memory DataFrames cleared.", "INFO")
+    return nothing
+end
+
 # ------------------------------------------------------------------------------
 # SECTION 18: BINARY VAULT (SERVER-SIDE BLOB STORAGE)
 # ------------------------------------------------------------------------------

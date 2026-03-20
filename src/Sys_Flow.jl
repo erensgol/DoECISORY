@@ -308,38 +308,14 @@ function FLOW_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5, Shif
         i, conf = vars[j]
         L_Old   = conf["Levels"]
         Val     = SelVals[j]
-        Range   = L_Old[3] - L_Old[1]
 
-        # Execution of the boundary proximity compensation protocol to manage search space clipping.
-        Tol      = Range * 0.05
-        at_limit = abs(Val - L_Old[1]) < Tol || abs(Val - L_Old[3]) < Tol
+        conf["Levels"] = FLOW_CalcAdaptiveRange_DDEF(Val, L_Old, ZoomFactor, ShiftFactor)
 
-        New_Range = at_limit ? Range : Range * ZoomFactor
-
-        # Application of manual translation (Shift) relative to the half-width of the recalibrated range.
-        ShiftVal = ShiftFactor * (New_Range * 0.5)
-        New_Mid  = Val + ShiftVal
-
-        action = at_limit ? "SHIFT (AUTO)" : (abs(ShiftFactor) > 0.05 ? "SHIFT (MANUAL)" : "ZOOM")
+        Range     = L_Old[3] - L_Old[1]
+        Tol       = Range * 0.05
+        at_limit  = abs(Val - L_Old[1]) < Tol || abs(Val - L_Old[3]) < Tol
+        action    = at_limit ? "SHIFT (AUTO)" : (abs(ShiftFactor) > 0.05 ? "SHIFT (MANUAL)" : "ZOOM")
         Sys_Fast.FAST_Log_DDEF("FLOW", action, "Var $i -> $(action)", "LIST")
-
-        New_Min = New_Mid - New_Range / 2
-        New_Max = New_Mid + New_Range / 2
-
-        # Enforcement of boundary constraint enforcement while maintaining range conservation.
-        if New_Min < 0.0
-            overshoot = -New_Min
-            New_Min   = 0.0
-            New_Max  += overshoot
-            Sys_Fast.FAST_Log_DDEF("FLOW", "CLAMP", "Var $i hit lower boundary.", "WARN")
-        end
-
-        org_max = L_Old[3] + Range * 0.5
-        if New_Max > org_max && org_max > 0.0
-            New_Max = org_max
-        end
-
-        conf["Levels"] = [New_Min, New_Mid, New_Max]
     end
     Sys_Fast.FAST_Log_DDEF("FLOW", "SEARCH_SPACE", "New space configured successfully.", "OK")
     return NewConf
@@ -417,7 +393,7 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
             x=[-1.0, 1.0], y=[y_pos, y_pos], mode="lines",
             name="Current", 
             legendgroup="Current",
-            line=attr(color=FD.COLOUR_DARLOW, width=18),
+            line=attr(color=FD.COLOUR_DARLOW, width=12),
             showlegend=(j == 1), 
             hoverinfo="skip"
         ))
@@ -426,7 +402,7 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
             x=[n_new_min, n_new_max], y=[y_pos, y_pos], mode="lines",
             name="Target", 
             legendgroup="Target",
-            line=attr(color=FD.COLOUR_HUEYEL, width=18),
+            line=attr(color=FD.COLOUR_HUEYEL, width=12),
             showlegend=(j == 1),
             hoverinfo="text",
             hovertext="New: $(round(L_New[1]; digits=2)) → $(round(L_New[3]; digits=2))"
@@ -451,7 +427,7 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
             name="Leader",
             legendgroup="Leader",
             marker=attr(
-                symbol="circle", size=18, color=FD.COLOUR_SHAMAG,
+                symbol="circle", size=12, color=FD.COLOUR_SHAMAG,
                 line=attr(color=FD.COLOUR_PURWHI, width=2)
             ),
             showlegend=(j == 1),
