@@ -460,7 +460,7 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
         plot_bgcolor   = FD.COLOUR_PURWHI,
         paper_bgcolor  = "rgba(0,0,0,0)",
         xaxis = attr(
-            title      = attr(text="Standardised Coded Scale", font=attr(size=10, color=FD.COLOUR_DARHIG)),
+            title      = attr(text="", font=attr(size=10, color=FD.COLOUR_DARHIG)),
             gridcolor  = FD.COLOUR_LIGHIG, 
             zeroline   = false,
             autorange  = false, 
