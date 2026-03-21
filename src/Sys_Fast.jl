@@ -101,7 +101,10 @@ const FAST_Data_DDEC = FAST_Constants_DDES()
     FAST_TempRoot_DDEC
 Dedicated directory for transient operations to prevent system-wide data scattering.
 """
-const FAST_TempRoot_DDEC = joinpath(tempdir(), "DaishoDoE_Workforce")
+const FAST_TempRoot_DDEC = let
+    base = rstrip(tempdir(), ['/', '\\'])
+    endswith(base, "DaishoDoE_Workforce") ? base : joinpath(base, "DaishoDoE_Workforce")
+end
 
 """
     FAST_InitialiseWorkforce_DDEF()

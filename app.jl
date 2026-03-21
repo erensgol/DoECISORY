@@ -15,6 +15,22 @@
 # SECTION 1: ENVIRONMENT & STABILITY CONFIGURATIONS
 # ------------------------------------------------------------------------------
 
+let
+    base_tmp = tempdir()
+    wf_path  = endswith(rstrip(base_tmp, ['/', '\\']), "DaishoDoE_Workforce") ? base_tmp : joinpath(base_tmp, "DaishoDoE_Workforce")
+    if !isdir(wf_path)
+        mkpath(wf_path)
+    end
+    # Force Julia & Standard libraries into Workforce
+    ENV["TMP"]                    = wf_path
+    ENV["TEMP"]                   = wf_path
+    ENV["TMPDIR"]                 = wf_path
+    
+    # Force PlotlyJS/Kaleido (Chromium Engine) into Workforce
+    ENV["CHROME_USER_DATA_DIR"]   = wf_path
+    ENV["CHROME_CRASH_DUMPS_DIR"] = wf_path
+end
+
 ENV["GKSwstype"]               = "100"
 ENV["JULIA_WEBIO_NOT_AVAILABLE"] = "1"
 ENV["PLOTLY_KALEIDO_NO_SANDBOX"] = "1"
