@@ -1,5 +1,5 @@
 # ==============================================================================
-# DAISHODOE PROJECT - APP MAIN
+# DAISHODOE FRAMEWORK - APP MAIN (ORCHESTRATOR)
 # ==============================================================================
 # Description: Primary application entry point, routing orchestrator, and UI layout definition.
 # Author:      Ecz. Eren Selim GÖL
