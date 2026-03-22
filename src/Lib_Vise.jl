@@ -956,7 +956,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         write(io, "\n*Stability analysis suggests these coordinates reside within a high-confidence 'Optimal Zone' for experimental reproducibility.*\n\n")
     end
 
-    write(io, "*Generated via DaishoDoE $(Sys_Fast.FAST_Data_DDEC.VERSION) Academic Module. Optimised for publication in scientific journals.*\n")
+    write(io, "*Generated via the DaishoDoE Modular Framework $(Sys_Fast.FAST_Data_DDEC.VERSION). Formatted in compliance with academic reporting standards.*\n")
 
     return String(take!(io))
 end

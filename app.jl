@@ -89,7 +89,7 @@ Sys_Fast.FAST_InitialiseWorkforce_DDEF()
 println("\e[1m               \e[32m_\e[0m")
 println("\e[1m   \e[34m_\e[0m       _ \e[31m_\e[32m(_)\e[35m_\e[0m     |")
 println("\e[1m  \e[34m(_)\e[0m     | \e[31m(_)\e[0m \e[35m(_)\e[0m    |  System Status: \e[32m[OPTIMAL]\e[0m")
-println("\e[1m   _ _   _| |_  __ _   |  \e[1mDaishoDoE Software\e[0m v1.0-dev")
+println("\e[1m   _ _   _| |_  __ _   |  \e[1mDaishoDoE Framework\e[0m v1.0-dev")
 println("\e[1m  | | | | | | |/ _` |  |  Author: E.S. GÖL, Pharmacist  ")
 println("\e[1m  | | |_| | | | (_| |  |  Department of Radiopharmacy")
 println("\e[1m _/ |\\__'_|_|_|\\__'_|  |  Hacettepe University. 2026.")
@@ -106,15 +106,16 @@ end
 # ------------------------------------------------------------------------------
 
 for (label, file) in [
-    ("Molecule Engine: Lib_Mole",   "src/Lib_Mole.jl"),
-    ("Visual Engine: Lib_Arts",     "src/Lib_Arts.jl"),
-    ("Algorithm Core: Lib_Core",     "src/Lib_Core.jl"),
-    ("System Flow Bus: Sys_Flow",     "src/Sys_Flow.jl"),
-    ("Analysis Suite: Lib_Vise",      "src/Lib_Vise.jl"),
-    ("GUI Base Component: Gui_Base", "src/Gui_Base.jl"),
-    ("GUI Design Deck: Gui_Deck",    "src/Gui_Deck.jl"),
-    ("GUI Analysis Lens: Gui_Lens",  "src/Gui_Lens.jl"),
+    ("Stoichiometry Module: Lib_Mole", "src/Lib_Mole.jl"),
+    ("Visualisation Module: Lib_Arts", "src/Lib_Arts.jl"),
+    ("Algorithmic Module: Lib_Core",   "src/Lib_Core.jl"),
+    ("Flow Control Module: Sys_Flow",  "src/Sys_Flow.jl"),
+    ("Statistical Module: Lib_Vise",   "src/Lib_Vise.jl"),
+    ("UI Base Module: Gui_Base",       "src/Gui_Base.jl"),
+    ("UI Design Module: Gui_Deck",     "src/Gui_Deck.jl"),
+    ("UI Analysis Module: Gui_Lens",   "src/Gui_Lens.jl")
 ]
+
     !APP_IsHfSpaces_DDEC && FAST_Log_DDEF("BOOT", "Loading", label, "INFO")
     try
         if APP_HasRevise_DDEC && !haskey(ENV, "DASH_DEBUG")
@@ -356,7 +357,7 @@ function APP_RoutePage_DDEF(pathname::String)
                         className = "fw-bold display-4 mb-3", 
                         style     = Dict("letterSpacing" => "-0.04em", "color" => "var(--colour-val5-purbla)")
                     ),
-                    html_p("A Decision-Adaptive, Interactive, and Sequential Hybrid Optimisation Environment for Design of Experiments (DoE) Processes",
+                    html_p("A Decision-Adaptive, Interactive, and Sequential Hybrid Optimisation Framework for Design of Experiments (DoE)",
                         className = "lead mb-2", 
                         style     = Dict("color" => "var(--colour-val4-darhig)", "maxWidth" => "800px", "margin" => "0 auto")
                     ),
