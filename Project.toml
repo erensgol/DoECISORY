@@ -1,3 +1,7 @@
+name = "DaishoDoE"
+authors = ["Pharmacist Eren Selim GÖL"]
+license = "AGPL-3.0-or-later"
+
 [deps]
 Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 BlackBoxOptim = "a134a8b2-14d6-55f6-9291-3336d3ab0209"
