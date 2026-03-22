@@ -1,7 +1,7 @@
 module Gui_Base
 
 # ==============================================================================
-# DAISHODOE PROJECT - GUI BASE (SHARED COMPONENTS)
+# DAISHODOE FRAMEWORK - GUI BASE (SHARED UI COMPONENTS)
 # ==============================================================================
 # Description: Reusable Dash-Bootstrap components and high-fidelity styling 
 #              tokens.

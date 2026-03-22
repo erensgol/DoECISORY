@@ -1,7 +1,7 @@
 module Gui_Lens
 
 # ==============================================================================
-# DAISHODOE PROJECT - GUI LENS (STATISTICAL ANALYSIS ENGINE)
+# DAISHODOE FRAMEWORK - GUI LENS (STATISTICAL ANALYSIS)
 # ==============================================================================
 # Description: Data analysis, model fitting (GLM), and high-fidelity 
 #              visualisation.

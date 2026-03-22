@@ -1,10 +1,10 @@
 module Lib_Core
 
 # ==============================================================================
-# DAISHODOE PROJECT - LIB CORE
+# DAISHODOE FRAMEWORK - LIB CORE (CORE MATRICES)
 # ==============================================================================
-# Description: Core engine for experimental design generation, coordinate mapping, 
-#              and adaptive search algorithms (Zoom/Shift).
+# Description: Module for experimental design generation, coordinate mapping, 
+#              and adaptive search algorithms.
 # Module Tag:  CORE
 # ==============================================================================
 

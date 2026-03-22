@@ -1,7 +1,7 @@
 module Sys_Fast
 
 # ==============================================================================
-# DAISHODOE PROJECT - SYSTEM FAST (IO & UTILS)
+# DAISHODOE FRAMEWORK - SYSTEM FAST (IO & UTILS)
 # ==============================================================================
 # Description: High-speed I/O (Excel/XLSX), system-wide logging, and transient 
 #              data orchestration.

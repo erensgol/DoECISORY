@@ -1,7 +1,7 @@
 module Gui_Deck
 
 # ==============================================================================
-# DAISHODOE PROJECT - GUI DECK (EXPERIMENTAL DESIGN)
+# DAISHODOE FRAMEWORK - GUI DECK (EXPERIMENTAL DESIGN)
 # ==============================================================================
 # Description: Experimental design workspace, matrix generation, and protocol 
 #              export.

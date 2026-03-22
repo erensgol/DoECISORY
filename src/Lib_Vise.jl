@@ -1,9 +1,9 @@
 module Lib_Vise
 
 # ==============================================================================
-# DAISHODOE PROJECT - LIB VISE
+# DAISHODOE FRAMEWORK - LIB VISE (STATISTICAL ANALYSIS)
 # ==============================================================================
-# Description: Statistical analysis engine for modelling (GLM), sensitivity 
+# Description: Statistical analysis module for modelling (GLM), sensitivity 
 #              analysis, and multi-objective optimisation tasks.
 # Module Tag:  VISE
 # ==============================================================================

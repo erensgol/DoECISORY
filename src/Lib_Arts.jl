@@ -1,9 +1,9 @@
 module Lib_Arts
 
 # ==============================================================================
-# DAISHODOE PROJECT - LIB ARTS
+# DAISHODOE FRAMEWORK - LIB ARTS (VISUALISATION)
 # ==============================================================================
-# Description: Visualisation and graphics engine for high-fidelity scientific 
+# Description: Visualisation and graphics module for high-fidelity scientific 
 #              data representation and response surface mapping.
 # Module Tag:  ARTS
 # ==============================================================================

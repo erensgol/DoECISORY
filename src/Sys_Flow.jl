@@ -1,7 +1,7 @@
 module Sys_Flow
 
 # ==============================================================================
-# DAISHODOE PROJECT - SYSTEM FLOW (PROCESS & STATE)
+# DAISHODOE FRAMEWORK - SYSTEM FLOW (PROCESS & STATE)
 # ==============================================================================
 # Description: Experimental phase management, transition logic, and state 
 #              synchronisation bus.
