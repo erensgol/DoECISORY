@@ -74,7 +74,7 @@ function LENS_Layout_DDEF()
                     html_div(id="lens-panel-radio", className="d-none", children=[
                         BASE_SidebarHeader_DDEF("RADIOACTIVITY", icon="fas fa-radiation-alt"),
                         dbc_row(dbc_col([
-                            dbc_button([html_i(id="lens-icon-radio-correct", className="fas fa-times me-2"), "Decay Correction"],
+                            dbc_button([html_i(id="lens-icon-radio-correct", className="fas fa-radiation-alt me-2"), "Radioactive Correction"],
                                 id="lens-btn-radio-correct", className="w-100 fw-bold lens-radio-inactive", outline=false, size="sm")
                         ], xs=12)),
                         BASE_Separator_DDEF(),
@@ -253,6 +253,51 @@ function LENS_Layout_DDEF()
                 dbc_col(dbc_button([html_i(className="fas fa-times me-2"),        "Cancel"], id="lens-prev-btn-cancel", outline=false, size="sm", className="w-100 colourgl-c0hr"), xs=12, md=3),
                 dbc_col(dbc_button([html_i(className="fas fa-check-circle me-2"), "Commit to Project Vault"], id="lens-prev-btn-commit", className="w-100 colourgl-c4tg", size="sm"), xs=12, md=6),
             ], className="w-100 g-2"); size="xl", close_button=false, backdrop="static", keyboard=false),
+
+        BASE_Modal_DDEF("lens-modal-radio-config", [html_i(className="fas fa-radiation-alt me-2 colourtx-c1sm"), "Radioactivity Decay Correction"],
+            [
+                dbc_alert([
+                    html_strong("WARNING: "),
+                    "Radioactive correction processes must solely be applied to radioactivity units such as mCi, MBq, Ci, GBq, CPM, CPS."
+                ], color="danger", className="small py-2 mb-3 fw-bold"),
+                dbc_row([
+                    dbc_col([
+                        html_h6("1. Forward Decay (Inputs)", className="small fw-bold colourtx-v4dh border-bottom pb-1"),
+                        html_p("Target radioactive inputs for correction:", className="x-small colourtx-v3dl mb-2"),
+                        dcc_dropdown(id="lens-radio-dd-inputs", options=[], multi=true, placeholder="Select...", className="small mb-3"),
+                        
+                        html_div(children=[
+                            html_div(id="lens-radio-in-div-$i", className="mb-2 d-none", children=[
+                                html_span(id="lens-radio-in-lbl-$i", className="small fw-bold d-block colourtx-v5pb"),
+                                dbc_row([
+                                    dbc_col(dbc_input(id="lens-radio-in-name-$i", placeholder="Graph Name (e.g. Corr. F-18)", type="text", size="sm", className="form-control-sm"), width=8),
+                                    dbc_col(dbc_input(id="lens-radio-in-unit-$i", placeholder="Unit (e.g. mCi)", type="text", size="sm", className="form-control-sm"), width=4)
+                                ], className="g-1")
+                            ]) for i in 1:6
+                        ])
+                    ], md=6),
+                    dbc_col([
+                        html_h6("2. Reverse Decay & Yield (Outputs)", className="small fw-bold colourtx-v4dh border-bottom pb-1"),
+                        html_p("Map outputs to inputs to calculate yield:", className="x-small colourtx-v3dl mb-2"),
+                        
+                        html_div(children=[
+                            html_div(id="lens-radio-out-div-$i", className="mb-3 d-none", children=[
+                                html_span(id="lens-radio-out-lbl-$i", className="small fw-bold d-block colourtx-v5pb"),
+                                dcc_dropdown(id="lens-radio-out-dd-$i", options=[Dict("label" => "None", "value" => "None")], value="None", clearable=false, className="small mb-1"),
+                                dbc_row([
+                                    dbc_col(dbc_input(id="lens-radio-out-name-$i", placeholder="Graph Name (e.g. RCY)", type="text", size="sm", className="form-control-sm"), width=8),
+                                    dbc_col(dbc_input(id="lens-radio-out-unit-$i", placeholder="Unit (e.g. %)", type="text", size="sm", className="form-control-sm"), width=4)
+                                ], className="g-1")
+                            ]) for i in 1:6
+                        ])
+                    ], md=6)
+                ])
+            ],
+            html_div([
+                dbc_button("Cancel", id="lens-radio-btn-cancel", outline=false, className="me-2 colourgl-c0hr", size="sm"),
+                dbc_button(["Apply and Save ", html_i(className="fas fa-check ms-2")], id="lens-radio-btn-apply", className="colourgl-c4tg", size="sm"),
+            ], className="d-flex justify-content-end"); size="lg", close_button=false, backdrop="static", keyboard=false),
+
         dcc_store(id="lens-store-next-phase-proposal", data=Dict()),
     ], fluid=true, className="px-4 py-3")
 end
@@ -272,15 +317,6 @@ Initialises the reactive architecture and callback registry for the LENS module.
 function LENS_RegisterCallbacks_DDEF(app)
     C = Sys_Fast.FAST_Data_DDEC
 
-    callback!(app,
-        Output("sync-lens-content", "data"),
-        Input("lens-upload-data",  "contents"),
-        State("lens-upload-data",  "filename"),
-        prevent_initial_call=true
-    ) do cont, fname
-        (isnothing(cont) || cont == "") && return Dash.no_update()
-        return Dict("content" => cont, "filename" => fname)
-    end
 
 # ------------------------------------------------------------------------------
 # SECTION 4: UPLOAD & SYNC PIPELINES
@@ -414,7 +450,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 end
             end
             # Execution of the architectural audit for radioactivity parameters within the Smart Vault.
-            has_radio_headers = any(c -> occursin("CHRO_HOUR", string(c)) || occursin("CHRO_MIN", string(c)), names(df))
+            has_radio_headers = any(c -> occursin("TIME_EXP_", string(c)) || occursin("TIME_MEAS_", string(c)), names(df))
             has_radio_config = false
             if haskey(config, "Ingredients")
                 has_radio_config = has_radio_config || any(get(f, "IsRadioactive", false) == true for f in config["Ingredients"])
@@ -544,10 +580,12 @@ function LENS_RegisterCallbacks_DDEF(app)
             end
             Sys_Fast.FAST_Log_DDEF("LENS", "Process", "Starting GLM Analysis (Phase: $phase)...", "WAIT")
 
+            config_full = Sys_Fast.FAST_ReadConfig_DDEF(path)
+            full_radio_opts = get(config_full, "RadioOpts", Dict("Apply" => false))
+            full_radio_opts["Apply"] = is_rad_apply
+
             opts = Dict{String,Any}(
-                "RadioOpts" => Dict(
-                    "Apply" => is_rad_apply
-                )
+                "RadioOpts" => full_radio_opts
             )
 
             phase_str = isnothing(phase) ? "Phase1" : string(phase)
@@ -1444,41 +1482,235 @@ function LENS_RegisterCallbacks_DDEF(app)
 # SECTION 14: RADIOACTIVITY CORRECTION ARCHITECTURE
 # ------------------------------------------------------------------------------
 
+    # 1. Open/Close Modal
     callback!(app,
-        Output("lens-store-radio-correct", "data"),
-        Output("lens-btn-radio-correct",   "className"),
-        Output("lens-btn-radio-correct",   "outline"),
-        Output("lens-icon-radio-correct",  "className"),
+        Output("lens-modal-radio-config", "is_open"),
         Input("lens-btn-radio-correct", "n_clicks"),
-        Input("store-master-vault",     "data"),
-        State("lens-store-radio-correct", "data"),
+        Input("lens-radio-btn-cancel", "n_clicks"),
+        Input("lens-radio-btn-apply", "n_clicks"),
+        State("lens-modal-radio-config", "is_open"),
         prevent_initial_call=true
-    ) do n, active_cont, current_state
+    ) do n1, n2, n3, is_open
         trig = BASE_GetTrigger_DDEF(callback_context())
+        
+        # Explicit type conversion to handle Dash.jl integers parsing booleans as 0 or 1.
+        current_state = (is_open == true || is_open == 1)
+        
+        if trig == "lens-radio-btn-cancel" || trig == "lens-radio-btn-apply"
+            return false
+        elseif trig == "lens-btn-radio-correct"
+            return !current_state
+        end
+        return Dash.no_update()
+    end
 
-        new_state = current_state
+    # 2. Populate Modal Options from Smart Vault Data
+    callback!(app,
+        Output("lens-radio-dd-inputs", "options"),
+        [Output("lens-radio-out-dd-$i", "options") for i in 1:6]...,
+        [Output("lens-radio-out-div-$i", "className") for i in 1:6]...,
+        [Output("lens-radio-out-lbl-$i", "children") for i in 1:6]...,
+        Output("lens-radio-dd-inputs", "value"),
+        [Output("lens-radio-in-name-$i", "value") for i in 1:6]...,
+        [Output("lens-radio-in-unit-$i", "value") for i in 1:6]...,
+        [Output("lens-radio-out-dd-$i", "value") for i in 1:6]...,
+        [Output("lens-radio-out-name-$i", "value") for i in 1:6]...,
+        [Output("lens-radio-out-unit-$i", "value") for i in 1:6]...,
+        Input("lens-modal-radio-config", "is_open"),
+        State("store-master-vault", "data"),
+        prevent_initial_call=true
+    ) do is_open, active_data
+        (!is_open) && return ntuple(_ -> Dash.no_update(), 50)
+        (isnothing(active_data) || active_data == "") && return [], fill([Dict("label"=>"None", "value"=>"None")], 6)..., fill("d-none", 6)..., fill("", 6)..., [], fill("", 6)..., fill("", 6)..., fill("None", 6)..., fill("", 6)..., fill("", 6)...
 
-        if trig == "lens-btn-radio-correct"
-            new_state = (current_state === nothing) ? true : !current_state
-        elseif trig == "store-master-vault" && !isnothing(active_cont) && active_cont != ""
-            try
-                path   = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
-                config = Sys_Fast.FAST_ReadConfig_DDEF(path)
-                saved_radio = get(config, "RadioOpts", Dict())
-                new_state   = get(saved_radio, "Apply", false)
-                rm(path; force=true)
-            catch
-                new_state = false
+        active_cont = active_data isa String ? active_data : get(active_data, "content", "")
+        (isnothing(active_cont) || active_cont == "") && return [], fill([Dict("label"=>"None", "value"=>"None")], 6)..., fill("d-none", 6)..., fill("", 6)..., [], fill("", 6)..., fill("", 6)..., fill("None", 6)..., fill("", 6)..., fill("", 6)...
+
+        path   = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
+        config = Sys_Fast.FAST_ReadConfig_DDEF(path)
+        Sys_Fast.FAST_CleanTransient_DDEF(path)
+
+        ingreds = get(config, "Ingredients", [])
+        outputs = get(config, "Outputs", [])
+        
+        rad_inputs = filter(i -> get(i, "IsRadioactive", false) == true || Sys_Fast.FAST_SafeNum_DDEF(get(i, "HalfLife", 0.0)) > 0, ingreds)
+        in_options = [Dict("label" => get(i, "Name", ""), "value" => get(i, "Name", "")) for i in rad_inputs]
+        
+        out_options = [Dict("label" => "None", "value" => "None")]
+        append!(out_options, in_options)
+
+        radio_opts = get(config, "RadioOpts", Dict{String,Any}())
+        fwd_dict = get(radio_opts, "Forward", Dict{String,Any}())
+        rev_dict = get(radio_opts, "ReverseMap", Dict{String,Any}())
+        
+        fwd_keys = collect(keys(fwd_dict))
+
+        in_names = fill("", 6)
+        in_units = fill("", 6)
+        for (idx, k) in enumerate(fwd_keys[1:min(length(fwd_keys), 6)])
+            in_names[idx] = get(fwd_dict[k], "Name", "")
+            in_units[idx] = get(fwd_dict[k], "Unit", "")
+        end
+
+        out_div_classes = fill("d-none", 6)
+        out_lbls = fill("", 6)
+        out_src_vals = fill("None", 6)
+        out_names = fill("", 6)
+        out_units = fill("", 6)
+
+        for (idx, o) in enumerate(outputs[1:min(length(outputs), 6)])
+            out_name = get(o, "Name", "")
+            out_div_classes[idx] = "mb-3 d-block"
+            out_lbls[idx] = out_name
+            
+            if haskey(rev_dict, out_name)
+                mapping = rev_dict[out_name]
+                out_src_vals[idx] = get(mapping, "Source", "None")
+                out_names[idx]    = get(mapping, "Name", "")
+                out_units[idx]    = get(mapping, "Unit", "")
             end
         end
 
-        btn_class = (new_state === true) ?
-            "w-100 fw-bold lens-radio-active" :
-            "w-100 fw-bold lens-radio-inactive"
+        return in_options, fill(out_options, 6)..., 
+               out_div_classes..., out_lbls..., 
+               fwd_keys, 
+               in_names..., in_units..., 
+               out_src_vals..., out_names..., out_units...
+    end
 
-        icon = (new_state === true) ? "fas fa-check me-2" : "fas fa-times me-2"
+    # 2.5 Dynamic Input Row Visibility Toggle
+    callback!(app,
+        [Output("lens-radio-in-div-$i", "className") for i in 1:6]...,
+        [Output("lens-radio-in-lbl-$i", "children") for i in 1:6]...,
+        Input("lens-radio-dd-inputs", "value"),
+        prevent_initial_call=true
+    ) do sel_vals
+        vals = isnothing(sel_vals) ? String[] : (sel_vals isa String ? [sel_vals] : convert(Vector{String}, sel_vals))
+        cls = fill("d-none", 6)
+        lbl = fill("", 6)
+        for (i, v) in enumerate(vals[1:min(length(vals), 6)])
+            cls[i] = "mb-2 d-block"
+            lbl[i] = v
+        end
+        return tuple(cls..., lbl...)
+    end
 
-        return new_state, btn_class, false, icon
+    # 3. Apply Configuration & Master Vault Sync
+    callback!(app,
+        Output("sync-lens-content",        "data"),
+        Input("lens-radio-btn-apply", "n_clicks"),
+        Input("lens-upload-data",     "contents"),
+        State("lens-upload-data",     "filename"),
+        State("store-master-vault",   "data"),
+        State("lens-radio-dd-inputs", "value"),
+        [State("lens-radio-in-lbl-$i", "children") for i in 1:6]...,
+        [State("lens-radio-in-name-$i", "value") for i in 1:6]...,
+        [State("lens-radio-in-unit-$i", "value") for i in 1:6]...,
+        [State("lens-radio-out-lbl-$i", "children") for i in 1:6]...,
+        [State("lens-radio-out-dd-$i", "value") for i in 1:6]...,
+        [State("lens-radio-out-name-$i", "value") for i in 1:6]...,
+        [State("lens-radio-out-unit-$i", "value") for i in 1:6]...,
+        prevent_initial_call=true
+    ) do apply_clicks, upload_cont, upload_fname, active_cont, fwd_inputs, 
+         il1, il2, il3, il4, il5, il6,
+         in1, in2, in3, in4, in5, in6,
+         iu1, iu2, iu3, iu4, iu5, iu6,
+         ol1, ol2, ol3, ol4, ol5, ol6,
+         od1, od2, od3, od4, od5, od6,
+         on1, on2, on3, on4, on5, on6,
+         ou1, ou2, ou3, ou4, ou5, ou6
+
+        trig = BASE_GetTrigger_DDEF(callback_context())
+        
+        if trig == "lens-upload-data"
+            (isnothing(upload_cont) || upload_cont == "") && return Dash.no_update()
+            return Dict("content" => upload_cont, "filename" => upload_fname)
+        end
+
+        if trig == "lens-radio-btn-apply"
+            (isnothing(apply_clicks) || apply_clicks == 0) && return Dash.no_update()
+            (isnothing(active_cont) || active_cont == "") && return Dash.no_update()
+
+            # Robust handle extraction for scientific configuration updates.
+            handle = active_cont isa String ? active_cont : get(active_cont, "content", "")
+            (isnothing(handle) || handle == "") && return Dash.no_update()
+
+            in_lbls  = [il1, il2, il3, il4, il5, il6]
+            in_names = [in1, in2, in3, in4, in5, in6]
+            in_units = [iu1, iu2, iu3, iu4, iu5, iu6]
+            
+            out_lbls  = [ol1, ol2, ol3, ol4, ol5, ol6]
+            out_srcs  = [od1, od2, od3, od4, od5, od6]
+            out_names = [on1, on2, on3, on4, on5, on6]
+            out_units = [ou1, ou2, ou3, ou4, ou5, ou6]
+
+            fwd_arr = isnothing(fwd_inputs) ? String[] : (fwd_inputs isa String ? [fwd_inputs] : convert(Vector{String}, fwd_inputs))
+            fwd_dict = Dict{String, Any}()
+            
+            for fwd in fwd_arr
+                idx = findfirst(==(fwd), in_lbls)
+                if !isnothing(idx)
+                    fwd_dict[fwd] = Dict(
+                        "Name" => isnothing(in_names[idx]) ? "" : in_names[idx], 
+                        "Unit" => isnothing(in_units[idx]) ? "" : in_units[idx]
+                    )
+                end
+            end
+
+            rev_dict = Dict{String, Any}()
+            for i in 1:6
+                lbl = out_lbls[i]
+                src = out_srcs[i]
+                if !isnothing(lbl) && lbl != "" && !isnothing(src) && src != "None"
+                    rev_dict[lbl] = Dict(
+                        "Source" => src, 
+                        "Name"   => isnothing(out_names[i]) ? "" : out_names[i], 
+                        "Unit"   => isnothing(out_units[i]) ? "" : out_units[i]
+                    )
+                end
+            end
+
+            apply_flag = !isempty(fwd_dict) || !isempty(rev_dict)
+            new_radio_opts = Dict(
+                "Apply" => apply_flag,
+                "Forward" => fwd_dict,
+                "ReverseMap" => rev_dict
+            )
+
+            path   = Sys_Fast.FAST_GetTransientPath_DDEF(handle)
+            Sys_Fast.FAST_UpdateConfig_DDEF(path, Dict("RadioOpts" => new_radio_opts))
+            new_vault = Sys_Fast.FAST_ReadToStore_DDEF(path)
+            Sys_Fast.FAST_CleanTransient_DDEF(path)
+
+            return new_vault
+        end
+
+        return Dash.no_update()
+    end
+
+    callback!(app,
+        Output("lens-store-radio-correct", "data"),
+        Output("lens-btn-radio-correct",   "className"),
+        Output("lens-icon-radio-correct",  "className"),
+        Input("store-master-vault", "data"),
+        prevent_initial_call=true
+    ) do active_data
+        (isnothing(active_data) || active_data == "") && return false, "w-100 fw-bold lens-radio-inactive", "fas fa-radiation-alt me-2"
+        
+        active_cont = active_data isa String ? active_data : get(active_data, "content", "")
+        (isnothing(active_cont) || active_cont == "") && return false, "w-100 fw-bold lens-radio-inactive", "fas fa-radiation-alt me-2"
+
+        path   = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
+        config = Sys_Fast.FAST_ReadConfig_DDEF(path)
+        Sys_Fast.FAST_CleanTransient_DDEF(path)
+        
+        radio_opts = get(config, "RadioOpts", Dict("Apply" => false))
+        apply_flag = get(radio_opts, "Apply", false)
+
+        btn_class = apply_flag ? "w-100 fw-bold lens-radio-active" : "w-100 fw-bold lens-radio-inactive"
+        icon = apply_flag ? "fas fa-check me-2" : "fas fa-radiation-alt me-2"
+
+        return apply_flag, btn_class, icon
     end
 end
 

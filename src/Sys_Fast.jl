@@ -602,9 +602,9 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
         push!(headers, C.COL_SCORE)
 
         if !isnothing(DesignData)
-            for chr_col in ("CHRO_HOUR", "CHRO_MIN")
-                if chr_col ∈ names(DesignData) && chr_col ∉ headers
-                    push!(headers, chr_col)
+            for col in names(DesignData)
+                if (startswith(col, "TIME_EXP_MINS_") || startswith(col, "TIME_MEAS_MINS_")) && col ∉ headers
+                    push!(headers, col)
                 end
             end
         end

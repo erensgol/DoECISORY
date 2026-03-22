@@ -72,15 +72,15 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    MOLE_ApplyRadioDecay_DDEF(RawValue, HalfLife, HalfLifeUnit, DeltaTMinutes) -> Float64
-Calculates effective mass/activity after isothermal decay (Measured * DF).
+    MOLE_ApplyRadioDecay_DDEF(RawValue, HalfLife, HalfLifeUnit, DeltaTMinutes; Reverse=false) -> Float64
+Calculates effective mass/activity after isothermal decay (Mapping for Forward or Reverse Decay).
 """
-function MOLE_ApplyRadioDecay_DDEF(RawValue::Float64, HalfLife::Float64, HalfLifeUnit::String, DeltaTMinutes::Float64)
+function MOLE_ApplyRadioDecay_DDEF(RawValue::Float64, HalfLife::Float64, HalfLifeUnit::String, DeltaTMinutes::Float64; Reverse::Bool=false)
     hl_minutes = MOLE_ConvertTimeToMinutes_DDEF(HalfLife, HalfLifeUnit)
     hl_minutes <= 0.0 && return RawValue
 
     lambda       = log(2) / hl_minutes
-    decay_factor = exp(-lambda * DeltaTMinutes)
+    decay_factor = exp((Reverse ? lambda : -lambda) * DeltaTMinutes)
     
     return RawValue * decay_factor
 end

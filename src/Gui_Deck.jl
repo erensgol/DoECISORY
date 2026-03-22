@@ -683,9 +683,14 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
         df[!, C.COL_SCORE] = fill(missing, N_Runs)
         df[!, C.COL_NOTES] = fill("", N_Runs)
 
-        if any(r -> get(r, "IsRadioactive", false), D["Rows"])
-            df[!, "CHRO_HOUR"] = fill(0.0, N_Runs)
-            df[!, "CHRO_MIN"]  = fill(0.0, N_Runs)
+        for r in D["Rows"]
+            if get(r, "IsRadioactive", false)
+                rn = string(get(r, "Name", ""))
+                if !isempty(rn)
+                    df[!, "TIME_EXP_MINS_" * rn]  = fill(0.0, N_Runs)
+                    df[!, "TIME_MEAS_MINS_" * rn] = fill(0.0, N_Runs)
+                end
+            end
         end
 
         f_name = ""; f_mw = 0.0

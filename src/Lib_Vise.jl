@@ -861,11 +861,12 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     # Integrated analysis of radioactive decay correction protocols.
     if haskey(Res, "RadioCorrection") && !isempty(Res["RadioCorrection"])
         write(io, "### II. Radioactive Decay Correction (Audit)\n")
-        write(io, "Row-based dynamic correction applied to compensate for isothermal decay between calibration and experimental execution.\n\n")
+        write(io, "Row-based bidirectional dynamic correction applied to compensate for isothermal decay (Forward & Reverse).\n\n")
         for itm in Res["RadioCorrection"]
-            @printf(io, "- **%s**: Applied dynamic row-based correction.\n", itm["Name"])
-            @printf(io, "  - *Half-Life (T½)*: %.2f %s\n", itm["HalfLife"], itm["Unit"])
-            @printf(io, "  - *Avg Decay Time*: %.2f hours\n", get(itm, "AvgDeltaT", 0.0))
+            r_type = get(itm, "Type", "dynamic row-based correction")
+            @printf(io, "- **%s**: Applied %s.\n", itm["Name"], r_type)
+            @printf(io, "  - *Half-Life (T½)*: %.2f %s\n", get(itm, "HalfLife", 0.0), get(itm, "Unit", ""))
+            @printf(io, "  - *Avg Decay Time*: %.2f mins\n", get(itm, "AvgDeltaT", 0.0))
             @printf(io, "  - *Avg Decay Factor*: %.4f\n", get(itm, "AvgDF", 0.0))
         end
         write(io, "\n")
@@ -1026,6 +1027,11 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     N          = size(X_Clean, 1)
     K          = 3
 
+    if N < 3
+        Log("VISE", "INSUFFICIENT_DATA", "Filtered response vectors yield N = $N valid rows (Minimum 3 required).", "FAIL")
+        return Dict("Status" => "FAIL", "Message" => "Insufficient valid response data (N < 3). Ensure that you have measured results in the Excel file.")
+    end
+
     # Load configuration to accurately map columns back to ingredient/output names
     # This ensures that headers like 'VARIA_Component_mg' correctly map to 'Component'
     config      = Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
@@ -1066,57 +1072,129 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
     # Radioactive decay correction based on experimental timestamps
     radio_correction_audit = []
     if get(get(Opts, "RadioOpts", Dict()), "Apply", false)
-        Log("VISE", "DECAY", "Executing global radioactivity decay correction.", "INFO")
+        Log("VISE", "DECAY", "Executing bidirectional radioactivity decay correction.", "INFO")
         
-        col_hr  = Sys_Fast.FAST_GetCol_DDEF(df_train, "CHRO_HOUR")
-        col_min = Sys_Fast.FAST_GetCol_DDEF(df_train, "CHRO_MIN")
+        radio_opts = get(Opts, "RadioOpts", Dict{String,Any}())
+        fwd_dict   = get(radio_opts, "Forward", Dict{String,Any}())
+        rev_dict   = get(radio_opts, "ReverseMap", Dict{String,Any}())
 
-        if isempty(col_hr) || isempty(col_min)
-            push!(boundary_warnings, "Radioactivity correction enabled but CHRO_HOUR/CHRO_MIN columns not found in dataset. Skipping correction.")
-            Log("VISE", "DECAY_SKIP", "CHRO columns missing.", "WARN")
+        ingredients = if !isempty(cfg_ingreds)
+            cfg_ingreds
+        elseif haskey(config, "Ingredients")
+            config["Ingredients"] isa Dict ? collect(values(config["Ingredients"])) : config["Ingredients"]
         else
-            # Use already loaded config from earlier mapping step
-            ingredients = if !isempty(cfg_ingreds)
-                cfg_ingreds
-            elseif haskey(config, "Ingredients")
-                config["Ingredients"] isa Dict ? collect(values(config["Ingredients"])) : config["Ingredients"]
-            else
-                []
-            end
+            []
+        end
 
-            for (v_idx, v_name) in enumerate(InNames)
-                ing_idx = findfirst(i -> get(i, "Name", "") == v_name, ingredients)
-                isnothing(ing_idx) && continue
-                ing = ingredients[ing_idx]
+        # 1. Forward Decay (Inputs)
+        for v_name in keys(fwd_dict)
+            ing_idx = findfirst(i -> get(i, "Name", "") == v_name, ingredients)
+            isnothing(ing_idx) && continue
+            ing = ingredients[ing_idx]
+            
+            v_idx = findfirst(==(v_name), InNames) # Might be nothing if Fixed
+            
+            hl_raw  = get(ing, "HalfLife", 0.0)
+            hl_unit = get(ing, "HalfLifeUnit", "Hours")
+            hl_min  = Lib_Mole.MOLE_ConvertTimeToMinutes_DDEF(hl_raw, hl_unit)
 
-                if get(ing, "IsRadioactive", false)
-                    hl_raw  = get(ing, "HalfLife", 0.0)
-                    hl_unit = get(ing, "HalfLifeUnit", "Hours")
-                    hl_min  = Lib_Mole.MOLE_ConvertTimeToMinutes_DDEF(hl_raw, hl_unit)
-
-                    if hl_min > 0.0
-                        dfs = Float64[]
-                        for i in 1:N
-                            # Default to 0 if not entered
-                            t_hr  = Sys_Fast.FAST_SafeNum_DDEF(df_train[i, col_hr])
-                            t_min = Sys_Fast.FAST_SafeNum_DDEF(df_train[i, col_min])
-                            t_total_min = t_hr * 60.0 + t_min
-                            
-                            df_row = exp(-log(2) * t_total_min / hl_min)
-                            X_Clean[i, v_idx] *= df_row
-                            push!(dfs, df_row)
-                        end
-
-                        push!(radio_correction_audit, Dict(
-                            "Name"        => v_name,
-                            "HalfLife"    => hl_raw,
-                            "Unit"        => hl_unit,
-                            "AvgDeltaT"   => (isempty(dfs) ? 0.0 : mean((Sys_Fast.FAST_SafeNum_DDEF.(df_train[!, col_hr]) .* 60.0 .+ Sys_Fast.FAST_SafeNum_DDEF.(df_train[!, col_min])))),
-                            "AvgDF"       => (isempty(dfs) ? 1.0 : mean(dfs)),
-                            "IsCorrected" => true
-                        ))
+            if hl_min > 0.0
+                col_exp = Sys_Fast.FAST_GetCol_DDEF(df_train, "TIME_EXP_MINS_" * v_name)
+                
+                dfs = Float64[]
+                for i in 1:N
+                    t_min = isempty(col_exp) ? 0.0 : Sys_Fast.FAST_SafeNum_DDEF(df_train[i, col_exp])
+                    df_row = exp(-log(2) * t_min / hl_min)
+                    
+                    if !isnothing(v_idx)
+                        X_Clean[i, v_idx] *= df_row
                     end
+                    push!(dfs, df_row)
                 end
+                
+                type_lbl = isnothing(v_idx) ? "Forward (Fixed)" : "Forward (Input)"
+                opts = get(fwd_dict, v_name, Dict())
+                disp_name = get(opts, "Name", "")
+                disp_name = isempty(disp_name) ? v_name : disp_name
+
+                push!(radio_correction_audit, Dict(
+                    "Name"        => disp_name,
+                    "HalfLife"    => hl_raw,
+                    "Unit"        => hl_unit,
+                    "Type"        => type_lbl,
+                    "AvgDeltaT"   => isempty(col_exp) ? 0.0 : mean(Sys_Fast.FAST_SafeNum_DDEF.(df_train[!, col_exp])),
+                    "AvgDF"       => isempty(dfs) ? 1.0 : mean(dfs),
+                    "IsCorrected" => true
+                ))
+            end
+        end
+
+        # 2. Reverse Decay & Yield Transformation (Outputs)
+        for (out_name, out_data) in rev_dict
+            mapped_in_name = get(out_data, "Source", "None")
+            (mapped_in_name == "None" || isempty(mapped_in_name)) && continue
+            o_idx = findfirst(==(out_name), OutNames)
+            isnothing(o_idx) && continue
+
+            ing_idx = findfirst(i -> get(i, "Name", "") == mapped_in_name, ingredients)
+            isnothing(ing_idx) && continue
+            ing = ingredients[ing_idx]
+            
+            hl_raw  = get(ing, "HalfLife", 0.0)
+            hl_unit = get(ing, "HalfLifeUnit", "Hours")
+            hl_min  = Lib_Mole.MOLE_ConvertTimeToMinutes_DDEF(hl_raw, hl_unit)
+
+            if hl_min > 0.0
+                col_meas = Sys_Fast.FAST_GetCol_DDEF(df_train, "TIME_MEAS_MINS_" * mapped_in_name)
+                col_exp  = Sys_Fast.FAST_GetCol_DDEF(df_train, "TIME_EXP_MINS_" * mapped_in_name)
+                
+                dfs = Float64[]
+                for i in 1:N
+                    t_meas = isempty(col_meas) ? 0.0 : Sys_Fast.FAST_SafeNum_DDEF(df_train[i, col_meas])
+                    t_exp  = isempty(col_exp)  ? 0.0 : Sys_Fast.FAST_SafeNum_DDEF(df_train[i, col_exp])
+                    
+                    df_row = exp(log(2) * t_meas / hl_min)
+                    A_out_corr = Y_Clean[i, o_idx] * df_row
+                    
+                    v_idx = findfirst(==(mapped_in_name), InNames)
+                    if !isnothing(v_idx)
+                        # Yield relative to Independent Variable (already forward decayed in Step 1)
+                        A_in_corr = X_Clean[i, v_idx]
+                        yield_val = (A_in_corr > 0.0) ? (A_out_corr / A_in_corr) * 100.0 : 0.0
+                        Y_Clean[i, o_idx] = clamp(yield_val, 0.0, 100.0)
+                    else
+                        # Yield relative to Fixed/Filler Ingredient
+                        c_fixed = Sys_Fast.FAST_GetCol_DDEF(df_train, C.PRE_FIXED * mapped_in_name)
+                        c_fixed = isempty(c_fixed) ? Sys_Fast.FAST_GetCol_DDEF(df_train, C.PRE_FILL * mapped_in_name) : c_fixed
+                        
+                        if !isempty(c_fixed)
+                            val_raw = Sys_Fast.FAST_SafeNum_DDEF(df_train[i, c_fixed])
+                            # In-place dynamic forward decay for fixed components logic
+                            A_in_corr = val_raw * exp(-log(2) * t_exp / hl_min)
+                            yield_val = (A_in_corr > 0.0) ? (A_out_corr / A_in_corr) * 100.0 : 0.0
+                            Y_Clean[i, o_idx] = clamp(yield_val, 0.0, 100.0)
+                        else
+                            # Fallback if no input volume/mass found
+                            Y_Clean[i, o_idx] = A_out_corr
+                        end
+                    end
+                    push!(dfs, df_row)
+                end
+                
+                # Retrieval of scientific naming override for high-fidelity reporting.
+                opts = get(rev_dict, out_name, Dict())
+                disp_name = get(opts, "Name", "")
+                disp_name = isempty(disp_name) ? out_name : disp_name
+
+                push!(radio_correction_audit, Dict(
+                    "Name"        => disp_name,
+                    "HalfLife"    => hl_raw,
+                    "Unit"        => hl_unit,
+                    "Type"        => "Reverse & Yield ($mapped_in_name)",
+                    "AvgDeltaT"   => isempty(col_meas) ? 0.0 : mean(Sys_Fast.FAST_SafeNum_DDEF.(df_train[!, col_meas])),
+                    "AvgDF"       => isempty(dfs) ? 1.0 : mean(dfs),
+                    "IsCorrected" => true
+                ))
             end
         end
     end
@@ -1433,7 +1511,53 @@ function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVecto
         end
     end
 
-    graphs = Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, InNames, OutNames,
+    DisplayInNames = copy(InNames)
+    DisplayOutNames = copy(OutNames)
+
+    if get(get(Opts, "RadioOpts", Dict()), "Apply", false)
+        radio_opts = get(Opts, "RadioOpts", Dict())
+        fwd_dict   = get(radio_opts, "Forward", Dict{String,Any}())
+        rev_dict   = get(radio_opts, "ReverseMap", Dict{String,Any}())
+
+        for (i, name) in enumerate(DisplayInNames)
+            if haskey(fwd_dict, name)
+                d      = fwd_dict[name]
+                cust_n = get(d, "Name", "")
+                cust_u = get(d, "Unit", "")
+                DisplayInNames[i] = isempty(cust_n) ? name * " (Corr.)" : (isempty(cust_u) ? cust_n : "$cust_n ($cust_u)")
+            end
+        end
+
+        for (i, name) in enumerate(DisplayOutNames)
+            if haskey(rev_dict, name)
+                d      = rev_dict[name]
+                cust_n = get(d, "Name", "")
+                cust_u = get(d, "Unit", "")
+                # If no custom name is given for the output, we keep the original name but potentially add the unit
+                DisplayOutNames[i] = isempty(cust_n) ? name : (isempty(cust_u) ? cust_n : "$cust_n ($cust_u)")
+            end
+        end
+
+        # Update TermNames in models so Pareto charts use the new input names
+        for m in models
+            if haskey(m, "TermNames")
+                new_terms = copy(m["TermNames"])
+                for (i, t) in enumerate(new_terms)
+                    for (orig, data) in fwd_dict
+                        cust_n = get(data, "Name", "")
+                        cust_u = get(data, "Unit", "")
+                        new_name = isempty(cust_n) ? orig * " (Corr.)" : (isempty(cust_u) ? cust_n : "$cust_n ($cust_u)")
+                        
+                        # Simple string replacement for factors
+                        new_terms[i] = replace(new_terms[i], orig => new_name)
+                    end
+                end
+                m["TermNames"] = new_terms
+            end
+        end
+    end
+
+    graphs = Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, DisplayInNames, DisplayOutNames,
         Goals, r2_vec, r2_pred_vec, Opts, Leaders_DF, sens_list, residuals_list)
 
     # Execution of mathematical health audit on experimental design topology.
