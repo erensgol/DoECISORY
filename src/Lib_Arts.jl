@@ -351,15 +351,15 @@ function ARTS_CalcDesirability_DDEF(Val::Float64, Goal::AbstractDict)
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 8: HARRINGTON DESIRABILITY SCORING
+# SECTION 8: DERRINGER DESIRABILITY SCORING
 # ------------------------------------------------------------------------------
 
 """
     ARTS_CalcDesirability_DDEF(Val, GoalTup) -> Float64
-Calculates desirability scores using Harrington's function for multi-objective mapping.
+Calculates desirability scores using Derringer's function for multi-objective mapping.
 """
 function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
-    G_Min, G_Max, G_Tgt, is_max, is_min, _ = GoalTup
+    G_Min, G_Max, G_Tgt, is_max, is_min, Weight = GoalTup
     res = 0.0
 
     if is_max
@@ -369,7 +369,7 @@ function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
             res = 0.0
         else
             denom = G_Tgt - G_Min
-            res   = denom > 1e-9 ? (Val - G_Min) / denom : 1.0
+            res   = denom > 1e-9 ? ((Val - G_Min) / denom)^Weight : 1.0
         end
     elseif is_min
         if Val <= G_Tgt
@@ -378,7 +378,7 @@ function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
             res = 0.0
         else
             denom = G_Max - G_Tgt
-            res   = denom > 1e-9 ? (G_Max - Val) / denom : 1.0
+            res   = denom > 1e-9 ? ((G_Max - Val) / denom)^Weight : 1.0
         end
     # Nominal
     else
@@ -388,11 +388,11 @@ function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
             res = 1.0
         elseif Val < G_Tgt
             denom = G_Tgt - G_Min
-            res   = denom > 1e-9 ? (Val - G_Min) / denom : 1.0
+            res   = denom > 1e-9 ? ((Val - G_Min) / denom)^Weight : 1.0
         # Val > G_Tgt
         else
             denom = G_Max - G_Tgt
-            res   = denom > 1e-9 ? (G_Max - Val) / denom : 1.0
+            res   = denom > 1e-9 ? ((G_Max - Val) / denom)^Weight : 1.0
         end
     end
 

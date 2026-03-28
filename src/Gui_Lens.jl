@@ -100,12 +100,12 @@ function LENS_Layout_DDEF()
                     dbc_row(dbc_col([
                         html_div(html_table([
                             html_thead(html_tr([
-                                BASE_TableHeader_DDEF("RESPONSE",  width="20%"),
+                                BASE_TableHeader_DDEF("RESPONSE",  width="16%"),
                                 BASE_TableHeader_DDEF("LOWER",     width="15%"),
                                 BASE_TableHeader_DDEF("TARGET",    width="15%"),
                                 BASE_TableHeader_DDEF("UPPER",     width="15%"),
                                 BASE_TableHeader_DDEF("OBJECTIVE", width="20%"),
-                                BASE_TableHeader_DDEF("VALUE",     width="15%"),
+                                BASE_TableHeader_DDEF("VALUE",     width="19%"), 
                             ])),
                             html_tbody([BASE_BuildGoalRow_DDEF(i) for i in 1:3])
                         ], className="colourtx-v5pb", style=Dict("width" => "100%", "borderCollapse" => "collapse", "fontSize" => "10px", "tableLayout" => "fixed")), className="table-responsive m-0")

@@ -68,7 +68,7 @@ function MOLE_ConvertTimeToMinutes_DDEF(Value::Real, Unit::String)
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 3: ISOTHERMAL RADIO-DECAY CALCULATION
+# SECTION 3: RADIO-DECAY CALCULATION
 # ------------------------------------------------------------------------------
 
 """
@@ -371,7 +371,7 @@ function MOLE_QuickAudit_DDEF(TableData::AbstractVector, Vol::Float64, Conc::Flo
         end
     end
 
-    units = [string(get(r, "Unit", "")) for r in D["Rows"]]
+    units = String[string(get(r, "Unit", "")) for r in D["Rows"]]
     # Utilise raw values for stoichiometric auditing without scaling.
     mass_results = MOLE_CalcMass_DDEF(
         D["Names"][idx_chem], D["MWs"][idx_chem], ratios[idx_chem], Vol, Conc, units[idx_chem]
@@ -640,7 +640,7 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
         r_chem = ratios_full[idx_chem]
         n_chem = D["Names"][idx_chem]
         w_chem = D["MWs"][idx_chem]
-        u_chem = [string(get(r, "Unit", "-")) for r in D["Rows"][idx_chem]]
+        u_chem = String[string(get(r, "Unit", "-")) for r in D["Rows"][idx_chem]]
 
         if isempty(idx_chem)
             masses[i] = 0.0
@@ -801,7 +801,7 @@ function MOLE_ProcessDesign_DDEF(DesignMatrix::AbstractMatrix, TableData::Abstra
         end
         
         chems = D["Idx_Chem"]
-        units = [string(get(r, "Unit", "-")) for r in D["Rows"][chems]]
+        units = String[string(get(r, "Unit", "-")) for r in D["Rows"][chems]]
         m_df  = MOLE_CalcMass_DDEF(D["Names"][chems], D["MWs"][chems], current_ratios[chems], Vol, Conc, units)
         
         for r in eachrow(m_df)

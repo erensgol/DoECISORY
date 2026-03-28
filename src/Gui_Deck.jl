@@ -638,7 +638,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
         end
 
         chem_indices = D["Idx_Chem"]
-        chem_units = [string(get(r, "Unit", "-")) for r in D["Rows"][chem_indices]]
+        chem_units = String[string(get(r, "Unit", "-")) for r in D["Rows"][chem_indices]]
         run_masses = L_AMM(real_matrix, D["Names"][chem_indices], D["MWs"][chem_indices], Sys_Fast.FAST_SafeNum_DDEF(vol), Sys_Fast.FAST_SafeNum_DDEF(conc), chem_units)
         if any(isnan, run_masses) || any(<(0.0), run_masses)
             return (false, "Mass Calculation Error: One or more runs resulted in invalid chemical mass. Please check your MW and Concentration values.")

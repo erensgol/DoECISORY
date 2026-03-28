@@ -628,8 +628,8 @@ try
     env_label = APP_IsHfSpaces_DDEC ? "Cloud (HF Spaces)" : "Local $(Threads.nthreads())T"
     
     Sys_Fast.FAST_Log_DDEF("SERVER", "Ready", "DaishoDoE Engine listening on :$(APP_Port_DDEC) ($env_label)", "OK")
-    custom_logger = EarlyFilteredLogger(current_logger()) do log
-        if log.level == Logging.Error && contains(string(log.message), "operation canceled")
+    custom_logger = ActiveFilteredLogger(current_logger()) do rec
+        if rec.level == Logging.Error && contains(string(rec.message), "operation canceled")
             Sys_Fast.FAST_Log_DDEF("SERVER", "DISCONNECT", "Connection reset by browser (ECANCELED)", "INFO")
             return false
         end

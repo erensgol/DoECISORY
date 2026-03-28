@@ -498,7 +498,7 @@ function BASE_BuildGoalRow_DDEF(i)
                     Dict("label" => "★★★☆☆", "value" => "1.00"),
                     Dict("label" => "★★★★☆", "value" => "2.50"),
                     Dict("label" => "★★★★★", "value" => "5.00"),
-                ], value="1.00", className="form-select form-select-sm border-0 py-0 text-center colourtx-v4dh", style=Dict("width" => "100%", "fontSize" => "12px", "backgroundColor" => "transparent", "boxShadow" => "none")), style=merge(BASE_StyleCell_DDEC, Dict("width" => "15%", "borderBottom" => "none")), className="p-1")
+                ],value="1.00", className="form-select form-select-sm border-0 py-0 text-center colourtx-v4dh", style=Dict("width" => "100%", "fontSize" => "10px", "backgroundColor" => "transparent", "boxShadow" => "none")), style=merge(BASE_StyleCell_DDEC, Dict("width" => "19%", "borderBottom" => "none")), className="p-1")
     ])
 end
 

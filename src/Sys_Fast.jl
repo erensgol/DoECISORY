@@ -620,25 +620,20 @@ function FAST_InitMaster_DDEF(File::String, InNames::Vector{String}, OutNames::V
             try
                 df_old = FAST_ReadExcel_DDEF(File, C.SHEET_DATA)
                 if !isempty(df_old)
-                    FAST_NormaliseCols_DDEF!(df_old)
-                    headers = names(df_old)
+                    headers_old = names(df_old)
+                    all_headers = unique(vcat(headers_old, headers))
 
-                    for h in setdiff(names(df_new), headers)
-                        push!(headers, h)
+                    for h in setdiff(all_headers, names(df_old))
+                        df_old[!, h] = fill(missing, nrow(df_old))
+                    end
+                    for h in setdiff(all_headers, names(df_new))
+                        df_new[!, h] = fill(missing, nrow(df_new))
                     end
 
-                    for col in setdiff(headers, names(df_new))
-                        df_new[!, col] = fill(missing, nrow(df_new))
-                    end
-
-                    for col in setdiff(headers, names(df_old))
-                        df_old[!, col] = fill(missing, nrow(df_old))
-                    end
-
-                    df_final_data = vcat(select!(df_old, headers), select!(df_new, headers))
+                    df_final_data = vcat(df_old[:, all_headers], df_new[:, all_headers])
                 end
             catch e
-                FAST_Log_DDEF("FAST", "Merge Warning", "Could not read existing data or preserve order: $e", "WARN")
+                FAST_Log_DDEF("FAST", "Merge Warning", "Structural merge failed: $e", "WARN")
             end
         end
 
