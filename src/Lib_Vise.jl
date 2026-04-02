@@ -731,6 +731,9 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
             @printf(io, "  - *%s*: %.4f\n", in_names[i], val)
         end
         write(io, "\n> [!NOTE]\n> Stability analysis suggests these coordinates reside within a high-confidence 'Optimal Zone' for experimental reproducibility.\n\n")
+    else
+        write(io, "### III. Global Optimum & Control Topology\n")
+        write(io, "> [!IMPORTANT]\n> **Global Optimisation in Progress**: Mathematical convergence in the background. Results will be visible in Pulse #2.\n\n")
     end
 
     write(io, "*Generated via the DaishoDoE Modular Framework $(Main.Sys_Fast.FAST_Data_DDEC.VERSION). Formatted in compliance with academic reporting standards.*\n")
@@ -797,7 +800,7 @@ end
 # ------------------------------------------------------------------------------
 
 function VISE_Execute_DDEF(DataFile::AbstractString, Phase::AbstractString, Goals::AbstractVector, ModelType::AbstractString="Auto"; 
-    Opts=Dict{String,Any}(), ConfigUpdates::Dict{String,Any}=Dict{String,Any}(), t_start::Float64=time(), RenderMode::Symbol=:Full)
+    Opts=Dict{String,Any}(), ConfigUpdates::Dict{String,Any}=Dict{String,Any}(), t_start::Float64=time(), RenderMode::Symbol=:Full, Optim::Bool=true)
     t0 = t_start
     C, Log = Main.Sys_Fast.FAST_Data_DDEC, Main.Sys_Fast.FAST_Log_DDEF
     Log("VISE", "INITIALISATION", "Analysing Phase: $Phase (File: $(basename(DataFile)))", "WAIT")
@@ -809,7 +812,7 @@ function VISE_Execute_DDEF(DataFile::AbstractString, Phase::AbstractString, Goal
     config = Main.Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
     
     # 2. Execute Core Analytical Pipeline (Staged Rendering Support)
-    res, sheets_to_commit = VISE_ExecuteCore_DDEF(df_raw, config, Phase, Goals, ModelType; Opts=Opts, t_start=t0, RenderMode=RenderMode)
+    res, sheets_to_commit = VISE_ExecuteCore_DDEF(df_raw, config, Phase, Goals, ModelType; Opts=Opts, t_start=t0, RenderMode=RenderMode, Optim=Optim)
     
     res["Status"] != "OK" && return res
 
@@ -822,8 +825,12 @@ function VISE_Execute_DDEF(DataFile::AbstractString, Phase::AbstractString, Goal
         sheets_to_commit[C.SHEET_CONFIG] = df_cfg
     end
     
-    Log("VISE", "IO_FLUSH", "Committing analytical updates to $DataFile...", "WAIT")
-    Main.Sys_Fast.FAST_SafeExcelWrite_DDEF(DataFile, sheets_to_commit)
+    if Optim
+        Log("VISE", "IO_FLUSH", "Committing analytical updates to $DataFile...", "WAIT")
+        Main.Sys_Fast.FAST_SafeExcelWrite_DDEF(DataFile, sheets_to_commit)
+    else
+        res["_Hidden_Sheets"] = sheets_to_commit
+    end
     
     elapsed_total = round(time() - t0; digits=1)
     res["Elapsed"] = "$(elapsed_total)s"
@@ -838,7 +845,7 @@ end
 Orchestrates the scientific analytical pipeline entirely in memory. Target for JIT warmup.
 """
 function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::AbstractString, Goals::AbstractVector, ModelType::AbstractString="Auto"; 
-    Opts=Dict{String,Any}(), t_start::Float64=time(), RenderMode::Symbol=:Full)
+    Opts=Dict{String,Any}(), t_start::Float64=time(), RenderMode::Symbol=:Full, Optim::Bool=true)
     
     C, Log = Main.Sys_Fast.FAST_Data_DDEC, Main.Sys_Fast.FAST_Log_DDEF
     t0 = t_start
@@ -860,7 +867,13 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
     
     InNames_v = collect(String, InNames)
     OutNames_v = collect(String, OutNames)
-    bp, bs, ldf, SC, warns = VISE_RunOptimisation_DDEF(X_Clean, models, Goals, config, Phase, InNames_v, OutNames_v, Opts, C, Log)
+    
+    # Mathematical Optimisation: BBO Pulse handled concurrently or skipped for Priority Start
+    bp, bs, ldf, SC, warns = if Optim
+        VISE_RunOptimisation_DDEF(X_Clean, models, Goals, config, Phase, InNames_v, OutNames_v, Opts, C, Log)
+    else
+        [], 0.0, DataFrame(), zeros(1), String[]
+    end
     
     Y_Pred, Actual_Scores = VISE_GeneratePredictions_DDEF(X_Clean, Y_Clean, models, Goals)
     df_updated = VISE_PreparePredictionsSheet_DDEF(df_raw, Phase, Y_Pred, Actual_Scores, valid_mask, OutNames_v, C, Log)
@@ -903,8 +916,6 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
         Log("VISE", "VITALS_WARN", "Health diagnostics incomplete: $e", "WARN")
     end
     
-    # Scientific Visualisation Portfolio (Staged via ARTS Orchestrator)
-    # Inject RenderMode to satisfy immediate UI response targets.
     opts_with_mode = copy(Opts)
     opts_with_mode["Mode"] = RenderMode
 

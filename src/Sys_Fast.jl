@@ -114,7 +114,6 @@ function FAST_ExtractVid_DDEF(vault)
     return ""
 end
 
-
 """
     FAST_InitialiseWorkforce_DDEF()
 Initialises transient directories and clears existing temporary files.

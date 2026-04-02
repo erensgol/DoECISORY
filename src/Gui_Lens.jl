@@ -660,15 +660,13 @@ function LENS_RegisterCallbacks_DDEF(app)
             st_next = get(status, "next_pkg", get(status, :next_pkg, 0))
             st_work = get(status, "working",  get(status, :working,  false))
             
-            # Streaming Protocol Heartbeat: Tracking state for $(st_next) in handle $(manifest_h)
-            (st_next > 0) && Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Poll", "Staging Pulse #$(st_next) [Manifest Check]...", "WAIT")
+            (st_next > 0) && Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Poll", "Staging Pulse #$(st_next)...", "WAIT")
             
             (isnothing(status) || st_next == 0 || st_work) && return ntuple(_ -> nu, 10)
             
             manifest_h  = get(status, "handle", get(status, :handle, ""))
             current_graphs = args[25]
             
-            # manifest_h is the base path. We look for manifest.json first.
             m_path = manifest_h * "_manifest.json"
             pkg_h  = manifest_h * "_pkg$st_next.json"
             
@@ -676,31 +674,32 @@ function LENS_RegisterCallbacks_DDEF(app)
             
             manifest = try; open(m_path, "r") do io; JSON3.read(io) end; catch; nothing; end
             isnothing(manifest) && return ntuple(_ -> nu, 10)
-            total_pkgs = get(manifest, "total", 0)
             
             batch_data = try; open(pkg_h, "r") do io; JSON3.read(io) end; catch; nothing; end
             isnothing(batch_data) && return ntuple(_ -> nu, 10)
-            new_graphs = batch_data["graphs"]
-                
-                updated_graphs = [current_graphs; new_graphs]
-                new_count      = length(updated_graphs)
-                
-                # Cleanup consumed chunk
-                try; rm(pkg_h; force=true); catch; end
-                
-                if st_next >= total_pkgs
-                    # Convergence: All 64+ units delivered successfully.
-                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Flow", "Streaming Concluded. Total Ensemble: $new_count units.", "OK")
-                    try; rm(m_path; force=true); catch; end
-                    return (updated_graphs, nu, nu, nu, nu, nu, nu, nu, Dict("next_pkg" => 0, "handle" => "", "working" => false), true)
-                else
-                    # Progression: Advancing to the next science packet in the transient pipeline.
-                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Flow", "Stream Segment $st_next/$total_pkgs accepted [Total: $new_count].", "OK")
-                    return (updated_graphs, nu, nu, nu, nu, nu, nu, nu, Dict("next_pkg" => st_next + 1, "handle" => manifest_h, "working" => false), false)
-                end
-            end
-        
+            
+            new_graphs = get(batch_data, "graphs", [])
+            opt_data   = get(batch_data, "opt_results", nothing)
+            
+            updated_graphs = [current_graphs; new_graphs]
+            new_count      = length(updated_graphs)
+            
+            try; rm(pkg_h; force=true); catch; end
+            
+            res_report   = isnothing(opt_data) ? nu : get(opt_data, "Report", nu)
+            res_bundle   = isnothing(opt_data) ? nu : get(opt_data, "Bundle", nu)
+            res_leaders  = isnothing(opt_data) ? nu : get(opt_data, "Leaders", nu)
+            res_badge    = isnothing(opt_data) ? nu : get(opt_data, "Badge", nu)
 
+            if st_next >= 2
+                Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Flow", "Streaming Concluded. Total Ensemble: $new_count units.", "OK")
+                try; rm(m_path; force=true); catch; end
+                return (updated_graphs, nu, nu, res_report, res_bundle, nu, res_leaders, res_badge, Dict("next_pkg" => 0, "handle" => "", "working" => false), true)
+            else
+                Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Flow", "Stream Segment $st_next accepted [Total: $new_count].", "OK")
+                return (updated_graphs, nu, nu, res_report, res_bundle, nu, res_leaders, res_badge, Dict("next_pkg" => st_next + 1, "handle" => manifest_h, "working" => false), false)
+            end
+        end
 
         t_start = time()
         n, _, phase, model = args[1:4]
@@ -770,9 +769,8 @@ function LENS_RegisterCallbacks_DDEF(app)
             model_str   = isnothing(model) ? "Auto" : string(model)
             cfg_updates = Dict{String,Any}("LensGoals" => goals, "RadioOpts" => opts["RadioOpts"])
 
-            # 1. IMMEDIATE: Modelling + Priority Render (Groups 1-5: Pareto, Fit, Trend, Slice)
             res = Lib_Vise.VISE_Execute_DDEF(path, phase_str, goals, model_str; 
-                Opts=opts, ConfigUpdates=cfg_updates, t_start=t_start, RenderMode=:Priority)
+                Opts=opts, ConfigUpdates=cfg_updates, t_start=t_start, RenderMode=:Priority, Optim=false)
 
             if res["Status"] != "OK"
                 return [], "", html_span("❌ Analysis Failed: $(res["Message"])", className="colourtx-c0hr"), "", nu, nu, "", "", nu, true
@@ -780,7 +778,6 @@ function LENS_RegisterCallbacks_DDEF(app)
 
             sci_report = Lib_Vise.VISE_GenerateScientificReport_DDEF(res)
             
-            # Preparation of Pkg 1 (Immediate Plots: Pareto + Fit)
             pkg1_graphs = [
                 Dict(
                     "figure" => Dict("data" => g["Plot"].data, "layout" => g["Plot"].layout, "config" => g["Plot"].config),
@@ -788,52 +785,90 @@ function LENS_RegisterCallbacks_DDEF(app)
                 ) for g in res["Graphs"] 
             ]
 
-            Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Split", "(Pkg 1) Sent ($(length(pkg1_graphs)) units). Deferred render initiated...", "OK")
+            Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Split", "(Pkg 1) Sent ($(length(pkg1_graphs)) units). Background BBO & Render initiated...", "OK")
             
-            # 1. Background Pulse Generator: Splits 64+ graphs into smaller chunks to stay below browser memory limits.
             batch_base = joinpath(Sys_Fast.FAST_TempRoot_DDEC, "DDE_B_$(Dates.format(now(), "HHmmss_SSS"))")
             
+            open(batch_base * "_manifest.json", "w") do io
+                JSON3.write(io, Dict("total" => 2))
+            end
+
             Threads.@spawn begin
                 try
-                    def_opts = copy(opts)
-                    def_opts["Mode"] = :Deferred
+                    C, Log = Sys_Fast.FAST_Data_DDEC, Sys_Fast.FAST_Log_DDEF
                     
-                    deferred_raw = Main.Lib_Arts.ARTS_Render_DDEF(
-                        res["Models"], res["X_Clean"], res["Y_Clean"], res["InNames"], res["OutNames"], 
-                        res["Goals"], res["R2_Adj"], res["Q2"], def_opts, res["Leaders"], res["Sensitivities"], res["Residuals"]
+                    config_b = Sys_Fast.FAST_ReadConfig_DDEF(path)
+                    in_n = collect(String, res["InNames"])
+                    out_n = collect(String, res["OutNames"])
+                    
+                    bp, bs, ldf, sc, warns = Lib_Vise.VISE_RunOptimisation_DDEF(
+                        res["X_Clean"], res["Models"], goals, config_b, phase_str, in_n, out_n, opts, C, Log
                     )
                     
-                    # Scientific Burst Optimization: Increasing chunk size (32 per pulse) for high-performance ingestion.
-                    unit_limit = 32 
-                    total_units = length(deferred_raw)
-                    num_pkgs    = ceil(Int, total_units / unit_limit)
+                    res_b = copy(res)
+                    res_b["BestPoint"] = bp
+                    res_b["BestScore"] = bs
+                    res_b["Leaders"]   = ldf
+                    res_b["BoundaryWarnings"] = warns
+                    
+                    sheets = get(res, "_Hidden_Sheets", Dict())
+                    !isempty(sheets) && Sys_Fast.FAST_SafeExcelWrite_DDEF(path, sheets)
+                    
+                    rep_b = Lib_Vise.VISE_GenerateScientificReport_DDEF(res_b)
+                    
+                    ld_html = ""
+                    if !isempty(ldf)
+                        lcols = names(ldf)
+                        id_c = findfirst(c -> c == C.COL_EXP_ID || c == C.COL_ID, lcols)
+                        in_c = filter(c -> startswith(c, C.PRE_INPUT), lcols)
+                        pr_c = filter(c -> startswith(c, C.PRE_PRED),  lcols)
+                        sc_c = findfirst(==(C.COL_SCORE), lcols)
+                        dis_c = String[]; dis_n = String[]
+                        if !isnothing(id_c); push!(dis_c, lcols[id_c]); push!(dis_n, "ID") end
+                        for c in in_c; push!(dis_c, c); push!(dis_n, replace(c, C.PRE_INPUT => "")) end
+                        for c in pr_c; push!(dis_c, c); push!(dis_n, replace(c, C.PRE_PRED => "")) end
+                        if !isnothing(sc_c); push!(dis_c, lcols[sc_c]); push!(dis_n, "Score") end
+                        
+                        th_s = Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "4px 6px", "fontSize" => "10px", "whiteSpace" => "nowrap")
+                        td_s = Dict("textAlign" => "center", "padding" => "3px 6px", "fontSize" => "10px")
+                        
+                        ld_html = html_table([
+                            html_thead(html_tr([html_th(n, style=th_s) for n in dis_n])),
+                            html_tbody([html_tr([
+                                html_td(let v = ldf[r, Symbol(c)]; ismissing(v) ? "-" : (v isa Number ? @sprintf("%.3f", v) : string(v)) end,
+                                        className = c == C.COL_SCORE ? "colourtx-c1sm" : "",
+                                        style=merge(td_s, c == C.COL_SCORE ? Dict("fontWeight" => "bold") : Dict()))
+                                for c in dis_c
+                            ], style=Dict("borderBottom" => "1px solid var(--colour-val1-lighig)")) for r in 1:nrow(ldf)])
+                        ], className="table table-sm table-borderless mb-0 mx-auto", style=Dict("width" => "100%", "marginTop" => "5px"))
+                    end
 
-                    # Streaming Protocol Step 1: Write the manifest BEFORE the loop so the poll begins instantly.
-                    open(batch_base * "_manifest.json", "w") do io
-                        JSON3.write(io, Dict("total" => num_pkgs + 1))
+                    rad_b = (haskey(res_b, "RadioCorrection") && !isempty(res_b["RadioCorrection"])) ?
+                            dbc_badge([html_i(className="fas fa-radiation me-1 colourtx-v5pb"), "Radio-Corrected"], className="ms-2 fw-bold colourgl-c4tg colourtx-v5pb") : ""
+
+                    def_opts = copy(opts)
+                    def_opts["Mode"] = :Deferred
+                    def_raw = Main.Lib_Arts.ARTS_Render_DDEF(
+                        res["Models"], res["X_Clean"], res["Y_Clean"], res["InNames"], res["OutNames"], 
+                        goals, res["R2_Adj"], res["Q2"], def_opts, ldf, res["Sensitivities"], res["Residuals"]
+                    )
+                    
+                    pkg_graphs = [Dict("figure" => Dict("data" => g["Plot"].data, "layout" => g["Plot"].layout, "config" => g["Plot"].config), "title" => g["Title"]) for g in def_raw]
+                    
+                    final_bundle = Sys_Fast.FAST_SanitiseJson_DDEF(res_b)
+                    delete!(final_bundle, "Graphs")
+                    delete!(final_bundle, "_Hidden_Sheets")
+                    
+                    open(batch_base * "_pkg2.json", "w") do io
+                        JSON3.write(io, Dict(
+                            "graphs" => pkg_graphs,
+                            "opt_results" => Dict("Report" => rep_b, "Bundle" => final_bundle, "Leaders" => ld_html, "Badge" => rad_b)
+                        ))
                     end
                     
-                    for p in 1:num_pkgs
-                        start_i = (p-1)*unit_limit + 1
-                        end_i   = min(p*unit_limit, total_units)
-                        chunk   = deferred_raw[start_i:end_i]
-                        
-                        pkg_graphs = [
-                            Dict(
-                                "figure" => Dict("data" => g["Plot"].data, "layout" => g["Plot"].layout, "config" => g["Plot"].config), 
-                                "title"  => g["Title"]
-                            ) for g in chunk
-                        ]
-                        
-                        # Streaming Protocol Step 2: Write chunk as it becomes available.
-                        ch_path = batch_base * "_pkg$(p+1).json"
-                        open(ch_path, "w") do io; JSON3.write(io, Dict("graphs" => pkg_graphs)) end
-                        # Silent Background Write (No Log to avoid race-verbosity)
-                    end
-                    
-                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Async", "Deferred portfolio split into $num_pkgs pulses [Total Units: $total_units].", "OK")
+                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Async", "Background Portfolio Compiled [Units: $(length(pkg_graphs))]. Pulse #2 Ready.", "OK")
                 catch e
-                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Crash", "Deferred rendering or chunking failed: $e", "FAIL")
+                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Crash", "Background Task failed: $e", "FAIL")
                 end
             end
 
@@ -1027,9 +1062,9 @@ function LENS_RegisterCallbacks_DDEF(app)
                         dbc_badge([html_i(className="fas fa-radiation me-1 colourtx-v5pb"), "Radio-Corrected"], className="ms-2 fw-bold colourgl-c4tg colourtx-v5pb") : ""
 
             final_res = Sys_Fast.FAST_SanitiseJson_DDEF(res)
-            # Architectural Optimization: Remove bulky graph objects from the persistent vault state.
-            # They are already displayed in the UI; keeping them in the store causes redundant serialization lag.
+            # Architectural Optimization: Remove bulky objects from persistent vault to prevent serialization lag.
             delete!(final_res, "Graphs") 
+            delete!(final_res, "_Hidden_Sheets")
 
             final_res["vid"]  = updated_base64
             final_res["type"] = "SCIENCE_PULSE"
