@@ -106,11 +106,11 @@ end
 # ------------------------------------------------------------------------------
 
 for (label, file) in [
-    ("Stoichiometry Module: Lib_Mole", "src/Lib_Mole.jl"),
-    ("Visualisation Module: Lib_Arts", "src/Lib_Arts.jl"),
     ("Algorithmic Module: Lib_Core",   "src/Lib_Core.jl"),
+    ("Stoichiometry Module: Lib_Mole", "src/Lib_Mole.jl"),
     ("Flow Control Module: Sys_Flow",  "src/Sys_Flow.jl"),
     ("Statistical Module: Lib_Vise",   "src/Lib_Vise.jl"),
+    ("Visualisation Module: Lib_Arts", "src/Lib_Arts.jl"),
     ("UI Base Module: Gui_Base",       "src/Gui_Base.jl"),
     ("UI Design Module: Gui_Deck",     "src/Gui_Deck.jl"),
     ("UI Analysis Module: Gui_Lens",   "src/Gui_Lens.jl")
@@ -267,7 +267,8 @@ app.layout = html_div([
 # SECTION 10: SYSTEM READINESS OVERLAY
 # ------------------------------------------------------------------------------
 
-    dcc_interval(id="sys-ready-poll", interval=500, max_intervals=-1),
+    dcc_interval(id="sys-ready-poll", interval=2000, max_intervals=-1),
+
     html_div(id="sys-loading-overlay", children=[
         html_div([
             html_div(className="sys-spinner"),
@@ -525,7 +526,7 @@ function APP_HandleLoadingOverlay_DDEF(n::Any)
     n_val::Int  = isnothing(n) ? 0 : Int(n)
 
     # Status check logging active during pre-operation phase with regulated polling frequency.
-    if !ready && n_val % 30 == 0
+    if !ready && n_val % 10 == 0
         Sys_Fast.FAST_Log_DDEF("BOOT", "UI_SYNC", "Status Check: Waiting for System Pre-compilation... (Poll #$n_val)", "INFO")
     end
 
@@ -594,21 +595,89 @@ function APP_Warmup_DDEF()::Nothing
         design_mock = fill(20.0, 5, 1) 
 
         Lib_Mole.MOLE_AuditBatch_DDEF(table_mock, design_mock, 5.0, 10.0)
+        pfx_in, pfx_out = Main.Sys_Fast.FAST_Data_DDEC.PRE_INPUT, Main.Sys_Fast.FAST_Data_DDEC.PRE_RESULT
 
-        X_dummy = rand(11, 3) 
-        Y_dummy = rand(11, 1)
+        # Standard BB15 (Box-Behnken) matrix from Lib_Core for idiomatic JIT pulse
+        X_dummy = Float64.(Lib_Core.CORE_Bb15Design_DDEC)
+        
+        # Dynamic Y response synthesis: Parabolic function to ensure perfect modelling fit
+        # Formula: Y = 50 + 10*x1 + 5*x2 - 2*x3 + 8*x1^2 + 6*x2^2 + 4*x3^2
+        Y_dummy = [50 + 10*r[1] + 5*r[2] - 2*r[3] + 8*r[1]^2 + 6*r[2]^2 + 4*r[3]^2 for r in eachrow(X_dummy)]
+        
         names_in = ["X1", "X2", "X3"]
-        mod_dummy = Lib_Vise.VISE_Regress_DDEF(X_dummy, vec(Y_dummy), "linear"; InNames=names_in)
+        bounds_dummy = [-1.0 1.0; -1.0 1.0; -1.0 1.0]
+        goal_dummy = Dict{String, Any}("Type"=>"Maximise", "Min"=>0.0, "Max"=>20.0, "Target"=>15.0, "Weight"=>1.0, "WeightVal" => 1.0)
+
+        # PULSE 1: Linear Path Warmup
+        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Scientific Engine (Phase-A: Linear)...", "WAIT")
+        mod_lin = Lib_Vise.VISE_Regress_DDEF(X_dummy, vec(Y_dummy), "linear"; InNames=names_in)
+        mod_lin["Goal"] = goal_dummy
+        Lib_Vise.VISE_GridSearch_DDEF([mod_lin], [goal_dummy], bounds_dummy; Steps=11)
+        FAST_Log_DDEF("BOOT", "Warmup", "Phase-A completed. Pulsing Phase-B...", "OK")
+        Lib_Arts.ARTS_Draw_DDEF(Lib_Arts.ARTS_PlotSurface_DDES(), mod_lin, X_dummy, [1, 2], ["X1", "X2"], "Pulse-L")
+
+        # PULSE 2: Quadratic Path Warmup
+        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Scientific Engine (Phase-B: Quadratic)...", "WAIT")
+        mod_quad = Lib_Vise.VISE_Regress_DDEF(X_dummy, vec(Y_dummy), "quadratic"; InNames=names_in)
+        mod_quad["Goal"] = goal_dummy
+        Lib_Vise.VISE_GridSearch_DDEF([mod_quad], [goal_dummy], bounds_dummy; Steps=11)
+        FAST_Log_DDEF("BOOT", "Warmup", "Phase-B completed. Pulsing Phase-C...", "OK")
+
+        # PULSE 3: Optimisation & Stoichiometry Pulse (The BBO & Mole Path)
+        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Scientific Engine (Phase-C: BBO & Audit)...", "WAIT")
         
-        goals_dummy = [Dict("Type"=>"Maximise", "Weight"=>1.0)]
-        mod_dummy["Goal"] = goals_dummy[1]
+        # Pre-compiling the Global Multi-Objective Optimiser (BlackBoxOptim)
+        # Using a very short MaxTime for warmup
+        Lib_Core.CORE_OptimiseDesirability_DDEF([mod_quad], [goal_dummy], bounds_dummy; MaxTime=0.1)
         
-        bounds_dummy = [0.0 1.0; 0.0 1.0; 0.0 1.0]
-        Lib_Vise.VISE_GridSearch_DDEF([mod_dummy], goals_dummy, bounds_dummy)
+        # Pre-compiling the Stoichiometric Safety Audit
+        ingredients_dummy = [Dict("Name"=>"X1", "MW"=>100.0, "Unit"=>"mg", "Ratio"=>1.0)]
+        Lib_Mole.MOLE_AuditBatch_DDEF(ingredients_dummy, X_dummy, 5.0, 10.0)
+
+        # PULSE 4: Diagnostic Statistics Pulse (ANOVA & Normality)
+        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Scientific Engine (Phase-D: Diagnostics)...", "WAIT")
+        Lib_Vise.VISE_GenerateAnovaTable_DDEF(mod_quad, X_dummy, vec(Y_dummy))
+        Lib_Vise.VISE_PerformNormalityTest_DDEF(mod_quad, X_dummy, vec(Y_dummy))
+        Lib_Vise.VISE_SensitivityAnalysis_DDEF(mod_quad, [0.5, 0.5, 0.5])
+
+        # PULSE 5: Analytical Orchestration Pulse
+        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Orchestration Engine (Phase-E: Finalisation)...", "WAIT")
+
+        df_mock = DataFrame()
+        df_mock[!, "$(pfx_in)X1"] = X_dummy[:, 1]
+        df_mock[!, "$(pfx_in)X2"] = X_dummy[:, 2]
+        df_mock[!, "$(pfx_in)X3"] = X_dummy[:, 3]
+        df_mock[!, "$(pfx_out)Y1"] = Y_dummy
+
+        # Mock Config object
+        config_mock = Dict{String, Any}(
+            "Ingredients" => [Dict("Name" => "X1"), Dict("Name" => "X2"), Dict("Name" => "X3")],
+            "Outputs"     => [Dict("Name" => "Y1")],
+            "Global"      => Dict("Volume" => 5.0, "Conc" => 10.0)
+        )
+        # Trigger the Core Execution Pipeline for both Linear and Quadratic paths
+        # Optimised for JIT Speed: 0.1s BBO and Staged Rendering Portfolio Pulse
+        warmup_opts = Dict{String, Any}("MaxTime" => 0.1, "GridSteps" => 11)
+        
+        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Orchestration Engine (Linear Mode)...", "WAIT")
+        Lib_Vise.VISE_ExecuteCore_DDEF(df_mock, config_mock, "PulsePhase", [goal_dummy], "linear"; 
+            t_start=time(), Opts=warmup_opts, RenderMode=:Full)
+        
+        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Orchestration Engine (Quadratic Mode)...", "WAIT")
+        Lib_Vise.VISE_ExecuteCore_DDEF(df_mock, config_mock, "PulsePhase", [goal_dummy], "quadratic"; 
+            t_start=time(), Opts=warmup_opts, RenderMode=:Full)
+
+        # Visualisation Pulse: Triggering PlotlyJS and RSM rendering logic compilation
+        Lib_Arts.ARTS_Draw_DDEF(Lib_Arts.ARTS_PlotPareto_DDES(), mod_quad, "Pulse-Q", 0.9, 0.8)
+        Lib_Arts.ARTS_Draw_DDEF(Lib_Arts.ARTS_PlotSurface_DDES(), mod_quad, X_dummy, [1, 2], ["X1", "X2"], "Pulse-Q")
+        Lib_Arts.ARTS_Draw_DDEF(Lib_Arts.ARTS_PlotContour_DDES(), mod_quad, X_dummy, [1, 2], ["X1", "X2"], "Pulse-Q")
+        Lib_Arts.ARTS_Draw_DDEF(Lib_Arts.ARTS_PlotTrend_DDES(), mod_quad, X_dummy, vec(Y_dummy), [1], ["X1"], "Pulse-Q")
+        Lib_Arts.ARTS_Draw_DDEF(Lib_Arts.ARTS_PlotSlice_DDES(), mod_quad, X_dummy, [1, 2], ["X1", "X2"], "Pulse-Q")
+        Lib_Arts.ARTS_Draw_DDEF(Lib_Arts.ARTS_PlotQQ_DDES(), rand(10), "Pulse-Q")
         
         GC.gc()
     catch e
-        FAST_Log_DDEF("BOOT", "Warmup_Warn", "JIT pulse encountered warnings: $e", "WARN")
+        FAST_Log_DDEF("BOOT", "Warmup_Warn", "JIT pulse encountered warnings: $(sprint(showerror, e))", "WARN")
     end
 
     APP_SystemReady_DDEC[] = true

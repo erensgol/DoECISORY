@@ -3,8 +3,8 @@ module Lib_Arts
 # ==============================================================================
 # DAISHODOE FRAMEWORK - LIB ARTS (VISUALISATION)
 # ==============================================================================
-# Description: Visualisation and graphics module for high-fidelity scientific 
-#              data representation and response surface mapping.
+# Description: Visualization and graphics module for academic data 
+#              representation and response surface mapping.
 # Module Tag:  ARTS
 # ==============================================================================
 
@@ -16,23 +16,42 @@ using Combinatorics
 using Distributions
 using DataFrames
 using Main.Sys_Fast
+using Main.Lib_Core
 
 export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
     ARTS_RenderContour_DDEF, ARTS_RenderSlice_DDEF, ARTS_RenderTrend_DDEF,
     ARTS_RenderSpace_DDEF, ARTS_RenderCandidates_DDEF, ARTS_Render_DDEF,
-    ARTS_CalcDesirability_DDEF, ARTS_ExtractGoal_DDEF,
     ARTS_Downsample_DDEF, ARTS_RenderOptimalZone_DDEF, ARTS_RenderInteractionMatrix_DDEF,
     ARTS_BaseLayout_DDEF, ARTS_Predict_DDEF, ARTS_BuildGrid_DDEF,
     ARTS_AdaptiveGridN_DDEF, ARTS_RenderSpaceImpl_DDEF,
-    ARTS_GetDynamicN_DDEF
+    ARTS_GetDynamicN_DDEF, ARTS_PlotPareto_DDES, ARTS_PlotFit_DDES,
+    ARTS_PlotInteractionMatrix_DDES, ARTS_PlotQQ_DDES, ARTS_PlotResiduals_DDES, 
+    ARTS_PlotSensitivity_DDES, ARTS_PlotSurface_DDES, ARTS_PlotContour_DDES, 
+    ARTS_PlotSlice_DDES, ARTS_PlotTrend_DDES, ARTS_PlotOptimalZone_DDES, 
+    ARTS_PlotDesignSpace_DDES, ARTS_PlotCandidates_DDES
 
 # ==============================================================================
 # PART A: VISUAL CORE & INFRASTRUCTURE
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 1: VISUAL THEME & COLOUR PALETTES
+# SECTION 1: THEME & CONSTANTS
 # ------------------------------------------------------------------------------
+
+abstract type ARTS_AbstractPlotType_DDET end
+struct ARTS_PlotPareto_DDES       <: ARTS_AbstractPlotType_DDET end
+struct ARTS_PlotFit_DDES          <: ARTS_AbstractPlotType_DDET end
+struct ARTS_PlotSurface_DDES      <: ARTS_AbstractPlotType_DDET end
+struct ARTS_PlotContour_DDES      <: ARTS_AbstractPlotType_DDET end
+struct ARTS_PlotSlice_DDES        <: ARTS_AbstractPlotType_DDET end
+struct ARTS_PlotTrend_DDES        <: ARTS_AbstractPlotType_DDET end
+struct ARTS_PlotOptimalZone_DDES  <: ARTS_AbstractPlotType_DDET end
+struct ARTS_PlotDesignSpace_DDES  <: ARTS_AbstractPlotType_DDET end
+struct ARTS_PlotCandidates_DDES   <: ARTS_AbstractPlotType_DDET end
+struct ARTS_PlotInteractionMatrix_DDES <: ARTS_AbstractPlotType_DDET end
+struct ARTS_PlotQQ_DDES            <: ARTS_AbstractPlotType_DDET end
+struct ARTS_PlotResiduals_DDES     <: ARTS_AbstractPlotType_DDET end
+struct ARTS_PlotSensitivity_DDES   <: ARTS_AbstractPlotType_DDET end
 
 const ARTS_Theme_DDEC = let C = Main.Sys_Fast.FAST_Data_DDEC
     (
@@ -63,7 +82,7 @@ const ARTS_ViridisScale_DDEC = let C = Main.Sys_Fast.FAST_Data_DDEC
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 2: GRAPHICAL STANDARD SCALES
+# SECTION 2: PLOT DIMENSIONS & FONT SIZES
 # ------------------------------------------------------------------------------
 
 const ARTS_PlotWidth_DDEC    = 320
@@ -87,7 +106,7 @@ const ARTS_WidthGrid_DDEC    = 0.5
     ARTS_BaseLayout_DDEF(title; [height]) -> Layout
 Generates a standardised PlotlyJS layout with fixed square canvas.
 """
-function ARTS_BaseLayout_DDEF(title::String; height=ARTS_PlotHeight_DDEC)
+function ARTS_BaseLayout_DDEF(title::AbstractString; height=ARTS_PlotHeight_DDEC)
     return Layout(;
         title=attr(
             text=title,
@@ -110,7 +129,7 @@ function ARTS_BaseLayout_DDEF(title::String; height=ARTS_PlotHeight_DDEC)
             color=ARTS_Theme_DDEC.DARHIG,
             size=ARTS_SizeLabel_DDEC
         ),
-        margin=attr(l=65, r=35, t=65, b=115),
+        margin=attr(l=40, r=30, t=60, b=40),
         showlegend=true,
         legend=attr(
             orientation="h",
@@ -161,8 +180,6 @@ function ARTS_BaseLayout_DDEF(title::String; height=ARTS_PlotHeight_DDEC)
     )
 end
 
-
-
 # ------------------------------------------------------------------------------
 # SECTION 4: SMART DOWNSAMPLING & GRID LIMITER CONSTANTS
 # ------------------------------------------------------------------------------
@@ -177,7 +194,7 @@ const ARTS_MaxGridPoints_DDEC = 11000
     ARTS_AdaptiveGridN_DDEF(preferred, [max_total]) -> Int
 Returns a grid resolution N such that N×N ≤ max_total.
 """
-function ARTS_AdaptiveGridN_DDEF(preferred::Int, max_total::Int=ARTS_MaxGridPoints_DDEC)
+function ARTS_AdaptiveGridN_DDEF(preferred::Integer, max_total::Integer=ARTS_MaxGridPoints_DDEC)
     N = preferred
     while N * N > max_total && N > 5
         N -= 1
@@ -194,7 +211,7 @@ end
 Returns a dynamic grid resolution (N) based on available system hardware threads.
 Rule: N=61 for ≤4 threads, N=101 for >4 threads.
 """
-function ARTS_GetDynamicN_DDEF()::Int
+function ARTS_GetDynamicN_DDEF()::Integer
     threads = Main.Sys_Fast.FAST_GetComputeThreads_DDEF()
     return (threads <= 4 ? 61 : 101)
 end
@@ -203,7 +220,7 @@ end
     ARTS_Downsample_DDEF(Z, target_rows, target_cols) -> Matrix
 Sub-samples oversized matrices using strided decimation for optimal browser performance.
 """
-function ARTS_Downsample_DDEF(Z::Matrix{T}, target_rows::Int, target_cols::Int) where T
+function ARTS_Downsample_DDEF(Z::AbstractMatrix{T}, target_rows::Integer, target_cols::Integer) where T
     nr, nc = size(Z)
     (nr ≤ target_rows && nc ≤ target_cols) && return Z
 
@@ -213,7 +230,6 @@ function ARTS_Downsample_DDEF(Z::Matrix{T}, target_rows::Int, target_cols::Int) 
     row_idx = 1:row_stride:nr
     col_idx = 1:col_stride:nc
 
-    # Execution of boundary preservation logic for decimation.
     row_idx = unique([collect(row_idx); nr])
     col_idx = unique([collect(col_idx); nc])
 
@@ -228,7 +244,7 @@ Applies a 3x3 box blur filter to a matrix to reduce visual aliasing (staircase e
 Automatically handles NaNs by calculating the mean of valid neighbouring pixels.
 Includes boundary handling for consistent smoothing across the entire surface.
 """
-function ARTS_SmoothMatrix_DDEF(Z::Matrix{Float64}, passes::Int=1)
+function ARTS_SmoothMatrix_DDEF(Z::AbstractMatrix{Float64}, passes::Integer=1)
     nr, nc = size(Z)
     (nr < 2 || nc < 2) && return Z
     
@@ -236,17 +252,14 @@ function ARTS_SmoothMatrix_DDEF(Z::Matrix{Float64}, passes::Int=1)
     for _ in 1:passes
         Next = copy(Current)
         
-        # Execution of a standard 3x3 spatial convolution with boundary padding logic.
         @inbounds for j in 1:nc
             for i in 1:nr
-                # Extraction of valid coordinate ranges for the neighbourhood window.
                 r_start, r_end = max(1, i-1), min(nr, i+1)
                 c_start, c_end = max(1, j-1), min(nc, j+1)
                 
                 s_val = 0.0
                 s_cnt = 0
                 
-                # Iteration over local neighbourhood to calculate average signal.
                 for c in c_start:c_end
                     for r in r_start:r_end
                         v = Current[r, c]
@@ -272,7 +285,7 @@ end
     ARTS_HexToRGBA_DDEF(hex, alpha) -> String
 Converts hex color strings to RGBA format for Plotly transparency support.
 """
-function ARTS_HexToRGBA_DDEF(hex::String, alpha::Float64)
+function ARTS_HexToRGBA_DDEF(hex::AbstractString, alpha::AbstractFloat)
     h = replace(hex, "#" => "")
     r = parse(Int, h[1:2], base=16)
     g = parse(Int, h[3:4], base=16)
@@ -285,10 +298,8 @@ end
 Generates a custom Viridis colorscale with a smooth alpha-gradient at the threshold.
 Eliminates aliasing by using fragment-level transparency instead of mesh-level NaN clipping.
 """
-function ARTS_GenerateAlphaViridis_DDEF(thresh::Float64)
+function ARTS_GenerateAlphaViridis_DDEF(thresh::AbstractFloat)
     C = Main.Sys_Fast.FAST_Data_DDEC
-    # Formulation of the alpha-enabled Viridis palette for optimal candidate mapping.
-    # We use a 10% fade range below the threshold for professional gradient effect.
     fade_start = max(0.0, thresh - 0.10)
     
     base_cols = [
@@ -296,7 +307,6 @@ function ARTS_GenerateAlphaViridis_DDEF(thresh::Float64)
     ]
     
     scale = Any[]
-    # Fully transparent zone
     push!(scale, [0.0, "rgba(255,255,255,0)"])
     push!(scale, [max(0.0, fade_start - 0.01), "rgba(255,255,255,0)"])
     
@@ -304,7 +314,7 @@ function ARTS_GenerateAlphaViridis_DDEF(thresh::Float64)
     push!(scale, [fade_start, ARTS_HexToRGBA_DDEF(base_cols[1], 0.0)])
     push!(scale, [thresh,     ARTS_HexToRGBA_DDEF(base_cols[1], 1.0)])
     
-    # Mapped Viridis Zone (Standard Intensity)
+    # Mapped Viridis Zone
     for i in 2:5
         val = thresh + (1.0 - thresh) * ((i - 1) / 4)
         push!(scale, [val, ARTS_HexToRGBA_DDEF(base_cols[i], 1.0)])
@@ -314,177 +324,78 @@ function ARTS_GenerateAlphaViridis_DDEF(thresh::Float64)
 end
 
 # ==============================================================================
-# PART B: MULTI-OBJECTIVE DESIRABILITY ENGINE
+# PART B: MULTI-OBJECTIVE DESIRABILITY ENGINE (REDIRECTS)
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 7: MULTI-OBJECTIVE GOAL PARSING
+# SECTION 7: MULTI-OBJECTIVE GOAL REDIRECTS
 # ------------------------------------------------------------------------------
 
-"""
-    ARTS_ExtractGoal_DDEF(Goal) -> Tuple
-Extracts and normalises goal parameters from an objective dictionary.
-"""
-function ARTS_ExtractGoal_DDEF(Goal::AbstractDict)
-    G_Min = Float64(get(Goal, "Min", -Inf))
-    G_Max = Float64(get(Goal, "Max", Inf))
-    # Implementation of safety protocols for infinite bounds to prevent undefined targets.
-    G_Tgt_Raw = get(Goal, "Target", nothing)
-    G_Tgt = if !isnothing(G_Tgt_Raw)
-        Float64(G_Tgt_Raw)
-    elseif isfinite(G_Min) && isfinite(G_Max)
-        (G_Min + G_Max) / 2
-    else
-        # Default fallback target
-        0.0
-    end
-    Type = string(get(Goal, "Type", "Nominal"))
-    # Enforcement of non-negativity constraint on desirability weights for statistical stability.
-    Weight = max(0.0, Float64(get(Goal, "Weight", 1.0)))
-    is_max = occursin("Maximise", Type)
-    is_min = occursin("Minimise", Type)
-    return (G_Min, G_Max, G_Tgt, is_max, is_min, Weight)
-end
-
-function ARTS_CalcDesirability_DDEF(Val::Float64, Goal::AbstractDict)
-    return ARTS_CalcDesirability_DDEF(Val, ARTS_ExtractGoal_DDEF(Goal))
-end
-
 # ------------------------------------------------------------------------------
-# SECTION 8: DERRINGER DESIRABILITY SCORING
+# SECTION 8: DERRINGER DESIRABILITY SCORING (DEPRECATED IN ARTS)
 # ------------------------------------------------------------------------------
-
-"""
-    ARTS_CalcDesirability_DDEF(Val, GoalTup) -> Float64
-Calculates desirability scores using Derringer's function for multi-objective mapping.
-"""
-function ARTS_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple)
-    G_Min, G_Max, G_Tgt, is_max, is_min, Weight = GoalTup
-    res = 0.0
-
-    if is_max
-        if Val >= G_Tgt
-            res = 1.0
-        elseif Val <= G_Min
-            res = 0.0
-        else
-            denom = G_Tgt - G_Min
-            res   = denom > 1e-9 ? ((Val - G_Min) / denom)^Weight : 1.0
-        end
-    elseif is_min
-        if Val <= G_Tgt
-            res = 1.0
-        elseif Val >= G_Max
-            res = 0.0
-        else
-            denom = G_Max - G_Tgt
-            res   = denom > 1e-9 ? ((G_Max - Val) / denom)^Weight : 1.0
-        end
-    # Nominal
-    else
-        if Val <= G_Min || Val >= G_Max
-            res = 0.0
-        elseif abs(Val - G_Tgt) < 1e-12
-            res = 1.0
-        elseif Val < G_Tgt
-            denom = G_Tgt - G_Min
-            res   = denom > 1e-9 ? ((Val - G_Min) / denom)^Weight : 1.0
-        # Val > G_Tgt
-        else
-            denom = G_Max - G_Tgt
-            res   = denom > 1e-9 ? ((G_Max - Val) / denom)^Weight : 1.0
-        end
-    end
-
-    # Scientific Safeguard: NaN or Inf should be 0.0, others clamped to [0, 1]
-    return (isnan(res) || isinf(res)) ? 0.0 : clamp(res, 0.0, 1.0)
-end
 
 # ==============================================================================
 # PART C: ACADEMIC DIAGNOSTICS & PLOTTING
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 9: PARETO ANALYSIS VISUALISER
+# SECTION 9: PARETO ANALYSIS VISUALISER (MULTIPLE DISPATCH)
 # ------------------------------------------------------------------------------
 
 """
     ARTS_RenderPareto_DDEF(Model, OutName, R2_Adj, Q2) -> Plot
-Renders a horizontal bar chart showing standardised effects of factors.
+Backwards compatible wrapper for the Pareto Draw Dispatch.
 """
-function ARTS_RenderPareto_DDEF(Model::Dict, OutName::String, R2_Adj::Float64, R2_Pred::Float64)
-    Coefs = Model["Coefs"]
-    Names = get(Model, "TermNames", ["T$i" for i in eachindex(Coefs)])
-    # Model t-statistics retrieval with coefficients as fallback in case of null diagnostics.
-    t_Stats = get(Model, "t_Stats", Coefs) 
+function ARTS_RenderPareto_DDEF(Model::AbstractDict, OutName::AbstractString, R2_Adj::AbstractFloat, R2_Pred::AbstractFloat)
+    return ARTS_Draw_DDEF(ARTS_PlotPareto_DDES(), Model, OutName, R2_Adj, R2_Pred)
+end
 
+function ARTS_Draw_DDEF(::ARTS_PlotPareto_DDES, Model::AbstractDict, OutName::AbstractString, R2_Adj::AbstractFloat, R2_Pred::AbstractFloat)
+    mod_status = get(Model, "Status", "FAIL")
+    if mod_status != "OK"
+        # Emergency placeholder layout for failed models
+        layout = ARTS_BaseLayout_DDEF("Analysis Bypass: $OutName")
+        return Plot(scatter(x=[0], y=[0], mode="text", text="Modelling Failure: Check Diagnostics"), layout)
+    end
+    
+    # Defensive acquisition of model coefficients and metadata
+    Coefs = get(Model, "Coefs", Float64[])
+    isempty(Coefs) && return Plot(scatter(x=[0], y=[0], mode="text", text="Incomplete Data: No Coefs"), ARTS_BaseLayout_DDEF(OutName))
+    
+    Names = get(Model, "TermNames", ["T$i" for i in eachindex(Coefs)])
+    t_Stats = get(Model, "t_Stats", Coefs) 
     N_Samples = get(Model, "N_Samples", length(Coefs) + 5)
 
-    # Exclusion of the intercept term from the effects analysis.
     clean_eff = @view t_Stats[2:end]
     clean_nms = @view Names[2:end]
     clean_signs = any(isnan, clean_eff) ? sign.(@view Coefs[2:end]) : sign.(clean_eff)
     magnitudes = any(isnan, clean_eff) ? abs.(@view Coefs[2:end]) : abs.(clean_eff)
 
     perm = sortperm(magnitudes)
-    sorted_mag = magnitudes[perm]
-    sorted_nms = clean_nms[perm]
-    sorted_sgn = clean_signs[perm]
+    sorted_mag, sorted_nms, sorted_sgn = magnitudes[perm], clean_nms[perm], clean_signs[perm]
 
     traces = GenericTrace[]
-
-    # Determination of factor segments exhibiting negative statistical effects.
-    neg_idx = findall(x -> x < 0, sorted_sgn)
-    if !isempty(neg_idx)
-        push!(traces, bar(;
-            x            = sorted_mag[neg_idx],
-            y            = sorted_nms[neg_idx],
-            orientation  = "h",
-            name         = "Negative Effect",
-            marker       = attr(color=ARTS_Theme_DDEC.SHAMAG, line=attr(width=0)),
-            text         = [@sprintf("%.2f", m) for m in sorted_mag[neg_idx]],
-            textposition = "auto",
-            textfont     = attr(size=ARTS_SizeAnnot_DDEC)
-        ))
+    for (sgn, col, label) in [(-1, ARTS_Theme_DDEC.SHAMAG, "Negative Effect"), (1, ARTS_Theme_DDEC.HUEYEL, "Positive Effect")]
+        idx = findall(x -> sgn == -1 ? x < 0 : x >= 0, sorted_sgn)
+        if !isempty(idx)
+            push!(traces, bar(;
+                x=sorted_mag[idx], y=sorted_nms[idx], orientation="h", name=label,
+                marker=attr(color=col, line=attr(width=0)),
+                text=[@sprintf("%.2f", m) for m in sorted_mag[idx]],
+                textposition="auto", textfont=attr(size=ARTS_SizeAnnot_DDEC)
+            ))
+        end
     end
 
-    # Determination of factor segments exhibiting positive statistical effects.
-    pos_idx = findall(x -> x >= 0, sorted_sgn)
-    if !isempty(pos_idx)
-        push!(traces, bar(;
-            x            = sorted_mag[pos_idx],
-            y            = sorted_nms[pos_idx],
-            orientation  = "h",
-            name         = "Positive Effect",
-            marker       = attr(color=ARTS_Theme_DDEC.HUEYEL, line=attr(width=0)),
-            text         = [@sprintf("%.2f", m) for m in sorted_mag[pos_idx]],
-            textposition = "auto",
-            textfont     = attr(size=ARTS_SizeAnnot_DDEC)
-        ))
-    end
-
-    r2_str = isnan(R2_Adj)  ? "N/A" : @sprintf("%.3f", R2_Adj)
-    q2_str = isnan(R2_Pred) ? "N/A" : @sprintf("%.3f", R2_Pred)
-
+    r2_str, q2_str = [@sprintf("%.3f", isnan(v) ? 0.0 : v) for v in (R2_Adj, R2_Pred)]
     layout = ARTS_BaseLayout_DDEF("Pareto: $OutName (R²Adj: $r2_str | Q²: $q2_str)")
     layout[:xaxis][:title] = "Standardised Effect (|t-value|)"
-    layout[:barmode]       = "stack"
+    layout[:barmode] = "stack"
 
-    # Calculation of the Bonferroni-corrected significance threshold for effect validation.
-    df              = max(1, N_Samples - length(Coefs))
-    alpha_corrected = 0.05 / length(clean_eff)
-    t_crit          = quantile(TDist(df), 1.0 - alpha_corrected / 2)
-
-    limit_shape = attr(
-        type="line", 
-        x0=t_crit, 
-        x1=t_crit, 
-        y0=0, 
-        y1=1,
-        yref="paper", 
-        line=attr(color=ARTS_Theme_DDEC.HUERED, width=2, dash="dash")
-    )
-    layout[:shapes] = [limit_shape]
+    df, alpha = max(1, N_Samples - length(Coefs)), 0.05 / length(clean_eff)
+    t_crit = quantile(TDist(df), 1.0 - alpha / 2)
+    layout[:shapes] = [attr(type="line", x0=t_crit, x1=t_crit, y0=0, y1=1, yref="paper", line=attr(color=ARTS_Theme_DDEC.HUERED, width=2, dash="dash"))]
 
     return Plot(traces, layout)
 end
@@ -495,32 +406,26 @@ end
 
 """
     ARTS_RenderFit_DDEF(Y_Real, Y_Pred, OutName) -> Plot
-Compares experimental results with model predictions via scatter plot.
+Backwards compatible wrapper for the Fit Accuracy Draw Dispatch.
 """
-function ARTS_RenderFit_DDEF(Y_Real::Vector{Float64}, Y_Pred::Vector{Float64}, OutName::String)
-    mn     = min(minimum(Y_Real), minimum(Y_Pred))
-    mx     = max(maximum(Y_Real), maximum(Y_Pred))
+function ARTS_RenderFit_DDEF(Y_Real::AbstractVector{Float64}, Y_Pred::AbstractVector{Float64}, OutName::AbstractString)
+    return ARTS_Draw_DDEF(ARTS_PlotFit_DDES(), Y_Real, Y_Pred, OutName)
+end
+
+function ARTS_Draw_DDEF(::ARTS_PlotFit_DDES, Y_Real::AbstractVector{Float64}, Y_Pred::AbstractVector{Float64}, OutName::AbstractString)
+    mn, mx = min(minimum(Y_Real), minimum(Y_Pred)), max(maximum(Y_Real), maximum(Y_Pred))
     margin = (mx - mn) * 0.05
 
-    t_data = scatter(; 
-        x      = Y_Real, 
-        y      = Y_Pred, 
-        mode   = "markers",
+    t_data = scatter(; x = Y_Real, y = Y_Pred, mode = "markers",
         marker = attr(size=ARTS_SizeMarker_DDEC, color=ARTS_Theme_DDEC.TONGRE, line=attr(width=1, color=ARTS_Theme_DDEC.PURBLA)), 
-        name   = "Data"
-    )
+        name = "Measured Data")
 
-    t_ideal = scatter(; 
-        x    = [mn - margin, mx + margin], 
-        y    = [mn - margin, mx + margin],
-        mode = "lines", 
-        line = attr(color=ARTS_Theme_DDEC.DARHIG, dash="dash", width=ARTS_WidthLine_DDEC), 
-        name = "Ideal"
-    )
+    t_ideal = scatter(; x = [mn - margin, mx + margin], y = [mn - margin, mx + margin],
+        mode = "lines", line = attr(color=ARTS_Theme_DDEC.DARHIG, dash="dash", width=ARTS_WidthLine_DDEC), 
+        name = "Perfect Fit (Ideal)")
 
-    layout = ARTS_BaseLayout_DDEF("Prediction Accuracy: $OutName")
-    layout[:xaxis][:title] = "Experimental (Recorded)"
-    layout[:yaxis][:title] = "Predicted (Model)"
+    layout = ARTS_BaseLayout_DDEF("Prediction Accuracy Audit: $OutName")
+    layout[:xaxis][:title], layout[:yaxis][:title] = "Experimental Record", "Model Estimation"
     
     return Plot([t_data, t_ideal], layout)
 end
@@ -537,49 +442,70 @@ end
     ARTS_Predict_DDEF(Model, X) -> Vector{Float64}
 Internal evaluator for plotting grids (stateless design matrix expansion).
 """
-function ARTS_Predict_DDEF(Model, X)
-    ModelType = get(Model, "ModelType", "quadratic")
+function ARTS_Predict_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, buff_Xd::Union{Nothing, AbstractMatrix{Float64}}=nothing)
+    m_type = Main.Lib_Core.CORE_GetModelType_DDEF(string(get(Model, "ModelType", "quadratic")))
+    return ARTS_Predict_DDEF(m_type, X, get(Model, "Coefs", Float64[]), buff_Xd)
+end
 
-    Beta = Model["Coefs"]
-    N    = size(X, 1)
-    K    = 3
-    # Implementation of prediction logic across model type topologies (Linear vs. Quadratic).
-    if occursin("linear", ModelType)
+function ARTS_Predict_DDEF(::Main.Lib_Core.CORE_ModelQuadratic_DDES, X::AbstractMatrix{Float64}, Beta::AbstractVector, buff_Xd)
+    return ARTS_PredictQuadratic_DDEF(X, Beta, buff_Xd)
+end
+
+function ARTS_Predict_DDEF(::Main.Lib_Core.CORE_ModelLinear_DDES, X::AbstractMatrix{Float64}, Beta::AbstractVector, buff_Xd)
+    return ARTS_PredictLinear_DDEF(X, Beta, buff_Xd)
+end
+
+function ARTS_PredictLinear_DDEF(X, Beta, buff_Xd)
+    N = size(X, 1)
+    if isnothing(buff_Xd)
         Xd = hcat(ones(N), X)
-        return Xd * Beta
     else
-        # Generation of multidimensional factor combinations for interaction expansion.
-        combos  = collect(combinations(1:K, 2))
-        n_inter = length(combos)
-        Xd      = Matrix{Float64}(undef, N, 1 + K + n_inter + K)
+        Xd = view(buff_Xd, 1:N, 1:4)
         fill!(view(Xd, :, 1), 1.0)
-        copyto!(view(Xd, :, 2:K+1), X)
-
-        # Vectorised expansion
-        @inbounds for (i, (c1, c2)) in enumerate(combos)
-            Xd[:, K+1+i] .= view(X, :, c1) .* view(X, :, c2)
-        end
-        # Execution of vectorised squared-order expansion for quadratic modelling.
-        @views @. Xd[:, K+n_inter+2:end] = abs2(X)
-        return Xd * Beta
+        copyto!(view(Xd, :, 2:4), X)
     end
+    return Xd * Beta
+end
+
+function ARTS_PredictQuadratic_DDEF(X, Beta, buff_Xd)
+    N = size(X, 1)
+    # Standard 10-term Quadratic (1 + 3 + 3 + 3)
+    Xd = if !isnothing(buff_Xd) && size(buff_Xd, 1) >= N && size(buff_Xd, 2) >= 10
+        view(buff_Xd, 1:N, 1:10)
+    else
+        Matrix{Float64}(undef, N, 10)
+    end
+    
+    fill!(view(Xd, :, 1), 1.0)
+    copyto!(view(Xd, :, 2:4), X)
+    
+    # Interactions: Optimised mapping for 3-factor system
+    @inbounds @views begin
+        @. Xd[:, 5] = X[:, 1] * X[:, 2] # 1x2
+        @. Xd[:, 6] = X[:, 1] * X[:, 3] # 1x3
+        @. Xd[:, 7] = X[:, 2] * X[:, 3] # 2x3
+        # Squared Terms
+        @. Xd[:, 8:10] = abs2(X)
+    end
+    
+    return Xd * Beta
 end
 
 # ------------------------------------------------------------------------------
 # SECTION 12: PREDICTION GRID CONSTRUCTOR
 # ------------------------------------------------------------------------------
 
-"""
-    ARTS_BuildGrid_DDEF(X, ix, iy, N_requested) -> (x1, x2, Grid)
-Constructs a prediction grid for surface and contour plots centred on factor means.
-"""
-function ARTS_BuildGrid_DDEF(X::Matrix{Float64}, ix::Int, iy::Int, N_requested::Int)
-    # Implementation of automated grid resolution limiting.
-    N  = ARTS_AdaptiveGridN_DDEF(N_requested)
+function ARTS_BuildGrid_DDEF(X::AbstractMatrix{Float64}, ix::Integer, iy::Integer, N_requested::Integer, buff_Grid::Union{Nothing, AbstractMatrix{Float64}}=nothing)
+    N = ARTS_AdaptiveGridN_DDEF(N_requested)
     x1 = range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N)
     x2 = range(minimum(view(X, :, iy)), maximum(view(X, :, iy)); length=N)
 
-    Grid = repeat(mean(X; dims=1), N * N)
+    Grid = if !isnothing(buff_Grid) && size(buff_Grid, 1) >= (N*N)
+        view(buff_Grid, 1:(N*N), :)
+    else
+        repeat(mean(X; dims=1), N * N)
+    end
+    
     @inbounds for (k, pt) in enumerate(Iterators.product(x1, x2))
         Grid[k, ix] = pt[1]
         Grid[k, iy] = pt[2]
@@ -593,106 +519,76 @@ end
 
 """
     ARTS_RenderSurface_DDEF(Model, X_Train, Idx, Lbls, OutName) -> Plot
-Renders a 3D Response Surface (RSM) for two selected variables.
+Backwards compatible wrapper for the 3D Surface Draw Dispatch.
 """
-function ARTS_RenderSurface_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int},
-    Lbls::Vector{String}, OutName::String)
+function ARTS_RenderSurface_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
+    return ARTS_Draw_DDEF(ARTS_PlotSurface_DDES(), Model, X, Idx, Lbls, OutName)
+end
+
+function ARTS_Draw_DDEF(::ARTS_PlotSurface_DDES, Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
     ix, iy = Idx[1], Idx[2]
-    # Execution of dynamic hardware scaling for grid resolution density.
-    N_Grid  = ARTS_GetDynamicN_DDEF()
-    
-    x1, x2, Grid = ARTS_BuildGrid_DDEF(X, ix, iy, N_Grid)
+    N = ARTS_GetDynamicN_DDEF()
+    x1, x2, Grid = ARTS_BuildGrid_DDEF(X, ix, iy, N)
+    Z = reshape(ARTS_Predict_DDEF(Model, Grid), N, N)'
 
-    Z = reshape(ARTS_Predict_DDEF(Model, Grid), N_Grid, N_Grid)'
-
-    # Downsample safeguard for large JSON payloads
+    # Internal decimation safeguard for high-resolution surfaces
     if length(Z) > ARTS_MaxGridPoints_DDEC
         target_N = Int(sqrt(ARTS_MaxGridPoints_DDEC))
-        Z        = ARTS_Downsample_DDEF(Z, target_N, target_N)
-        r_str    = max(1, length(x1) ÷ target_N)
-        x1       = x1[unique([collect(1:r_str:length(x1)); length(x1)])]
-        x2       = x2[unique([collect(1:r_str:length(x2)); length(x2)])]
+        Z = ARTS_Downsample_DDEF(Z, target_N, target_N)
+        # Re-map x/y axes for decimated matrix
+        x1 = range(first(x1), last(x1), length=size(Z, 2))
+        x2 = range(first(x2), last(x2), length=size(Z, 1))
     end
+    
+    # Apply Smoothing (Anti-aliasing)
+    Z = ARTS_SmoothMatrix_DDEF(Z, 1)
 
-    trace = surface(; 
-        x          = collect(x1), 
-        y          = collect(x2), 
-        z          = Z, 
-        colorscale = ARTS_ViridisScale_DDEC,
-        contours   = attr(z=attr(show=true, usecolormap=true, project_z=true)),
-        colorbar   = attr(
-            orientation = "h",
-            x           = 0.5,
-            xanchor     = "center",
-            y           = -0.24,
-            yanchor     = "top",
-            thickness   = 15,
-            len         = 0.6,
-            tickfont    = attr(size=ARTS_SizeColorbar_DDEC)
-        )
-    )
+    trace = surface(; x=collect(x1), y=collect(x2), z=Z, colorscale=ARTS_ViridisScale_DDEC,
+        contours=attr(z=attr(show=true, usecolormap=true, project_z=true)),
+        colorbar=attr(orientation="h", x=0.5, xanchor="center", y=-0.24, yanchor="top", thickness=15, len=0.6, tickfont=attr(size=ARTS_SizeColorbar_DDEC)))
 
-    layout = ARTS_BaseLayout_DDEF("Response Surface: $OutName")
-    layout[:scene] = attr(
-        xaxis  = attr(title=Lbls[1]),
-        yaxis  = attr(title=Lbls[2]),
-        zaxis  = attr(title=OutName),
-        camera = attr(eye=attr(x=1.65, y=1.65, z=0.9)),
-        aspectmode = "cube"
-    )
+    layout = ARTS_BaseLayout_DDEF("Response Surface Mapping: $OutName")
+    layout[:scene] = attr(xaxis=attr(title=Lbls[1]), yaxis=attr(title=Lbls[2]), zaxis=attr(title=OutName),
+        camera=attr(eye=attr(x=1.65, y=1.65, z=0.9)), aspectmode="cube")
     layout[:margin] = attr(l=5, r=5, t=65, b=100)
 
     return Plot(trace, layout)
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 14: 2D CONTOUR PROJECTION RENDERER
+# SECTION 14: 2D CONTOUR PROJECTION RENDERER 
 # ------------------------------------------------------------------------------
 
 """
     ARTS_RenderContour_DDEF(Model, X_Train, Idx, Lbls, OutName) -> Plot
-Renders a 2D Contour map (Heatmap) with labeled isolating lines.
+Backwards compatible wrapper for the Contour Draw Dispatch.
 """
-function ARTS_RenderContour_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int},
-    Lbls::Vector{String}, OutName::String)
-    ix, iy = Idx[1], Idx[2]
-    # Execution of dynamic hardware scaling for contour resolution density.
-    N       = ARTS_GetDynamicN_DDEF()
-    
-    x1, x2, Grid = ARTS_BuildGrid_DDEF(X, ix, iy, N)
+function ARTS_RenderContour_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
+    return ARTS_Draw_DDEF(ARTS_PlotContour_DDES(), Model, X, Idx, Lbls, OutName)
+end
 
+function ARTS_Draw_DDEF(::ARTS_PlotContour_DDES, Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
+    ix, iy = Idx[1], Idx[2]
+    N = ARTS_GetDynamicN_DDEF()
+    x1, x2, Grid = ARTS_BuildGrid_DDEF(X, ix, iy, N)
     Z = reshape(ARTS_Predict_DDEF(Model, Grid), N, N)'
 
-    # Downsample safeguard for large JSON payloads
     if length(Z) > ARTS_MaxGridPoints_DDEC
         target_N = Int(sqrt(ARTS_MaxGridPoints_DDEC))
-        Z        = ARTS_Downsample_DDEF(Z, target_N, target_N)
-        r_str    = max(1, length(x1) ÷ target_N)
-        x1       = x1[unique([collect(1:r_str:length(x1)); length(x1)])]
-        x2       = x2[unique([collect(1:r_str:length(x2)); length(x2)])]
+        Z = ARTS_Downsample_DDEF(Z, target_N, target_N)
+        x1 = range(first(x1), last(x1), length=size(Z, 2))
+        x2 = range(first(x2), last(x2), length=size(Z, 1))
     end
+    
+    # Apply Smoothing (Anti-aliasing) for heatmap clarity
+    Z = ARTS_SmoothMatrix_DDEF(Z, 2)
 
-    trace = contour(; 
-        x          = collect(x1), 
-        y          = collect(x2), 
-        z          = Z, 
-        colorscale = ARTS_ViridisScale_DDEC,
-        contours   = attr(coloring="heatmap", showlabels=true, labelfont=attr(size=ARTS_SizeTick_DDEC)),
-        colorbar   = attr(
-            orientation = "h",
-            x           = 0.5,
-            xanchor     = "center",
-            y           = -0.24,
-            yanchor     = "top",
-            thickness   = 15,
-            len         = 0.6,
-            tickfont    = attr(size=ARTS_SizeColorbar_DDEC)
-        )
-    )
+    trace = contour(; x=collect(x1), y=collect(x2), z=Z, colorscale=ARTS_ViridisScale_DDEC,
+        contours=attr(coloring="heatmap", showlabels=true, labelfont=attr(size=ARTS_SizeTick_DDEC)),
+        colorbar=attr(orientation="h", x=0.5, xanchor="center", y=-0.24, yanchor="top", thickness=15, len=0.6, tickfont=attr(size=ARTS_SizeColorbar_DDEC)))
 
-    layout = ARTS_BaseLayout_DDEF("Contour Projection: $OutName")
-    layout[:xaxis][:title] = Lbls[1]
-    layout[:yaxis][:title] = Lbls[2]
+    layout = ARTS_BaseLayout_DDEF("Contour Projection Index: $OutName")
+    layout[:xaxis][:title], layout[:yaxis][:title] = Lbls[1], Lbls[2]
     
     return Plot(trace, layout)
 end
@@ -707,44 +603,36 @@ end
 
 """
     ARTS_RenderSlice_DDEF(Model, X, Idx, Lbls, OutName) -> Plot
-Renders interaction slices for two variables (Min/Mean/Max levels).
+Backwards compatible wrapper for the Interaction Slice Draw Dispatch.
 """
-function ARTS_RenderSlice_DDEF(Model::Dict, X::Matrix{Float64}, Idx::Vector{Int},
-    Lbls::Vector{String}, OutName::String)
+function ARTS_RenderSlice_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
+    return ARTS_Draw_DDEF(ARTS_PlotSlice_DDES(), Model, X, Idx, Lbls, OutName)
+end
+
+function ARTS_Draw_DDEF(::ARTS_PlotSlice_DDES, Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
     ix, iy = Idx[1], Idx[2]
-    # Fixed 3-variable system
-    K      = 3 
+    N = ARTS_GetDynamicN_DDEF()
 
-    # Dynamic Hardware Scaling: Level 1 (21->61) vs Level 2 (21->101)
-    N_Slice = ARTS_GetDynamicN_DDEF()
-
-    x1      = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N_Slice))
-    y_vals  = (minimum(view(X, :, iy)), mean(view(X, :, iy)), maximum(view(X, :, iy)))
-    y_names = ("Min", "Mean", "Max")
-    styles  = ("solid", "dash", "solid")
+    x1 = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N))
+    y_vals = (minimum(view(X, :, iy)), mean(view(X, :, iy)), maximum(view(X, :, iy)))
+    y_names, styles = ("Min", "Mean", "Max"), ("solid", "dash", "solid")
     colours = (ARTS_Theme_DDEC.SHAMAG, ARTS_Theme_DDEC.TONCYA, ARTS_Theme_DDEC.HUEYEL)
 
     col_means = vec(mean(X; dims=1))
-    traces    = GenericTrace[]
+    traces = GenericTrace[]
 
     for i in eachindex(y_vals)
-        Grid      = repeat(col_means', length(x1))
+        Grid = repeat(col_means', length(x1))
         Grid[:, ix] .= x1
         Grid[:, iy] .= y_vals[i]
 
         z = ARTS_Predict_DDEF(Model, Grid)
-        push!(traces, scatter(; 
-            x    = x1, 
-            y    = z, 
-            mode = "lines",
-            name = "$(Lbls[2]) = $(y_names[i])",
-            line = attr(color=colours[i], dash=styles[i], width=ARTS_WidthLine_DDEC)
-        ))
+        push!(traces, scatter(; x=x1, y=z, mode="lines", name="$(Lbls[2]) = $(y_names[i])",
+            line=attr(color=colours[i], dash=styles[i], width=ARTS_WidthLine_DDEC)))
     end
 
-    layout = ARTS_BaseLayout_DDEF("Interaction Slice: $OutName")
-    layout[:xaxis][:title] = Lbls[1]
-    layout[:yaxis][:title] = OutName
+    layout = ARTS_BaseLayout_DDEF("Interaction Cross-Section: $OutName")
+    layout[:xaxis][:title], layout[:yaxis][:title] = Lbls[1], OutName
     
     return Plot(traces, layout)
 end
@@ -755,39 +643,30 @@ end
 
 """
     ARTS_RenderTrend_DDEF(Model, X, Y_Real, Idx, Lbls, OutName) -> Plot
-Renders main effect trend line with experimental scatter points.
+Backwards compatible wrapper for the Main Effect Trend Draw Dispatch.
 """
-function ARTS_RenderTrend_DDEF(Model::Dict, X::Matrix{Float64}, Y_Real::Vector{Float64},
-    Idx::Vector{Int}, Lbls::Vector{String}, OutName::String)
-    ix = Idx[1]
-    N  = ARTS_GetDynamicN_DDEF()
+function ARTS_RenderTrend_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Y_Real::AbstractVector{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
+    return ARTS_Draw_DDEF(ARTS_PlotTrend_DDES(), Model, X, Y_Real, Idx, Lbls, OutName)
+end
 
-    xr   = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length = N))
-    # Generation of a baseline design matrix utilizing factor arithmetic means.
+function ARTS_Draw_DDEF(::ARTS_PlotTrend_DDES, Model::AbstractDict, X::AbstractMatrix{Float64}, Y_Real::AbstractVector{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
+    ix = Idx[1]
+    N = ARTS_GetDynamicN_DDEF()
+
+    xr = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length = N))
     Grid = repeat(mean(X; dims=1), N)
     Grid[:, ix] .= xr
 
     y_trend = ARTS_Predict_DDEF(Model, Grid)
 
-    t_line = scatter(; 
-        x    = xr, 
-        y    = y_trend, 
-        mode = "lines", 
-        name = "Model Trend",
-        line = attr(color=ARTS_Theme_DDEC.DARHIG, dash="dash", width=ARTS_WidthLine_DDEC)
-    )
+    t_line = scatter(; x=xr, y=y_trend, mode="lines", name="Model Estimator",
+        line=attr(color=ARTS_Theme_DDEC.DARHIG, dash="dash", width=ARTS_WidthLine_DDEC))
 
-    t_data = scatter(; 
-        x      = X[:, ix], 
-        y      = Y_Real, 
-        mode   = "markers", 
-        name   = "Experimental",
-        marker = attr(color=ARTS_Theme_DDEC.TONGRE, size=ARTS_SizeMarker_DDEC, line=attr(width=1, color=ARTS_Theme_DDEC.PURBLA))
-    )
+    t_data = scatter(; x=X[:, ix], y=Y_Real, mode="markers", name="Experimental Obs.",
+        marker=attr(color=ARTS_Theme_DDEC.TONGRE, size=ARTS_SizeMarker_DDEC, line=attr(width=0.5, color=ARTS_Theme_DDEC.PURBLA)))
 
-    layout = ARTS_BaseLayout_DDEF("Main Effect: $(Lbls[1]) -> $OutName")
-    layout[:xaxis][:title] = Lbls[1]
-    layout[:yaxis][:title] = OutName
+    layout = ARTS_BaseLayout_DDEF("Main Effect Trend: $(Lbls[1])")
+    layout[:xaxis][:title], layout[:yaxis][:title] = Lbls[1], OutName
     
     return Plot([t_line, t_data], layout)
 end
@@ -800,272 +679,100 @@ end
     ARTS_RenderSpace_DDEF(Models, Goals, X, Idx, Lbls, [Best_Point]) -> Plot
 Visualises the multi-objective desirability space.
 """
-function ARTS_RenderSpace_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int}, Lbls::Vector{String},
-    Leaders_DF::AbstractDataFrame=DataFrame())
-    return ARTS_RenderSpaceImpl_DDEF(Models, Goals, X, Idx, Lbls, Leaders_DF, false)[1]
+function ARTS_RenderSpace_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame=DataFrame())
+    return ARTS_Draw_DDEF(ARTS_PlotDesignSpace_DDES(), Models, Goals, X, Idx, Lbls, Leaders_DF)
 end
-
-# ------------------------------------------------------------------------------
-# SECTION 18: OPTIMAL SOLUTION SPACE MAPPING
-# ------------------------------------------------------------------------------
 
 """
     ARTS_RenderCandidates_DDEF(Models, Goals, X, Idx, Lbls, [Best_Point]) -> (Plot, PctString)
 Visualises the top quartile of the desirability space (Optimal Solution Space).
 """
-function ARTS_RenderCandidates_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int}, Lbls::Vector{String},
-    Leaders_DF::AbstractDataFrame=DataFrame())
-    p, pct_str = ARTS_RenderSpaceImpl_DDEF(Models, Goals, X, Idx, Lbls, Leaders_DF, true)
-    return p, pct_str
+function ARTS_RenderCandidates_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame=DataFrame())
+    return ARTS_Draw_DDEF(ARTS_PlotCandidates_DDES(), Models, Goals, X, Idx, Lbls, Leaders_DF)
 end
 
-# ------------------------------------------------------------------------------
-# SECTION 19: CORE DESIRABILITY RENDERING LOGIC
-# ------------------------------------------------------------------------------
+# Internal Implementation Redirect for Space/Candidates
+function ARTS_Draw_DDEF(::ARTS_PlotDesignSpace_DDES, Models, Goals, X, Idx, Lbls, Leaders_DF)
+    p, _ = ARTS_RenderSpaceCore_DDEF(Models, Goals, X, Idx, Lbls, Leaders_DF, false)
+    return p
+end
 
-function ARTS_AddLeaderMarkers_DDEF(traces::Vector{GenericTrace}, Leaders_DF::AbstractDataFrame, ix::Int, iy::Int, iz::Int)
+function ARTS_Draw_DDEF(::ARTS_PlotCandidates_DDES, Models, Goals, X, Idx, Lbls, Leaders_DF)
+    return ARTS_RenderSpaceCore_DDEF(Models, Goals, X, Idx, Lbls, Leaders_DF, true)
+end
+
+function ARTS_AddLeaderMarkers_DDEF!(traces::Vector{GenericTrace}, Leaders_DF::AbstractDataFrame, ix::Int, iy::Int, iz::Int)
     nrow(Leaders_DF) == 0 && return
-    
-    C = Main.Sys_Fast.FAST_Data_DDEC
-    th = ARTS_Theme_DDEC
+    C, th = Main.Sys_Fast.FAST_Data_DDEC, ARTS_Theme_DDEC
     in_cols = filter(n -> startswith(uppercase(string(n)), uppercase(C.PRE_INPUT)), names(Leaders_DF))
-    id_col = findfirst(c -> uppercase(c) == "ID" || uppercase(c) == "EXP_ID", names(Leaders_DF))
-    score_col = findfirst(c -> uppercase(c) == "SCORE", names(Leaders_DF))
-
-    top_limit = 8
-    inp_limit = 3
-    out_limit = 3
-
-    added_top, added_in, added_out = 0, 0, 0
     for r in 1:nrow(Leaders_DF)
-        id_val = !isnothing(id_col) ? string(Leaders_DF[r, id_col]) : "L$r"
-        id_upper = uppercase(id_val)
-
-        is_top = occursin("TOP", id_upper)
-        is_in = occursin("INP", id_upper)
-        is_out = occursin("OUT", id_upper)
-
-        marker_type = ""
-        if is_top && added_top < top_limit
-            added_top += 1
-            marker_type = "TOP"
-        elseif is_in && added_in < inp_limit
-            added_in += 1
-            marker_type = "INP"
-        elseif is_out && added_out < out_limit
-            added_out += 1
-            marker_type = "OUT"
-        else
-            continue
-        end
-
-        bx = Leaders_DF[r, Symbol(in_cols[ix])]
-        by = Leaders_DF[r, Symbol(in_cols[iy])]
-        bz = iz > 0 ? Leaders_DF[r, Symbol(in_cols[iz])] : 0.0
+        id = hasproperty(Leaders_DF, :ID) ? string(Leaders_DF[r, :ID]) : "L$r"
+        is_top = occursin("TOP", uppercase(id))
+        marker_col = is_top ? th.HUERED : th.PURBLA
         
-        marker_colour = marker_type == "TOP" ? th.HUERED : (marker_type == "INP" ? th.PURWHI : th.PURBLA)
-        marker_name = marker_type == "TOP" ? "Global Leader ($id_val)" :
-                      (marker_type == "INP" ? "Input-Based Leader ($id_val)" : "Output-Based Leader ($id_val)")
-
-        push!(traces, scatter3d(;
-            x         = [bx], 
-            y         = [by], 
-            z         = [bz],
-            mode      = "markers",
-            marker    = attr(size=ARTS_SizeLeader_DDEC, color=marker_colour, symbol="diamond", line=attr(color=th.PURBLA, width=1)),
-            showlegend = false,
-            name      = marker_name,
-            hovertext = ["$marker_name<br>Score: $(round(Leaders_DF[r, score_col], digits=3))"],
-            hoverinfo = "text"
-        ))
+        push!(traces, scatter3d(; x=[Leaders_DF[r, Symbol(in_cols[ix])]], y=[Leaders_DF[r, Symbol(in_cols[iy])]], 
+            z=[iz > 0 ? Leaders_DF[r, Symbol(in_cols[iz])] : 0.0], mode="markers",
+            marker=attr(size=ARTS_SizeLeader_DDEC, color=marker_col, symbol="diamond", line=attr(color=th.PURBLA, width=1)),
+            showlegend=false, name="Leader $id"))
     end
 end
 
-"""
-    ARTS_RenderSpaceImpl_DDEF(Models, Goals, X, Idx, Lbls, Best_Point, is_candidate) -> (Plot, PctString)
-Core rendering logic for desirability-based solution spaces.
-"""
-function ARTS_RenderSpaceImpl_DDEF(Models, Goals, X::Matrix{Float64}, Idx::Vector{Int}, Lbls::Vector{String},
-    Leaders_DF::AbstractDataFrame, is_candidate::Bool)
+function ARTS_RenderSpaceCore_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame, is_candidate::Bool)
     ix, iy = Idx[1], Idx[2]
-
     N = ARTS_GetDynamicN_DDEF()
-    K = 3
-
-    x1 = collect(range(minimum(view(X, :, ix)), maximum(view(X, :, ix)); length=N))
-    x2 = collect(range(minimum(view(X, :, iy)), maximum(view(X, :, iy)); length=N))
-
-    # Execution of coordinate centring for desirability cross-section analysis.
-    col_ref = vec(mean(X; dims=1))
-    if nrow(Leaders_DF) > 0
-        C       = Main.Sys_Fast.FAST_Data_DDEC
-        in_cols = filter(n -> startswith(n, C.PRE_INPUT), names(Leaders_DF))
-        if length(in_cols) == K
-            # Average coordinates of top 8 leaders (or all if < 8)
-            num_ref    = min(8, nrow(Leaders_DF))
-            # Filter out any rows that have missing values in the input columns before conversion
-            ref_sub    = Leaders_DF[1:num_ref, Symbol.(in_cols)]
-            ref_clean  = dropmissing(ref_sub)
-            if !isempty(ref_clean)
-                ref_matrix = Matrix{Float64}(ref_clean)
-                col_ref    = vec(mean(ref_matrix; dims=1))
-            end
-        end
-    end
-
-    # Determination of the tertiary coordinate for multidimensional slice projection.
-    iz    = first(setdiff(1:3, Idx))
-    z_min = minimum(view(X, :, iz))
-    z_max = maximum(view(X, :, iz))
-
-    # Selection of the tertiary component from the reference centre for slice projection.
-    z_mid = col_ref[iz]
-
-    # Scientific Safeguard: Ensure Z-dimension has depth even if variable is constant
-    if abs(z_max - z_min) < 1e-4
-        z_min -= 0.5
-        z_max += 0.5
-    end
-    z_vals = [z_min, z_mid, z_max]
-
-    traces     = GenericTrace[]
-    global_max = 0.0
-    global_min = 1.0
-    all_scores = Vector{Matrix{Float64}}(undef, length(z_vals))
-
-    # Utilisation of the calculated reference for consistent coordinate mapping.
-    col_means = col_ref
-    # Prioritisation of goals embedded within specific models to ensure analytical robustness.
-    parsed_goals = [ARTS_ExtractGoal_DDEF(get(Models[m], "Goal", Goals[m])) for m in eachindex(Models)]
-
-    for (s, zv) in enumerate(z_vals)
-        Grid = repeat(col_means', N * N)
-        @inbounds for (k, pt) in enumerate(Iterators.product(x1, x2))
-            Grid[k, ix] = pt[1]
-            Grid[k, iy] = pt[2]
-            iz > 0 && (Grid[k, iz] = zv)
-        end
-
-        # Initialisation of score vectors for multi-objective optimisation aggregation.
-        Scores     = ones(N * N)
-        weight_sum = sum([g[6] for g in parsed_goals])
-        pow_factor = weight_sum > 0.0 ? (1.0 / weight_sum) : 1.0
-
-        # Execution of objective-wise desirability assessment across the grid.
-        for m in eachindex(Models)
-            preds    = ARTS_Predict_DDEF(Models[m], Grid)
-            goal_tup = parsed_goals[m]
-
-            Threads.@threads for i in eachindex(preds)
-                d_val      = ARTS_CalcDesirability_DDEF(preds[i], goal_tup)
-                Scores[i] *= (d_val^goal_tup[6])
-            end
-        end
-        
-        # Final ScoreMat Clamping & NaN-safe stats
-        ScoreMat = clamp.(reshape(Scores .^ pow_factor, N, N)', 0.0, 1.0)
-        ScoreMat[isnan.(ScoreMat)] .= 0.0
-        all_scores[s] = ScoreMat
-
-        # Robust min/max ignoring NaNs for colourbar stability
-        valid_scores_mat = filter(!isnan, ScoreMat)
-        if !isempty(valid_scores_mat)
-            global_max = max(global_max, maximum(valid_scores_mat))
-            global_min = min(global_min, minimum(valid_scores_mat))
-        end
-    end
-
-    all_non_zero = Float64[]
-    for s in eachindex(z_vals)
-        for val in all_scores[s]
-            val > 1e-6 && push!(all_non_zero, val)
-        end
-    end
-
-    if isempty(all_non_zero)
-        thresh = 1.0
-        pct = 0.0
-    else
-        # Determination of the top quartile score threshold for optimal zone identification.
-        thresh = quantile(all_non_zero, 0.75)
-        total_pts = length(z_vals) * N * N
-        pct = (0.25 * length(all_non_zero) / total_pts) * 100.0
-    end
-    pct_str = @sprintf("%.2f", pct)
-
-    for (s, zv) in enumerate(z_vals)
-        # Structural duplication of score matrices for threshold masking.
-        Masked = copy(all_scores[s])
-        if is_candidate
-            # Execution of anti-aliasing filter to ensure underlying score continuity.
-            Masked = ARTS_SmoothMatrix_DDEF(Masked, 4)
-        end
-
-        Z_layer = fill(iz > 0 ? zv : 0.0, N, N)
-
-        # Execution of conditional drawing for boundary layers to preserve volumetric structure.
-        if any(!isnan, Masked) || s == 1 || s == 3
-            # Resolve ghost surface transparency for empty boundary layers.
-            is_empty_layer = !any(!isnan, Masked)
-            if is_empty_layer
-                # Show as zero/min colour
-                Masked = fill(0.0, N, N) 
-
-            end
-
-            alpha_val = (s == 2 || iz == 0) ? (is_candidate ? 0.85 : 0.70) : (is_candidate ? 0.35 : 0.20)
-            if is_empty_layer
-                alpha_val = 0.05
-            end
-            trace_name = (s == 2 && K > 2 && nrow(Leaders_DF) > 0) ? "Level: $(round(zv; digits=2))" : "Slice $s"
-
-            push!(traces, surface(;
-                x            = x1, 
-                y            = x2, 
-                z            = Z_layer,
-                surfacecolor = Masked,
-                colorscale   = is_candidate ? ARTS_GenerateAlphaViridis_DDEF(thresh) : ARTS_ViridisScale_DDEC,
-                cmin         = 0.0, 
-                cmax         = 1.0, 
-                showscale    = (s == 1),
-                opacity      = alpha_val,
-                name         = trace_name,
-                showlegend   = false,
-                contours     = attr(z=attr(show=true, usecolormap=true, width=3)),
-                colorbar     = attr(
-                    title       = "Desirability",
-                    orientation = "h",
-                    x           = 0.5,
-                    xanchor     = "center",
-                    y           = -0.24,
-                    yanchor     = "top",
-                    thickness   = 15,
-                    len         = 0.6,
-                    tickvals    = [0, 0.2, 0.4, 0.6, 0.8, 1.0],
-                    ticktext    = ["0.0", "0.2", "0.4", "0.6", "0.8", "1.0"],
-                    tickfont    = attr(size=ARTS_SizeColorbar_DDEC)
-                )
-            ))
-        end
-    end
-
-    ARTS_AddLeaderMarkers_DDEF(traces, Leaders_DF, ix, iy, iz)
-
-    plot_title = is_candidate ? "Candidates ($pct_str%)" : "Design Space: $(Lbls[1]) vs $(Lbls[2])"
-    layout     = ARTS_BaseLayout_DDEF(plot_title)
-
-    layout[:scene] = attr(
-        xaxis  = attr(title=Lbls[1]),
-        yaxis  = attr(title=Lbls[2]),
-        zaxis  = attr(
-            title = iz > 0 ? (length(Lbls) > 2 ? Lbls[3] : "Z-Axis") : "Level",
-            range = abs(z_vals[3] - z_vals[1]) < 1e-6 ? [z_vals[1] - 0.5, z_vals[1] + 0.5] : nothing
-        ),
-        camera     = attr(eye=attr(x=1.65, y=1.65, z=0.9)),
-        aspectmode = "cube"
-    )
-    layout[:margin] = attr(l=5, r=5, t=65, b=100)
+    iz = first(setdiff(1:3, Idx))
     
+    x1, x2 = range(minimum(view(X,:,ix)), maximum(view(X,:,ix)), length=N), range(minimum(view(X,:,iy)), maximum(view(X,:,iy)), length=N)
+    col_ref = vec(mean(X; dims=1))
+    z_vals = [minimum(view(X,:,iz)), col_ref[iz], maximum(view(X,:,iz))]
+
+    traces, all_scores = GenericTrace[], Vector{AbstractMatrix{Float64}}(undef, 3)
+    parsed_goals = [Main.Lib_Core.CORE_ExtractGoal_DDEF(get(Models[m], "Goal", Goals[m])) for m in eachindex(Models)]
+    w_sum = sum([g[5] for g in parsed_goals])
+    pow = w_sum > 0.0 ? (1.0 / w_sum) : 1.0
+
+    # Allocated once, reused for all 3 slices
+    Grid_buf   = repeat(reshape(col_ref, 1, :), N * N)
+    Xd_buf     = Matrix{Float64}(undef, N * N, 10)
+    Scores_buf = Vector{Float64}(undef, N * N)
+
+    for (s, zv) in enumerate(z_vals)
+        @inbounds for (k, pt) in enumerate(Iterators.product(x1, x2))
+            Grid_buf[k, ix], Grid_buf[k, iy], Grid_buf[k, iz] = pt[1], pt[2], zv
+        end
+
+        fill!(Scores_buf, 1.0)
+
+        for m in eachindex(Models)
+            preds = ARTS_Predict_DDEF(Models[m], Grid_buf, Xd_buf)
+            goal_tup = parsed_goals[m]
+            
+            @inbounds for i in eachindex(preds)
+                Scores_buf[i] *= Main.Lib_Core.CORE_CalcDesirability_DDEF(preds[i], goal_tup)
+            end
+        end
+        all_scores[s] = clamp.(reshape(Scores_buf .^ pow, N, N)', 0.0, 1.0)
+    end
+
+    all_flat = vcat([vec(s) for s in all_scores]...)
+    valid_sc = filter(v -> v > 1e-6, all_flat)
+    thresh = isempty(valid_sc) ? 1.0 : quantile(valid_sc, 0.75)
+    pct_str = @sprintf("%.2f", (length(valid_sc) * 0.25 / (3*N*N)) * 100.0)
+
+    for (s, zv) in enumerate(z_vals)
+        Masked = is_candidate ? ARTS_SmoothMatrix_DDEF(all_scores[s], 2) : all_scores[s]
+        alpha = (s == 2) ? (is_candidate ? 0.85 : 0.70) : (is_candidate ? 0.35 : 0.20)
+        
+        push!(traces, surface(; x=collect(x1), y=collect(x2), z=fill(zv, N, N), surfacecolor=Masked,
+            colorscale = is_candidate ? ARTS_GenerateAlphaViridis_DDEF(thresh) : ARTS_ViridisScale_DDEC,
+            cmin=0.0, cmax=1.0, opacity=alpha, showscale=(s==1), showlegend=false,
+            contours=attr(z=attr(show=true, usecolormap=true, width=3))))
+    end
+
+    ARTS_AddLeaderMarkers_DDEF!(traces, Leaders_DF, ix, iy, iz)
+    title = is_candidate ? "Optimal Candidates ($pct_str%)" : "Decision Space Exploration"
+    layout = ARTS_BaseLayout_DDEF(title)
+    layout[:scene] = attr(xaxis=attr(title=Lbls[1]), yaxis=attr(title=Lbls[2]), zaxis=attr(title=Lbls[3]), aspectmode="cube")
     return Plot(traces, layout), pct_str
 end
 
@@ -1075,86 +782,49 @@ end
 
 """
     ARTS_RenderOptimalZone_DDEF(Models, Goals, X, InNames, [Leaders_DF]) -> (Plot, PctString)
-Renders a 3D isometric volume of the 'Optimal Zone' based on desirability criteria (Top 10% Desirability).
+Backwards compatible wrapper for the Optimal Zone Draw Dispatch.
 """
-function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::Matrix{Float64}, InNames::Vector{String},
-    Leaders_DF::AbstractDataFrame=DataFrame())
-    # Definition of volumetric grid resolution for optimal zone rendering.
-    N      = 41 
+function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::AbstractMatrix{Float64}, InNames::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame=DataFrame())
+    return ARTS_Draw_DDEF(ARTS_PlotOptimalZone_DDES(), Models, Goals, X, InNames, Leaders_DF)
+end
 
+function ARTS_Draw_DDEF(::ARTS_PlotOptimalZone_DDES, Models, Goals, X::AbstractMatrix{Float64}, InNames::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame)
+    N = 41 
     ranges = [range(minimum(view(X, :, i)), maximum(view(X, :, i)); length=N) for i in 1:3]
-    Grid   = Matrix{Float64}(undef, N^3, 3)
-
+    Grid = Matrix{Float64}(undef, N^3, 3)
     idx = 1
     for (x, y, z) in Iterators.product(ranges...)
-        Grid[idx, 1] = x
-        Grid[idx, 2] = y
-        Grid[idx, 3] = z
+        Grid[idx, 1], Grid[idx, 2], Grid[idx, 3] = x, y, z
         idx += 1
     end
 
-    Scores       = ones(N^3)
-    parsed_goals = [ARTS_ExtractGoal_DDEF(get(Models[m], "Goal", Goals[m])) for m in eachindex(Models)]
-    weight_sum   = sum([g[6] for g in parsed_goals])
-    pow          = weight_sum > 0.0 ? (1.0 / weight_sum) : 1.0
+    Scores = ones(N^3)
+    parsed_goals = [Main.Lib_Core.CORE_ExtractGoal_DDEF(get(Models[m], "Goal", Goals[m])) for m in eachindex(Models)]
+    w_sum = sum([g[5] for g in parsed_goals])
+    pow = w_sum > 0.0 ? (1.0 / w_sum) : 1.0
 
-    # Execution of model-based predictions for volumetric desirability mapping.
     for m in eachindex(Models)
         preds = ARTS_Predict_DDEF(Models[m], Grid)
+        goal  = parsed_goals[m]
         for i in eachindex(preds)
-            d          = ARTS_CalcDesirability_DDEF(preds[i], parsed_goals[m])
-            Scores[i] *= (d^parsed_goals[m][6])
+            # CalcDesirability already includes the ^Weight power. 
+            Scores[i] *= Main.Lib_Core.CORE_CalcDesirability_DDEF(preds[i], goal)
         end
     end
+    # Apply the final 1/sum(weights) power for the true weighted geometric mean
     Scores = clamp.(Scores .^ pow, 0.0, 1.0)
+    valid_sc = filter(s -> !isnan(s) && s > 1e-6, Scores)
+    thresh = isempty(valid_sc) ? 0.9 : quantile(valid_sc, 0.90)
+    pct_str = @sprintf("%.2f", (count(s -> s >= thresh, Scores) / length(Scores)) * 100.0)
 
-    # Application of desirability filtering focusing on top-tier scenarios.
-    valid_scores = filter(s -> !isnan(s) && s > 1e-6, Scores)
-    thresh       = isempty(valid_scores) ? 0.9 : quantile(valid_scores, 0.90)
+    trace = volume(; x=Grid[:, 1], y=Grid[:, 2], z=Grid[:, 3], value=Scores, isomin=thresh, isomax=1.0, 
+        opacity=0.3, surface_count=5, colorscale=ARTS_ViridisScale_DDEC, cmin=0.0, cmax=1.0)
 
-    pts_above = count(s -> !isnan(s) && s >= thresh, Scores)
-    pct       = (pts_above / length(Scores)) * 100.0
-    pct_str   = @sprintf("%.2f", pct)
-
-    trace = volume(;
-        x             = Grid[:, 1], 
-        y             = Grid[:, 2], 
-        z             = Grid[:, 3],
-        value         = Scores,
-        isomin        = thresh,
-        isomax        = 1.0, 
-        opacity       = 0.3,
-        surface_count = 5,
-        colorscale    = ARTS_ViridisScale_DDEC,
-        cmin          = 0.0,
-        cmax          = 1.0,
-        colorbar      = attr(
-            title       = "Quality Index",
-            orientation = "h",
-            x           = 0.5,
-            xanchor     = "center",
-            y           = -0.24,
-            yanchor     = "top",
-            thickness   = 15,
-            len         = 0.6,
-            tickvals    = [0, 0.2, 0.4, 0.6, 0.8, 1.0],
-            ticktext    = ["0.0", "0.2", "0.4", "0.6", "0.8", "1.0"],
-            tickfont    = attr(size=ARTS_SizeColorbar_DDEC)
-        )
-    )
-
-    layout = ARTS_BaseLayout_DDEF("Optimal Solution Volume ($pct_str%)")
-    layout[:scene] = attr(
-        xaxis  = attr(title=InNames[1]),
-        yaxis  = attr(title=InNames[2]),
-        zaxis  = attr(title=InNames[3]),
-        camera = attr(eye=attr(x=1.65, y=1.65, z=0.9)),
-        aspectmode = "cube"
-    )
-    layout[:margin] = attr(l=5, r=5, t=65, b=100)
+    layout = ARTS_BaseLayout_DDEF("Optimal Volumetric Zone ($pct_str%)")
+    layout[:scene] = attr(xaxis=attr(title=InNames[1]), yaxis=attr(title=InNames[2]), zaxis=attr(title=InNames[3]), aspectmode="cube")
     
     traces = GenericTrace[trace]
-    ARTS_AddLeaderMarkers_DDEF(traces, Leaders_DF, 1, 2, 3)
+    ARTS_AddLeaderMarkers_DDEF!(traces, Leaders_DF, 1, 2, 3)
 
     return Plot(traces, layout), pct_str
 end
@@ -1165,366 +835,278 @@ end
 
 """
     ARTS_RenderInteractionMatrix_DDEF(Model, InNames, OutName) -> Plot
-Renders a heatmap matrix illustrating factor interaction strengths and types.
+Backwards compatible wrapper for the Interaction Matrix Draw Dispatch.
 """
-function ARTS_RenderInteractionMatrix_DDEF(Model::Dict, InNames::Vector{String}, OutName::String)
-    K = 3
-    M = zeros(K, K)
+function ARTS_RenderInteractionMatrix_DDEF(Model::AbstractDict, InNames::AbstractVector{<:AbstractString}, OutName::AbstractString)
+    return ARTS_Draw_DDEF(ARTS_PlotInteractionMatrix_DDES(), Model, InNames, OutName)
+end
 
-    ModelType = get(Model, "ModelType", "quadratic")
-    if occursin("quadratic", ModelType) && haskey(Model, "Coefs") && length(Model["Coefs"]) >= 10
-        Beta    = Model["Coefs"]
-        M[1, 1] = Beta[8]
-        M[2, 2] = Beta[9]
-        M[3, 3] = Beta[10]
-        M[1, 2] = M[2, 1] = Beta[5]
-        M[1, 3] = M[3, 1] = Beta[6]
-        M[2, 3] = M[3, 2] = Beta[7]
-    end
+function ARTS_Draw_DDEF(::ARTS_PlotInteractionMatrix_DDES, Model::AbstractDict, InNames::AbstractVector{<:AbstractString}, OutName::AbstractString)
+    # Use Multiple Dispatch to resolve matrix calculation based on model type
+    m_type::Main.Lib_Core.CORE_AbstractModelType_DDET = Main.Lib_Core.CORE_GetModelType_DDEF(string(get(Model, "ModelType", "quadratic")))
+    coefs = get(Model, "Coefs", Float64[])
+    
+    M = ARTS_GetInteractionMatrix_DDEF(m_type, coefs)
 
-    trace  = heatmap(; 
-        z = M, 
-        x = InNames, 
-        y = InNames, 
-        colorscale = [[0, ARTS_Theme_DDEC.SHAMAG], [0.5, ARTS_Theme_DDEC.PURWHI], [1, ARTS_Theme_DDEC.HUEYEL]], 
-        zmid = 0,
-        colorbar = attr(
-            orientation = "h",
-            x           = 0.5,
-            xanchor     = "center",
-            y           = -0.24,
-            yanchor     = "top",
-            thickness   = 15,
-            len         = 0.6,
-            tickfont    = attr(size=ARTS_SizeColorbar_DDEC)
-        )
-    )
-    layout = ARTS_BaseLayout_DDEF("Interaction Landscape: $OutName")
+    max_abs = max(1e-9, maximum(abs.(M)))
+    M_norm = M ./ max_abs
+
+    trace = heatmap(; z=M_norm, x=InNames, y=InNames, zmid=0,
+        colorscale=[[0, ARTS_Theme_DDEC.SHAMAG], [0.5, ARTS_Theme_DDEC.PURWHI], [1, ARTS_Theme_DDEC.HUEYEL]], 
+        colorbar=attr(
+            title="Relative Impact",
+            orientation="h", x=0.5, xanchor="center", y=-0.28, yanchor="top", 
+            thickness=12, len=0.7, tickfont=attr(size=ARTS_SizeColorbar_DDEC)
+        ),
+        hovertemplate="Factor A: %{x}<br>Factor B: %{y}<br>Impact: %{z:.3f}<extra></extra>")
+    
+    layout = ARTS_BaseLayout_DDEF("Interaction Landscape Index: $OutName")
+    layout[:margin] = attr(l=80, r=40, t=65, b=120)
     
     return Plot(trace, layout)
 end
 
-# ==============================================================================
-# PART F: ADVANCED DIAGNOSTIC VALIDATION
-# ==============================================================================
+# Internal Multiple Dispatch Gateways for Interaction Landscapes
+function ARTS_GetInteractionMatrix_DDEF(::Main.Lib_Core.CORE_ModelQuadratic_DDES, B::AbstractVector)::Matrix{Float64}
+    M = zeros(3, 3)
+    # Map Standard Quadratic: 1(Int), 2,3,4(Lin), 5,6,7(Inter), 8,9,10(Quad)
+    if length(B) >= 10
+        M[1,1], M[2,2], M[3,3] = B[8], B[9], B[10]
+        M[1,2] = M[2,1] = B[5]; M[1,3] = M[3,1] = B[6]; M[2,3] = M[3,2] = B[7]
+    end
+    return M
+end
+
+ARTS_GetInteractionMatrix_DDEF(::Main.Lib_Core.CORE_ModelLinear_DDES, B::AbstractVector) = zeros(3, 3)
 
 # ------------------------------------------------------------------------------
-# SECTION 22: NORMAL PROBABILITY DIAGNOSTICS (Q-Q Plot)
+# SECTION 22: DIAGNOSTIC PLOTS
 # ------------------------------------------------------------------------------
 
-"""
-    ARTS_RenderQQPlot_DDEF(Residuals, OutName) -> Plot
-Renders a Q-Q plot (Normal Probability Plot) for residual diagnostic validation.
-"""
-function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::String)
-    n          = length(Residuals)
-    sorted_res = sort(Residuals)
+function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::AbstractString)
+    return ARTS_Draw_DDEF(ARTS_PlotQQ_DDES(), Residuals, OutName)
+end
 
-    z_res = (sorted_res .- mean(sorted_res)) ./ std(sorted_res)
+function ARTS_Draw_DDEF(::ARTS_PlotQQ_DDES, Residuals::AbstractVector{Float64}, OutName::AbstractString)
+    n = length(Residuals)
+    z_res = (sort(Residuals) .- mean(Residuals)) ./ std(Residuals)
+    theoretical = quantile.(Normal(0, 1), [(i - 0.5) / n for i in 1:n])
 
-    # Determination of theoretical quantiles for Gaussian distribution comparison.
-    p_vals      = [(i - 0.5) / n for i in 1:n]
-    theoretical = quantile.(Normal(0, 1), p_vals)
-
-    trace_pts = scatter(; 
-        x      = theoretical, 
-        y      = z_res, 
-        mode   = "markers",
-        marker = attr(color=ARTS_Theme_DDEC.SHAMAG, size=ARTS_SizeMarker_DDEC, opacity=0.7, line=attr(width=1, color=ARTS_Theme_DDEC.PURBLA)),
-        name   = "Residuals"
-    )
-
-    lims       = [minimum([theoretical; z_res]), maximum([theoretical; z_res])]
-    trace_line = scatter(; 
-        x    = lims, 
-        y    = lims, 
-        mode = "lines",
-        line = attr(color=ARTS_Theme_DDEC.HUEYEL, width=ARTS_WidthLine_DDEC, dash="dash"),
-        name = "Normal Dist"
-    )
+    t_pts = scatter(; x=theoretical, y=z_res, mode="markers", name="Residuals",
+        marker=attr(color=ARTS_Theme_DDEC.SHAMAG, size=ARTS_SizeMarker_DDEC, opacity=0.7, line=attr(width=1, color=ARTS_Theme_DDEC.PURBLA)))
+    
+    lims = [minimum([theoretical; z_res]), maximum([theoretical; z_res])]
+    t_line = scatter(; x=lims, y=lims, mode="lines", name="Normal Distribution",
+        line=attr(color=ARTS_Theme_DDEC.HUEYEL, width=ARTS_WidthLine_DDEC, dash="dash"))
 
     layout = ARTS_BaseLayout_DDEF("Normal Probability (Q-Q): $OutName")
-    layout[:xaxis][:title] = "Theoretical Quantiles"
-    layout[:yaxis][:title] = "Standardised Residuals"
-
-    return Plot([trace_pts, trace_line], layout)
+    layout[:xaxis][:title], layout[:yaxis][:title] = "Theoretical Quantiles", "Standardised Residuals"
+    return Plot([t_pts, t_line], layout)
 end
 
-# ------------------------------------------------------------------------------
-# SECTION 23: RESIDUAL HOMOSCEDASTICITY ANALYSIS
-# ------------------------------------------------------------------------------
-
-"""
-    ARTS_RenderResidualsVsPred_DDEF(Y_Pred, Residuals, OutName) -> Plot
-Renders Residuals vs. Predicted plot to assess variance homogeneity (homoscedasticity).
-"""
-function ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residuals::AbstractVector{Float64}, OutName::String)
-    trace_pts = scatter(; 
-        x      = Y_Pred, 
-        y      = Residuals, 
-        mode   = "markers",
-        marker = attr(color = ARTS_Theme_DDEC.SHAMAG, size = ARTS_SizeMarker_DDEC, opacity = 0.7, line = attr(width = 1, color = ARTS_Theme_DDEC.PURWHI)),
-        name   = "Residuals"
-    )
-
-    trace_zero = scatter(; 
-        x          = [minimum(Y_Pred), maximum(Y_Pred)], 
-        y          = [0, 0], 
-        mode       = "lines",
-        line       = attr(color = ARTS_Theme_DDEC.HUEYEL, width = ARTS_WidthLine_DDEC, dash = "solid"),
-        showlegend = false
-    )
-
-    layout = ARTS_BaseLayout_DDEF("Residuals vs. Predicted: $OutName")
-    layout[:xaxis][:title] = "Predicted Value"
-    layout[:yaxis][:title] = "Residual"
-
-    return Plot([trace_pts, trace_zero], layout)
+function ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residuals::AbstractVector{Float64}, OutName::AbstractString)
+    return ARTS_Draw_DDEF(ARTS_PlotResiduals_DDES(), Y_Pred, Residuals, OutName)
 end
 
-# ------------------------------------------------------------------------------
-# SECTION 24: LOCAL SENSITIVITY INDEXING
-# ------------------------------------------------------------------------------
+function ARTS_Draw_DDEF(::ARTS_PlotResiduals_DDES, Y_Pred::AbstractVector{Float64}, Residuals::AbstractVector{Float64}, OutName::AbstractString)
+    t_pts = scatter(; x=Y_Pred, y=Residuals, mode="markers", name="Residuals",
+        marker=attr(color=ARTS_Theme_DDEC.SHAMAG, size=ARTS_SizeMarker_DDEC, opacity=0.7, line=attr(width=1, color=ARTS_Theme_DDEC.PURWHI)))
 
-"""
-    ARTS_RenderSensitivityPlot_DDEF(Sens, InNames, OutName) -> Plot
-Renders factor sensitivity contributions at the identified optimal coordinates.
-"""
-function ARTS_RenderSensitivityPlot_DDEF(Sens::AbstractVector{Float64}, InNames::Vector{String}, OutName::String)
-    trace = bar(; 
-        x      = InNames, 
-        y      = Sens .* 100.0,
-        marker = attr(
-            color = [ARTS_Theme_DDEC.SHAMAG, ARTS_Theme_DDEC.TONGRE, ARTS_Theme_DDEC.HUEYEL], 
-            line  = attr(width = 1.5, color = ARTS_Theme_DDEC.PURWHI)
-        ),
-        textposition = "auto",
-        text         = [@sprintf("%.1f%%", s * 100) for s in Sens]
-    )
+    t_zero = scatter(; x=[minimum(Y_Pred), maximum(Y_Pred)], y=[0, 0], mode="lines", showlegend=false,
+        line=attr(color=ARTS_Theme_DDEC.HUEYEL, width=ARTS_WidthLine_DDEC, dash="solid"))
 
-    layout = ARTS_BaseLayout_DDEF("Local Sensitivity Index: $OutName")
-    layout[:yaxis][:title] = "Contribution (%)"
-    layout[:xaxis][:title] = "Experimental Factor"
+    layout = ARTS_BaseLayout_DDEF("Variance Homogeneity: $OutName")
+    layout[:xaxis][:title], layout[:yaxis][:title] = "Predicted Estimation", "Residual Error"
+    return Plot([t_pts, t_zero], layout)
+end
 
+function ARTS_RenderSensitivityPlot_DDEF(Sens::AbstractVector{Float64}, InNames::AbstractVector{<:AbstractString}, OutName::AbstractString)
+    return ARTS_Draw_DDEF(ARTS_PlotSensitivity_DDES(), Sens, InNames, OutName)
+end
+
+function ARTS_Draw_DDEF(::ARTS_PlotSensitivity_DDES, Sens::AbstractVector{Float64}, InNames::AbstractVector{<:AbstractString}, OutName::AbstractString)
+    trace = bar(; x=InNames, y=Sens .* 100.0, text=[@sprintf("%.1f%%", s * 100) for s in Sens], textposition="auto",
+        marker=attr(color=[ARTS_Theme_DDEC.SHAMAG, ARTS_Theme_DDEC.TONGRE, ARTS_Theme_DDEC.HUEYEL], line=attr(width=1.5, color=ARTS_Theme_DDEC.PURWHI)))
+
+    layout = ARTS_BaseLayout_DDEF("Local Sensitivity Impact: $OutName")
+    layout[:yaxis][:title], layout[:xaxis][:title] = "Contribution (%)", "Experimental Factor"
     return Plot(trace, layout)
 end
 
 # ==============================================================================
-# PART G: SYSTEM ORCHESTRATION & DISPATCH
+# PART G: SYSTEM DISPATCH & ORCHESTRATION
 # ==============================================================================
-
-# ------------------------------------------------------------------------------
-# SECTION 25: MASTER RENDERER DISPATCHER
-# ------------------------------------------------------------------------------
 
 """
     ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, Leaders_DF, Sens, Residuals) -> Vector{Dict}
-Primary output orchestrator for generating the selected suite of analytical plots.
 """
 function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts,
-    Leaders_DF::AbstractDataFrame=DataFrame(),
-    Sens::Vector{Vector{Float64}}=Vector{Float64}[],
-    Residuals::Vector{Vector{Float64}}=Vector{Float64}[])
+    Leaders_DF::AbstractDataFrame=DataFrame(), Sens::AbstractVector=Vector{Vector{Float64}}[], Residuals::AbstractVector=Vector{Vector{Float64}}[])
 
-    C      = Main.Sys_Fast.FAST_Data_DDEC
-    graphs = Dict{String,Any}[]
+    graphs, graphs_lock = Dict{String,Any}[], ReentrantLock()
+    # Cleaner Error Reporting to prevent REPL overflows
+    ARTS_SafeErrorLog_DDEF(tag, msg, e) = Main.Sys_Fast.FAST_Log_DDEF("ARTS", tag, "$msg: $(typeof(e)) -> $(sprint(showerror, e))", "WARN")
+    Main.Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_INIT", "Parallel Visual Dispatch Initiated...", "WAIT")
+
+    Combos = collect(combinations(1:3, 2))
+    tasks  = Task[]
+
+    # ------------------------------------------------------------------------------
+    # STAGED RENDERING ORCHESTRATOR (1-13 Scientific Order)
+    # ------------------------------------------------------------------------------
+    # Implementation of a lossless, staged delivery architecture to reduce initial feedback latency.
+    Mode = get(Opts, "Mode", :Full) # Support for :Full, :Priority (1-5), :Deferred (6-13)
     
-    Main.Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_INIT", "Constructing high-fidelity plot suite...", "WAIT")
+    # --- STAGE 1: PRIORITY GROUPS (1: Pareto, 2: Fit) ---
+    if Mode == :Full || Mode == :Priority
+        for m in eachindex(OutNames)
+            Models[m]["Status"] != "OK" && continue
+            name   = OutNames[m]
+            y_pred = ARTS_Predict_DDEF(Models[m], X)
 
-    graphs_lock = ReentrantLock()
-    NumVars     = 3
-    NumOut      = length(OutNames)
-
-    Combos = NumVars >= 2 ? collect(combinations(1:NumVars, 2)) : Vector{Int}[]
-
-    tasks = []
-
-    for m in 1:NumOut
-        Models[m]["Status"] != "OK" && continue
-        name = OutNames[m]
-
-        for v in 1:NumVars
-            push!(tasks, Threads.@spawn begin
-                try
-                    p = ARTS_RenderTrend_DDEF(Models[m], X, Y[:, m], [v], [InNames[v]], name)
-                    lock(graphs_lock) do
-                        push!(graphs, Dict(
-                            "Type"      => "Trend",
-                            "Title"     => "Trend: $name ($(InNames[v]))",
-                            "Plot"      => p,
-                            "OutputIdx" => m,
-                            "SubIdx"    => v
-                        ))
-                    end
-                catch e
-                    Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_ERR", "Trend plot failed for $(InNames[v]): $e", "WARN")
-                end
-            end)
-        end
-
-        if get(Opts, "Pareto", true)
-            push!(tasks, Threads.@spawn begin
-                try
-                    p1     = ARTS_RenderPareto_DDEF(Models[m], name, R2s[m], Q2s[m])
-                    y_pred = ARTS_Predict_DDEF(Models[m], X)
-                    p2     = ARTS_RenderFit_DDEF(Y[:, m], y_pred, name)
-
-                    lock(graphs_lock) do
-                        push!(graphs, Dict("Type" => "Pareto", "Title" => "Pareto: $name",      "Plot" => p1, "OutputIdx" => m, "SubIdx" => 0))
-                        push!(graphs, Dict("Type" => "Fit",    "Title" => "Fit: $name",         "Plot" => p2, "OutputIdx" => m, "SubIdx" => 0))
-                    end
-
-                    if m <= length(Residuals) && !isempty(Residuals[m])
-                        p_qq  = ARTS_RenderQQPlot_DDEF(Residuals[m], name)
-                        p_res = ARTS_RenderResidualsVsPred_DDEF(y_pred, Residuals[m], name)
-                        lock(graphs_lock) do
-                            push!(graphs, Dict("Type" => "QQ",        "Title" => "Q-Q Plot: $name", "Plot" => p_qq,  "OutputIdx" => m, "SubIdx" => 0))
-                            push!(graphs, Dict("Type" => "Residuals", "Title" => "Residuals: $name", "Plot" => p_res, "OutputIdx" => m, "SubIdx" => 0))
-                        end
-                    end
-
-                    if m <= length(Sens) && !isempty(Sens[m])
-                        p_sens = ARTS_RenderSensitivityPlot_DDEF(Sens[m], InNames, name)
-                        lock(graphs_lock) do
-                            push!(graphs, Dict("Type" => "Sensitivity", "Title" => "Sensitivity: $name", "Plot" => p_sens, "OutputIdx" => m, "SubIdx" => 0))
-                        end
-                    end
-                catch e
-                    Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_ERR", "Diagnostic plot failed for $name: $e", "WARN")
-                end
-            end)
-        end
-
-        for c in Combos
-            lbls = [InNames[c[1]], InNames[c[2]]]
-            tag  = "$(lbls[1])-$(lbls[2])"
-
-            if get(Opts, "Surface", true)
-                push!(tasks, Threads.@spawn begin
-                    try
-                        p1 = ARTS_RenderSurface_DDEF(Models[m], X, c, lbls, name)
-                        p2 = ARTS_RenderContour_DDEF(Models[m], X, c, lbls, name)
-                        lock(graphs_lock) do
-                            ix = findfirst(==(c), Combos)
-                            push!(graphs, Dict("Type" => "Surface", "Title" => "RSM: $name ($tag)",     "Plot" => p1, "OutputIdx" => m, "SubIdx" => ix))
-                            push!(graphs, Dict("Type" => "Contour", "Title" => "Contour: $name ($tag)",   "Plot" => p2, "OutputIdx" => m, "SubIdx" => ix))
-                        end
-                    catch e
-                         Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_ERR", "Surface/Contour plot failed for $name: $e", "WARN")
-                    end
-                end)
-            end
-        end
-
-        perms = NumVars >= 2 ? collect(permutations(1:NumVars, 2)) : Vector{Int}[]
-        for (ix, c) in enumerate(perms)
-            if get(Opts, "Interaction", true)
-                push!(tasks, Threads.@spawn begin
-                    try
-                        lbls = [InNames[c[1]], InNames[c[2]]]
-                        p = ARTS_RenderSlice_DDEF(Models[m], X, c, lbls, name)
-                        lock(graphs_lock) do
-                            push!(graphs, Dict(
-                                "Type"      => "Slice",
-                                "Title"     => "Interact: $name ($(lbls[1]) vs $(lbls[2]))",
-                                "Plot"      => p,
-                                "OutputIdx" => m,
-                                "SubIdx"    => ix
-                            ))
-                        end
-                    catch e
-                        Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_ERR", "Interaction plot failed for $name: $e", "WARN")
-                    end
-                end)
-            end
-        end
-
-        # Execution of the global Interaction Landscape (Heatmap) for the current response variable.
-        push!(tasks, Threads.@spawn begin
-            try
-                p = ARTS_RenderInteractionMatrix_DDEF(Models[m], InNames, name)
+            # [1] Pareto (QA)
+            t1 = Threads.@spawn try
+                p = ARTS_Draw_DDEF(ARTS_PlotPareto_DDES(), Models[m], name, R2s[m], Q2s[m])
                 lock(graphs_lock) do
-                    push!(graphs, Dict(
-                        "Type"      => "IntMatrix",
-                        "Title"     => "Int. Matrix: $name",
-                        "Plot"      => p,
-                        "OutputIdx" => m,
-                        "SubIdx"    => 0
-                    ))
+                    push!(graphs, Dict("Type"=>"Pareto", "Title"=>"Pareto: $name", "Plot"=>p, "OutputIdx"=>m, "SubIdx"=>0))
                 end
-            catch e
-                Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_ERR", "Interaction Matrix plot failed for $name: $e", "WARN")
+            catch e; ARTS_SafeErrorLog_DDEF("ERR_P1_PARETO", "Pareto failed", e); end
+            push!(tasks, t1)
+
+            # [2] Fit Audit (QA)
+            t2 = Threads.@spawn try
+                p = ARTS_Draw_DDEF(ARTS_PlotFit_DDES(), Y[:, m], y_pred, name)
+                lock(graphs_lock) do
+                    push!(graphs, Dict("Type"=>"Fit", "Title"=>"Fit Audit: $name", "Plot"=>p, "OutputIdx"=>m, "SubIdx"=>0))
+                end
+            catch e; ARTS_SafeErrorLog_DDEF("ERR_P2_FITAUDIT", "Fit failed", e); end
+            push!(tasks, t2)
+        end
+        wait.(tasks)
+        empty!(tasks)
+        Main.Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_POLL", "Packet 1 of 2 (Priority) completed.", "OK")
+    end
+
+    # --- STAGE 2: DEFERRED GROUPS (3-13: RESP, SURFACE, DIAG, SPACE) ---
+    if Mode == :Full || Mode == :Deferred
+        for m in eachindex(OutNames)
+            Models[m]["Status"] != "OK" && continue
+            name   = OutNames[m]
+            y_pred = ARTS_Predict_DDEF(Models[m], X)
+
+            # [3] Response Trends (RESP)
+            for v in 1:3
+                tv = Threads.@spawn try
+                    p = ARTS_Draw_DDEF(ARTS_PlotTrend_DDES(), Models[m], X, Y[:, m], [v], [InNames[v]], name)
+                    lock(graphs_lock) do
+                        push!(graphs, Dict("Type"=>"Trend", "Title"=>"Trend: $name ($(InNames[v]))", "Plot"=>p, "OutputIdx"=>m, "SubIdx"=>v))
+                    end
+                catch e; ARTS_SafeErrorLog_DDEF("ERR_P3_TREND", "Trend failed", e); end
+                push!(tasks, tv)
             end
-        end)
-    end
 
-    if get(Opts, "DesignSpace", true) && !isempty(Combos)
-        for c in Combos
-            lbls = [InNames[c[1]], InNames[c[2]]]
-            # Calculation of the tertiary exclusion index for 3D coordinate identification.
-            iz = first(setdiff(1:3, c))
-            push!(lbls, InNames[iz])
-
-            push!(tasks, Threads.@spawn begin
-                try
-                    p1                  = ARTS_RenderSpace_DDEF(Models, Goals, X, c, lbls, Leaders_DF)
-                    cand_plot, cand_pct = ARTS_RenderCandidates_DDEF(Models, Goals, X, c, lbls, Leaders_DF)
+            # [4] Interaction Slices (RESP)
+            for (ix, c) in enumerate(Combos)
+                ts = Threads.@spawn try
+                    lbls_12 = [InNames[c[1]], InNames[c[2]]]
+                    lbls_21 = [InNames[c[2]], InNames[c[1]]]
+                    p1 = ARTS_Draw_DDEF(ARTS_PlotSlice_DDES(), Models[m], X, [c[1], c[2]], lbls_12, name)
+                    p2 = ARTS_Draw_DDEF(ARTS_PlotSlice_DDES(), Models[m], X, [c[2], c[1]], lbls_21, name)
                     lock(graphs_lock) do
-                        ix = findfirst(==(c), Combos)
-                        push!(graphs, Dict("Type" => "DesignSpace", "Title" => "Design Space: $(lbls[1])-$(lbls[2])", "Plot" => p1, "OutputIdx" => NumOut + 1, "SubIdx" => ix))
-                        push!(graphs, Dict("Type" => "Candidates",  "Title" => "Candidates: $(lbls[1])-$(lbls[2])",  "Plot" => cand_plot, "OutputIdx" => NumOut + 1, "SubIdx" => ix))
+                        push!(graphs, Dict("Type"=>"Slice", "Title"=>"Interact: $name ($(lbls_12[1]) by $(lbls_12[2]))", "Plot"=>p1, "OutputIdx"=>m, "SubIdx"=>ix))
+                        push!(graphs, Dict("Type"=>"Slice", "Title"=>"Interact: $name ($(lbls_21[1]) by $(lbls_21[2]))", "Plot"=>p2, "OutputIdx"=>m, "SubIdx"=>ix))
                     end
-                catch e
-                    Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_ERR", "Design Space plot failed for $(lbls[1])-$(lbls[2]): $e", "WARN")
+                catch e; ARTS_SafeErrorLog_DDEF("ERR_P4_SLICE", "Slice failed", e); end
+                push!(tasks, ts)
+            end
+
+            # [5] Interaction Matrix (RESP)
+            t5 = Threads.@spawn try
+                p = ARTS_Draw_DDEF(ARTS_PlotInteractionMatrix_DDES(), Models[m], InNames, name)
+                lock(graphs_lock) do
+                    push!(graphs, Dict("Type"=>"IntMatrix", "Title"=>"Landscape: $name", "Plot"=>p, "OutputIdx"=>m, "SubIdx"=>0))
                 end
-            end)
+            catch e; ARTS_SafeErrorLog_DDEF("ERR_P5_IMATRIX", "Landscape failed", e); end
+            push!(tasks, t5)
+
+            # [6 & 7] Surface & Contour (SURFACE)
+            for (ix, c) in enumerate(Combos)
+                tsury = Threads.@spawn try
+                    lbls = [InNames[c[1]], InNames[c[2]]]
+                    p1 = ARTS_Draw_DDEF(ARTS_PlotSurface_DDES(), Models[m], X, [c[1], c[2]], lbls, name)
+                    p2 = ARTS_Draw_DDEF(ARTS_PlotContour_DDES(), Models[m], X, [c[1], c[2]], lbls, name)
+                    lock(graphs_lock) do
+                        push!(graphs, Dict("Type"=>"Surface", "Title"=>"RSM: $name ($(lbls[1])-$(lbls[2]))", "Plot"=>p1, "OutputIdx"=>m, "SubIdx"=>ix))
+                        push!(graphs, Dict("Type"=>"Contour", "Title"=>"Contour: $name ($(lbls[1])-$(lbls[2]))", "Plot"=>p2, "OutputIdx"=>m, "SubIdx"=>ix))
+                    end
+                catch e; ARTS_SafeErrorLog_DDEF("ERR_P67_SURF", "Surface/Contour failed", e); end
+                push!(tasks, tsury)
+            end
+
+            # [8, 9, 10] Forensics (QQ, Residuals, Sensitivity)
+            t_diag = Threads.@spawn try
+                if m <= length(Residuals) && !isempty(Residuals[m])
+                    p_qq = ARTS_Draw_DDEF(ARTS_PlotQQ_DDES(), Residuals[m], name)
+                    p_res = ARTS_Draw_DDEF(ARTS_PlotResiduals_DDES(), y_pred, Residuals[m], name)
+                    lock(graphs_lock) do
+                        push!(graphs, Dict("Type"=>"QQ", "Title"=>"Q-Q: $name", "Plot"=>p_qq, "OutputIdx"=>m, "SubIdx"=>0))
+                        push!(graphs, Dict("Type"=>"Residuals", "Title"=>"Errors: $name", "Plot"=>p_res, "OutputIdx"=>m, "SubIdx"=>0))
+                    end
+                end
+                if m <= length(Sens) && !isempty(Sens[m])
+                    p_sens = ARTS_Draw_DDEF(ARTS_PlotSensitivity_DDES(), Sens[m], InNames, name)
+                    lock(graphs_lock) do
+                        push!(graphs, Dict("Type"=>"Sensitivity", "Title"=>"Sensitivity: $name", "Plot"=>p_sens, "OutputIdx"=>m, "SubIdx"=>0))
+                    end
+                end
+            catch e; ARTS_SafeErrorLog_DDEF("ERR_P810_DIAG", "Forensics failed", e); end
+            push!(tasks, t_diag)
         end
 
-        if get(Opts, "GoldenZone", true) && NumVars >= 3
-            push!(tasks, Threads.@spawn begin
-                try
-                    p_gz, gz_pct = ARTS_RenderOptimalZone_DDEF(Models, Goals, X, InNames, Leaders_DF)
-                    lock(graphs_lock) do
-                        push!(graphs, Dict("Type" => "OptimalZone", "Title" => "Optimal Zone", "Plot" => p_gz, "OutputIdx" => NumOut + 1, "SubIdx" => 0))
+        # [11, 12, 13] Design Space & Candidates & Golden Zone (SPACE - Composite Viz)
+        t_space = Threads.@spawn try
+            # Critical Sanity Check: Ensure all constituent models are successfully trained.
+            # Composite desirability maps require a complete model portfolio.
+            if all(m -> get(m, "Status", "FAIL") == "OK", Models)
+                if get(Opts, "DesignSpace", true) && !isempty(Combos)
+                    for (ix, c) in enumerate(Combos)
+                        lbls = [InNames[c[1]], InNames[c[2]], InNames[first(setdiff(1:3, c))]]
+                        p_sp = ARTS_Draw_DDEF(ARTS_PlotDesignSpace_DDES(), Models, Goals, X, c, lbls, Leaders_DF)
+                        p_ca, _ = ARTS_Draw_DDEF(ARTS_PlotCandidates_DDES(), Models, Goals, X, c, lbls, Leaders_DF)
+                        lock(graphs_lock) do
+                            push!(graphs, Dict("Type"=>"DesignSpace", "Title"=>"Space: $(lbls[1])-$(lbls[2])", "Plot"=>p_sp, "OutputIdx"=>length(OutNames)+1, "SubIdx"=>ix))
+                            push!(graphs, Dict("Type"=>"Candidates", "Title"=>"Candidates: $(lbls[1])-$(lbls[2])", "Plot"=>p_ca, "OutputIdx"=>length(OutNames)+1, "SubIdx"=>ix))
+                        end
                     end
-                catch e
-                    Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_ERR", "Optimal Zone plot failed: $e", "WARN")
                 end
-            end)
-        end
+                if get(Opts, "GoldenZone", true)
+                    p_gz, _ = ARTS_Draw_DDEF(ARTS_PlotOptimalZone_DDES(), Models, Goals, X, InNames, Leaders_DF)
+                    lock(graphs_lock) do
+                        push!(graphs, Dict("Type"=>"OptimalZone", "Title"=>"Golden Zone", "Plot"=>p_gz, "OutputIdx"=>length(OutNames)+1, "SubIdx"=>0))
+                    end
+                end
+            else
+                Main.Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_SKIP", "Composite visualizations bypassed due to training failure in one or more models.", "WARN")
+            end
+        catch e; ARTS_SafeErrorLog_DDEF("ERR_P1113_SPACE", "Space logic failed", e); end
+        push!(tasks, t_space)
+
+        wait.(tasks)
+        Main.Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_POLL", "Packet 2 of 2 (Deferred) completed.", "OK")
     end
 
-    for t in tasks
-        wait(t)
-    end
-
-# ------------------------------------------------------------------------------
-# SECTION 26: RENDER ORDERING & PRIORITY LOGIC
-# ------------------------------------------------------------------------------
-
-    # Definition of render ordering and priority hierarchy for analytical report clarity.
-    TypePriority = Dict(
-        "Pareto"      => 1,
-        "Fit"         => 2,
-        "Trend"       => 3,
-        "Slice"       => 4,
-        "IntMatrix"   => 5,
-        "Surface"     => 6,
-        "Contour"     => 7,
-        "QQ"          => 8,
-        "Residuals"   => 9,
-        "Sensitivity" => 10,
-        "DesignSpace" => 11,
-        "Candidates"  => 12,
-        "OptimalZone" => 13
+    # 6. Results Ordering Protocol (Scientific Workflow Architecture)
+    # 1-2: QA | 3-5: RESP | 6-10: DIAG & SURFACE | 11-13: SPACE
+    Priority = Dict(
+        "Pareto"=>1, "Fit"=>2, "Trend"=>3, "Slice"=>4, "IntMatrix"=>5,
+        "Surface"=>6, "Contour"=>7, "QQ"=>8, "Residuals"=>9, "Sensitivity"=>10,
+        "DesignSpace"=>11, "Candidates"=>12, "OptimalZone"=>13
     )
-    sort!(graphs, by=g -> (
-        get(TypePriority, g["Type"], 99),
-        get(g, "OutputIdx", 99),
-        get(g, "SubIdx", 0)
-    ))
+    # Sort by Logic: Quality Assurance -> Response Analysis -> Surface Mapping -> Space Exploration
+    sort!(graphs, by = x -> (get(Priority, x["Type"], 99), x["OutputIdx"], x["SubIdx"]))
 
+    Main.Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_COMPLETE", "Portfolio of $(length(graphs)) units ready | Mode: $Mode", length(graphs) > 0 ? "OK" : "WARN")
     return graphs
 end
 
-end
+end # module Lib_Arts

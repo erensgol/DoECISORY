@@ -13,11 +13,17 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
             const context = window.dash_clientside.callback_context;
             const trigger = context.triggered.length > 0 ? context.triggered[0].prop_id : "";
             const tot = (g && Array.isArray(g)) ? g.length : 0;
+            console.log("[DAISHO] Graphs in Store:", tot, "| Trigger:", trigger);
 
-            // Initial state or data reset
-            if (trigger.includes('lens-store-graphs.data') || tot === 0) {
-                return [0, 1, Math.max(1, tot)];
+            // Initial state or data reset OR Data Growth (6 -> 70)
+            if (trigger.includes('lens-store-graphs.data') || (tot > 6 && current_i < 6)) {
+                if (tot === 0) return [0, 1, 1];
+                let idx = (current_i === null || current_i === undefined) ? 0 : current_i;
+                // Preserve current index if it's still valid, otherwise clamp
+                idx = Math.min(idx, tot - 1);
+                return [idx, idx + 1, Math.max(1, tot)];
             }
+            if (tot === 0) return [0, 1, 1];
 
             let idx = (current_i === null || current_i === undefined) ? 0 : current_i;
 

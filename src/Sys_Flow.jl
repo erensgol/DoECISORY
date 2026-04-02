@@ -13,49 +13,83 @@ using DataFrames
 using PlotlyJS
 using Printf
 using Main.Sys_Fast
-using Main.Lib_Arts
+
 
 export FLOW_AskLeader_DDEF, FLOW_NextPhase_DDEF, FLOW_GetCandidates_DDEF,
     FLOW_BuildNextPhase_DDEF, FLOW_CalcNextRange_DDEF, FLOW_WriteLeaders_DDEF,
-    FLOW_CalcAdaptiveRange_DDEF, FLOW_RenderPhaseTransition_DDEF
+    FLOW_CalcAdaptiveRange_DDEF, FLOW_RenderPhaseTransition_DDEF,
+    FLOW_BridgeTransform_DDEF, FLOW_BridgeValidate_DDEF
 
 # ==============================================================================
-# PART A: PHASE TRANSITION ORCHESTRATION
+# PART A: TYPE DEFINITIONS & CONSTANTS & TRANSITION
 # ==============================================================================
+
+"""
+    AbstractFLOW_BoundaryStatus (DDET)
+Trait hierarchy for classifying leader proximity to search space edges.
+"""
+abstract type AbstractFLOW_BoundaryStatus end
+struct FLOW_BoundarySafe_DDES  <: AbstractFLOW_BoundaryStatus end
+struct FLOW_BoundaryLower_DDES <: AbstractFLOW_BoundaryStatus end
+struct FLOW_BoundaryUpper_DDES <: AbstractFLOW_BoundaryStatus end
+
+"""
+    FLOW_BoundaryAlertMap_DDEC
+Centralised map for translating boundary traits into user alerts and system flags.
+"""
+const FLOW_BoundaryAlertMap_DDEC = Dict{DataType, Tuple{Bool, String}}(
+    FLOW_BoundarySafe_DDES  => (true,  "Leader point near centre. Suggest zooming in for finer scan."),
+    FLOW_BoundaryLower_DDES => (false, "Leader point too close to LOWER bound! Shift search space left?"),
+    FLOW_BoundaryUpper_DDES => (false, "Leader point too close to UPPER bound! Shift search space right?")
+)
+
+"""
+    FLOW_ActionTagMap_DDEC
+Standardised action identifiers for search space adaptation telemetry.
+"""
+const FLOW_ActionTagMap_DDEC = Dict{DataType, String}(
+    FLOW_BoundarySafe_DDES  => "ZOOM",
+    FLOW_BoundaryLower_DDES => "SHIFT (AUTO)",
+    FLOW_BoundaryUpper_DDES => "SHIFT (AUTO)"
+)
 
 # ------------------------------------------------------------------------------
 # SECTION 1: PROCESS FLOW LOGIC
 # ------------------------------------------------------------------------------
 
 """
+    FLOW_DetermineBoundaryStatus_DDEF(Val, Min, Max) -> AbstractFLOW_BoundaryStatus
+Classifies the spatial status of a value relative to boundary tolerances.
+"""
+function FLOW_DetermineBoundaryStatus_DDEF(Val::Real, Min::Real, Max::Real)::AbstractFLOW_BoundaryStatus
+    rng  = Max - Min
+    tol  = rng * 0.05
+    Val < Min + tol && return FLOW_BoundaryLower_DDES()
+    Val > Max - tol && return FLOW_BoundaryUpper_DDES()
+    return FLOW_BoundarySafe_DDES()
+end
+
+"""
     FLOW_AskLeader_DDEF(LeaderVal, CurrentRange) -> (Valid, Msg)
 Evaluates the proximity of the selected leader to existing boundaries to prevent search space clipping.
 """
-function FLOW_AskLeader_DDEF(LeaderVal::Float64, CurrentRange::Vector{Float64})
-    min_val, _, max_val = CurrentRange
-    tol                 = (max_val - min_val) * 0.05
-
-    if abs(LeaderVal - min_val) < tol
-        return (false, "Leader point too close to LOWER bound! Shift search space left?")
-    elseif abs(LeaderVal - max_val) < tol
-        return (false, "Leader point too close to UPPER bound! Shift search space right?")
-    else
-        return (true, "Leader point near centre. Suggest zooming in for finer scan.")
-    end
+function FLOW_AskLeader_DDEF(LeaderVal::Real, CurrentRange::AbstractVector{<:Real})
+    status = FLOW_DetermineBoundaryStatus_DDEF(LeaderVal, CurrentRange[1], CurrentRange[3])
+    return get(FLOW_BoundaryAlertMap_DDEC, typeof(status), (true, "Status OK."))
 end
 
 """
     FLOW_NextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor, ShiftFactor) -> Dict
 Orchestrates the transition to the subsequent experimental phase based on leader performance.
 """
-function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Union{String,Nothing},
-    SelectedLeaderID::Union{String,Nothing}="", ZoomFactor::Float64=0.5, ShiftFactor::Float64=0.0)::Dict{String,Any}
+function FLOW_NextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentPhase::Union{AbstractString,Nothing},
+    SelectedLeaderID::Union{AbstractString,Nothing}="", ZoomFactor::Real=0.5, ShiftFactor::Real=0.0)::Dict{String,Any}
     
     (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict("Status" => "FAIL", "Message" => "Invalid master file path provided.")
     (isnothing(CurrentPhase) || isempty(CurrentPhase)) && return Dict("Status" => "FAIL", "Message" => "Current phase not specified.")
     
-    C         = Sys_Fast.FAST_Data_DDEC
-    df_config = Sys_Fast.FAST_ReadExcel_DDEF(MasterFile, C.SHEET_CONFIG)
+    C         = Main.Sys_Fast.FAST_Data_DDEC
+    df_config = Main.Sys_Fast.FAST_ReadExcel_DDEF(MasterFile, C.SHEET_CONFIG)
 
     OldConfig  = Dict{String,Any}[]
     Outputs    = Dict{String,Any}[]
@@ -70,7 +104,7 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
 
                 if haskey(RawConf, "Ingredients")
                     raw_ing  = RawConf["Ingredients"]
-                    iter_ing = raw_ing isa Dict ? values(raw_ing) : raw_ing
+                    iter_ing = (raw_ing isa AbstractDict || raw_ing isa Dict) ? values(raw_ing) : raw_ing
                     OldConfig = map(iter_ing) do item
                         d = Dict{String,Any}(string(k) => v for (k, v) in pairs(item))
                         d["Levels"] = if haskey(d, "Levels")
@@ -92,7 +126,7 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
                 GlobalInfo = Dict{String,Any}(string(k) => v for (k, v) in pairs(get(RawConf, "Global", Dict())))
 
             catch e
-                Sys_Fast.FAST_Log_DDEF("FLOW", "STATE_RESTORE", "JSON configuration sync failed: $e", "FAIL")
+                Main.Sys_Fast.FAST_Log_DDEF("FLOW", "STATE_RESTORE", "JSON configuration sync failed: $e", "FAIL")
             end
         end
     end
@@ -103,7 +137,17 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
     isempty(Leader) && return Dict("Status" => "FAIL", "Message" => "Leader extraction failed for $CurrentPhase.")
 
     Leader["OldConfig"] = OldConfig
-    NewConfig           = FLOW_CalcNextRange_DDEF(Leader, ZoomFactor, ShiftFactor)
+    
+    alerts = String[]
+    vars_only = filter(c -> get(c, "Role", "") == C.ROLE_VAR, OldConfig)
+    for (j, conf) in enumerate(vars_only)
+        lvls = get(conf, "Levels", [0.0, 0.0, 0.0])
+        val  = (j <= length(Leader["Vals"])) ? Leader["Vals"][j] : lvls[2]
+        ok, msg = FLOW_AskLeader_DDEF(val, lvls)
+        !ok && push!(alerts, "[Var $(j)]: " * msg)
+    end
+
+    NewConfig = FLOW_CalcNextRange_DDEF(Leader, ZoomFactor, ShiftFactor)
 
     p_num        = tryparse(Int, replace(CurrentPhase, "Phase" => ""))
     target_phase = "Phase$(isnothing(p_num) ? 2 : p_num + 1)"
@@ -116,8 +160,9 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Un
         "OldConfig"    => OldConfig,
         "LeaderValues" => collect(get(Leader, "Vals", Float64[])),
         "LeaderScore"  => get(Leader, "Score", 0.0),
-        "Outputs"      => Outputs,
-        "Global"       => GlobalInfo,
+        "Outputs"        => Outputs,
+        "Global"         => GlobalInfo,
+        "BoundaryAlerts" => alerts
     )
 end
 
@@ -125,18 +170,18 @@ end
     FLOW_GetCandidates_DDEF(MasterFile::String, CurrentPhase::String)::Vector{Dict{String, Any}}
 Extracts potential leaders for the specified phase, sorted by scientific score.
 """
-function FLOW_GetCandidates_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Union{String,Nothing})::Vector{Dict{String,Any}}
+function FLOW_GetCandidates_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentPhase::Union{AbstractString,Nothing})::Vector{Dict{String,Any}}
     (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict{String,Any}[]
     (isnothing(CurrentPhase) || isempty(CurrentPhase)) && return Dict{String,Any}[]
     
-    C  = Sys_Fast.FAST_Data_DDEC
-    df = Sys_Fast.FAST_ReadExcel_DDEF(MasterFile, C.PREFIX_LEADERS * CurrentPhase)
+    C  = Main.Sys_Fast.FAST_Data_DDEC
+    df = Main.Sys_Fast.FAST_ReadExcel_DDEF(MasterFile, C.PREFIX_LEADERS * CurrentPhase)
     isempty(df) && return Dict{String,Any}[]
 
     candidates = map(eachrow(df)) do row
         d          = Dict{String,Any}(string(k) => v for (k, v) in pairs(row))
         lookup     = Dict(uppercase(string(k)) => v for (k, v) in pairs(row))
-        d["Score"] = Sys_Fast.FAST_SafeNum_DDEF(get(lookup, "SCORE", 0.0))
+        d["Score"] = Main.Sys_Fast.FAST_SafeNum_DDEF(get(lookup, "SCORE", 0.0))
         d
     end
 
@@ -147,35 +192,24 @@ end
     FLOW_CalcAdaptiveRange_DDEF(Val, L_Old, Zoom, Shift) -> Vector{Float64}
 Internal helper for search space adaptation logic.
 """
-function FLOW_CalcAdaptiveRange_DDEF(Val::Float64, L_Old::Vector{Float64}, Zoom::Real, Shift::Real)
-    Range = L_Old[3] - L_Old[1]
+function FLOW_CalcAdaptiveRange_DDEF(Val::Real, L_Old::AbstractVector{<:Real}, Zoom::Real, Shift::Real)
+    rng      = L_Old[3] - L_Old[1]
+    status   = FLOW_DetermineBoundaryStatus_DDEF(Val, L_Old[1], L_Old[3])
+    
+    # Adaptive span determination: ZOOM if safe, MAINTAIN if at limit.
+    new_rng = (status isa FLOW_BoundarySafe_DDES) ? rng * Zoom : rng
 
-    # Execution of the boundary proximity compensation protocol to manage search space clipping.
-    Tol      = Range * 0.05
-    at_limit = abs(Val - L_Old[1]) < Tol || abs(Val - L_Old[3]) < Tol
+    shift_val = Shift * (new_rng * 0.5)
+    new_mid   = Val + shift_val
 
-    New_Range = at_limit ? Range : Range * Zoom
+    new_min = max(0.0, new_mid - new_rng / 2.0)
+    new_max = new_min + new_rng
+    
+    # Absolute physical limit clamping (Forensic consistency).
+    org_max = L_Old[3] + rng * 0.5
+    new_max = (org_max > 0.0) ? min(new_max, org_max) : new_max
 
-    # Application of manual translation (Shift) relative to the half-width of the recalibrated range.
-    ShiftVal = Shift * (New_Range * 0.5)
-    New_Mid  = Val + ShiftVal
-
-    New_Min = New_Mid - New_Range / 2
-    New_Max = New_Mid + New_Range / 2
-
-    # Enforcement of boundary constraint enforcement while maintaining range conservation.
-    if New_Min < 0.0
-        overshoot = -New_Min
-        New_Min   = 0.0
-        New_Max  += overshoot
-    end
-
-    org_max = L_Old[3] + Range * 0.5
-    if New_Max > org_max && org_max > 0.0
-        New_Max = org_max
-    end
-
-    return Float64[New_Min, New_Mid, New_Max]
+    return Float64[new_min, new_mid, new_max]
 end
 
 # ------------------------------------------------------------------------------
@@ -190,8 +224,8 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
     SelectedLeaderID::Union{String,Nothing}="", ZoomFactor::Float64=0.5, Method::String="TL09", ShiftFactor::Float64=0.0)::Dict{String,Any}
     
     (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict("Status" => "FAIL", "Message" => "Invalid master file path provided.")
-    C   = Sys_Fast.FAST_Data_DDEC
-    Log = Sys_Fast.FAST_Log_DDEF
+    C   = Main.Sys_Fast.FAST_Data_DDEC
+    Log = Main.Sys_Fast.FAST_Log_DDEF
 
     res = FLOW_NextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor, ShiftFactor)
     res["Status"] != "OK" && return res
@@ -204,18 +238,18 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
     vol        = Float64(get(GlobalData, "Volume", 5.0))
     conc       = Float64(get(GlobalData, "Concentration", 10.0))
 
-    _get(o, k, d) = haskey(o, string(k)) ? o[string(k)] : (haskey(o, Symbol(k)) ? o[Symbol(k)] : d)
+    FLOW_GetSafeKey_DDEF(o, k, d) = haskey(o, string(k)) ? o[string(k)] : (haskey(o, Symbol(k)) ? o[Symbol(k)] : d)
 
     audit_rows = map(NewConfig) do c
-        lvls = _get(c, "Levels", [0.0, 0.0, 0.0])
+        lvls = FLOW_GetSafeKey_DDEF(c, "Levels", [0.0, 0.0, 0.0])
         Dict(
-            "Name" => string(_get(c, "Name", "Unknown")), 
-            "Role" => string(_get(c, "Role", "Fixed")),
+            "Name" => string(FLOW_GetSafeKey_DDEF(c, "Name", "Unknown")), 
+            "Role" => string(FLOW_GetSafeKey_DDEF(c, "Role", "Fixed")),
             "L1"   => Float64(lvls[1]), 
             "L2"   => Float64(lvls[2]), 
             "L3"   => Float64(lvls[3]), 
-            "MW"   => Float64(_get(c, "MW", 0.0)),
-            "Unit" => string(_get(c, "Unit", "-"))
+            "MW"   => Float64(FLOW_GetSafeKey_DDEF(c, "MW", 0.0)),
+            "Unit" => string(FLOW_GetSafeKey_DDEF(c, "Unit", "-"))
         )
     end
 
@@ -227,7 +261,7 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
         Log("FLOW", "CHEM_SKIP", "Stoichiometry not configured or zero mass. Proceeding...", "INFO")
     end
 
-    var_indices = findall(c -> _get(c, "Role", "") == C.ROLE_VAR, NewConfig)
+    var_indices = findall(c -> get(c, "Role", "") == C.ROLE_VAR, NewConfig)
     length(var_indices) != 3 && return Dict("Status" => "FAIL", "Message" => "System requires 3 ingredients for phase transitions.")
 
     design_coded = Main.Lib_Core.CORE_GenDesign_DDEF(Method, 3)
@@ -246,7 +280,6 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
     )
 
     # Execution of the centralised stoichiometry audit engine (Lib_Mole integration).
-    # Verification of MASS_ and FILL_ dimensionality to ensure report integrity.
     df_chem = Main.Lib_Mole.MOLE_ProcessDesign_DDEF(real_matrix, audit_rows, vol, conc)
 
     df = hcat(df_sys, df_chem)
@@ -265,7 +298,7 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
         end
     end
     df[!, C.COL_SCORE] = Vector{Union{Missing,Float64}}(missing, N_Runs)
-    current_config                = Sys_Fast.FAST_ReadConfig_DDEF(MasterFile)
+    current_config                = Main.Sys_Fast.FAST_ReadConfig_DDEF(MasterFile)
     current_config["Ingredients"] = [Dict{String,Any}(string(k) => v for (k, v) in pairs(c)) for c in NewConfig]
 
     g_info                   = get(current_config, "Global", Dict{String,Any}())
@@ -275,7 +308,7 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
     out_names = [string(get(o, "Name", "")) for o in get(res, "Outputs", []) if !isempty(get(o, "Name", ""))]
     in_names  = [get(c, "Name", "") for c in NewConfig]
 
-    success = Sys_Fast.FAST_InitMaster_DDEF(MasterFile, in_names, out_names, df, current_config)
+    success = Main.Sys_Fast.FAST_InitMaster_DDEF(MasterFile, in_names, out_names, df, current_config)
     !success && return Dict("Status" => "FAIL", "Message" => "Excel commit failed for $TargetPhase.")
 
     Log("FLOW", "PHASE_BUILD", "Protocol $TargetPhase ($N_Runs runs) committed to Vault.", "OK")
@@ -295,11 +328,11 @@ end
 Calculates the adaptive search space for the subsequent phase using Zoom (compression) or Shift (translation).
 """
 function FLOW_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5, ShiftFactor::Float64=0.0)
-    C       = Sys_Fast.FAST_Data_DDEC
+    C       = Main.Sys_Fast.FAST_Data_DDEC
     NewConf = deepcopy(LeaderInfo["OldConfig"])
     SelVals = LeaderInfo["Vals"]
 
-    Sys_Fast.FAST_Log_DDEF("FLOW", "SEARCH_SPACE", "Calculating adaptive design update (Z=$(ZoomFactor), S=$(ShiftFactor))...", "WAIT")
+    Main.Sys_Fast.FAST_Log_DDEF("FLOW", "SEARCH_SPACE", "Calculating adaptive design update (Z=$(ZoomFactor), S=$(ShiftFactor))...", "WAIT")
 
     vars     = [(i, conf) for (i, conf) in enumerate(NewConf) if get(conf, "Role", "Variable") == C.ROLE_VAR]
     n_update = min(length(vars), length(SelVals))
@@ -311,13 +344,12 @@ function FLOW_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5, Shif
 
         conf["Levels"] = FLOW_CalcAdaptiveRange_DDEF(Val, L_Old, ZoomFactor, ShiftFactor)
 
-        Range     = L_Old[3] - L_Old[1]
-        Tol       = Range * 0.05
-        at_limit  = abs(Val - L_Old[1]) < Tol || abs(Val - L_Old[3]) < Tol
-        action    = at_limit ? "SHIFT (AUTO)" : (abs(ShiftFactor) > 0.05 ? "SHIFT (MANUAL)" : "ZOOM")
-        Sys_Fast.FAST_Log_DDEF("FLOW", action, "Var $i -> $(action)", "LIST")
+        status = FLOW_DetermineBoundaryStatus_DDEF(Val, L_Old[1], L_Old[3])
+        action = (abs(ShiftFactor) > 0.05) ? "SHIFT (MANUAL)" : get(FLOW_ActionTagMap_DDEC, typeof(status), "UPDATE")
+        
+        Main.Sys_Fast.FAST_Log_DDEF("FLOW", action, "Var $i -> $(action)", "LIST")
     end
-    Sys_Fast.FAST_Log_DDEF("FLOW", "SEARCH_SPACE", "New space configured successfully.", "OK")
+    Main.Sys_Fast.FAST_Log_DDEF("FLOW", "SEARCH_SPACE", "New space configured successfully.", "OK")
     return NewConf
 end
 
@@ -328,22 +360,56 @@ Persists prioritized candidates for the current phase to the shared master recor
 function FLOW_WriteLeaders_DDEF(File::Union{String,Nothing}, Phase::Union{String,Nothing}, LeadersDF::DataFrame)
     (isnothing(File) || isempty(File) || isnothing(Phase) || isempty(Phase)) && return false
     
-    C          = Sys_Fast.FAST_Data_DDEC
+    C          = Main.Sys_Fast.FAST_Data_DDEC
     sheet_name = C.PREFIX_LEADERS * Phase
 
     isempty(LeadersDF) && return false
 
     try
-        Sys_Fast.FAST_SafeExcelWrite_DDEF(File, Dict(sheet_name => LeadersDF))
+        Main.Sys_Fast.FAST_SafeExcelWrite_DDEF(File, Dict(sheet_name => LeadersDF))
         return true
     catch e
-        Sys_Fast.FAST_Log_DDEF("FLOW", "IO_ERROR", "WriteLeaders Failed: $e", "FAIL")
+        Main.Sys_Fast.FAST_Log_DDEF("FLOW", "IO_ERROR", "WriteLeaders Failed: $e", "FAIL")
         return false
     end
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 4: PHASE TRANSITION VISUALISATION
+# SECTION 4: CROSS-PROJECT BRIDGE TRANSFORMS
+# ------------------------------------------------------------------------------
+
+"""
+    FLOW_BridgeTransform_DDEF(Val, Alpha, Beta) -> Float64
+Applies an affine transformation to transfer a leader value across experimental systems.
+"""
+function FLOW_BridgeTransform_DDEF(Val::Real, Alpha::Real, Beta::Real)::Float64
+    return Float64(Alpha * Val + Beta)
+end
+
+"""
+    FLOW_BridgeValidate_DDEF(Val, MinLimit, MaxLimit) -> (Valid, ClampedVal, Warning)
+Enforces physical laboratory constraints on a transformed value.
+"""
+function FLOW_BridgeValidate_DDEF(Val::Real, MinLimit::Real, MaxLimit::Real)::Tuple{Bool,Float64,String}
+    v_f   = Float64(Val)
+    min_f = Float64(MinLimit)
+    max_f = Float64(MaxLimit)
+
+    min_f >= max_f && return (true, v_f, "")
+
+    clamped = clamp(v_f, min_f, max_f)
+    if clamped != v_f
+        bound_name = (v_f < min_f) ? "LOWER" : "UPPER"
+        bound_val  = (v_f < min_f) ? min_f : max_f
+        msg = "Value $(round(v_f; digits=2)) exceeds $bound_name bound $(round(bound_val; digits=2)). Clamped."
+        return (false, clamped, msg)
+    end
+
+    return (true, v_f, "")
+end
+
+# ------------------------------------------------------------------------------
+# SECTION 5: PHASE TRANSITION VISUALISATION
 # ------------------------------------------------------------------------------
 
 """
@@ -352,8 +418,7 @@ Visualises the adaptation of search space boundaries between sequential experime
 Standardised Coded Scale: Current boundaries are mapped to [-1, 1].
 """
 function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVector, LeaderVals::AbstractVector)
-    # Integration of the Daisho palette via synchronised binding to Sys_Fast standards for consistent visualisation.
-    FD = Sys_Fast.FAST_Data_DDEC
+    FD = Main.Sys_Fast.FAST_Data_DDEC
 
     vars = [(i, c) for (i, c) in enumerate(OldConfig) if get(c, "Role", "Variable") == FD.ROLE_VAR]
     n_vars = length(vars)
@@ -366,28 +431,27 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
 
     traces      = GenericTrace[]
     annotations = Dict{String,Any}[]
-    y_nms       = [get(c, "Name", "Var$i") for (i, c) in vars]
+    new_vars = [c for c in NewConfig if get(c, "Role", "Variable") == FD.ROLE_VAR]
+
+    y_nms       = [j <= length(new_vars) ? get(new_vars[j], "Name", "Var$j") : get(c, "Name", "Var$j") for (j, (i, c)) in enumerate(vars)]
 
     for (j, (i, conf)) in enumerate(vars)
         L_Old = Float64.(get(conf, "Levels", [0.0, 0.0, 0.0]))
-        
-        v_name = get(conf, "Name", "")
-        n_idx  = findfirst(c -> get(c, "Name", "") == v_name, NewConfig)
-        L_New  = !isnothing(n_idx) ? Float64.(get(NewConfig[n_idx], "Levels", L_Old)) : L_Old
+        L_New = j <= length(new_vars) ? Float64.(get(new_vars[j], "Levels", L_Old)) : L_Old
 
         y_pos = n_vars - j + 1
 
         # Formal mapping of selected leader coordinates across the adaptive space.
         Val = (j <= length(LeaderVals)) ? Float64(LeaderVals[j]) : L_Old[2]
         
-        # NORMALISATION PROTOCOL: Implementation of coordinate mapping from Current [Min, Max] to the standardised range of [-1.0, 1.0].
         base_mid  = (L_Old[1] + L_Old[3]) / 2.0
         base_span = max(L_Old[3] - L_Old[1], 1e-5)
-        norm(v)   = (v - base_mid) / (base_span / 2.0)
+        FLOW_NormaliseValue_DDEF(v) = (v - base_mid) / (base_span / 2.0)
 
-        n_new_min = norm(L_New[1])
-        n_new_max = norm(L_New[3])
-        n_leader  = norm(Val)
+        n_new_min = clamp(FLOW_NormaliseValue_DDEF(L_New[1]), AXIS_LO, AXIS_HI)
+        n_new_max = clamp(FLOW_NormaliseValue_DDEF(L_New[3]), AXIS_LO, AXIS_HI)
+        n_new_mid = clamp(FLOW_NormaliseValue_DDEF(L_New[2]), AXIS_LO, AXIS_HI)
+        n_leader  = FLOW_NormaliseValue_DDEF(Val)
 
         push!(traces, scatter(; 
             x=[-1.0, 1.0], y=[y_pos, y_pos], mode="lines",
@@ -407,7 +471,17 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
             hoverinfo="text",
             hovertext="New: $(round(L_New[1]; digits=2)) → $(round(L_New[3]; digits=2))"
         ))
-        # Provision of raw boundary annotations for experimental clarity.
+        
+        push!(traces, scatter(; 
+            x=[n_new_mid], y=[y_pos], mode="markers", 
+            name="Target Centre",
+            legendgroup="Target", 
+            marker=attr(symbol="circle", size=12, color=FD.COLOUR_TONGRE, line=attr(color=FD.COLOUR_PURWHI, width=2)),
+            showlegend=false,
+            hoverinfo="text",
+            hovertext="Target Centre: $(round(L_New[2]; digits=2))"
+        ))
+
         y_ann = y_pos - 0.35
         push!(annotations, Dict(
             "x" => n_new_min, "y" => y_ann, "xref" => "x", "yref" => "y",

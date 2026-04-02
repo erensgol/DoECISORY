@@ -14,30 +14,79 @@ using Unitful
 using Statistics
 using Main.Sys_Fast
 
-export MOLE_ParseTable_DDEF, MOLE_QuickAudit_DDEF, MOLE_CalcMass_DDEF,
-    MOLE_ApproxEq_DDEF, MOLE_ValidatePhysicalUnit_DDEF,
-    MOLE_AuditMatrix_DDEF, MOLE_AuditBatch_DDEF, MOLE_ValidateDesignFeasibility_DDEF, MOLE_Ingredient_DDES,
-    MOLE_ApplyRadioDecay_DDEF, MOLE_ProcessDesign_DDEF, MOLE_GetPercentageEquivalent_DDEF
+export MOLE_ParseTable_DDEF, MOLE_QuickAudit_DDEF, 
+    MOLE_CalcMass_DDEF, MOLE_ApproxEq_DDEF, 
+    MOLE_ValidatePhysicalUnit_DDEF, MOLE_AuditMatrix_DDEF, 
+    MOLE_AuditBatch_DDEF, MOLE_ValidateDesignFeasibility_DDEF, 
+    MOLE_Ingredient_DDES, MOLE_ApplyRadioDecay_DDEF, 
+    MOLE_ProcessDesign_DDEF, MOLE_GetPercentageEquivalent_DDEF
 
 # ==============================================================================
 # PART A: CHEMICAL DATA STRUCTURES & MODELS
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 1: INGREDIENT DEFINITION (DDES Struct)
+# SECTION 1: INGREDIENT DEFINITION
 # ------------------------------------------------------------------------------
 
 """
     MOLE_Ingredient_DDES
 Represents chemical and operational properties of a single component.
 """
+abstract type AbstractIngredientRole end
+struct MOLE_RoleVariable_DDES <: AbstractIngredientRole end
+struct MOLE_RoleFixed_DDES    <: AbstractIngredientRole end
+struct MOLE_RoleFiller_DDES   <: AbstractIngredientRole end
+
+abstract type AbstractStoicUnit end
+struct MOLE_UnitMass_DDES          <: AbstractStoicUnit end
+struct MOLE_UnitMolar_DDES         <: AbstractStoicUnit end
+struct MOLE_UnitConcentration_DDES <: AbstractStoicUnit end
+struct MOLE_UnitOther_DDES         <: AbstractStoicUnit end
+
+const MOLE_UnitMap_DDEC = Dict{String, Tuple{AbstractStoicUnit, Float64}}(
+    ""           => (MOLE_UnitMolar_DDES(), 1.0),
+    "mr"         => (MOLE_UnitMolar_DDES(), 1.0),
+    "ratio"      => (MOLE_UnitMolar_DDES(), 1.0),
+    "-"          => (MOLE_UnitMolar_DDES(), 1.0),
+    "%m"         => (MOLE_UnitMolar_DDES(), 0.01),
+    "%"          => (MOLE_UnitMolar_DDES(), 0.01),
+    "m"          => (MOLE_UnitConcentration_DDES(), 1000.0),
+    "mol/l"      => (MOLE_UnitConcentration_DDES(), 1000.0),
+    "molar"      => (MOLE_UnitConcentration_DDES(), 1000.0),
+    "mm"         => (MOLE_UnitConcentration_DDES(), 1.0),
+    "mmol/l"     => (MOLE_UnitConcentration_DDES(), 1.0),
+    "millimolar" => (MOLE_UnitConcentration_DDES(), 1.0),
+    "um"         => (MOLE_UnitConcentration_DDES(), 0.001),
+    "μm"         => (MOLE_UnitConcentration_DDES(), 0.001),
+    "micromolar" => (MOLE_UnitConcentration_DDES(), 0.001),
+    "umol/l"     => (MOLE_UnitConcentration_DDES(), 0.001)
+)
+
+const MOLE_RoleMap_DDEC = Dict{String, AbstractIngredientRole}(
+    "variable" => MOLE_RoleVariable_DDES(),
+    "fixed"    => MOLE_RoleFixed_DDES(),
+    "filler"   => MOLE_RoleFiller_DDES()
+)
+
+const MOLE_TimeFactorMap_DDEC = Dict{String, Float64}(
+    "SEC"       => 1/60,
+    "SECONDS"   => 1/60,
+    "MIN"       => 1.0,
+    "MINS"      => 1.0,
+    "MINUTES"   => 1.0,
+    "HOUR"      => 60.0,
+    "HRS"       => 60.0,
+    "HR"        => 60.0,
+    "HOURS"     => 60.0,
+    "DAY"       => 1440.0,
+    "DAYS"      => 1440.0
+)
+
 struct MOLE_Ingredient_DDES
     Name::String
-    # Recognised operational roles: Variable, Fixed, or Filler.
     Role::String            
-    # Configurable stratigraphic level values: Min, Mid, Max.
     Levels::Vector{Float64} 
-    # Component molecular mass measured in grams per mole.
     MW::Float64             
 end
 
@@ -49,22 +98,10 @@ end
     MOLE_ConvertTimeToMinutes_DDEF(Value, Unit) -> Float64
 Normalises arbitrary time units (Seconds, Hours, Days) to Minutes for system-wide consistency.
 """
-function MOLE_ConvertTimeToMinutes_DDEF(Value::Real, Unit::String)
+function MOLE_ConvertTimeToMinutes_DDEF(Value::Real, Unit::AbstractString)::Float64
     Value <= 0.0 && return 0.0
     u = uppercase(strip(Unit))
-    if occursin("SEC", u)
-        return Value / 60.0
-    elseif occursin("MIN", u)
-        return Float64(Value)
-    elseif occursin("DAY", u)
-        # Normalise daily temporal duration to minutes.
-        return Value * 24.0 * 60.0 
-    elseif occursin("HOUR", u) || occursin("HR", u)
-        return Value * 60.0
-    else
-        # Default temporal unit fallback to minutes.
-        return Float64(Value) 
-    end
+    return Float64(Value * get(MOLE_TimeFactorMap_DDEC, u, 1.0))
 end
 
 # ------------------------------------------------------------------------------
@@ -75,7 +112,7 @@ end
     MOLE_ApplyRadioDecay_DDEF(RawValue, HalfLife, HalfLifeUnit, DeltaTMinutes; Reverse=false) -> Float64
 Calculates effective mass/activity after isothermal decay (Mapping for Forward or Reverse Decay).
 """
-function MOLE_ApplyRadioDecay_DDEF(RawValue::Float64, HalfLife::Float64, HalfLifeUnit::String, DeltaTMinutes::Float64; Reverse::Bool=false)
+function MOLE_ApplyRadioDecay_DDEF(RawValue::Float64, HalfLife::Float64, HalfLifeUnit::AbstractString, DeltaTMinutes::Float64; Reverse::Bool=false)
     hl_minutes = MOLE_ConvertTimeToMinutes_DDEF(HalfLife, HalfLifeUnit)
     hl_minutes <= 0.0 && return RawValue
 
@@ -89,7 +126,6 @@ end
 # SECTION 4: CONSTANTS & TOLERANCE REGISTRY
 # ------------------------------------------------------------------------------
 
-# Global stoichiometric precision tolerance threshold.
 const MOLE_StoiTolerance_DDEC = 1e-6   
 """
     MOLE_ApproxEq_DDEF(a::Real, b::Real; atol=1e-6) -> Bool
@@ -110,43 +146,37 @@ MOLE_ApproxEq_DDEF(a::Real, b::Real; atol::Float64=MOLE_StoiTolerance_DDEC) = is
 Parses structured data from the UI's DataTable into operational categories.
 """
 function MOLE_ParseTable_DDEF(TableData::AbstractVector)
-    # Execute comprehensive input data sanitisation.
     clean_data, input_warnings = Main.Sys_Fast.FAST_SanitiseInput_DDEF(TableData)
+    C = Main.Sys_Fast.FAST_Data_DDEC
 
-    safe_num = Main.Sys_Fast.FAST_SafeNum_DDEF
-    C        = Main.Sys_Fast.FAST_Data_DDEC
+    names = string.(get.(clean_data, "Name", "Unknown"))
+    roles_str = string.(get.(clean_data, "Role", "Fixed"))
+    mins = Float64.(get.(clean_data, "L1", 0.0))
+    mids = Float64.(get.(clean_data, "L2", 0.0))
+    maxs = Float64.(get.(clean_data, "L3", 0.0))
+    mws = Float64.(get.(clean_data, "MW", 0.0))
 
-    names_vec = string.(get.(clean_data, "Name", "Unknown"))
-    roles     = string.(get.(clean_data, "Role", "Fixed"))
-    mins      = Float64.(get.(clean_data, "L1", 0.0))
-    mids      = Float64.(get.(clean_data, "L2", 0.0))
-    maxs      = Float64.(get.(clean_data, "L3", 0.0))
-    mws       = Float64.(get.(clean_data, "MW", 0.0))
+    tag_var = lowercase(C.ROLE_VAR)
+    tag_fill = lowercase(C.ROLE_FILL)
 
-    roles_lower = lowercase.(roles)
-    tag_var     = lowercase(C.ROLE_VAR)
-    tag_fill    = lowercase(C.ROLE_FILL)
-
-    idx_var  = findall(==(tag_var), roles_lower)
-    idx_fill = findall(==(tag_fill), roles_lower)
-    idx_fix  = findall(r -> r ∉ (tag_var, tag_fill), roles_lower)
+    idx_var = findall(r -> lowercase(r) == tag_var, roles_str)
+    idx_fill = findall(r -> lowercase(r) == tag_fill, roles_str)
+    idx_fix = findall(r -> (lr = lowercase(r); lr != tag_var && lr != tag_fill), roles_str)
     idx_chem = findall(>(0), mws)
 
     return Dict(
-        "Names"         => names_vec, 
-        "Roles"         => roles,
-        "Mins"          => mins, 
-        "Mids"          => mids, 
-        "Maxs"          => maxs, 
-        "MWs"           => mws,
-        "Idx_Var"       => idx_var, 
-        "Idx_Fix"       => idx_fix,
-        "Idx_Fill"      => idx_fill, 
-        "Idx_Chem"      => idx_chem,
-        "Rows"          => clean_data, 
-        "RawTable"      => clean_data,
+        "Names" => names, "Roles" => roles_str,
+        "Mins" => mins, "Mids" => mids, "Maxs" => maxs, "MWs" => mws,
+        "Idx_Var" => idx_var, "Idx_Fix" => idx_fix,
+        "Idx_Fill" => idx_fill, "Idx_Chem" => idx_chem,
+        "Rows" => clean_data, "RawTable" => clean_data,
         "InputWarnings" => input_warnings
     )
+end
+
+function MOLE_IdentifyRole_DDEF(r::AbstractString)::AbstractIngredientRole
+    u = lowercase(strip(r))
+    return get(MOLE_RoleMap_DDEC, u, MOLE_RoleFixed_DDES())
 end
 
 # ------------------------------------------------------------------------------
@@ -158,89 +188,82 @@ end
 Categorises a unit string into :Mass (Fixed), :Molar (Relational), or :Other.
 Returns (Type, ScaleToSystemBase) where the base is mg for mass and fractions for molar values.
 """
-function MOLE_GetUnitType_DDEF(UnitStr::String)
+function MOLE_GetUnitType_DDEF(UnitStr::AbstractString)::Tuple{AbstractStoicUnit, Float64}
     u = lowercase(strip(UnitStr))
-    isempty(u) && return (:Molar, 1.0)
     
-    if u == "%m" || u == "%"
-        return (:Molar, 0.01) 
-    elseif u == "mr" || u == "ratio" || u == "-"
-        return (:Molar, 1.0) 
-    elseif u == "m" || u == "mol/l" || u == "molar"
-        return (:Concentration, 1000.0) 
-    elseif u == "mm" || u == "mmol/l" || u == "millimolar"
-        return (:Concentration, 1.0) 
-    elseif u == "um" || u == "μm" || u == "micromolar" || u == "umol/l"
-        return (:Concentration, 0.001) 
-    end
+    # Priority 1: High-Performance O(1) Centralized Lookup.
+    static_lookup = get(MOLE_UnitMap_DDEC, u, nothing)
+    !isnothing(static_lookup) && return static_lookup
 
+    # Priority 2: Gravimetric Scaling via Unitful.jl / Dimensional Analysis.
     try
-        u_mod = replace(u, 
-            " " => "*", 
-            "_" => "*", 
-            "mc" => "μ", 
-            "mic" => "μ",
-            "u" => "μ",
-            "mcg" => "μg",
-            "microgram" => "μg"
-        )
-        # Dimensional analysis protocol assumes Greek mu for micrograms.
+        u_mod = u
+        u_mod = replace(u_mod, " " => "*", "_" => "*")
+        u_mod = replace(u_mod, r"(mcg|microgram)" => "μg")
+        u_mod = replace(u_mod, r"(mc|mic|u)" => "μ")
+        
         uq = uparse(u_mod)
         if dimension(uq) == dimension(u"g")
-            val_mg = ustrip(uconvert(u"mg", 1.0 * uq))
-            return (:Mass, Float64(val_mg))
+            return (MOLE_UnitMass_DDES(), Float64(ustrip(uconvert(u"mg", 1.0 * uq))))
         end
     catch
     end
-
-    return (:Other, 1.0)
+    
+    return (MOLE_UnitOther_DDES(), 1.0)
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 7: MOLAR PERCENTAGE EQUIVALENCY ENGINE
+# SECTION 7: MOLAR PERCENTAGE DISPATCH ENGINE
 # ------------------------------------------------------------------------------
+
+function MOLE_CalculatePercentage_DDEF(::MOLE_UnitMolar_DDES, Val, Scale, MW, Vol, Budget, RawU)
+    return Val * Scale * 100.0
+end
+
+function MOLE_CalculatePercentage_DDEF(::MOLE_UnitMass_DDES, Val, Scale, MW, Vol, Budget, RawU)
+    # Mass (mg) -> Millimoles -> % Relation
+    mmol = (Val * Scale) / MW
+    return (mmol / Budget) * 100.0
+end
+
+function MOLE_CalculatePercentage_DDEF(::MOLE_UnitConcentration_DDES, Val, Scale, MW, Vol, Budget, RawU)
+    # Concentration (mM) -> Millimoles -> % Relation
+    mmol = (Val * Scale) * (Vol / 1000.0)
+    return (mmol / Budget) * 100.0
+end
+
+function MOLE_CalculatePercentage_DDEF(::MOLE_UnitOther_DDES, Val, Scale, MW, Vol, Budget, RawU)
+    # Explicit fallback for Percentage Units that might be trapped.
+    occursin("%", RawU) && return Val * 1.0
+    return 0.0
+end
 
 """
     MOLE_GetPercentageEquivalent_DDEF(Value, UnitStr, MW, Vol, Conc) -> Float64
 Calculates the molar percentage contribution of a component within the system budget.
 This is used for accurate baseline validation (rough check) before full matrix generation.
 """
-function MOLE_GetPercentageEquivalent_DDEF(Value::Float64, UnitStr::String, MW::Float64, Vol::Float64, Conc::Float64)
-    # Determine system molar budget in millimoles.
-    (isnan(Vol) || isnan(Conc) || Vol <= 0.0 || Conc <= 0.0) && return 0.0
-    total_moles_target_mmol = (Vol / 1000.0) * Conc
-    (total_moles_target_mmol <= 0.0 || MW <= 0.0) && return 0.0
-    
+function MOLE_GetPercentageEquivalent_DDEF(Value::Float64, UnitStr::AbstractString, MW::Float64, Vol::Float64, Conc::Float64)
+    (isnan(Vol) || isnan(Conc) || Vol <= 0.0 || Conc <= 0.0 || MW <= 0.0) && return 0.0
+    budget = (Vol / 1000.0) * Conc
+    budget <= 0.0 && return 0.0
     u_type, u_scale = MOLE_GetUnitType_DDEF(UnitStr)
-    u_str = lowercase(strip(UnitStr))
-    
-    if u_type == :Molar
-        if u_str == "%m" || u_str == "%"
-            # Identified as native percentage value.
-            return Value 
-        else
-            return Value 
-        end
-    elseif u_type == :Mass
-        MW <= 0.0 && return 0.0
-        moles_mmol = (Value * u_scale) / MW
-        return (moles_mmol / total_moles_target_mmol) * 100.0
-    elseif u_type == :Concentration
-        moles_mmol = (Vol / 1000.0) * (Value * u_scale)
-        return (moles_mmol / total_moles_target_mmol) * 100.0
-    end
-    return 0.0
+    return MOLE_CalculatePercentage_DDEF(u_type, Value, u_scale, MW, Vol, budget, lowercase(strip(UnitStr)))
 end
+
+MOLE_CalculatePercentage_DDEF(::MOLE_UnitMolar_DDES, v, s, mw, vol, b, u_str) = (u_str == "%m" || u_str == "%") ? v : v
+MOLE_CalculatePercentage_DDEF(::MOLE_UnitMass_DDES, v, s, mw, vol, b, u_str) = ((v * s) / mw / b) * 100.0
+MOLE_CalculatePercentage_DDEF(::MOLE_UnitConcentration_DDES, v, s, mw, vol, b, u_str) = (((vol / 1000.0) * (v * s)) / b) * 100.0
+MOLE_CalculatePercentage_DDEF(::MOLE_UnitOther_DDES, v, s, mw, vol, b, u_str) = 0.0
 
 """
     MOLE_ValidatePhysicalUnit_DDEF(ValueStr::String, ExpectedType::String) -> (Bool, Float64, String)
 Uses strict dimensional analysis via Unitful.jl to ensure chemical/physical safety.
 """
-function MOLE_ValidatePhysicalUnit_DDEF(ValueStr::String, ExpectedType::String)
+function MOLE_ValidatePhysicalUnit_DDEF(ValueStr::AbstractString, ExpectedType::AbstractString)
     val_clean = strip(ValueStr)
     isempty(val_clean) && return (false, 0.0, "Input is empty.")
 
-    # Normalise string separators to multiplication operators for dimensional parsing.
     parse_str = replace(val_clean, " " => "*", "_" => "*", "mc" => "u")
 
     try
@@ -254,16 +277,16 @@ function MOLE_ValidatePhysicalUnit_DDEF(ValueStr::String, ExpectedType::String)
 
         if ExpectedType == "Volume"
             tgt_unit      = u"L"
-            expected_name = "Volume (e.g., mL, L)"
+            expected_name = "Volume (Dimensional Unit)"
         elseif ExpectedType == "Concentration"
             tgt_unit      = u"mol/L"
-            expected_name = "Concentration (e.g., mM, mol/L)"
+            expected_name = "Concentration (Dimensional Unit)"
         elseif ExpectedType == "Mass"
             tgt_unit      = u"g"
-            expected_name = "Mass (e.g., mg, g, kg)"
+            expected_name = "Mass (Dimensional Unit)"
         elseif ExpectedType == "Time"
             tgt_unit      = u"hr"
-            expected_name = "Time (e.g., s, min, hr)"
+            expected_name = "Time (Temporal Unit)"
         elseif ExpectedType == "Ratio" || ExpectedType == "Dimensionless"
             tgt_unit      = u"1"
             expected_name = "Dimensionless Ratio"
@@ -275,7 +298,6 @@ function MOLE_ValidatePhysicalUnit_DDEF(ValueStr::String, ExpectedType::String)
              return (true, Float64(ustrip(exp_val)), "OK")
         end
 
-        # Rigorous dimensional verification for biological and physical identity.
         if dimension(exp_val) != dimension(tgt_unit)
             return (false, 0.0, "Dimensional mismatch: Expected $expected_name, got $(dimension(exp_val)).")
         end
@@ -292,7 +314,7 @@ end
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 8: SYSTEM GRAVIMETRIC AUDIT (QuickAudit)
+# SECTION 8: SYSTEM GRAVIMETRIC AUDIT
 # ------------------------------------------------------------------------------
 
 """
@@ -327,13 +349,11 @@ function MOLE_QuickAudit_DDEF(TableData::AbstractVector, Vol::Float64, Conc::Flo
         mw = Float64(get(r, "MW", 0.0))
         name = string(get(r, "Name", "Unknown"))
         
-        # Integrity guard against physically impossible negative molecular weights.
         if mw < 0.0
             @printf(io, "![ERROR] Physical Impossibility: Component '%s' has negative Molecular Weight (%.2f). Calculation aborted.\n", name, mw)
             is_valid = false
         end
 
-        # Enforce molecular weight requirements for relational concentration metrics.
         if (unit == "%m" || unit == "mr" || unit == "ratio" || unit == "m") && mw <= 0.0
             @printf(io, "![ERROR] Stoichiometry Error: Component '%s' uses unit '%s' (Molar/Ratio) but has no Molecular Weight (MW). MW is mandatory for these calculations.\n", name, unit)
             is_valid = false
@@ -341,13 +361,10 @@ function MOLE_QuickAudit_DDEF(TableData::AbstractVector, Vol::Float64, Conc::Flo
 
         if mw > 0.0 && !isempty(unit) && unit != "-" && unit != "%m" && unit != "mr" && unit != "ratio" && unit != "m"
             u_type, _ = MOLE_GetUnitType_DDEF(unit)
-            if u_type == :Other
-                @printf(io, "![WARN] Unit Error: Component '%s' has invalid chemical unit '%s'.\n", name, unit)
-            end
+            MOLE_VerifyUnitSafely_DDEF(u_type, io, name, unit)
         end
     end
 
-    # Execution of automatic filler balancing based on molar budget awareness.
     if !isempty(idx_fill) && is_valid
         fill_idx = idx_fill[1]
         consumed_pct = 0.0
@@ -372,87 +389,68 @@ function MOLE_QuickAudit_DDEF(TableData::AbstractVector, Vol::Float64, Conc::Flo
     end
 
     units = String[string(get(r, "Unit", "")) for r in D["Rows"]]
-    # Utilise raw values for stoichiometric auditing without scaling.
     mass_results = MOLE_CalcMass_DDEF(
         D["Names"][idx_chem], D["MWs"][idx_chem], ratios[idx_chem], Vol, Conc, units[idx_chem]
     )
 
-    # Verify stoichiometric budget integrity to detect concentration deviations.
     total_moles_target_mmol = (Vol / 1000.0) * Conc
     if total_moles_target_mmol > 0 && is_valid
         total_moles_calc = sum(mass_results[!, :Moles_mmol])
         # Identify instances of over-concentration.
         if total_moles_calc > total_moles_target_mmol * (1.0 + 1e-6) + 1e-9
-            @printf(io, "![WARN] Over-Concentrated: Total moles (%.6f mmol) exceeds target (%.6f mmol). Breakdown reflects absolute input excess.\n", total_moles_calc, total_moles_target_mmol)
+            @printf(io, "![WARN] OVER-CONCENTRATED: Total moles (%.6f mmol) exceeds target (%.6f mmol). Breakdown reflects absolute input excess.\n", total_moles_calc, total_moles_target_mmol)
         # Identify instances of under-concentration and budget gaps.
         elseif total_moles_calc < total_moles_target_mmol * (1.0 - 1e-6) - 1e-9
-            @printf(io, "![WARN] Under-Concentrated: Total moles (%.6f mmol) is below target budget. Ensure a 'Filler' or sufficient 'Ratio' components are defined.\n", total_moles_calc)
+            @printf(io, "![WARN] UNDER-CONCENTRATED: Total moles (%.6f mmol) is below target budget. Ensure a 'Filler' or sufficient 'Ratio' components are defined.\n", total_moles_calc, total_moles_target_mmol)
         end
     end
 
     total_mass_mg = sum(mass_results[!, :TARGET_MASS_mg])
 
-    write(io, "\n[CHEMICAL BREAKDOWN]\n")
-    for (i, row) in enumerate(eachrow(mass_results))
-        role = D["Roles"][idx_chem[i]]
-        u_label = if role == "Filler"
-            "(System Filler)"
-        else
-            row[:IsFixed] ? "(Absolute/Fixed)" : "(Relational MR)"
-        end
-        u_raw   = lowercase(strip(units[idx_chem][i]))
-        
-        # Enforce molecular weight requirements for mandatory units.
-        is_relational = (u_raw == "%m" || u_raw == "mr" || u_raw == "ratio" || u_raw == "m")
-        mw_missing    = is_relational && (D["MWs"][idx_chem][i] <= 0.0 || isnan(D["MWs"][idx_chem][i]))
-        mw_warn       = mw_missing ? " [⚠️ MW MISSING]" : ""
-        
-        @printf(io, "> %-15s: %9.3f mg %-15s (Ratio: %6.1f%%)%s\n",
-            row[:Component], row[:TARGET_MASS_mg], u_label, row[:Molar_Ratio], mw_warn)
-    end
-
-    write(io, "\n[SOLVENT / MATRIX]\n")
-    if Vol > 0
-        # Estimate solvent requirements assuming standard water-based density.
-        @printf(io, "> Solvent Req.   : Fill up to %.2f mL total volume\n", Vol)
-    else
-        write(io, "> No liquid environment defined.\n")
-    end
-
-    write(io, "--------------------------------------\n")
-    @printf(io, "SUM DRY MASS : %9.4f mg\n", total_mass_mg)
-
     target_moles_mmol = (Vol / 1000.0) * Conc
-    if target_moles_mmol > 0
+    if target_moles_mmol > 0 && is_valid
         moles_sum = sum(mass_results[!, :Moles_mmol])
-        frac_ok = isapprox(moles_sum, target_moles_mmol; rtol=1e-6, atol=1e-10)
-        if !frac_ok
+        if !isapprox(moles_sum, target_moles_mmol; rtol=1e-6, atol=1e-10)
             @printf(io, "\n[WARN] Meticulous check: Molar balance deviation. Sum = %.8f (targeted %.8f)\n", moles_sum, target_moles_mmol)
         end
     end
 
-    fill_status = if isempty(idx_fill)
-        "Direct Fractions (No filler)"
-    else
-        f_name, f_val = D["Names"][idx_fill[1]], ratios[idx_fill[1]]
-        write(io, "\n[SYSTEM] Filler '$f_name' auto-balanced to $(round(f_val; digits=2))%")
-        "$f_name: $(round(f_val; digits=2))%"
+    write(io, "\n[CHEMICAL BREAKDOWN]\n")
+    for (i, row) in enumerate(eachrow(mass_results))
+        role_type = MOLE_IdentifyRole_DDEF(D["Roles"][idx_chem[i]])
+        u_label = MOLE_GetAuditLabel_DDEF(role_type, row[:IsFixed])
+        u_raw = lowercase(strip(units[idx_chem][i]))
+        mw_missing = (u_raw == "%m" || u_raw == "mr" || u_raw == "ratio" || u_raw == "m") && (D["MWs"][idx_chem][i] <= 0.0 || isnan(D["MWs"][idx_chem][i]))
+        
+        @printf(io, "> %-15s: %9.3f mg %-15s (Ratio: %6.1f%%)%s\n",
+            row[:Component], row[:TARGET_MASS_mg], u_label, row[:Molar_Ratio], mw_missing ? " [⚠️ MW MISSING]" : "")
     end
 
-    Main.Sys_Fast.FAST_Log_DDEF("MOLE", "AUDIT_COMPLETE",
-        "Total Mass: $(round(total_mass_mg; digits=2)) mg", "OK")
+    write(io, "\n[SOLVENT / MATRIX]\n")
+    if Vol > 0
+        @printf(io, "> Solvent Req.   : Fill up up to %.2f mL total volume (Target Density)\n", Vol)
+    else
+        write(io, "> ![WARN] No liquid environment defined.\n")
+    end
 
-    return (
-        is_valid && total_mass_mg > 0 && !isempty(mass_results),
-        String(take!(io)),
-        mass_results,
-        total_mass_mg,
-        fill_status,
-    )
+    write(io, "--------------------------------------\n")
+    @printf(io, "SUM DRY MASS : %10.4f mg\n", total_mass_mg)
+
+    fill_status = isempty(idx_fill) ? "Direct Fractions (No filler)" : let f_idx=idx_fill[1]; f_name=D["Names"][f_idx]; f_val=ratios[f_idx]; write(io, "\n[SYSTEM] Filler '$f_name' auto-balanced to $(round(f_val; digits=2))%"); "$f_name: $(round(f_val; digits=2))%" end
+
+    Main.Sys_Fast.FAST_Log_DDEF("MOLE", "AUDIT_COMPLETE", "Total Mass: $(round(total_mass_mg; digits=2)) mg", "OK")
+
+    return (is_valid && total_mass_mg > 0 && !isempty(mass_results), String(take!(io)), mass_results, total_mass_mg, fill_status)
 end
 
+MOLE_VerifyUnitSafely_DDEF(::MOLE_UnitOther_DDES, io, name, unit) = @printf(io, "![WARN] Unit Error: Component '%s' has invalid chemical unit '%s'.\n", name, unit)
+MOLE_VerifyUnitSafely_DDEF(::AbstractStoicUnit, io, name, unit) = nothing
+
+MOLE_GetAuditLabel_DDEF(::MOLE_RoleFiller_DDES, is_fix) = "(System Filler)"
+MOLE_GetAuditLabel_DDEF(::AbstractIngredientRole, is_fix) = is_fix ? "(Absolute/Fixed)" : "(Relational MR)"
+
 # ------------------------------------------------------------------------------
-# SECTION 9: PRIMARY STOICHIOMETRY ENGINE (Pass 1-3)
+# SECTION 9: PRIMARY STOICHIOMETRY ENGINE
 # ------------------------------------------------------------------------------
 
 """
@@ -460,62 +458,45 @@ end
 Universal Stoichiometry Engine utilising a integrated multiple-pass resolution model.
 Execution involves sequential resolution of absolute, internal percentage, and residual relative components.
 """
-function MOLE_CalcMass_DDEF(Names::AbstractVector{String}, MWs::AbstractVector{Float64},
+function MOLE_CalcMass_DDEF(Names::AbstractVector{<:AbstractString}, MWs::AbstractVector{Float64},
     Ratios::AbstractVector{Float64}, Tgt_Vol::Float64, Tgt_Conc::Float64,
-    Units::AbstractVector{String}, Scale::Float64=1.0; SuppressLog::Bool=false)
+    Units::AbstractVector{<:AbstractString}, Scale::Float64=1.0; SuppressLog::Bool=false)
     
-    n_comp = length(Names)
-    res_mass_mg = zeros(n_comp)
-    res_moles_mmol = zeros(n_comp)
-    is_fixed = fill(false, n_comp)
+    n = length(Names)
+    res_mass_mg = zeros(n)
+    res_moles_mmol = zeros(n)
+    is_fixed = fill(false, n)
 
-    (isnan(Tgt_Vol) || isnan(Tgt_Conc) || Tgt_Vol <= 0.0 || Tgt_Conc <= 0.0) && return DataFrame(
-        :Component      => Names,
-        :Molar_Ratio    => zeros(n_comp),
-        :Moles_mmol     => zeros(n_comp),
-        :TARGET_MASS_mg => zeros(n_comp),
-        :IsFixed        => [true for _ in 1:n_comp]
-    )
-    total_moles_target_mmol = (Tgt_Vol / 1000.0) * (Tgt_Conc * Scale)
-
-    # Execution of Pass 1: Resolution of absolute mass and molarity components.
-    for i in 1:n_comp
-        u_type, u_scale = MOLE_GetUnitType_DDEF(Units[i])
-        if u_type == :Mass
-            res_mass_mg[i]    = Ratios[i] * u_scale
-            res_moles_mmol[i] = MWs[i] > 0 ? res_mass_mg[i] / MWs[i] : 0.0
-            is_fixed[i]      = true
-        elseif u_type == :Concentration
-            target_mM = Ratios[i] * u_scale
-            res_moles_mmol[i] = (Tgt_Vol / 1000.0) * target_mM
-            res_mass_mg[i]    = MWs[i] > 0 ? res_moles_mmol[i] * MWs[i] : 0.0
-            is_fixed[i]      = true
-        end
+    if (isnan(Tgt_Vol) || isnan(Tgt_Conc) || Tgt_Vol <= 0.0 || Tgt_Conc <= 0.0)
+        return DataFrame(
+            :Component => Names, :Molar_Ratio => zeros(n), :Moles_mmol => zeros(n),
+            :TARGET_MASS_mg => zeros(n), :IsFixed => fill(true, n))
     end
 
-    # Execution of Pass 2: Resolution of absolute molar percentage components.
-    for i in 1:n_comp
+    total_moles_target_mmol = (Tgt_Vol / 1000.0) * (Tgt_Conc * Scale)
+
+    # Absolute Components (Mass / Concentration)
+    for i in 1:n
+        u_type, u_scale = MOLE_GetUnitType_DDEF(Units[i])
+        MOLE_ResolvePrimaryPass_DDEF!(u_type, i, Ratios[i], u_scale, MWs[i], Tgt_Vol, res_mass_mg, res_moles_mmol, is_fixed)
+    end
+
+    # Molar Percentage Components (%m, %)
+    for i in 1:n
         if !is_fixed[i]
             u_str = lowercase(strip(Units[i]))
-            if u_str == "%m" || u_str == "%"
-                if MWs[i] > 0
-                    # Molar percentage calculated relative to system target concentration.
-                    res_moles_mmol[i] = total_moles_target_mmol * (Ratios[i] / 100.0)
-                    res_mass_mg[i]    = res_moles_mmol[i] * MWs[i]
-                    is_fixed[i]       = true 
-                else
-                    res_moles_mmol[i] = 0.0
-                    res_mass_mg[i]    = 0.0
-                end
+            if (u_str == "%m" || u_str == "%") && MWs[i] > 0
+                res_moles_mmol[i] = total_moles_target_mmol * (Ratios[i] / 100.0)
+                res_mass_mg[i]    = res_moles_mmol[i] * MWs[i]
+                is_fixed[i]       = true
             end
         end
     end
 
-    # Execution of Pass 3: Resolution of relative molar relational components.
+    # Relative Molar/Stoichiometric Components
     fixed_moles_sum_mmol = sum(res_moles_mmol)
     residual_moles_mmol  = total_moles_target_mmol - fixed_moles_sum_mmol
 
-    # Final integrity guard for detection of molar budget overflows.
     if residual_moles_mmol < -1e-7
         if !SuppressLog
             Main.Sys_Fast.FAST_Log_DDEF("MOLE", "BUDGET_EXCEEDED", 
@@ -527,36 +508,31 @@ function MOLE_CalcMass_DDEF(Names::AbstractVector{String}, MWs::AbstractVector{F
     molar_indices = findall(.!is_fixed)
     if !isempty(molar_indices)
         total_molar_parts = sum(Ratios[molar_indices])
-        total_molar_parts = MOLE_ApproxEq_DDEF(total_molar_parts, 0.0) ? 1.0 : total_molar_parts
-
+        total_molar_parts = abs(total_molar_parts) < 1e-9 ? 1.0 : total_molar_parts
+        
         for i in molar_indices
             if MWs[i] > 0
                 ratio_frac = Ratios[i] / total_molar_parts
                 res_moles_mmol[i] = residual_moles_mmol * ratio_frac
                 res_mass_mg[i]    = res_moles_mmol[i] * MWs[i]
-            else
-                res_moles_mmol[i] = 0.0
-                res_mass_mg[i]    = 0.0
             end
         end
     end
 
-    # Reconstruct final molar ratio representation via back-calculation.
-    final_ratios = copy(Ratios)
-    if total_moles_target_mmol > 0
-        for i in 1:n_comp
-             final_ratios[i] = (res_moles_mmol[i] / total_moles_target_mmol) * 100.0
-        end
-    end
+    final_ratios = total_moles_target_mmol > 0 ? (res_moles_mmol ./ total_moles_target_mmol) .* 100.0 : copy(Ratios)
 
     return DataFrame(
-        :Component      => Names,
+        :Component      => Names, 
         :Molar_Ratio    => final_ratios,
-        :Moles_mmol     => res_moles_mmol,
-        :TARGET_MASS_mg => res_mass_mg,
+        :Moles_mmol     => res_moles_mmol, 
+        :TARGET_MASS_mg => res_mass_mg, 
         :IsFixed        => is_fixed
     )
 end
+
+MOLE_ResolvePrimaryPass_DDEF!(::MOLE_UnitMass_DDES, i, r, s, mw, vol, rm, rmoles, fix) = (rm[i] = r * s; rmoles[i] = mw > 0 ? rm[i] / mw : 0.0; fix[i] = true)
+MOLE_ResolvePrimaryPass_DDEF!(::MOLE_UnitConcentration_DDES, i, r, s, mw, vol, rm, rmoles, fix) = (rmoles[i] = (vol / 1000.0) * (r * s); rm[i] = mw > 0 ? rmoles[i] * mw : 0.0; fix[i] = true)
+MOLE_ResolvePrimaryPass_DDEF!(::AbstractStoicUnit, i, r, s, mw, vol, rm, rmoles, fix) = nothing
 
 """
     MOLE_AuditMatrix_DDEF(Design, Names, MWs, Vol, Conc, [Units]) -> Vector{Float64}
@@ -596,7 +572,6 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
 
     R, C = size(Design)
 
-    # Verify matrix columns correspond to defined variable counts.
     if C != length(idx_var)
         return Dict(
             "IsFeasible" => true,
@@ -608,7 +583,6 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
         )
     end
 
-    # Map experimental variables and fixed values with automatic filler balancing.
     idx_fix  = D["Idx_Fix"]
     idx_fill = D["Idx_Fill"]
 
@@ -645,7 +619,6 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
         if isempty(idx_chem)
             masses[i] = 0.0
         else
-            # Regulation of logging to prevent input/output contention across parallel operations.
             df        = MOLE_CalcMass_DDEF(n_chem, w_chem, r_chem, Vol, Conc, u_chem; SuppressLog=true)
             masses[i] = sum(df.TARGET_MASS_mg)
         end
@@ -744,7 +717,6 @@ function MOLE_ProcessDesign_DDEF(DesignMatrix::AbstractMatrix, TableData::Abstra
     C = Main.Sys_Fast.FAST_Data_DDEC
     R, C_dim = size(DesignMatrix)
     
-    # Construction of structural data containers in scientific sequence.
     df = DataFrame()
     
     # Generation of variable column headers.
@@ -779,8 +751,7 @@ function MOLE_ProcessDesign_DDEF(DesignMatrix::AbstractMatrix, TableData::Abstra
         for idx in D["Idx_Fix"]
             current_ratios[idx] = Main.Sys_Fast.FAST_SafeNum_DDEF(D["Rows"][idx]["L2"])
         end
-        
-        # Centralised budget subtraction for stoichiometric filler balancing.
+    
         if !isempty(D["Idx_Fill"])
             consumed_pct = 0.0
             for r_idx in D["Idx_Chem"]

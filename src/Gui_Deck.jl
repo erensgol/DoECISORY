@@ -69,6 +69,7 @@ end
 # ------------------------------------------------------------------------------
 # SECTION 3: MODAL WINDOWS
 # ------------------------------------------------------------------------------
+
 function DECK_ModalChemical_DDEF()
     return dbc_modal([
         dbc_modalheader(dbc_modaltitle([
@@ -749,105 +750,96 @@ function DECK_RegisterCallbacks_DDEF(app)
 # SECTION 10: INTERFACE & STATE CALLBACKS
 # ------------------------------------------------------------------------------
 
+    # Unit 1: UI Visibility & Row Orchestration
     callback!(app,
         [Output("deck-row-id-$i",     "style") for i in 1:DECK_MaxRows_DDEC]...,
         [Output("deck-row-level-$i",  "style") for i in 1:DECK_MaxRows_DDEC]...,
         [Output("deck-row-limits-$i", "style") for i in 1:DECK_MaxRows_DDEC]...,
-        [Output("deck-name-$i",       "value") for i in 1:DECK_MaxRows_DDEC]...,
-        [Output("deck-role-$i",       "value") for i in 1:DECK_MaxRows_DDEC]...,
-        [Output("deck-l1-$i",         "value") for i in 1:DECK_MaxRows_DDEC]...,
-        [Output("deck-l2-$i",         "value") for i in 1:DECK_MaxRows_DDEC]...,
-        [Output("deck-l3-$i",         "value") for i in 1:DECK_MaxRows_DDEC]...,
-        [Output("deck-min-$i",        "value") for i in 1:DECK_MaxRows_DDEC]...,
-        [Output("deck-max-$i",        "value") for i in 1:DECK_MaxRows_DDEC]...,
-        [Output("deck-mw-$i",         "value") for i in 1:DECK_MaxRows_DDEC]...,
-        [Output("deck-unit-$i",       "value") for i in 1:DECK_MaxRows_DDEC]...,
-        # Orchestration of visual parameter indicator styles for chemical and radioactive synchronisation.
-        [Output("deck-dot1-$i",       "className") for i in 1:DECK_MaxRows_DDEC]...,
-        [Output("deck-dot2-$i",       "className") for i in 1:DECK_MaxRows_DDEC]...,
-        [Output("deck-unit-$i",       "style") for i in 1:DECK_MaxRows_DDEC]...,
-        [Output("tip-deck-dot1-$i",   "children") for i in 1:DECK_MaxRows_DDEC]...,
-        [Output("tip-deck-dot2-$i",   "children") for i in 1:DECK_MaxRows_DDEC]...,
         Input("deck-store-factors", "data"),
         prevent_initial_call = true
     ) do stored
-        isnothing(stored) && return ntuple(_ -> Dash.no_update(), 17 * DECK_MaxRows_DDEC)
+        isnothing(stored) && return ntuple(_ -> Dash.no_update(), 3 * DECK_MaxRows_DDEC)
+        count = get(stored, "count", 0)
+        out_styles = [Dict("display" => (i <= 3 || i <= count) ? "table-row" : "none") for i in 1:DECK_MaxRows_DDEC]
+        return (out_styles..., out_styles..., out_styles...)
+    end
+
+    # Unit 2: Factor Identification & Roles
+    callback!(app,
+        [Output("deck-name-$i", "value") for i in 1:DECK_MaxRows_DDEC]...,
+        [Output("deck-role-$i", "value") for i in 1:DECK_MaxRows_DDEC]...,
+        Input("deck-store-factors", "data"),
+        prevent_initial_call = true
+    ) do stored
+        isnothing(stored) && return ntuple(_ -> Dash.no_update(), 2 * DECK_MaxRows_DDEC)
+        rows = get(stored, "rows", [])
+        out_names = [i <= length(rows) ? string(get(rows[i], "Name", "")) : "" for i in 1:DECK_MaxRows_DDEC]
+        out_roles = [(i <= 3 ? "Variable" : "Fixed") for i in 1:DECK_MaxRows_DDEC]
+        return (out_names..., out_roles...)
+    end
+
+    # Unit 3: Experimental Levels & Physical Boundaries
+    callback!(app,
+        [Output("deck-l1-$i",   "value") for i in 1:DECK_MaxRows_DDEC]...,
+        [Output("deck-l2-$i",   "value") for i in 1:DECK_MaxRows_DDEC]...,
+        [Output("deck-l3-$i",   "value") for i in 1:DECK_MaxRows_DDEC]...,
+        [Output("deck-min-$i",  "value") for i in 1:DECK_MaxRows_DDEC]...,
+        [Output("deck-max-$i",  "value") for i in 1:DECK_MaxRows_DDEC]...,
+        [Output("deck-mw-$i",   "value") for i in 1:DECK_MaxRows_DDEC]...,
+        [Output("deck-unit-$i", "value") for i in 1:DECK_MaxRows_DDEC]...,
+        Input("deck-store-factors", "data"),
+        prevent_initial_call = true
+    ) do stored
+        isnothing(stored) && return ntuple(_ -> Dash.no_update(), 7 * DECK_MaxRows_DDEC)
+        rows = get(stored, "rows", [])
+        l1s  = [i <= length(rows) ? get(rows[i], "L1", 0.0) : 0.0 for i in 1:DECK_MaxRows_DDEC]
+        l2s  = [i <= length(rows) ? get(rows[i], "L2", 0.0) : 0.0 for i in 1:DECK_MaxRows_DDEC]
+        l3s  = [i <= length(rows) ? get(rows[i], "L3", 0.0) : 0.0 for i in 1:DECK_MaxRows_DDEC]
+        mins = [i <= length(rows) ? get(rows[i], "Min", 0.0) : 0.0 for i in 1:DECK_MaxRows_DDEC]
+        maxs = [i <= length(rows) ? get(rows[i], "Max", 0.0) : 0.0 for i in 1:DECK_MaxRows_DDEC]
+        mws  = [i <= length(rows) ? get(rows[i], "MW", 0.0) : 0.0 for i in 1:DECK_MaxRows_DDEC]
+        unts = [i <= length(rows) ? string(get(rows[i], "Unit", "")) : "" for i in 1:DECK_MaxRows_DDEC]
+        return (l1s..., l2s..., l3s..., mins..., maxs..., mws..., unts...)
+    end
+
+    # Unit 4: Forensic Indicators & Validations
+    callback!(app,
+        [Output("deck-dot1-$i",     "className") for i in 1:DECK_MaxRows_DDEC]...,
+        [Output("deck-dot2-$i",     "className") for i in 1:DECK_MaxRows_DDEC]...,
+        [Output("deck-unit-$i",     "style")     for i in 1:DECK_MaxRows_DDEC]...,
+        [Output("tip-deck-dot1-$i", "children")  for i in 1:DECK_MaxRows_DDEC]...,
+        [Output("tip-deck-dot2-$i", "children")  for i in 1:DECK_MaxRows_DDEC]...,
+        Input("deck-store-factors", "data"),
+        prevent_initial_call = true
+    ) do stored
+        isnothing(stored) && return ntuple(_ -> Dash.no_update(), 5 * DECK_MaxRows_DDEC)
         rows  = get(stored, "rows", [])
         count = get(stored, "count", 0)
 
-        out_styles = [Dict("display" => (i <= 3 || i <= count) ? "table-row" : "none") for i in 1:DECK_MaxRows_DDEC]
-        out_names  = [i <= length(rows) ? string(get(rows[i], "Name", "")) : "" for i in 1:DECK_MaxRows_DDEC]
-        out_roles  = [(i <= 3 ? "Variable" : "Fixed") for i in 1:DECK_MaxRows_DDEC]
-        out_l1s    = [i <= length(rows) ? get(rows[i], "L1", 0.0) : 0.0 for i in 1:DECK_MaxRows_DDEC]
-        out_l2s    = [i <= length(rows) ? get(rows[i], "L2", 0.0) : 0.0 for i in 1:DECK_MaxRows_DDEC]
-        out_l3s    = [i <= length(rows) ? get(rows[i], "L3", 0.0) : 0.0 for i in 1:DECK_MaxRows_DDEC]
-        out_mins   = [i <= length(rows) ? get(rows[i], "Min", 0.0) : 0.0 for i in 1:DECK_MaxRows_DDEC]
-        out_maxs   = [i <= length(rows) ? get(rows[i], "Max", 0.0) : 0.0 for i in 1:DECK_MaxRows_DDEC]
-        out_mws    = [i <= length(rows) ? get(rows[i], "MW", 0.0) : 0.0 for i in 1:DECK_MaxRows_DDEC]
-        out_units  = [i <= length(rows) ? string(get(rows[i], "Unit", "")) : "" for i in 1:DECK_MaxRows_DDEC]
+        d1_cls = [(let r = (i <= length(rows) ? rows[i] : Dict()); Float64(get(r, "MW", get(r, :MW, 0.0))) > 0.0 ? "colourtx-c3tc" : "colourtx-v3dl" end) for i in 1:DECK_MaxRows_DDEC]
+        d2_cls = [(let r = (i <= length(rows) ? rows[i] : Dict()); (get(r, "IsRadioactive", false) == true) || (Float64(get(r, "HalfLife", get(r, :HalfLife, 0.0))) > 0.0) ? "colourtx-c4tg" : "colourtx-v3dl" end) for i in 1:DECK_MaxRows_DDEC]
+        d1_tps = [(let r = (i <= length(rows) ? rows[i] : Dict()); Float64(get(r, "MW", get(r, :MW, 0.0))) > 0.0 ? "Molecular Weight defined (Scientific context ACTIVE)" : "No Molecular Weight defined" end) for i in 1:DECK_MaxRows_DDEC]
+        d2_tps = [(let r = (i <= length(rows) ? rows[i] : Dict()); (get(r, "IsRadioactive", false) == true) || (Float64(get(r, "HalfLife", get(r, :HalfLife, 0.0))) > 0.0) ? "Radioactive Decay data present (Kinetic engine ACTIVE)" : "No half-life data" end) for i in 1:DECK_MaxRows_DDEC]
 
-        # Indicator dot colours: Blue for MW presence (Chemical), Green for Radioactivity
-        dot1_classes = [
-            (let r = (i <= length(rows) ? rows[i] : Dict()); Float64(get(r, "MW", get(r, :MW, 0.0))) > 0.0 ? "colourtx-c3tc" : "colourtx-v3dl" end)
-            for i in 1:DECK_MaxRows_DDEC
-        ]
-        dot2_classes = [
-            (let r = (i <= length(rows) ? rows[i] : Dict()); (get(r, "IsRadioactive", false) == true) || (Float64(get(r, "HalfLife", get(r, :HalfLife, 0.0))) > 0.0) ? "colourtx-c4tg" : "colourtx-v3dl" end)
-            for i in 1:DECK_MaxRows_DDEC
-        ]
-
-        # Generation of dynamic contextual tooltips for scientific parameter transparency.
-        dot1_tips = [
-            (let r = (i <= length(rows) ? rows[i] : Dict()); Float64(get(r, "MW", get(r, :MW, 0.0))) > 0.0 ? "Molecular Weight defined (Scientific context ACTIVE)" : "No Molecular Weight defined" end)
-            for i in 1:DECK_MaxRows_DDEC
-        ]
-        dot2_tips = [
-            (let r = (i <= length(rows) ? rows[i] : Dict()); (get(r, "IsRadioactive", false) == true) || (Float64(get(r, "HalfLife", get(r, :HalfLife, 0.0))) > 0.0) ? "Radioactive Decay data present (Kinetic engine ACTIVE)" : "No half-life data" end)
-            for i in 1:DECK_MaxRows_DDEC
-        ]
-
-        # Implementation of real-time architectural validation styles for units and molecular weights.
-        # Architectural capture of function references for robust closure orchestration.
-        vpu_func = Main.Lib_Mole.MOLE_ValidatePhysicalUnit_DDEF
-        unit_styles = [
+        unt_sts = [
             let
                 s = merge(Main.Gui_Base.BASE_StyleInputCentre_DDEC, Dict("fontSize" => "10px"))
                 if i <= length(rows) && i <= count
                     u  = lowercase(strip(string(get(rows[i], "Unit", ""))))
                     mw = Float64(get(rows[i], "MW", 0.0))
-                    
-                    # Execution of high-priority validation for molarity requirements (M) and molecular weight dependencies.
                     if (u == "%m" || u == "mr" || u == "ratio" || u == "m") && mw <= 0.0
-                        s["backgroundColor"] = "var(--colour-chr0-huered)"
-                        s["color"]           = "white"
-                        s["fontWeight"]      = "bold"
-                        s["border"]          = "2px solid white"
-                        s["boxShadow"]       = "0 0 15px rgba(255, 0, 0, 0.6)"
+                        s["backgroundColor"] = "var(--colour-chr0-huered)"; s["color"] = "white"; s["fontWeight"] = "bold"
+                        s["border"] = "2px solid white"; s["boxShadow"] = "0 0 15px rgba(255, 0, 0, 0.6)"
                     elseif mw > 0.0 && !isempty(u) && u != "-" && u != "%m" && u != "mr" && u != "ratio"
-                        # Utilisation of the captured function reference for stoichiometric validation.
-                        ok_m, _, _ = Lib_Mole_VPU(u, "Mass")
-                        ok_c, _, _ = Lib_Mole_VPU(u, "Concentration")
-                        if !ok_m && !ok_c
-                            s["color"]      = "var(--colour-chr3-toncya)"
-                            s["fontWeight"] = "bold"
-                            s["border"]     = "1px solid var(--colour-chr3-toncya)"
-                        else
-                            s["color"]      = "var(--colour-chr3-toncya)"
-                        end
+                        ok_m, _, _ = Main.Lib_Mole.MOLE_ValidatePhysicalUnit_DDEF(u, "Mass")
+                        ok_c, _, _ = Main.Lib_Mole.MOLE_ValidatePhysicalUnit_DDEF(u, "Concentration")
+                        s["color"] = "var(--colour-chr3-toncya)"; if !ok_m && !ok_c s["fontWeight"] = "bold"; s["border"] = "1px solid var(--colour-chr3-toncya)" end
                     end
                 end
                 s
             end for i in 1:DECK_MaxRows_DDEC
         ]
-
-        return (
-            out_styles..., out_styles..., out_styles..., 
-            out_names..., out_roles..., 
-            out_l1s..., out_l2s..., out_l3s..., 
-            out_mins..., out_maxs..., out_mws..., out_units..., 
-            dot1_classes..., dot2_classes..., unit_styles...,
-            dot1_tips..., dot2_tips...
-        )
+        return (d1_cls..., d2_cls..., unt_sts..., d1_tps..., d2_tps...)
     end
 
     # Execution of the primary Application State Orchestration Engine.
@@ -911,8 +903,9 @@ function DECK_RegisterCallbacks_DDEF(app)
     ) do args...
         # Implementation of a global exception guard to maintain orchestration engine stability.
         try
-            trig      = Dash.callback_context().triggered
-            trig      = isempty(trig) ? "" : split(string(trig[1].prop_id), ".")[1]
+            trig_raw  = Dash.callback_context().triggered
+            trig      = isempty(trig_raw) ? "" : split(string(trig_raw[1].prop_id), ".")[1]
+            idx_gl    = 11 + DECK_MaxRows_DDEC
             
             # Integration of primary action triggers spanning core system components (Buttons, Stores, Uploads).
             # Integration of row-level deletion triggers within the experimental workspace.
@@ -1624,23 +1617,23 @@ function DECK_RegisterCallbacks_DDEF(app)
             return html_div([
                 header,
                 html_div([
- html_span("Base Mass:", className="", style=Dict("color" => "var(--colour-val4-darhig)")),
+                html_span("Base Mass:", className="", style=Dict("color" => "var(--colour-val4-darhig)")),
                         html_span(@sprintf("%.4f mg", mass), className="fw-bold"),
                     ], className="mb-3"),
-                html_div(html_pre(res_text, style=Dict(
+                        html_div(html_pre(res_text, style=Dict(
                         "backgroundColor" => "var(--colour-val0-purwhi)", "color" => "var(--colour-val5-purbla)", "padding" => "15px",
                         "borderRadius" => "6px", "fontSize" => "0.8rem",
                         "fontFamily" => "SFMono-Regular, Consolas, monospace",
                         "border" => "1px solid var(--colour-val2-liglow)", "maxHeight" => "400px", "overflowY" => "auto",
                     )), className="mb-3"),
- html_div(msg, className="small fw-bold border-top pt-2", style=Dict("color" => "var(--colour-chr3-toncya)")),
+                html_div(msg, className="small fw-bold border-top pt-2", style=Dict("color" => "var(--colour-chr3-toncya)")),
             ]), true
         catch e
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("DECK", "AUDIT_CRASH", bt, "FAIL")
             return html_div([
- html_i(className="fas fa-exclamation-triangle me-2", style=Dict("color" => "var(--colour-chr0-huered)")),
- html_span("Audit Error: $(first(string(e), 150))", className="", style=Dict("color" => "var(--colour-chr0-huered)")),
+            html_i(className="fas fa-exclamation-triangle me-2", style=Dict("color" => "var(--colour-chr0-huered)")),
+            html_span("Audit Error: $(first(string(e), 150))", className="", style=Dict("color" => "var(--colour-chr0-huered)")),
             ]), true
         end
     end
@@ -1756,8 +1749,6 @@ function DECK_RegisterCallbacks_DDEF(app)
                 ))
             end
 
-            # Implementation of the Virtual Filler Inclusion Protocol inside the protocol synthesis engine to prevent structural duplication.
-
             if !isnothing(session_data) && session_data != "" && !isnothing(master_vault) && master_vault != ""
                 path = Sys_Fast.FAST_GetTransientPath_DDEF(master_vault)
             else
@@ -1807,6 +1798,8 @@ function DECK_RegisterCallbacks_DDEF(app)
         Input("btn-prop-cancel", "n_clicks"),
         Input("btn-prop-save", "n_clicks"),
         [Input("btn-prop-$i", "n_clicks") for i in 1:DECK_MaxRows_DDEC]...,
+        [Input("deck-dot1-$i", "n_clicks") for i in 1:DECK_MaxRows_DDEC]...,
+        [Input("deck-dot2-$i", "n_clicks") for i in 1:DECK_MaxRows_DDEC]...,
         State("deck-store-factors", "data"),
         prevent_initial_call=true
     ) do args...
@@ -1823,9 +1816,9 @@ function DECK_RegisterCallbacks_DDEF(app)
             return false, Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), (randn()), Dash.no_update()
         end
 
-        m = match(r"btn-prop-(\d+)", trig)
+        m = match(r"(btn-prop|deck-dot1|deck-dot2)-(\d+)", trig)
         if m !== nothing
-            idx = parse(Int, m.captures[1])
+            idx = parse(Int, m.captures[2])
             store_data = args[end]
 
             title = "Input Component #$idx Properties"
@@ -2000,7 +1993,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 end
             end
 
-            D = Lib_Mole_PT(processed_rows)
+            D = Main.Lib_Mole.MOLE_ParseTable_DDEF(processed_rows)
             num_vars = length(D["Idx_Var"])
             num_vars != 3 && return html_div("Protocol requires exactly 3 Variables. Detection: $num_vars", className="fw-bold", style=Dict("color" => "var(--colour-chr0-huered)")), true
 

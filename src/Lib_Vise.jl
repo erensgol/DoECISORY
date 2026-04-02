@@ -10,6 +10,7 @@ module Lib_Vise
 
 using GLM
 using DataFrames
+using JSON3
 using Combinatorics
 using Base.Threads
 using LinearAlgebra
@@ -19,7 +20,6 @@ using Printf
 using Dates
 using XLSX
 using Main.Sys_Fast
-using Main.Lib_Arts
 using Main.Lib_Mole
 using Main.Lib_Core
 using Main.Sys_Flow
@@ -33,6 +33,35 @@ export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
     VISE_CalcVIF_DDEF, VISE_LackOfFit_DDEF, VISE_GenerateAnovaTable_DDEF,
     VISE_PerformNormalityTest_DDEF, VISE_ExportToExcel_DDEF
 
+struct VISE_RegressionResult_DDES
+    Beta::Vector{Float64}
+    TermNames::Vector{String}
+    R2::Float64
+    R2_Adj::Float64
+    RMSE::Float64
+    AIC::Float64
+    F_Stat::Float64
+    P_Value::Float64
+    P_Coefs::Vector{Float64}
+    SE_Coefs::Vector{Float64}
+    t_Stats::Vector{Float64}
+    VIFs::Vector{Float64}
+    Leverage::Vector{Float64}
+    Outliers::Vector{Int}
+    Condition::Float64
+    ModelType::String
+    N_Samples::Int
+    Status::String
+end
+
+Base.Dict(r::VISE_RegressionResult_DDES) = Dict{String, Any}(
+    "Coefs" => r.Beta, "TermNames" => r.TermNames, "R2" => r.R2, "R2_Adj" => r.R2_Adj,
+    "RMSE" => r.RMSE, "AIC" => r.AIC, "F_Stat" => r.F_Stat, "P_Value" => r.P_Value,
+    "P_Coefs" => r.P_Coefs, "SE_Coefs" => r.SE_Coefs, "t_Stats" => r.t_Stats,
+    "VIFs" => r.VIFs, "Leverage" => r.Leverage, "Outliers" => r.Outliers,
+    "Condition" => r.Condition, "ModelType" => r.ModelType, "N_Samples" => r.N_Samples, "Status" => r.Status
+)
+
 # ==============================================================================
 # PART A: MODELLING ARCHITECTURE & DESIGN EXPANSION
 # ==============================================================================
@@ -43,17 +72,17 @@ export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
 
 """
     VISE_GetTermNames_DDEF(InNames, ModelType) -> Vector{String}
-Generates human-readable names for regression terms (e.g., "A × B", "A²").
+Generates human-readable names for regression terms (Factor Interactions and Polynomials).
 """
-function VISE_GetTermNames_DDEF(InNames::Vector{String}, ModelType::String)
-    K     = 3
-    names = Vector{String}(undef, 0)
-    push!(names, "Intercept")
-    append!(names, InNames)
+function VISE_GetTermNames_DDEF(InNames::AbstractVector{<:AbstractString}, ModelType::Any)
+    m_type = Main.Lib_Core.CORE_GetModelType_DDEF(ModelType)
+    return VISE_GetTerms_DDEF(m_type, InNames)
+end
 
-    occursin("linear", lowercase(ModelType)) && return names
-
-    # Quadratic formulation: execute interaction terms followed by polynomial squared terms.
+VISE_GetTerms_DDEF(::Main.Lib_Core.CORE_ModelLinear_DDES, InNames) = ["Intercept"; InNames]
+function VISE_GetTerms_DDEF(::Main.Lib_Core.CORE_ModelQuadratic_DDES, InNames)
+    K = 3
+    names = ["Intercept"; InNames]
     for (c1, c2) in combinations(1:K, 2)
         push!(names, "$(InNames[c1]) × $(InNames[c2])")
     end
@@ -63,6 +92,10 @@ function VISE_GetTermNames_DDEF(InNames::Vector{String}, ModelType::String)
     return names
 end
 
+VISE_GetParamCount_DDEF(::Main.Lib_Core.CORE_ModelLinear_DDES) = 4
+VISE_GetParamCount_DDEF(::Main.Lib_Core.CORE_ModelQuadratic_DDES) = 10
+VISE_GetParamCount_DDEF(m) = VISE_GetParamCount_DDEF(Main.Lib_Core.CORE_GetModelType_DDEF(m))
+
 # ------------------------------------------------------------------------------
 # SECTION 2: DESIGN MATRIX EXPANSION ENGINE
 # ------------------------------------------------------------------------------
@@ -71,33 +104,25 @@ end
     VISE_ExpandDesign_DDEF(X, ModelType) -> Matrix{Float64}
 Expands raw factor matrix into a design matrix (intercept + linear + interactions + quadratic).
 """
-function VISE_ExpandDesign_DDEF(X::AbstractMatrix{Float64}, ModelType::String)
-    N      = size(X, 1)
-    K      = 3
-    m_type = lowercase(ModelType)
+function VISE_ExpandDesign_DDEF(X::AbstractMatrix{Float64}, ModelType::AbstractString)
+    m_type = Main.Lib_Core.CORE_GetModelType_DDEF(ModelType)
+    return VISE_ExpandMatrix_DDEF(m_type, X)
+end
 
-    occursin("linear", m_type) && return hcat(ones(N), X)
-
-    combos  = [(1, 2), (1, 3), (2, 3)] 
-    n_inter = 3
-
-    Xd = Matrix{Float64}(undef, N, 1 + K + n_inter + K)
+VISE_ExpandMatrix_DDEF(::Main.Lib_Core.CORE_ModelLinear_DDES, X) = hcat(ones(size(X, 1)), X)
+function VISE_ExpandMatrix_DDEF(::Main.Lib_Core.CORE_ModelQuadratic_DDES, X)
+    N = size(X, 1)
+    Xd = Matrix{Float64}(undef, N, 10)
     fill!(view(Xd, :, 1), 1.0)
-    copyto!(view(Xd, :, 2:K+1), X)
-
-    if N > 1000
-        Threads.@threads for i in 1:n_inter
-            c1, c2 = combos[i]
-            @views @. Xd[:, K+1+i] = X[:, c1] * X[:, c2]
-        end
-    else
-        @inbounds for (i, (c1, c2)) in enumerate(combos)
-            Xd[:, K+1+i] .= view(X, :, c1) .* view(X, :, c2)
-        end
+    copyto!(view(Xd, :, 2:4), X)
+    
+    @inbounds @views begin
+        @. Xd[:, 5] = X[:, 1] * X[:, 2]
+        @. Xd[:, 6] = X[:, 1] * X[:, 3]
+        @. Xd[:, 7] = X[:, 2] * X[:, 3]
+        # Squared Terms (8, 9, 10)
+        @. Xd[:, 8:10] = abs2(X)
     end
-
-    @views @. Xd[:, K+n_inter+2:end] = abs2(X)
-
     return Xd
 end
 
@@ -110,15 +135,18 @@ end
 Universal prediction gateway for OLS models (Linear / Quadratic).
 """
 function VISE_Predict_DDEF(Model::AbstractDict, X_Raw::Any)
-    X = (X_Raw isa AbstractMatrix) ? Float64.(collect(X_Raw)) : (X_Raw isa AbstractVector && !isempty(X_Raw) && X_Raw[1] isa AbstractVector) ? 
-        Float64.(reduce(vcat, transpose.(collect.(X_Raw)))) : (X_Raw isa AbstractVector && length(X_Raw) % 3 == 0) ? 
-        reshape(Float64.(collect(X_Raw)), :, 3) : X_Raw
-    
-    m_type = lowercase(get(Model, "ModelType", "linear"))
-
-    Xd   = VISE_ExpandDesign_DDEF(X, m_type)
+    X = VISE_PrepareMatrix_DDEF(X_Raw)
+    m_type = get(Model, "ModelType", "linear")
+    Xd = VISE_ExpandDesign_DDEF(X, m_type)
     Beta = collect(Float64, get(Model, "Coefs", zeros(size(Xd, 2))))
     return Xd * Beta
+end
+
+VISE_PrepareMatrix_DDEF(X::AbstractMatrix) = Float64.(collect(X))
+VISE_PrepareMatrix_DDEF(X::AbstractVector{<:AbstractVector}) = Float64.(reduce(vcat, transpose.(collect.(X))))
+function VISE_PrepareMatrix_DDEF(X::AbstractVector)
+    length(X) % 3 == 0 && return reshape(Float64.(collect(X)), :, 3)
+    return Float64.(collect(X))
 end
 
 # ==============================================================================
@@ -140,88 +168,56 @@ VISE_ClampIndex_DDEF(idx::AbstractFloat, len::Integer) = clamp(round(Int, idx), 
     VISE_Regress_DDEF(X, Y, ModelType; [InNames]) -> Dict
 Strict OLS regression for experimental data analysis and modelling.
 """
-function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Float64},
-    ModelType::String; InNames::Vector{String}=String[])
-    X_Design = VISE_ExpandDesign_DDEF(X_Raw, ModelType)
-
+function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, ModelType::AbstractString; InNames::AbstractVector{<:AbstractString}=String[])
+    Xd = VISE_ExpandDesign_DDEF(X_Raw, ModelType)
     try
-        n = size(X_Design, 1)
-        p = size(X_Design, 2)
+        n, p = size(Xd)
+        c = cond(Xd)
+        c > 1e11 && return Dict{String, Any}("Status" => "FAIL", "Error" => Printf.@sprintf("[SENTRY] Ill-conditioned matrix (cond: %.2e). Numeric stability compromised.", c))
+        n < p && throw(ArgumentError("Underdetermined system (N < P). More parameters ($p) than samples ($n)."))
+        
+        F = qr(Xd)
+        rank_val = rank(F.R)
+        rank_val < p && throw(ArgumentError("Rank deficient design matrix (Rank: $rank_val / Need: $p). Collinearity detected."))
 
-        if cond(X_Design) > 1e10
-            return Dict{String, Any}(
-                "Status" => "FAIL", 
-                "Error"  => "Integrated matrix health check failure: Design matrix condition number exceeds stability threshold. Potential multicollinearity detected."
-            )
-        end
+        Beta = F \ Y
+        Yp = Xd * Beta
+        Resid = Y .- Yp
+        R2, R2a, RMSE, AIC = VISE_CalcMetrics_DDEF(Y, Yp, p)
+        fs, pv = NaN, NaN
+        pc, sec, ts = fill(NaN, p), fill(NaN, p), fill(NaN, p)
+        sst = var(Y) * (n - 1)
+        sse = sum(abs2, Resid)
 
-        if n < p
-            throw(ArgumentError("Insufficient data: Number of observations (\$n) is less than model parameters (\$p)."))
-        end
+        # Implementation of Hat Matrix for leverage diagnostics (h_ii)
+        h_ii = vec(sum(abs2, Matrix(F.Q); dims=2))
+        out_idx = findall(r -> abs(r) > 3 * RMSE, Resid)
 
-        if rank(X_Design) < p
-            throw(ArgumentError("Design matrix is linearly dependent (Singular/Collinear)."))
-        end
-
-        Beta   = X_Design \ Y
-        Y_Pred = X_Design * Beta
-        Resid  = Y .- Y_Pred
-        SSE    = sum(abs2, Resid)
-        SST    = var(Y) * (length(Y) - 1)
-
-        n, p                  = size(X_Design)
-        R2, R2_Adj, RMSE, AIC = VISE_CalcMetrics_DDEF(Y, Y_Pred, p)
-
-        F_Stat, P_Value = NaN, NaN
-        P_Coefs         = fill(NaN, p)
-        SE_Coefs        = fill(NaN, p)
-        t_Stats         = fill(NaN, p)
-
-        try
-            if n > p && SST > 1e-9 && SSE > 1e-9
-                MSR = (SST - SSE) / max(1, p - 1)
-                MSE = SSE / (n - p)
-                if MSE > 0.0
-                    F_Stat  = MSR / MSE
-                    P_Value = 1.0 - cdf(FDist(max(1, p - 1), n - p), F_Stat)
-
-                    # Model variance-covariance matrix derivation for standard error estimation.
-                    Var_Beta = MSE * inv(X_Design' * X_Design)
-                    SE_Coefs = sqrt.(max.(0.0, diag(Var_Beta)))
-                    # Guard against zero-division to ensure numerical safety.
-                    t_Stats  = Beta ./ max.(SE_Coefs, 1e-15)   
-
-                    P_Coefs  = 2.0 .* (1.0 .- cdf.(TDist(n - p), abs.(t_Stats)))
-                end
+        if n > p && sst > 1e-9 && sse > 1e-9
+            msr, mse = (sst - sse) / max(1, p - 1), sse / (n - p)
+            if mse > 1e-15
+                fs = msr / mse
+                pv = 1.0 - cdf(FDist(max(1, p - 1), n - p), fs)
+                vb = mse * inv(Xd' * Xd)
+                sec = sqrt.(max.(0.0, diag(vb)))
+                ts = Beta ./ max.(sec, 1e-15)
+                pc = 2.0 .* (1.0 .- cdf.(TDist(n - p), abs.(ts)))
             end
-        catch
-            Main.Sys_Fast.FAST_Log_DDEF("VISE", "MODELLING", "Failed to compute exact p-values during model fitting.", "WARN")
         end
 
-        vifs     = VISE_CalcVIF_DDEF(X_Design)
-        TNames   = VISE_GetTermNames_DDEF(InNames, ModelType)
-        cond_num = cond(X_Design)
-
-        return Dict{String, Any}(
-            "Coefs"     => Beta, 
-            "TermNames" => TNames,
-            "R2"        => R2, 
-            "R2_Adj"    => R2_Adj,
-            "RMSE"      => RMSE, 
-            "AIC"       => AIC, 
-            "F_Stat"    => F_Stat,
-            "P_Value"   => P_Value, 
-            "P_Coefs"   => P_Coefs,
-            "SE_Coefs"  => SE_Coefs, 
-            "t_Stats"   => t_Stats,
-            "VIFs"      => vifs, 
-            "Condition" => cond_num,
-            "ModelType" => ModelType, 
-            "N_Samples" => n,
-            "Status"    => "OK"
+        v  = VISE_CalcVIF_DDEF(Xd)
+        tn = VISE_GetTermNames_DDEF(InNames, ModelType)
+        
+        # Guard against automatic type conversion failures (Float64 to String)
+        res = VISE_RegressionResult_DDES(
+            Beta, tn, 
+            Float64(R2), Float64(R2a), Float64(RMSE), Float64(AIC), 
+            Float64(fs), Float64(pv), pc, sec, ts, v, h_ii, out_idx, 
+            Float64(c), string(ModelType), n, "OK"
         )
+        return Dict(res)
     catch e
-        Main.Sys_Fast.FAST_Log_DDEF("VISE", "MODELLING", sprint(showerror, e, catch_backtrace()), "FAIL")
+        Main.Sys_Fast.FAST_Log_DDEF("VISE", "MODELLING", "Forensic Failure: $(string(e))", "FAIL")
         return Dict{String, Any}("Status" => "FAIL", "Error" => string(e))
     end
 end
@@ -267,52 +263,28 @@ Performs Lack-of-Fit test to determine if model structure is adequate (requires 
 """
 function VISE_LackOfFit_DDEF(X_Design::AbstractMatrix, Y::AbstractVector)
     n, p = size(X_Design)
-
-    # Execution of coordinate mapping to identify unique experimental settings.
     unique_rows = Dict{Vector{Float64},Vector{Float64}}()
     for i in 1:n
         row = X_Design[i, :]
-        if haskey(unique_rows, row)
-            push!(unique_rows[row], Y[i])
-        else
-            unique_rows[row] = [Y[i]]
-        end
+        push!(get!(unique_rows, row, Float64[]), Y[i])
     end
-
-    # Determination of Pure Error sum of squares.
-    ss_pe = 0.0
-    df_pe = 0
-    for (row, vals) in unique_rows
+    ss_pe, df_pe = 0.0, 0
+    for vals in values(unique_rows)
         if length(vals) > 1
             ss_pe += sum(abs2, vals .- mean(vals))
             df_pe += (length(vals) - 1)
         end
     end
-
-    # Identify datasets lacking requisite replicates for lack-of-fit testing.
     df_pe == 0 && return (NaN, NaN)
-    # Determination of Residual sum of squares via OLS estimation.
-    Beta   = X_Design \ Y
-    Resid  = Y .- (X_Design * Beta)
-    ss_res = sum(abs2, Resid)
+    Beta = X_Design \ Y
+    ss_res = sum(abs2, Y .- (X_Design * Beta))
     df_res = n - p
-
-    # Partitioning of residual variance into Lack-of-Fit components.
-    ss_lof = max(0.0, ss_res - ss_pe)
-    df_lof = df_res - df_pe
-
-    # Validate existence of degrees of freedom to avoid undefined statistical p-values.
+    ss_lof, df_lof = max(0.0, ss_res - ss_pe), df_res - df_pe
     df_lof <= 0 && return (NaN, NaN)
-
-    ms_lof = ss_lof / df_lof
-    ms_pe  = ss_pe / df_pe
-
-    # Guard against zero pure-error variance to prevent infinity in the F-test.
+    ms_pe = ss_pe / df_pe
     ms_pe < 1e-12 && return (999.0, 0.0)
-    f_stat = ms_lof / ms_pe
-    p_val  = 1.0 - cdf(FDist(df_lof, df_pe), f_stat)
-
-    return (f_stat, p_val)
+    f_stat = (ss_lof / df_lof) / ms_pe
+    return (f_stat, 1.0 - cdf(FDist(df_lof, df_pe), f_stat))
 end
 
 # ==============================================================================
@@ -328,17 +300,12 @@ end
 Constructs a comprehensive ANOVA table for experimental validation.
 """
 function VISE_GenerateAnovaTable_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::Any)
-    # Standardise input formats to resolve potential deserialisation artifacts.
-    X = (X_Raw isa AbstractMatrix) ? Float64.(collect(X_Raw)) : (X_Raw isa AbstractVector && !isempty(X_Raw) && X_Raw[1] isa AbstractVector) ?
-        Float64.(reduce(vcat, transpose.(collect.(X_Raw)))) : (X_Raw isa AbstractVector && length(X_Raw) % 3 == 0) ?
-        reshape(Float64.(collect(X_Raw)), :, 3) : X_Raw
-
-    Y      = (Y_Raw isa AbstractVector) ? Float64.(collect(Y_Raw)) : Y_Raw
-    n      = length(Y)
-    m_type = lowercase(get(Model, "ModelType", "linear"))
-
-    Xd_temp = VISE_ExpandDesign_DDEF(zeros(1, 3), m_type)
-    p       = size(Xd_temp, 2)
+    X = VISE_PrepareMatrix_DDEF(X_Raw)
+    Y = (Y_Raw isa AbstractVector) ? Float64.(collect(Y_Raw)) : Y_Raw
+    n = length(Y)
+    
+    m_type = Main.Lib_Core.CORE_GetModelType_DDEF(string(get(Model, "ModelType", "linear")))
+    p      = VISE_GetParamCount_DDEF(m_type)
 
     Y_Pred = VISE_Predict_DDEF(Model, convert(Matrix{Float64}, X))
     Resid  = Y .- Y_Pred
@@ -442,11 +409,7 @@ end
 Executes the Shapiro-Wilk test on model residuals for normality assessment.
 """
 function VISE_PerformNormalityTest_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::Any)
-    # Ensure numerical consistency and resolve deserialisation artifacts.
-    X      = (X_Raw isa AbstractMatrix) ? Float64.(collect(X_Raw)) : (X_Raw isa AbstractVector && !isempty(X_Raw) && X_Raw[1] isa AbstractVector) ? 
-             Float64.(reduce(vcat, transpose.(collect.(X_Raw)))) : (X_Raw isa AbstractVector && length(X_Raw) % 3 == 0) ? 
-             reshape(Float64.(collect(X_Raw)), :, 3) : X_Raw
-        
+    X      = VISE_PrepareMatrix_DDEF(X_Raw)
     Y      = (Y_Raw isa AbstractVector) ? Float64.(collect(Y_Raw)) : Y_Raw
     m_type = get(Model, "ModelType", "linear")
     Xd     = VISE_ExpandDesign_DDEF(X, m_type)
@@ -494,105 +457,6 @@ function VISE_CalcMetrics_DDEF(Y_Real::AbstractVector{Float64}, Y_Pred::Abstract
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 10: XLSX EXPORT ENGINE
-# ------------------------------------------------------------------------------
-
-"""
-    VISE_ExportToExcel_DDEF(FilePath::String, Results::Dict) -> Bool
-Exports all statistical models, ANOVA tables, and metrics to a professional XLSX file.
-"""
-function VISE_ExportToExcel_DDEF(FilePath::String, Results::AbstractDict)
-    try
-        XLSX.openxlsx(FilePath, mode="w") do xf
-            # Integrated summary documentation for scientific intelligence.
-            sheet_ov       = xf[1]
-            XLSX.rename!(sheet_ov, "Summary")
-            sheet_ov["A1"] = "DaishoDoE Scientific Intelligence Report"
-            sheet_ov["A2"] = "Generated: $(Dates.now())"
-
-            sheet_mod       = XLSX.addsheet!(xf, "Model_Statistics")
-            sheet_mod["A1"] = ["Response", "Model Type", "R2", "R2_Adj", "RMSE", "P-Value", "Normality (p)"]
-
-            X_Clean = Results["X_Clean"]
-            if !(X_Clean isa AbstractMatrix)
-                if X_Clean isa AbstractVector && !isempty(X_Clean) && X_Clean[1] isa AbstractVector
-                    X_Clean = reduce(vcat, transpose.(collect.(X_Clean)))
-                elseif X_Clean isa AbstractVector && length(X_Clean) % 3 == 0
-                    X_Clean = reshape(Float64.(collect(X_Clean)), :, 3)
-                end
-            end
-            
-            Y_Clean = Results["Y_Clean"]
-            if !(Y_Clean isa AbstractMatrix) && Y_Clean isa AbstractVector && !isempty(Y_Clean) && Y_Clean[1] isa AbstractVector
-                 Y_Clean = reduce(vcat, transpose.(collect.(Y_Clean)))
-            end
-
-            row_idx = 2
-            for (i, out_name) in enumerate(get(Results, "OutNames", []))
-                m    = Results["Models"][i]
-                norm = VISE_PerformNormalityTest_DDEF(m, X_Clean, Y_Clean[:, i])
-
-                sheet_mod[row_idx, 1] = out_name
-                sheet_mod[row_idx, 2] = get(m, "ModelType", "N/A")
-                sheet_mod[row_idx, 3] = round(get(m, "R2", 0.0); digits=4)
-                sheet_mod[row_idx, 4] = round(get(m, "R2_Adj", 0.0); digits=4)
-                sheet_mod[row_idx, 5] = round(get(m, "RMSE", 0.0); digits=4)
-                sheet_mod[row_idx, 6] = round(get(m, "P_Value", 1.0); digits=4)
-                sheet_mod[row_idx, 7] = norm["p"]
-
-                row_idx += 1
-            end
-
-            # Detailed ANOVA and Coefficient analysis documentation per specific output stream.
-            for (i, out_name) in enumerate(get(Results, "OutNames", []))
-                m         = Results["Models"][i]
-                safe_name = first(replace(out_name, r"[^\w]" => "_"), 25)
-
-                # Execution of Analysis of Variance (ANOVA) documentation.
-                sh_ano   = XLSX.addsheet!(xf, "ANOVA_$(safe_name)")
-                df_anova = VISE_GenerateAnovaTable_DDEF(m, X_Clean, Y_Clean[:, i])
-                XLSX.writetable!(sh_ano, df_anova; anchor_cell=XLSX.CellRef("A1"))
-
-                # Tabulation of model coefficients and diagnostic metrics.
-                sh_coef = XLSX.addsheet!(xf, "Coefs_$(safe_name)")
-                terms   = get(m, "TermNames", [])
-                coefs   = get(m, "Coefs", [])
-                p_vals  = get(m, "P_Coefs", [])
-                vifs    = get(m, "VIFs", [])
-
-                sh_coef["A1"] = ["Term", "Coefficient", "P-Value", "VIF", "Significance"]
-                for j in eachindex(terms)
-                    sh_coef[j+1, 1] = terms[j]
-                    sh_coef[j+1, 2] = round(coefs[j]; digits=4)
-                    sh_coef[j+1, 3] = isnan(p_vals[j]) ? "N/A" : round(p_vals[j]; digits=4)
-                    sh_coef[j+1, 4] = (j == 1) ? 1.0 : round(vifs[j]; digits=2)
-                    sh_coef[j+1, 5] = (!isnan(p_vals[j]) && p_vals[j] < 0.05) ? "*" : ""
-                end
-            end
-
-            # Integrated radiation and isothermal decay correction registry.
-            if haskey(Results, "RadioCorrection")
-                sh_rad       = XLSX.addsheet!(xf, "Radiation_Decay_Correction")
-                sh_rad["A1"] = ["Component", "Half-Life", "Unit", "Avg Delta-T (Hours)", "Avg Decay Factor", "Correction Applied"]
-                data         = Results["RadioCorrection"]
-                for (r_idx, itm) in enumerate(data)
-                    sh_rad[r_idx+1, 1] = itm["Name"]
-                    sh_rad[r_idx+1, 2] = itm["HalfLife"]
-                    sh_rad[r_idx+1, 3] = itm["Unit"]
-                    sh_rad[r_idx+1, 4] = round(get(itm, "AvgDeltaT", 0.0); digits=4)
-                    sh_rad[r_idx+1, 5] = round(get(itm, "AvgDF", 0.0); digits=6)
-                    sh_rad[r_idx+1, 6] = get(itm, "IsCorrected", false) ? "YES (Dynamic)" : "NO"
-                end
-            end
-        end
-        return true
-    catch e
-        Main.Sys_Fast.FAST_Log_DDEF("VISE", "EXPORT_ERR", "Excel export failed: $e", "FAIL")
-        return false
-    end
-end
-
-# ------------------------------------------------------------------------------
 # SECTION 11: PRIMARY TOURNAMENT MODEL SELECTION
 # ------------------------------------------------------------------------------
 
@@ -600,11 +464,20 @@ end
     VISE_SelectBestModel_DDEF(X, Y, InNames) -> (BestModel, LogMsg)
 Evaluates multiple model structures and selects the optimal winner.
 """
-function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, InNames::Vector{String})
+function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, InNames::AbstractVector{<:AbstractString}, RequestedType::AbstractString="Auto")
     n      = size(X, 1)
     k      = 3
     # 1 + 2*3 + 3*(3-1)/2 = 10
     p_quad = 10
+    
+    # Execution Logic: If a specific type is requested (and not 'Auto'), bypass tournament.
+    req_type = lowercase(RequestedType)
+    if req_type != "auto" && req_type != ""
+        mod = VISE_Regress_DDEF(X, Y, req_type; InNames = InNames)
+        mod["Q2"] = VISE_CrossValidate_DDEF(X, Y, req_type)
+        return (mod, "Forced $req_type")
+    end
+
     # Evaluate candidate model structures including linear and quadratic variations.
     candidates = ["linear"]
     n > p_quad + 2 && push!(candidates, "quadratic")
@@ -613,20 +486,20 @@ function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector
     best_mod    = nothing
     log_details = String[]
 
-    for type in candidates
-        mod = VISE_Regress_DDEF(X, Y, type; InNames = InNames)
+    for type_str in candidates
+        m_type = Main.Lib_Core.CORE_GetModelType_DDEF(type_str)
+        mod = VISE_Regress_DDEF(X, Y, type_str; InNames = InNames)
         mod["Status"] != "OK" && continue
 
-        q2  = VISE_CrossValidate_DDEF(X, Y, type)
+        q2  = VISE_CrossValidate_DDEF(X, Y, type_str)
         r2a = get(mod, "R2_Adj", 0.0)
         
         q2_safe  = isnan(q2) ? 0.0 : q2
         r2a_safe = isnan(r2a) ? 0.0 : r2a
 
-        # Execution of tournament scoring weighted towards predictive stability (Q²).
         score = 0.6 * q2_safe + 0.4 * r2a_safe
 
-        push!(log_details, "$(uppercasefirst(type)): R²Adj=$(round(r2a_safe, digits=3)), Q²=$(round(q2_safe, digits=3))")
+        push!(log_details, "$(uppercasefirst(type_str)): R²Adj=$(round(r2a_safe, digits=3)), Q²=$(round(q2_safe, digits=3))")
 
         if score > best_score
             best_score     = score
@@ -662,7 +535,7 @@ end
 Calculates Predicted R² (Q²) using the PRESS statistic and Hat Matrix shortcut.
 """
 function VISE_CrossValidate_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Float64},
-    ModelType::String)
+    ModelType::AbstractString)
     N     = length(Y)
     N < 4 && return NaN
 
@@ -676,7 +549,6 @@ function VISE_CrossValidate_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVect
 
         denom = max.(1.0 .- h_ii, 1e-6)
         PRESS = sum(abs2, Resid ./ denom)
-
         SST = var(Y) * (N - 1)
         return SST < 1e-9 ? 0.0 : 1.0 - PRESS / SST
     catch
@@ -684,159 +556,103 @@ function VISE_CrossValidate_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVect
     end
 end
 
-# ------------------------------------------------------------------------------
-# SECTION 13: MULTITHREADED GRID SEARCH ENGINE
-# ------------------------------------------------------------------------------
-
 """
     VISE_GridSearch_DDEF(Models, Goals, Bounds; [Steps]) -> (X, Y_Pred, Scores)
 Performs high-density grid search across factor space for desirability exploration.
 """
-function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector,
-    X_Bounds::AbstractMatrix{Float64}; Steps::Int=41)
+function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_Bounds::AbstractMatrix{Float64}; Steps::Int=41)
     Dim = 3
-
-    # Dynamic Hardware-Aware Scaling (Dual Level Architecture)
-    compute_threads = Sys_Fast.FAST_GetComputeThreads_DDEF()
-    
-    # Determine capacity limits and baseline resolutions based on detected hardware profile.
-    cap_limit, base_n = if compute_threads <= 4
-        11_000, 21
-    else
-        69_000, 21
-    end
-
+    compute_threads = Main.Sys_Fast.FAST_GetComputeThreads_DDEF()
+    cap_limit, base_n = (compute_threads <= 4) ? (15_000, 21) : (100_000, 41)
     eff_steps = base_n
-    while eff_steps^Dim > cap_limit && eff_steps > 3
+    while eff_steps^Dim > cap_limit && eff_steps > 5
         eff_steps -= 2
     end
-
-    Main.Sys_Fast.FAST_Log_DDEF("VISE", "OPTIMISATION",
-        "Grid Harmony: $(eff_steps)^$Dim | Limit: $(cap_limit÷1000)k | Threads: $compute_threads", "INFO")
-
-    # Generate coordinate ranges
     Ranges = [range(X_Bounds[i, 1], X_Bounds[i, 2]; length=eff_steps) for i in 1:Dim]
-
-    # Coordinate collection via multidimensional product iteration.
-    Iter       = Iterators.product(Ranges...)
-    NumPoints  = length(Iter)
+    Iter = Iterators.product(Ranges...)
+    NumPoints = length(Iter)
     Candidates = Matrix{Float64}(undef, NumPoints, Dim)
-
     @inbounds for (i, pt) in enumerate(Iter)
-        for d in 1:Dim
-            Candidates[i, d] = pt[d]
-        end
+        for d in 1:Dim Candidates[i, d] = pt[d] end
     end
-
-    # Structural design matrix generation for the primary reference model.
-    RefType  = isempty(Models) ? "quadratic" : get(Models[1], "ModelType", "quadratic")
+    RefType = isempty(Models) ? "quadratic" : get(Models[1], "ModelType", "quadratic")
     X_Design = VISE_ExpandDesign_DDEF(Candidates, RefType)
-
-    NumModels    = length(Models)
-    Predictions  = zeros(Float64, NumPoints, NumModels)
+    NumModels = length(Models)
+    Predictions = zeros(Float64, NumPoints, NumModels)
     Active_Flags = falses(NumModels)
-
-    # Multithreaded prediction execution utilising BLAS integration.
-    Threads.@threads for m in 1:NumModels
-        Mod  = Models[m]
-        Goal = m <= length(Goals) ? Goals[m] : Dict{String, Any}("Type" => "Nominal", "Target" => 0.0, "Weight" => 1.0)
-        Mod["Status"] != "OK" && continue
-
-        m_type     = lowercase(get(Mod, "ModelType", ""))
-        local_pred = zeros(Float64, NumPoints)
-
-        Beta = collect(Float64, Mod["Coefs"])
-        if get(Mod, "ModelType", "quadratic") != RefType
-            Xd_Local = VISE_ExpandDesign_DDEF(Candidates, Mod["ModelType"])
-            mul!(local_pred, Xd_Local, Beta)
-        else
-            mul!(local_pred, X_Design, Beta)
-        end
-        Predictions[:, m] = local_pred
-
-        Active_Flags[m] = true
-    end
-
-    # High-fidelity composite scoring via point-level parallel execution.
-    active_idx = findall(Active_Flags)
-    if isempty(active_idx)
-        Scores = ones(NumPoints)
-    else
-        Scores = Vector{Float64}(undef, NumPoints)
-
-        weight_sum = 0.0
-        for m_idx in active_idx
-            # Safe Goal Access: Prioritise the explicit Goals array
-            m_goal = m_idx <= length(Goals) ? Goals[m_idx] : get(Models[m_idx], "Goal", Dict{String, Any}())
-            weight_sum += Float64(get(m_goal, "Weight", 1.0))
-        end
-        pow = weight_sum > 0.0 ? (1.0 / weight_sum) : 1.0
-
-        parsed_goals = [Main.Lib_Arts.ARTS_ExtractGoal_DDEF(m <= length(Goals) ? Goals[m] : get(Models[m], "Goal", Dict{String, Any}())) for m in 1:NumModels]
-
-        Threads.@threads for i in 1:NumPoints
-            s = 1.0
-            @inbounds for m_idx in active_idx
-                val  = Predictions[i, m_idx]
-                gtup = parsed_goals[m_idx]
-                d    = Main.Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
-                s   *= d^gtup[6]
+    # BLAS Thread Isolation: Prevents nested threading deadlocks (Threads.@threads + BLAS)
+    # on Windows systems during high-concurrency grid searches.
+    Main.Sys_Fast.FAST_Log_DDEF("VISE", "GRID_SEARCH", "Exploration Pulse [N=$NumPoints] - Dispatching $(NumModels) models...", "WAIT")
+    Scores = Vector{Float64}(undef, NumPoints)
+    
+    old_blas = LinearAlgebra.BLAS.get_num_threads()
+    LinearAlgebra.BLAS.set_num_threads(1)
+    try
+        # 1. Parallel Regression Matrix Expansion
+        Threads.@threads for m in 1:NumModels
+            Mod = Models[m]
+            Mod["Status"] != "OK" && continue
+            m_type_str = get(Mod, "ModelType", "quadratic")
+            m_type = Main.Lib_Core.CORE_GetModelType_DDEF(m_type_str)
+            Beta = collect(Float64, Mod["Coefs"])
+            if m_type_str != RefType
+                mul!(view(Predictions, :, m), VISE_ExpandMatrix_DDEF(m_type, Candidates), Beta)
+            else
+                mul!(view(Predictions, :, m), X_Design, Beta)
             end
-            res_val   = s^pow
-            Scores[i] = (isnan(res_val) || isinf(res_val)) ? 0.0 : clamp(res_val, 0.0, 1.0)
+            Active_Flags[m] = true
         end
+
+        # 2. Parallel Multi-Objective Desirability Scoring
+        active_idx = findall(Active_Flags)
+        Scores = Vector{Float64}(undef, NumPoints)
+        if isempty(active_idx)
+            fill!(Scores, 1.0)
+        else
+            sum_weights = 0.0
+            parsed_goals = Vector{Tuple}(undef, NumModels)
+            for m in 1:NumModels
+                gtup = Main.Lib_Core.CORE_ExtractGoal_DDEF(m <= length(Goals) ? Goals[m] : get(Models[m], "Goal", Dict()))
+                parsed_goals[m] = gtup
+                if m in active_idx; sum_weights += gtup[5] end
+            end
+            
+            pow = sum_weights > 0.0 ? (1.0 / sum_weights) : (length(active_idx) > 0 ? 1.0 / length(active_idx) : 1.0)
+            
+            Threads.@threads for i in 1:NumPoints
+                s = 1.0
+                @inbounds for m_idx in active_idx
+                    s *= Main.Lib_Core.CORE_CalcDesirability_DDEF(Predictions[i, m_idx], parsed_goals[m_idx])
+                end
+                res_val = s^pow
+                @inbounds Scores[i] = (isnan(res_val) || isinf(res_val)) ? 0.0 : clamp(res_val, 0.0, 1.0)
+            end
+        end
+    finally
+        LinearAlgebra.BLAS.set_num_threads(old_blas)
     end
 
     return Candidates, Predictions, Scores
 end
 
-# ------------------------------------------------------------------------------
-# SECTION 14: LOCAL GRADIENT SENSITIVITY ANALYSIS
-# ------------------------------------------------------------------------------
-
-"""
-    VISE_SensitivityAnalysis_DDEF(Model, X_Point; [delta]) -> Vector{Float64}
-Calculates local sensitivity (gradients) at a specific coordinate.
-"""
-function VISE_SensitivityAnalysis_DDEF(Model::AbstractDict, X_Point::Vector{Float64}; delta=1e-4)
-    # Implementation of local gradient sensitivity analysis.
-    Dim       = 3 
-
-    gradients = zeros(3)
-
-    base_pred = VISE_Predict_DDEF(Model, reshape(X_Point, 1, Dim))[1]
-
-    for i in 1:Dim
-        X_plus    = copy(X_Point)
-        X_plus[i] += delta
-        pred_plus = VISE_Predict_DDEF(Model, reshape(X_plus, 1, Dim))[1]
-        gradients[i] = abs(pred_plus - base_pred) / delta
+function VISE_SensitivityAnalysis_DDEF(Model::AbstractDict, X_Point::AbstractVector{Float64}; delta=1e-4)
+    Dim, gradients = 3, zeros(3)
+    base_pred = VISE_Predict_DDEF(Model, reshape(X_Point, 1, 3))[1]
+    for i in 1:3
+        Xp = copy(X_Point); Xp[i] += delta
+        pred_p = VISE_Predict_DDEF(Model, reshape(Xp, 1, 3))[1]
+        gradients[i] = abs(pred_p - base_pred) / delta
     end
-
     total = sum(gradients)
-    
-    return total > 0.0 ? gradients ./ total : fill(1.0 / Dim, Dim)
+    return total > 0.0 ? gradients ./ total : fill(1.0/3.0, 3)
 end
 
-# ==============================================================================
-# PART E: EDITORIAL & REPORTING INFRASTRUCTURE
-# ==============================================================================
-
-# ------------------------------------------------------------------------------
-# SECTION 15: SCIENTIFIC REPORT GENERATOR
-# ------------------------------------------------------------------------------
-
-"""
-    VISE_GenerateScientificReport_DDEF(Res) -> String
-Generates an academic report following rigorous editorial and scientific standards.
-"""
 function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     io = IOBuffer()
-    write(io, "## DAISHODOE ANALYTICAL REPORT\n")
-    write(io, Printf.@sprintf("*Protocol Execution: %s | [ACADEMIC COMPENDIUM] *\n", Dates.format(now(), "yyyy-mm-dd HH:MM")))
+    write(io, "# DAISHODOE ANALYTICAL REPORT (SCIENTIFIC COMPENDIUM)\n")
+    write(io, Printf.@sprintf("*Protocol Execution: %s | [ACADEMIC PRECISION MODE] *\n", Dates.format(now(), "yyyy-mm-dd HH:MM")))
     write(io, "---\n\n")
 
-    # Integrated analysis of experimental design vitals and design topology.
     if haskey(Res, "Vitals") && !isnothing(Res["Vitals"])
         v = Res["Vitals"]
         write(io, "### I. Experimental Design Vitals\n")
@@ -852,775 +668,681 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         
         if lof_val < 0.05
             write(io, "(`SIGNIFICANT` - Potential systematic bias or missing higher-order terms)\n")
+            write(io, "> [!CAUTION]\n> **Critical Lack-of-Fit**: The model fails to capture the underlying curvature. Optimisation based on this surface may be physically misleading.\n")
         else
             write(io, "(`NON-SIGNIFICANT` - Model captures the underlying phenomenon accurately)\n")
         end
         write(io, "\n")
     end
 
-    # Integrated analysis of radioactive decay correction protocols.
-    if haskey(Res, "RadioCorrection") && !isempty(Res["RadioCorrection"])
-        write(io, "### II. Radioactive Decay Correction (Audit)\n")
-        write(io, "Row-based bidirectional dynamic correction applied to compensate for isothermal decay (Forward & Reverse).\n\n")
-        for itm in Res["RadioCorrection"]
-            r_type = get(itm, "Type", "dynamic row-based correction")
-            @printf(io, "- **%s**: Applied %s.\n", itm["Name"], r_type)
-            @printf(io, "  - *Half-Life (T½)*: %.2f %s\n", get(itm, "HalfLife", 0.0), get(itm, "Unit", ""))
-            @printf(io, "  - *Avg Decay Time*: %.2f mins\n", get(itm, "AvgDeltaT", 0.0))
-            @printf(io, "  - *Avg Decay Factor*: %.4f\n", get(itm, "AvgDF", 0.0))
-        end
-        write(io, "\n")
-    end
-
+    write(io, "### II. Response Surface Dimension Analysis\n")
     out_names = Res["OutNames"]
     for (m_idx, name) in enumerate(out_names)
         mod = Res["Models"][m_idx]
         mod["Status"] != "OK" && continue
 
-        r2a  = get(Res, "R2_Adj", fill(NaN, length(out_names)))[m_idx]
-        q2   = get(Res, "R2_Pred", fill(NaN, length(out_names)))[m_idx]
+        r2a  = get(mod, "R2_Adj", NaN)
+        q2   = get(mod, "Q2", NaN)
         rmse = get(mod, "RMSE", 0.0)
         aic  = get(mod, "AIC", NaN)
 
-        write(io, "### Dimension Analysis: **$(name)**\n")
-        write(io, "#### II. Statistical Fidelity & Variance Explanation\n")
-        write(io, Printf.@sprintf("- **Objective Metric**: Adjusted R-Squared = %.4f (Adjusted for degrees of freedom)\n", r2a))
-        write(io, Printf.@sprintf("- **Predictive Stability**: Predicted R-Squared = %.4f (Leave-one-out cross-validation)\n", q2))
-        write(io, Printf.@sprintf("- **Residual Magnitude**: RMSE = %.4f (Root Mean Squared Error)\n", rmse))
-        if !isnan(aic) && !isinf(aic)
-            write(io, Printf.@sprintf("- **Information Criterion**: AIC = %.4f (Akaike Information Criterion)\n", aic))
-        end
+        write(io, "#### Response: **$(name)**\n")
+        write(io, Printf.@sprintf("- **Fitness (Adj. R²)**: %.4f (Variance explained)\n", r2a))
+        write(io, Printf.@sprintf("- **Predictivity (Q²)**: %.4f (Leave-one-out cross-validation)\n", q2))
+        write(io, Printf.@sprintf("- **Standard Error (RMSE)**: %.4f\n", rmse))
 
-        # Execution of predictive reliability classification.
         quality = q2 > 0.85 ? "SUPERIOR" : q2 > 0.7 ? "ROBUST" : q2 > 0.4 ? "FORMATIVE" : "TENTATIVE"
-        write(io, "- **Inference Reliability**: `$quality` profile. ")
+        write(io, "- **Inference Reliability**: `$quality` Profile. ")
+        
         if q2 > 0.7
             write(io, "The model exhibits strong extrapolative potential within the defined design space.\n")
         else
             write(io, "Exercise caution during phase transition; additional data points may be required for high-fidelity mapping.\n")
         end
 
-        # Factor Sensitivity summary for this output
-        if haskey(Res, "Sensitivities") && m_idx <= length(Res["Sensitivities"])
-            sens     = Res["Sensitivities"][m_idx]
+        gap = r2a - q2
+        if gap > 0.20
+            msg = Printf.@sprintf("> [!WARNING]\n> **High Overfitting Risk**: A significant gap (%.2f) detected between fitness and predictivity. The model is likely capturing experimental noise rather than true physical trends.\n", gap)
+            write(io, msg)
+        elseif gap < 0.10 && r2a > 0.70
+            write(io, "> [!TIP]\n> **Excellent Model Stability**: The high alignment between R² and Q² suggests a highly reliable scientific model.\n")
+        end
+
+        sens = get(Res, "Sensitivities", [])
+        if !isempty(sens) && m_idx <= length(sens)
+            s_vec = sens[m_idx]
             in_names = get(Res, "InNames", [])
-            if !isempty(sens) && length(sens) == length(in_names)
-                perm = sortperm(sens; rev=true)
-                write(io, "- **Top Sensitivity**: `$(in_names[perm[1]])` contributes $(round(sens[perm[1]]*100; digits=1))% to the response variance at the optimum.\n")
-            end
-        end
-
-        # Integrated variance inflation assessment (VIF).
-        write(io, "\n#### III. Orthogonality & Collinearity Diagnostics\n")
-        vifs    = get(mod, "VIFs", Float64[])
-        # Determination of multicollinearity severity based on VIF thresholds.
-        max_vif = isempty(vifs) ? 0.0 : maximum(vifs)
-        if max_vif > 10.0
-            @printf(io, "- **Multicollinearity Trace**: `WARNING` (Max VIF: %.2f). Parameters show significant correlation.\n", max_vif)
-        elseif max_vif > 0.0
-            @printf(io, "- **Multicollinearity Trace**: `CLEAN` (Max VIF: %.2f). The design preserves factor orthogonality.\n", max_vif)
-        end
-
-        # Assessment of primary factor impact and directional synergy.
-        write(io, "\n#### IV. Principal Factor Topology\n")
-        coefs   = mod["Coefs"]
-        t_stats = get(mod, "t_Stats", Float64[])
-        if length(coefs) > 1 && !isempty(t_stats)
-            abs_t = abs.(view(t_stats, 2:length(t_stats)))
-            if !all(isnan, abs_t)
-                perm     = sortperm(abs_t; rev=true)
-                top_idx  = perm[1] + 1
-                top_term = mod["TermNames"][top_idx]
-                top_t    = t_stats[top_idx]
-                impact   = top_t > 0 ? "positive (synergistic)" : "inverse (antagonistic)"
-                @printf(io, "- **Primary Driver**: `%s` is the dominant factor (t-value = %.2f), manifesting a clear *%s* impact.\n", top_term, top_t, impact)
-            else
-                write(io, "- **Primary Driver**: Statistical inference inconclusive for this model profile.\n")
+            if !isempty(s_vec) && length(s_vec) == length(in_names)
+                perm = sortperm(s_vec; rev=true)
+                write(io, Printf.@sprintf("- **Primary Driver**: `%s` (contributes %.1f%% to response variance).\n", in_names[perm[1]], s_vec[perm[1]]*100))
             end
         end
         write(io, "\n")
     end
 
-    if haskey(Res, "BestScore") && !isempty(get(Res, "BestPoint", []))
-        write(io, "#### V. Optimal Scenario & Optimal Zone Coordinates\n")
-        @printf(io, "- **Composite Desirability (D)**: %.4f\n", Res["BestScore"])
+    if !isempty(get(Res, "BestPoint", []))
+        write(io, "### III. Global Optimum & Control Topology\n")
+        @printf(io, "- **Composite Desirability (D)**: %.4f\n", get(Res, "BestScore", 0.0))
 
         best_pt  = Res["BestPoint"]
         in_names = get(Res, "InNames", [])
-        if length(best_pt) == length(in_names)
-            write(io, "- **Optimal Factor Settings**:\n")
-            for (i, val) in enumerate(best_pt)
-                @printf(io, "  - *%s*: %.4f\n", in_names[i], val)
-            end
+        write(io, "- **Optimal Factor Settings**:\n")
+        for (i, val) in enumerate(best_pt)
+            @printf(io, "  - *%s*: %.4f\n", in_names[i], val)
         end
-        write(io, "\n*Stability analysis suggests these coordinates reside within a high-confidence 'Optimal Zone' for experimental reproducibility.*\n\n")
+        write(io, "\n> [!NOTE]\n> Stability analysis suggests these coordinates reside within a high-confidence 'Optimal Zone' for experimental reproducibility.\n\n")
     end
 
-    write(io, "*Generated via the DaishoDoE Modular Framework $(Sys_Fast.FAST_Data_DDEC.VERSION). Formatted in compliance with academic reporting standards.*\n")
+    write(io, "*Generated via the DaishoDoE Modular Framework $(Main.Sys_Fast.FAST_Data_DDEC.VERSION). Formatted in compliance with academic reporting standards.*\n")
 
     return String(take!(io))
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 16: EXECUTION ORCHESTRATOR (Main Gateway)
+# SECTION 17: PHASE DATA LOADER & INGESTION
 # ------------------------------------------------------------------------------
 
 """
-    VISE_Execute_DDEF(DataFile, Phase, Goals, [ModelType]; [Opts]) -> Dict
-Higher-level entry point for phase-based experimental analysis and optimisation.
+    VISE_LoadPhaseData_DDEF(FilePath, Phase, C, Log) -> DataFrame
+High-fidelity data loader that filters global experiment records for phase-specific analysis.
 """
-function VISE_Execute_DDEF(DataFile::String, Phase::String, Goals::AbstractVector,
-    ModelType::String="Auto"; Opts=Dict{String,Any}())
-    C   = Sys_Fast.FAST_Data_DDEC
-    Log = Sys_Fast.FAST_Log_DDEF
-
-    Log("VISE", "INITIALISATION", "Analysing Phase: $Phase", "WAIT")
-    t0                = time()
-    boundary_warnings = String[]
-
-    df_raw = Sys_Fast.FAST_ReadExcel_DDEF(DataFile, C.SHEET_DATA)
-    isempty(df_raw) && (df_raw = Sys_Fast.FAST_ReadExcel_DDEF(DataFile, "DATA_RECORDS"))
-    isempty(df_raw) && return Dict("Status" => "FAIL", "Message" => "Source data is unreadable or empty.")
-
-    valid, issues = Sys_Fast.FAST_ValidateDataFrame_DDEF(df_raw, [C.COL_PHASE])
-    if !valid
-        Log("VISE", "INITIALISATION", "Pre-flight issues: $(join(issues, " | "))", "WARN")
+function VISE_LoadPhaseData_DDEF(FilePath::String, Phase::String, C, Log)
+    df = Main.Sys_Fast.FAST_ReadExcel_DDEF(FilePath, C.SHEET_DATA)
+    isempty(df) && return DataFrame()
+    # Filter for Phase-Specific Records to ensure isolated logic
+    # Filter for Phase-Specific Records to ensure isolated logic
+    if hasproperty(df, Symbol(C.COL_PHASE))
+        df_p = filter(r -> string(r[C.COL_PHASE]) == Phase, df)
+        return isempty(df_p) ? df : df_p # Fallback to all if Phase-ID tagging is missing
     end
-    Sys_Fast.FAST_NormaliseCols_DDEF!(df_raw)
-    col_phase_name = Sys_Fast.FAST_GetCol_DDEF(df_raw, C.COL_PHASE)
-    if isempty(col_phase_name)
-        Log("VISE", "INITIALISATION", "Required column '$(C.COL_PHASE)' not found in dataset.", "FAIL")
-        return Dict(
-            "Status"  => "FAIL", 
-            "Message" => "Required column '$(C.COL_PHASE)' not found in dataset. Please ensure the data sheet is properly formatted."
-        )
+    return df
+end
+
+# ------------------------------------------------------------------------------
+# SECTION 18: ENSEMBLE MODELLING ORCHESTRATOR
+# ------------------------------------------------------------------------------
+
+"""
+    VISE_TrainEnsemble_DDEF(X, Y, InNames, ModelType, Goals, Log) -> Vector{Dict}
+Parallelized ensemble trainer that selects the optimal model structure for each response variable.
+"""
+function VISE_TrainEnsemble_DDEF(X::AbstractMatrix{Float64}, Y::AbstractMatrix{Float64}, InNames::AbstractVector{<:AbstractString}, ModelType::AbstractString, Goals::AbstractVector, Log)
+    n_out = size(Y, 2)
+    models = Vector{Dict}(undef, n_out)
+    tasks = Task[]
+    for m in 1:n_out
+        t = Threads.@spawn begin
+            try
+                mod, log_msg = VISE_SelectBestModel_DDEF(X, Y[:, m], InNames, ModelType)
+                # Attach Metadata for Traceability
+                if mod["Status"] == "OK"
+                    mod["Goal"] = m <= length(Goals) ? Goals[m] : Dict{String, Any}()
+                end
+                mod["ModelIndex"] = Int(m)
+                models[m] = mod
+                Log("VISE", "MODELLING", "Output $m ($ModelType): $(string(log_msg))", "OK")
+            catch e
+                Log("VISE", "ERR", "Output $m modelling failed: $(string(e))", "FAIL")
+                models[m] = Dict{String, Any}("Status" => "FAIL", "Error" => string(e))
+            end
+        end
+        push!(tasks, t)
+    end
+    wait.(tasks)
+    return models
+end
+
+# ------------------------------------------------------------------------------
+# SECTION 19: SYSTEM EXECUTION GATEWAY (VISE_EXECUTE)
+# ------------------------------------------------------------------------------
+
+function VISE_Execute_DDEF(DataFile::AbstractString, Phase::AbstractString, Goals::AbstractVector, ModelType::AbstractString="Auto"; 
+    Opts=Dict{String,Any}(), ConfigUpdates::Dict{String,Any}=Dict{String,Any}(), t_start::Float64=time(), RenderMode::Symbol=:Full)
+    t0 = t_start
+    C, Log = Main.Sys_Fast.FAST_Data_DDEC, Main.Sys_Fast.FAST_Log_DDEF
+    Log("VISE", "INITIALISATION", "Analysing Phase: $Phase (File: $(basename(DataFile)))", "WAIT")
+    
+    # 1. Load Data & Config
+    df_raw = VISE_LoadPhaseData_DDEF(DataFile, Phase, C, Log)
+    isempty(df_raw) && return Dict("Status" => "FAIL", "Message" => "Data load failed: Phase $Phase not found in $DataFile.")
+    
+    config = Main.Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
+    
+    # 2. Execute Core Analytical Pipeline (Staged Rendering Support)
+    res, sheets_to_commit = VISE_ExecuteCore_DDEF(df_raw, config, Phase, Goals, ModelType; Opts=Opts, t_start=t0, RenderMode=RenderMode)
+    
+    res["Status"] != "OK" && return res
+
+    # 3. Handle Configuration Merging & Commit to Disk
+    if !isempty(ConfigUpdates)
+        for (k, v) in ConfigUpdates
+            config[k] = v
+        end
+        df_cfg = DataFrame(PARAMETER=["MasterConfig"], VALUE_JSON=[JSON3.write(config)])
+        sheets_to_commit[C.SHEET_CONFIG] = df_cfg
     end
     
-    # Implementation of case-insensitive alignment for phase-based filtering.
-    col_phase = Symbol(col_phase_name)
-    df_train  = filter(r -> strip(uppercase(string(r[col_phase]))) == strip(uppercase(Phase)), df_raw)
+    Log("VISE", "IO_FLUSH", "Committing analytical updates to $DataFile...", "WAIT")
+    Main.Sys_Fast.FAST_SafeExcelWrite_DDEF(DataFile, sheets_to_commit)
+    
+    elapsed_total = round(time() - t0; digits=1)
+    res["Elapsed"] = "$(elapsed_total)s"
+    
+    Log("VISE", "COMPLETE", "Analytical Orchestration Finalised ($(res["Elapsed"])).", "OK")
+    
+    return res
+end
 
-    nrow(df_train) < 3 && return Dict("Status" => "FAIL", "Message" => "Insufficient data points (N < 3).")
-
-    # Execution of case-insensitive prefix searches for factor identification.
-    in_cols  = filter(n -> startswith(uppercase(n), C.PRE_INPUT), names(df_train))
-    out_cols = filter(n -> startswith(uppercase(n), C.PRE_RESULT), names(df_train))
-
-    # Resolution of structured numeric matrices from dimensional datasets.
-    nr      = nrow(df_train)
-    num_in  = max(3, length(in_cols))
-    num_out = max(1, length(out_cols))
-    X_Raw   = zeros(Float64, nr, num_in) 
-    Y_Raw   = fill(NaN, nr, num_out) 
-
-    @inbounds for (ci, c) in enumerate(in_cols), r in 1:nr
-        X_Raw[r, ci] = Sys_Fast.FAST_SafeNum_DDEF(df_train[r, c])
+"""
+    VISE_ExecuteCore_DDEF(df_raw, config, Phase, Goals, ModelType; Opts, t_start) -> (Dict, Dict)
+Orchestrates the scientific analytical pipeline entirely in memory. Target for JIT warmup.
+"""
+function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::AbstractString, Goals::AbstractVector, ModelType::AbstractString="Auto"; 
+    Opts=Dict{String,Any}(), t_start::Float64=time(), RenderMode::Symbol=:Full)
+    
+    C, Log = Main.Sys_Fast.FAST_Data_DDEC, Main.Sys_Fast.FAST_Log_DDEF
+    t0 = t_start
+    
+    X_Clean, Y_Clean, InNames, OutNames, valid_mask = VISE_IngestMatrices_DDEF(df_raw, config, C, Log)
+    n_samples, n_out = size(X_Clean, 1), size(Y_Clean, 2)
+    
+    if n_samples < 3
+        return Dict("Status" => "FAIL", "Message" => "Insufficient data (N=$n_samples). Minimum 3 valid rows required."), Dict()
     end
-    @inbounds for (ci, c) in enumerate(out_cols), r in 1:nr
-        Y_Raw[r, ci] = Sys_Fast.FAST_SafeNum_DDEF(df_train[r, c])
+    
+    radio_audit = VISE_ApplyDecayKernel_DDEF!(X_Clean, Y_Clean, InNames, OutNames, df_raw, config, Opts, C, Log)
+    eff_model = ModelType == "Auto" ? (n_samples > 12 ? "quadratic" : "linear") : lowercase(ModelType)
+    if (lowercase(ModelType) != "auto" && lowercase(ModelType) != "") 
+        Log("VISE", "MODELLING", "User Directive: Forcing $eff_model model architecture.", "INFO")
     end
-
-    # Execute validation protocol against actual result vectors.
-    valid_mask = vec(all(!isnan, view(Y_Raw, :, 1:length(out_cols)); dims=2))
-    X_Clean    = X_Raw[valid_mask, 1:3]
-    Y_Clean    = Y_Raw[valid_mask, 1:length(out_cols)]
-    N          = size(X_Clean, 1)
-    K          = 3
-
-    if N < 3
-        Log("VISE", "INSUFFICIENT_DATA", "Filtered response vectors yield N = $N valid rows (Minimum 3 required).", "FAIL")
-        return Dict("Status" => "FAIL", "Message" => "Insufficient valid response data (N < 3). Ensure that you have measured results in the Excel file.")
+    
+    models = VISE_TrainEnsemble_DDEF(X_Clean, Y_Clean, InNames, eff_model, Goals, Log)
+    
+    InNames_v = collect(String, InNames)
+    OutNames_v = collect(String, OutNames)
+    bp, bs, ldf, SC, warns = VISE_RunOptimisation_DDEF(X_Clean, models, Goals, config, Phase, InNames_v, OutNames_v, Opts, C, Log)
+    
+    Y_Pred, Actual_Scores = VISE_GeneratePredictions_DDEF(X_Clean, Y_Clean, models, Goals)
+    df_updated = VISE_PreparePredictionsSheet_DDEF(df_raw, Phase, Y_Pred, Actual_Scores, valid_mask, OutNames_v, C, Log)
+    
+    anova_tables = Vector{DataFrame}()
+    normality_res = Vector{Dict}()
+    residuals = Vector{Vector{Float64}}()
+    sens_list = Vector{Vector{Float64}}()
+    for i in 1:n_out
+        m = models[i]
+        push!(anova_tables, VISE_GenerateAnovaTable_DDEF(m, X_Clean, Y_Clean[:, i]))
+        push!(normality_res, VISE_PerformNormalityTest_DDEF(m, X_Clean, Y_Clean[:, i]))
+        push!(residuals, Y_Clean[:, i] .- Y_Pred[:, i])
+        push!(sens_list, isempty(bp) ? zeros(3) : VISE_SensitivityAnalysis_DDEF(m, bp))
+        r2a, q2 = get(m, "R2_Adj", 0.0), get(m, "Q2", 0.0)
+        (r2a - q2) > 0.20 && push!(warns, "$(OutNames_v[i]): Large R2 gap ($(round(r2a-q2; digits=2))). Potential overfitting.")
     end
-
-    # Load configuration to accurately map columns back to ingredient/output names
-    # This ensures that headers like 'VARIA_Component_mg' correctly map to 'Component'
-    config      = Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
-    cfg_ingreds = get(config, "Ingredients", [])
-    cfg_outputs = get(config, "Outputs", [])
-
-    InNames = map(in_cols) do n
-        n_up = uppercase(n)
-        for ing in cfg_ingreds
-            nm = get(ing, "Name", "")
-            pfx_nm = uppercase(C.PRE_INPUT * nm)
-            if n_up == pfx_nm || startswith(n_up, pfx_nm * "_")
-                return nm
-            end
-        end
-        # Fallback to structural cleaning if no JSON match
-        return replace(Sys_Fast.FAST_CleanHeader_DDEF(n), Regex("(?i)^" * C.PRE_INPUT) => "")
-    end
-
-    OutNames = map(out_cols) do n
-        n_up = uppercase(n)
-        for out in cfg_outputs
-            nm = get(out, "Name", "")
-            pfx_nm = uppercase(C.PRE_RESULT * nm)
-            if n_up == pfx_nm || startswith(n_up, pfx_nm * "_")
-                return nm
-            end
-        end
-        # Fallback to structural cleaning if no JSON match
-        return replace(Sys_Fast.FAST_CleanHeader_DDEF(n), Regex("(?i)^" * C.PRE_RESULT) => "")
-    end
-
-    # Calculate Design Efficiency (New Bridge Lib_Core -> Lib_Vise)
-    d_eff = Lib_Core.CORE_D_Efficiency_DDEF(X_Clean)
-    Log("VISE", "DESIGN_QUALITY", "Calculated D-Efficiency: $(round(d_eff * 100; digits=2))%",
-        d_eff > 0.5 ? "OK" : "WARN")
-
-    # Radioactive decay correction based on experimental timestamps
-    radio_correction_audit = []
-    if get(get(Opts, "RadioOpts", Dict()), "Apply", false)
-        Log("VISE", "DECAY", "Executing bidirectional radioactivity decay correction.", "INFO")
-        
-        radio_opts = get(Opts, "RadioOpts", Dict{String,Any}())
-        fwd_dict   = get(radio_opts, "Forward", Dict{String,Any}())
-        rev_dict   = get(radio_opts, "ReverseMap", Dict{String,Any}())
-
-        ingredients = if !isempty(cfg_ingreds)
-            cfg_ingreds
-        elseif haskey(config, "Ingredients")
-            config["Ingredients"] isa Dict ? collect(values(config["Ingredients"])) : config["Ingredients"]
-        else
-            []
-        end
-
-        # 1. Forward Decay (Inputs)
-        for v_name in keys(fwd_dict)
-            ing_idx = findfirst(i -> get(i, "Name", "") == v_name, ingredients)
-            isnothing(ing_idx) && continue
-            ing = ingredients[ing_idx]
-            
-            v_idx = findfirst(==(v_name), InNames) # Might be nothing if Fixed
-            
-            hl_raw  = get(ing, "HalfLife", 0.0)
-            hl_unit = get(ing, "HalfLifeUnit", "Hours")
-            hl_min  = Lib_Mole.MOLE_ConvertTimeToMinutes_DDEF(hl_raw, hl_unit)
-
-            if hl_min > 0.0
-                col_exp = Sys_Fast.FAST_GetCol_DDEF(df_train, "TIME_EXP_MINS_" * v_name)
-                
-                dfs = Float64[]
-                for i in 1:N
-                    t_min = isempty(col_exp) ? 0.0 : Sys_Fast.FAST_SafeNum_DDEF(df_train[i, col_exp])
-                    df_row = exp(-log(2) * t_min / hl_min)
-                    
-                    if !isnothing(v_idx)
-                        X_Clean[i, v_idx] *= df_row
-                    end
-                    push!(dfs, df_row)
-                end
-                
-                type_lbl = isnothing(v_idx) ? "Forward (Fixed)" : "Forward (Input)"
-                opts = get(fwd_dict, v_name, Dict())
-                disp_name = get(opts, "Name", "")
-                disp_name = isempty(disp_name) ? v_name : disp_name
-
-                push!(radio_correction_audit, Dict(
-                    "Name"        => disp_name,
-                    "HalfLife"    => hl_raw,
-                    "Unit"        => hl_unit,
-                    "Type"        => type_lbl,
-                    "AvgDeltaT"   => isempty(col_exp) ? 0.0 : mean(Sys_Fast.FAST_SafeNum_DDEF.(df_train[!, col_exp])),
-                    "AvgDF"       => isempty(dfs) ? 1.0 : mean(dfs),
-                    "IsCorrected" => true
-                ))
-            end
-        end
-
-        # 2. Reverse Decay & Yield Transformation (Outputs)
-        for (out_name, out_data) in rev_dict
-            mapped_in_name = get(out_data, "Source", "None")
-            (mapped_in_name == "None" || isempty(mapped_in_name)) && continue
-            o_idx = findfirst(==(out_name), OutNames)
-            isnothing(o_idx) && continue
-
-            ing_idx = findfirst(i -> get(i, "Name", "") == mapped_in_name, ingredients)
-            isnothing(ing_idx) && continue
-            ing = ingredients[ing_idx]
-            
-            hl_raw  = get(ing, "HalfLife", 0.0)
-            hl_unit = get(ing, "HalfLifeUnit", "Hours")
-            hl_min  = Lib_Mole.MOLE_ConvertTimeToMinutes_DDEF(hl_raw, hl_unit)
-
-            if hl_min > 0.0
-                col_meas = Sys_Fast.FAST_GetCol_DDEF(df_train, "TIME_MEAS_MINS_" * mapped_in_name)
-                col_exp  = Sys_Fast.FAST_GetCol_DDEF(df_train, "TIME_EXP_MINS_" * mapped_in_name)
-                
-                dfs = Float64[]
-                for i in 1:N
-                    t_meas = isempty(col_meas) ? 0.0 : Sys_Fast.FAST_SafeNum_DDEF(df_train[i, col_meas])
-                    t_exp  = isempty(col_exp)  ? 0.0 : Sys_Fast.FAST_SafeNum_DDEF(df_train[i, col_exp])
-                    
-                    df_row = exp(log(2) * t_meas / hl_min)
-                    A_out_corr = Y_Clean[i, o_idx] * df_row
-                    
-                    v_idx = findfirst(==(mapped_in_name), InNames)
-                    if !isnothing(v_idx)
-                        # Yield relative to Independent Variable (already forward decayed in Step 1)
-                        A_in_corr = X_Clean[i, v_idx]
-                        yield_val = (A_in_corr > 0.0) ? (A_out_corr / A_in_corr) * 100.0 : 0.0
-                        Y_Clean[i, o_idx] = clamp(yield_val, 0.0, 100.0)
-                    else
-                        # Yield relative to Fixed/Filler Ingredient
-                        c_fixed = Sys_Fast.FAST_GetCol_DDEF(df_train, C.PRE_FIXED * mapped_in_name)
-                        c_fixed = isempty(c_fixed) ? Sys_Fast.FAST_GetCol_DDEF(df_train, C.PRE_FILL * mapped_in_name) : c_fixed
-                        
-                        if !isempty(c_fixed)
-                            val_raw = Sys_Fast.FAST_SafeNum_DDEF(df_train[i, c_fixed])
-                            # In-place dynamic forward decay for fixed components logic
-                            A_in_corr = val_raw * exp(-log(2) * t_exp / hl_min)
-                            yield_val = (A_in_corr > 0.0) ? (A_out_corr / A_in_corr) * 100.0 : 0.0
-                            Y_Clean[i, o_idx] = clamp(yield_val, 0.0, 100.0)
-                        else
-                            # Fallback if no input volume/mass found
-                            Y_Clean[i, o_idx] = A_out_corr
-                        end
-                    end
-                    push!(dfs, df_row)
-                end
-                
-                # Retrieval of scientific naming override for high-fidelity reporting.
-                opts = get(rev_dict, out_name, Dict())
-                disp_name = get(opts, "Name", "")
-                disp_name = isempty(disp_name) ? out_name : disp_name
-
-                push!(radio_correction_audit, Dict(
-                    "Name"        => disp_name,
-                    "HalfLife"    => hl_raw,
-                    "Unit"        => hl_unit,
-                    "Type"        => "Reverse & Yield ($mapped_in_name)",
-                    "AvgDeltaT"   => isempty(col_meas) ? 0.0 : mean(Sys_Fast.FAST_SafeNum_DDEF.(df_train[!, col_meas])),
-                    "AvgDF"       => isempty(dfs) ? 1.0 : mean(dfs),
-                    "IsCorrected" => true
-                ))
-            end
-        end
-    end
-
-    # Zero Variance Check (Flat Line Detector)
-    # 1 + 2*3 + 3*(3-1)/2 = 10
-    P_quad    = 10 
-
-    eff_model = ModelType == "Auto" ? (N > P_quad + 2 ? "quadratic" : "linear") : lowercase(ModelType)
-
-    Log("VISE", "MODEL_SETUP", "Using '$eff_model' model for $N samples.", "OK")
-
-    # NOTE: InNames and OutNames already computed, no reassignment needed
-
-    models = map(eachindex(out_cols)) do m
-        if lowercase(eff_model) == "auto"
-            mod, tournament_msg = VISE_SelectBestModel_DDEF(X_Clean, view(Y_Clean, :, m), InNames)
-            Log("VISE", "TOURNAMENT", "Output $(OutNames[m]): $tournament_msg", "INFO")
-        else
-            mod       = VISE_Regress_DDEF(X_Clean, view(Y_Clean, :, m), eff_model; InNames)
-            mod["Q2"] = VISE_CrossValidate_DDEF(X_Clean, view(Y_Clean, :, m), eff_model)
-        end
-        mod["Goal"] = m <= length(Goals) ? Goals[m] : Dict{String, Any}("Type" => "Nominal", "Target" => 0.0, "Weight" => 1.0)
-        mod
-    end
-
-    r2_vec      = [get(m, "R2_Adj", NaN) for m in models]
-    r2_pred_vec = [get(m, "Q2", NaN) for m in models]
-
-    valid_r2 = filter(!isnan, r2_vec)
-    !isempty(valid_r2) && Log("VISE", "TRAINING_SUMMARY",
-        "Average Model R²_Adj: $(round(mean(valid_r2); digits=3))", "OK")
-
-    Best_Point = Float64[]
-    Leaders_DF = DataFrame()
-
-    # Integrated resolution of multi-objective optimisation goals.
-    active_goals = isempty(Goals) ? [get(m, "Goal", Dict{String, Any}()) for m in models] : Goals
-
-    if get(Opts, "Optim", true) && K >= 2
-        bounds = hcat(minimum(X_Clean; dims=1)', maximum(X_Clean; dims=1)')
-
-        # Execution of high-density density exploration protocols.
-        XT, YP, SC = VISE_GridSearch_DDEF(models, active_goals, bounds)
-
-        num_candidates = length(SC)
-
-        # Implementation of global desirability maximum search via BlackBoxOptim.
-        Best_Point, Best_Score = Lib_Core.CORE_OptimiseDesirability_DDEF(models, active_goals, bounds)
-
-        # Execution of diversity-focused candidate selection logic based on multidimensional coverage.
-        used_indices = Int[]
-        cand_indices = Int[]
-        cand_tags    = String[]
-        cand_count   = 0
-
-        top_indices = partialsortperm(SC, 1:min(8, num_candidates); rev=true)
-        # Benchmark score determination for tier-based selection.
-        bench_score = SC[top_indices[end]]
-        score_limit = bench_score * 0.90
-
-        # Determination of candidate pool boundaries based on a defined proximity to the benchmark score.
-        tier_indices = findall(>=(score_limit), SC)
-
-        # Integration of primary global leaders previously identified during tournament selection.
-        top_idx = top_indices[1]
-        for i in 1:3
-            val          = XT[top_idx, i]
-            b_min, b_max = bounds[i, 1], bounds[i, 2]
-            # Determination of physical feasibility and boundary adherence for leader coordinates.
-            v_range       = [b_min, (b_min + b_max) / 2, b_max]
-            is_valid, msg = Main.Sys_Flow.FLOW_AskLeader_DDEF(val, v_range)
-            if !is_valid
-                push!(boundary_warnings, "$(InNames[i]): $msg")
-            end
-        end
-
-        for k in 1:min(8, length(top_indices))
-            p_idx = VISE_ClampIndex_DDEF(top_indices[k], num_candidates)
-            cand_count += 1
-            push!(cand_indices, p_idx)
-            push!(cand_tags, @sprintf("TOP-%02d", k))
-            push!(used_indices, p_idx)
-        end
-
-        # Selection of diversity candidates focusing on factor-level minimisation strategies.
-        for i in 1:min(3, size(XT, 2))
-            tag_pre = i <= length(InNames) ? first(InNames[i] * "   ", 3) : "IN$i"
-
-            # Identification of the optimal tier point for specific input minimisation.
-            best_idx = -1
-            min_val  = Inf
-            for idx in tier_indices
-                val = XT[idx, i]
-                if val < min_val
-                    min_val  = val
-                    best_idx = idx
-                end
-            end
-
-            if best_idx != -1
-                tag_str = (best_idx in used_indices) ? "INP-$(tag_pre)(D)" : "INP-$(tag_pre)"
-                push!(cand_indices, best_idx)
-                push!(cand_tags, tag_str)
-                push!(used_indices, best_idx)
-                cand_count += 1
-            end
-        end
-
-        # Selection of diversity candidates focusing on output-specific target maximisation.
-        for i in 1:min(3, size(YP, 2))
-            tag_pre  = i <= length(OutNames) ? first(OutNames[i] * "   ", 3) : "OUT$i"
-            mod_goal = get(models[i], "Goal", Dict())
-            gtup     = Lib_Arts.ARTS_ExtractGoal_DDEF(mod_goal)
-
-            # Identification of the optimal tier point for specific output desirability.
-            best_idx = -1
-            max_d    = -Inf
-            for idx in tier_indices
-                val   = YP[idx, i]
-                d_val = Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
-                if d_val > max_d
-                    max_d    = d_val
-                    best_idx = idx
-                end
-            end
-
-            if best_idx != -1
-                tag_str = (best_idx in used_indices) ? "OUT-$(tag_pre)(D)" : "OUT-$(tag_pre)"
-                push!(cand_indices, best_idx)
-                push!(cand_tags, tag_str)
-                push!(used_indices, best_idx)
-                cand_count += 1
-            end
-        end
-
-        # Execution of structurally consistent DataFrame extraction for leader candidates.
-        Leaders_DF = DataFrame()
-
-        # Utilisation of primary dataset headers to maintain structural and ordinal integrity.
-        main_headers = names(df_raw)
-
-        for h in main_headers
-            h_sym = Symbol(h)
-            if h == C.COL_ID || h == C.COL_EXP_ID
-                Leaders_DF[!, h_sym] = cand_tags
-            elseif h == C.COL_PHASE
-                Leaders_DF[!, h_sym] = fill(Phase, length(cand_indices))
-            elseif h == C.COL_STATUS
-                Leaders_DF[!, h_sym] = fill("Candidate", length(cand_indices))
-            elseif h == C.COL_SCORE
-                Leaders_DF[!, h_sym] = round.(SC[cand_indices]; digits=4)
-            elseif startswith(h, C.PRE_INPUT)
-                # Execution of robust column name matching for input factor mapping.
-                clean_n = replace(h, C.PRE_INPUT => "")
-                ki      = findfirst(n -> (clean_n == n || startswith(clean_n, n * "_")), InNames)
-                if !isnothing(ki)
-                    Leaders_DF[!, h_sym] = round.(XT[cand_indices, ki]; digits=3)
-                else
-                    Leaders_DF[!, h_sym] = fill(missing, length(cand_indices))
-                end
-            elseif startswith(h, C.PRE_PRED)
-                clean_n = replace(h, C.PRE_PRED => "")
-                ki      = findfirst(n -> (clean_n == n || startswith(clean_n, n * "_")), OutNames)
-                if !isnothing(ki)
-                    Leaders_DF[!, h_sym] = round.(YP[cand_indices, ki]; digits=3)
-                else
-                    Leaders_DF[!, h_sym] = fill(missing, length(cand_indices))
-                end
-            elseif startswith(h, C.PRE_RESULT)
-                # Placeholder assignments for result columns in candidate sets.
-                Leaders_DF[!, h_sym] = fill(missing, length(cand_indices))
-            else
-                # Default assignments for metadata and auxiliary columns.
-                Leaders_DF[!, h_sym] = fill(missing, length(cand_indices))
-            end
-        end
-
-        # Write candidate sets to the transient file for FLOW leader extraction
-        Main.Sys_Flow.FLOW_WriteLeaders_DDEF(DataFile, Phase, Leaders_DF)
-
-        # Integrated stoichiometric verification for physical run feasibility.
-        config  = Sys_Fast.FAST_ReadConfig_DDEF(DataFile)
-        ingreds = get(config, "Ingredients", [])
-        if !isempty(ingreds)
-            g_cfg = get(config, "Global", Dict())
-            sv = Float64(get(g_cfg, "Volume", 5.0))
-            sc = Float64(get(g_cfg, "Conc", 10.0))
-            audit = Main.Lib_Mole.MOLE_AuditBatch_DDEF(ingreds, XT, sv, sc)
-            if !audit["IsFeasible"]
-                Log("VISE", "STOICHIOMETRY", "Experimental design contains physically questionable runs (Negative Mass).", "WARN")
-            else
-                Log("VISE", "STOICHIOMETRY", "Physical feasibility audit passed for entire candidate set.", "OK")
-            end
-        end
-
-        Log("VISE", "OPTIMISATION", "Candidate pool (N=14 Diversity-Focussed) generated and saved.", "OK")
-    end
-
-    # Execution of model predictions for existing experimental data points.
-    Y_Pred = Matrix{Float64}(undef, N, length(out_cols))
-    for m in eachindex(out_cols)
-        Y_Pred[:, m] = VISE_Predict_DDEF(models[m], X_Clean)
-    end
-
-    # Execution of desirability scoring for existing experimental data points.
-    parsed_goals = [Lib_Arts.ARTS_ExtractGoal_DDEF(models[m]["Goal"]) for m in eachindex(out_cols)]
-    active_idx   = findall(m -> get(models[m], "Status", "") == "OK", 1:length(out_cols))
-
-    Actual_Scores = zeros(Float64, N)
-    if !isempty(active_idx)
-        weight_sum = sum(Float64(get(models[m]["Goal"], "Weight", 1.0)) for m in active_idx)
-        pow        = weight_sum > 0.0 ? (1.0 / weight_sum) : 1.0
-
-        for i in 1:N
-            s = 1.0
-            for m_idx in active_idx
-                val  = Y_Pred[i, m_idx]
-                gtup = parsed_goals[m_idx]
-                d    = Lib_Arts.ARTS_CalcDesirability_DDEF(val, gtup)
-                s   *= d^gtup[6]
-            end
-            res              = s^pow
-            Actual_Scores[i] = (isnan(res) || isinf(res)) ? 0.0 : clamp(res, 0.0, 1.0)
-        end
-    end
-
-    # Standardise phase name for robust comparison
-    target_phase_stripped = strip(uppercase(Phase))
-
-    # Determination of row indices corresponding to the active experimental phase.
-    row_idx_in_raw = Int[]
-    if hasproperty(df_raw, col_phase)
-        for (idx, row) in enumerate(eachrow(df_raw))
-            val = get(row, col_phase, "")
-            if !ismissing(val) && strip(uppercase(string(val))) == target_phase_stripped
-                push!(row_idx_in_raw, idx)
-            end
-        end
-    end
-
-    if isempty(row_idx_in_raw)
-        Log("VISE", "PHASE_EMPTY", "No records found for phase '$Phase'.", "FAIL")
-        return Dict(
-            "Status"  => "FAIL", 
-            "Message" => "No records found matching phase '$Phase'. Execution halted."
-        )
-    end
-
-    pred_idx = 1
-    for (i, raw_idx) in enumerate(row_idx_in_raw)
-        if valid_mask[i]
-            for (m, out_name) in enumerate(OutNames)
-                pred_col = Symbol(C.PRE_PRED * out_name)
-                if !hasproperty(df_raw, pred_col)
-                    df_raw[!, pred_col] = Vector{Union{Missing,Float64}}(missing, nrow(df_raw))
-                end
-                df_raw[raw_idx, pred_col] = round(Y_Pred[pred_idx, m]; digits=3)
-            end
-
-            score_col = Symbol(C.COL_SCORE)
-            if !hasproperty(df_raw, score_col)
-                df_raw[!, score_col] = Vector{Union{Missing,Float64}}(missing, nrow(df_raw))
-            end
-            df_raw[raw_idx, score_col] = round(Actual_Scores[pred_idx]; digits=4)
-
-            # Increment prediction index to maintain alignment.
-            pred_idx += 1
-        end
-    end
-
-    # Integrated persistence of predictions back to the repository.
-    try
-        target_sheet = C.SHEET_DATA
-        if isfile(DataFile)
-            try
-                sheets = XLSX.sheetnames(XLSX.readxlsx(DataFile))
-                if target_sheet ∉ sheets && "DATA_RECORDS" ∈ sheets
-                    target_sheet = "DATA_RECORDS"
-                end
-            catch
-            end
-        end
-        Sys_Fast.FAST_SafeExcelWrite_DDEF(DataFile, Dict(target_sheet => df_raw))
-        Log("VISE", "PERSIST_PRED", "Saved predicted outputs to MasterVault.", "OK")
-    catch e
-        Log("VISE", "PERSIST_FAIL", "Failed to save predictions: $e", "WARN")
-    end
-
-    # Execution of sensitivity analysis at the identified desirability optimum.
-    sens_list = Vector{Float64}[]
-    if !isempty(Best_Point)
-        for m in models
-            push!(sens_list, VISE_SensitivityAnalysis_DDEF(m, Best_Point))
-        end
-    end
-
-    # Execution of advanced analytical diagnostics including ANOVA and normality testing.
-    anova_tables      = []
-    normality_results = Dict[]
-    residuals_list    = Vector{Float64}[]
-    for (i, m) in enumerate(models)
-        if get(m, "Status", "") == "OK"
-            push!(anova_tables, VISE_GenerateAnovaTable_DDEF(m, X_Clean, Y_Clean[:, i]))
-            push!(normality_results, VISE_PerformNormalityTest_DDEF(m, X_Clean, Y_Clean[:, i]))
-
-            # Extraction of residuals for quantile-quantile (Q-Q) distribution analysis.
-            yp = VISE_Predict_DDEF(m, X_Clean)
-            push!(residuals_list, Y_Clean[:, i] .- yp)
-        else
-            push!(anova_tables, DataFrame())
-            push!(normality_results, Dict("p" => NaN, "IsNormal" => false))
-            push!(residuals_list, Float64[])
-        end
-    end
-
-    DisplayInNames = copy(InNames)
-    DisplayOutNames = copy(OutNames)
-
-    if get(get(Opts, "RadioOpts", Dict()), "Apply", false)
-        radio_opts = get(Opts, "RadioOpts", Dict())
-        fwd_dict   = get(radio_opts, "Forward", Dict{String,Any}())
-        rev_dict   = get(radio_opts, "ReverseMap", Dict{String,Any}())
-
-        for (i, name) in enumerate(DisplayInNames)
-            if haskey(fwd_dict, name)
-                d      = fwd_dict[name]
-                cust_n = get(d, "Name", "")
-                cust_u = get(d, "Unit", "")
-                DisplayInNames[i] = isempty(cust_n) ? name * " (Corr.)" : (isempty(cust_u) ? cust_n : "$cust_n ($cust_u)")
-            end
-        end
-
-        for (i, name) in enumerate(DisplayOutNames)
-            if haskey(rev_dict, name)
-                d      = rev_dict[name]
-                cust_n = get(d, "Name", "")
-                cust_u = get(d, "Unit", "")
-                # If no custom name is given for the output, we keep the original name but potentially add the unit
-                DisplayOutNames[i] = isempty(cust_n) ? name : (isempty(cust_u) ? cust_n : "$cust_n ($cust_u)")
-            end
-        end
-
-        # Update TermNames in models so Pareto charts use the new input names
-        for m in models
-            if haskey(m, "TermNames")
-                new_terms = copy(m["TermNames"])
-                for (i, t) in enumerate(new_terms)
-                    for (orig, data) in fwd_dict
-                        cust_n = get(data, "Name", "")
-                        cust_u = get(data, "Unit", "")
-                        new_name = isempty(cust_n) ? orig * " (Corr.)" : (isempty(cust_u) ? cust_n : "$cust_n ($cust_u)")
-                        
-                        # Simple string replacement for factors
-                        new_terms[i] = replace(new_terms[i], orig => new_name)
-                    end
-                end
-                m["TermNames"] = new_terms
-            end
-        end
-    end
-
-    graphs = Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, DisplayInNames, DisplayOutNames,
-        Goals, r2_vec, r2_pred_vec, Opts, Leaders_DF, sens_list, residuals_list)
-
-    # Execution of mathematical health audit on experimental design topology.
+    
+    # Forensic Stats (LOF, ANOVA, Normality, Vitals)
     vitals = Dict("D" => 0.0, "Condition" => Inf, "MaxVIF" => 0.0, "LOF" => 1.0)
     try
-        # Selection of the most appropriate model for global health assessment.
-        best_m = findfirst(m -> get(m, "ModelType", "") == "quadratic", models)
-        isnothing(best_m) && (best_m = 1)
-
-        m_type    = get(models[best_m], "ModelType", "linear")
-        X_Clean_Coded = Lib_Core.CORE_CodeMatrix_DDEF(X_Clean)
-        Xd_health = VISE_ExpandDesign_DDEF(X_Clean_Coded, m_type)
-        m_health  = Lib_Core.CORE_CalcDesignMetrics_DDEF(Xd_health)
-
-        vitals["D"]         = m_health["D"]
+        best_m_idx = findfirst(m -> get(m, "ModelType", "") == "quadratic", models)
+        isnothing(best_m_idx) && (best_m_idx = 1)
+        m_type_str = get(models[best_m_idx], "ModelType", "linear")
+        
+        X_Coded = Main.Lib_Core.CORE_CodeMatrix_DDEF(X_Clean)
+        Xd_health = VISE_ExpandDesign_DDEF(X_Coded, m_type_str)
+        m_health = Main.Lib_Core.CORE_CalcDesignMetrics_DDEF(Xd_health)
+        
+        vitals["D"] = m_health["D"]
         vitals["Condition"] = m_health["Condition"]
-
-        # Determination of maximum variance inflation across the model ensemble.
-        vif_list         = [maximum(get(m, "VIFs", [0.0])) for m in models if haskey(m, "VIFs")]
+        vif_list = [maximum(get(m, "VIFs", [0.0])) for m in models if haskey(m, "VIFs")]
         vitals["MaxVIF"] = isempty(vif_list) ? 1.0 : maximum(vif_list)
-
-        # Execution of Lack-of-Fit verification for the primary response stream.
-        if N > size(Xd_health, 2) + 2
-            _, p_lof      = VISE_LackOfFit_DDEF(Xd_health, view(Y_Clean, :, 1))
+        
+        if n_samples > size(Xd_health, 2) + 2
+            _, p_lof = VISE_LackOfFit_DDEF(Xd_health, view(Y_Clean, :, 1))
             vitals["LOF"] = p_lof
         end
     catch e
         Log("VISE", "VITALS_WARN", "Health diagnostics incomplete: $e", "WARN")
     end
+    
+    # Scientific Visualisation Portfolio (Staged via ARTS Orchestrator)
+    # Inject RenderMode to satisfy immediate UI response targets.
+    opts_with_mode = copy(Opts)
+    opts_with_mode["Mode"] = RenderMode
 
-    # Ensure serialisability of model objects by removing function closures before UI transmission.
-    ui_models = deepcopy(models)
-    for m in ui_models
-        delete!(m, "_Closure")
+    graphs = Main.Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, InNames_v, OutNames_v, Goals, 
+        [get(m, "R2_Adj", 0.0) for m in models], [get(m, "Q2", 0.0) for m in models], opts_with_mode, ldf,
+        sens_list, residuals)
+        
+    sheets_to_commit = Dict(C.SHEET_DATA => df_updated)
+    sheet_leader     = C.PREFIX_LEADERS * Phase
+    sheets_to_commit[sheet_leader] = ldf
+    
+    res_bundle = VISE_AssembleBundle_DDEF(Phase, InNames_v, OutNames_v, models, bp, bs, ldf, X_Clean, Y_Clean, Opts, 
+        Goals, Y_Pred, Actual_Scores, radio_audit, warns, vitals, anova_tables, normality_res, residuals, sens_list, graphs, t_start, C)
+        
+    return res_bundle, sheets_to_commit
+end
+
+# ------------------------------------------------------------------------------
+# SECTION 20: INTERNAL LOGISTIC HELPERS
+# ------------------------------------------------------------------------------
+
+function VISE_IngestMatrices_DDEF(df::DataFrame, config::AbstractDict, C, Log)
+    # Strict lookup via System Constants (VARIA_, RESULT_)
+    in_cols = filter(n -> startswith(uppercase(strip(string(n))), C.PRE_INPUT), names(df))
+    out_cols = filter(n -> startswith(uppercase(strip(string(n))), C.PRE_RESULT), names(df))
+    
+    nr = nrow(df)
+    in_len, out_len = length(in_cols), length(out_cols)
+    
+    # Stability Guard: Ensure we always have at least one column to prevent 0xN Matrix structural failures
+    X = zeros(nr, max(1, in_len))
+    Y = fill(NaN, nr, max(1, out_len))
+    
+    for (ci, c) in enumerate(in_cols) X[:, ci] .= Main.Sys_Fast.FAST_SafeNum_DDEF.(df[!, c]) end
+    for (ci, c) in enumerate(out_cols) Y[:, ci] .= Main.Sys_Fast.FAST_SafeNum_DDEF.(df[!, c]) end
+    
+    mask = vec(all(!isnan, Y[:, 1:max(1, out_len)]; dims=2))
+    xc, yc = X[mask, 1:in_len], Y[mask, 1:out_len]   
+    
+    # Strict Type Enforcement: Ensure names are Vector{String} to avoid MethodError in TrainEnsemble
+    in_names = String[VISE_ResolveName_DDEF(string(n), C.PRE_INPUT, get(config, "Ingredients", []), C) for n in in_cols]
+    out_names = String[VISE_ResolveName_DDEF(string(n), C.PRE_RESULT, get(config, "Outputs", []), C) for n in out_cols]
+    
+    # Final Matrix Emergency Fallback: If no columns were found (Warmup/Migration Safety)
+    if isempty(xc) || size(xc, 2) == 0
+        Log("VISE", "INGEST_FAIL", "Matrix Extraction Failure: No valid columns matched prefix $(C.PRE_INPUT).", "FAIL")
+        return zeros(min(1, nr), 3), zeros(min(1, nr), 1), ["X1", "X2", "X3"], ["Y1"], [false]
+    end
+    
+    return xc, yc, in_names, out_names, mask
+end
+
+VISE_ResolveName_DDEF(n, pfx, cfg, C) = let n_up=uppercase(strip(string(n))); match=findfirst(i->uppercase(pfx*strip(get(i,"Name","")))==n_up || startswith(n_up, uppercase(pfx*strip(get(i,"Name",""))*"_")), cfg); isnothing(match) ? replace(Main.Sys_Fast.FAST_CleanHeader_DDEF(n), Regex("(?i)^"*pfx)=>"") : cfg[match]["Name"] end
+
+function VISE_ApplyDecayKernel_DDEF!(X, Y, in_n, out_n, df, config, opts, C, Log)
+    audit = []
+    !get(get(opts, "RadioOpts", Dict()), "Apply", false) && return audit
+    
+    r_opts = get(opts, "RadioOpts", Dict{String,Any}())
+    fwd_dict = get(r_opts, "Forward", Dict{String,Any}())
+    rev_dict = get(r_opts, "ReverseMap", Dict{String,Any}())
+    
+    ingreds = get(config, "Ingredients", [])
+    
+    N = size(X, 1)
+
+    # Forward Decay (Inputs)
+    for v_name in keys(fwd_dict)
+        idx = findfirst(i -> get(i, "Name", "") == v_name, ingreds)
+        isnothing(idx) && continue
+        ing = ingreds[idx]
+        
+        v_idx = findfirst(==(v_name), in_n)
+        
+        hl_raw  = get(ing, "HalfLife", 0.0)
+        hl_unit = get(ing, "HalfLifeUnit", "Hours")
+        hl_min  = Main.Lib_Mole.MOLE_ConvertTimeToMinutes_DDEF(hl_raw, hl_unit)
+
+        if hl_min > 0.0
+            col_exp = Main.Sys_Fast.FAST_GetCol_DDEF(df, "TIME_EXP_MINS_" * v_name)
+            
+            dfs = Float64[]
+            for i in 1:N
+                t_min = isempty(col_exp) ? 0.0 : Main.Sys_Fast.FAST_SafeNum_DDEF(df[i, col_exp])
+                df_row = exp(-log(2) * t_min / hl_min)
+                
+                if !isnothing(v_idx)
+                    X[i, v_idx] *= df_row
+                end
+                push!(dfs, df_row)
+            end
+            
+            type_lbl = isnothing(v_idx) ? "Forward (Fixed)" : "Forward (Input)"
+            f_opts = get(fwd_dict, v_name, Dict())
+            disp_name = get(f_opts, "Name", "")
+            disp_name = isempty(disp_name) ? v_name : disp_name
+
+            push!(audit, Dict(
+                "Name"        => disp_name,
+                "HalfLife"    => hl_raw,
+                "Unit"        => hl_unit,
+                "Type"        => type_lbl,
+                "AvgDeltaT"   => isempty(col_exp) ? 0.0 : mean(Main.Sys_Fast.FAST_SafeNum_DDEF.(df[!, col_exp])),
+                "AvgDF"       => isempty(dfs) ? 1.0 : mean(dfs),
+                "IsCorrected" => true
+            ))
+        end
     end
 
-    t_end = time()
-    elapsed_sec = t_end - t0
-    elapsed_str = elapsed_sec < 60 ? @sprintf("%.1fs", elapsed_sec) : @sprintf("%dm %ds", floor(Int, elapsed_sec / 60), floor(Int, elapsed_sec % 60))
+    # Reverse Decay & Yield Transformation (Outputs)
+    for (out_name, out_data) in rev_dict
+        mapped_in_name = get(out_data, "Source", "None")
+        (mapped_in_name == "None" || isempty(mapped_in_name)) && continue
+        o_idx = findfirst(==(out_name), out_n)
+        isnothing(o_idx) && continue
 
-    return Dict(
-        "Status"            => "OK",
-        "Phase"             => Phase,
-        "InNames"           => InNames,
-        "OutNames"          => OutNames,
-        "Models"            => ui_models,
-        "R2_Adj"            => r2_vec,
-        "R2_Pred"           => r2_pred_vec,
-        "BestPoint"         => Best_Point,
-        "BestScore"         => Best_Score,
-        "Graphs"            => graphs,
-        "Vitals"            => vitals,
-        "Sensitivities"     => sens_list,
-        "ANOVA"             => anova_tables,
-        "Normality"         => normality_results,
-        "Residuals"         => residuals_list,
-        "RadioCorrection"   => radio_correction_audit,
-        "BoundaryWarnings"  => boundary_warnings,
-        "Leaders"           => Leaders_DF,
-        "X_Clean"           => X_Clean,
-        "Y_Clean"           => Y_Clean,
-        "Elapsed"           => elapsed_str
-    )
+        idx = findfirst(i -> get(i, "Name", "") == mapped_in_name, ingreds)
+        isnothing(idx) && continue
+        ing = ingreds[idx]
+        
+        hl_raw  = get(ing, "HalfLife", 0.0)
+        hl_unit = get(ing, "HalfLifeUnit", "Hours")
+        hl_min  = Main.Lib_Mole.MOLE_ConvertTimeToMinutes_DDEF(hl_raw, hl_unit)
+
+        if hl_min > 0.0
+            col_meas = Main.Sys_Fast.FAST_GetCol_DDEF(df, "TIME_MEAS_MINS_" * mapped_in_name)
+            col_exp  = Main.Sys_Fast.FAST_GetCol_DDEF(df, "TIME_EXP_MINS_" * mapped_in_name)
+            
+            dfs = Float64[]
+            for i in 1:N
+                t_meas = isempty(col_meas) ? 0.0 : Main.Sys_Fast.FAST_SafeNum_DDEF(df[i, col_meas])
+                t_exp  = isempty(col_exp)  ? 0.0 : Main.Sys_Fast.FAST_SafeNum_DDEF(df[i, col_exp])
+                
+                df_row = exp(log(2) * t_meas / hl_min)
+                A_out_corr = Y[i, o_idx] * df_row
+                
+                v_idx = findfirst(==(mapped_in_name), in_n)
+                if !isnothing(v_idx)
+                    # Yield relative to Independent Variable (already forward decayed)
+                    A_in_corr = X[i, v_idx]
+                    yield_val = (A_in_corr > 0.0) ? (A_out_corr / A_in_corr) * 100.0 : 0.0
+                    Y[i, o_idx] = clamp(yield_val, 0.0, 100.0)
+                else
+                    # Yield relative to Fixed/Filler Ingredient
+                    c_fixed = Main.Sys_Fast.FAST_GetCol_DDEF(df, C.PRE_FIXED * mapped_in_name)
+                    c_fixed = isempty(c_fixed) ? Main.Sys_Fast.FAST_GetCol_DDEF(df, C.PRE_FILL * mapped_in_name) : c_fixed
+                    
+                    if !isempty(c_fixed)
+                        val_raw = Main.Sys_Fast.FAST_SafeNum_DDEF(df[i, c_fixed])
+                        # In-place dynamic forward decay for fixed components logic
+                        A_in_corr = val_raw * exp(-log(2) * t_exp / hl_min)
+                        yield_val = (A_in_corr > 0.0) ? (A_out_corr / A_in_corr) * 100.0 : 0.0
+                        Y[i, o_idx] = clamp(yield_val, 0.0, 100.0)
+                    else
+                        # Fallback if no input volume/mass found
+                        Y[i, o_idx] = A_out_corr
+                    end
+                end
+                push!(dfs, df_row)
+            end
+            
+            r_opts_out = get(rev_dict, out_name, Dict())
+            disp_name = get(r_opts_out, "Name", "")
+            disp_name = isempty(disp_name) ? out_name : disp_name
+
+            push!(audit, Dict(
+                "Name"        => disp_name,
+                "HalfLife"    => hl_raw,
+                "Unit"        => hl_unit,
+                "Type"        => "Reverse & Yield ($mapped_in_name)",
+                "AvgDeltaT"   => isempty(col_meas) ? 0.0 : mean(Main.Sys_Fast.FAST_SafeNum_DDEF.(df[!, col_meas])),
+                "AvgDF"       => isempty(dfs) ? 1.0 : mean(dfs),
+                "IsCorrected" => true
+            ))
+        end
+    end
+    return audit
 end
 
+function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n, opts, C, Log)
+    !get(opts, "Optim", true) && return [], 0.0, DataFrame(), zeros(1), String[]
+    
+    bounds = hcat(minimum(X; dims=1)', maximum(X; dims=1)')
+    
+    # 1. High-Density Grid Exploration
+    XT, YP, SC = VISE_GridSearch_DDEF(models, goals, bounds)
+    
+    # 2. Global Desirability Maximum (BlackBoxOptim)
+    max_time = get(opts, "MaxTime", 2.0)
+    bp, bs = Main.Lib_Core.CORE_OptimiseDesirability_DDEF(models, goals, bounds; MaxTime=max_time)
+    
+    # 3. Diversity Candidate Selection
+    used_indices = Int[]
+    cand_indices = Int[]
+    cand_tags    = String[]
+    
+    num_candidates = length(SC)
+    top_indices = partialsortperm(SC, 1:min(8, num_candidates); rev=true)
+    
+    bench_score = SC[top_indices[1]]
+    score_limit = bench_score * 0.90
+    tier_indices = findall(>=(score_limit), SC)
+    
+    # A. Global Top Leaders
+    for k in 1:min(8, length(top_indices))
+        p_idx = top_indices[k]
+        push!(cand_indices, p_idx)
+        push!(cand_tags, @sprintf("TOP-%02d", k))
+        push!(used_indices, p_idx)
+    end
+    
+    # B. Input Minimisation Diversity (INP-)
+    for i in 1:min(3, size(XT, 2))
+        tag_pre = i <= length(in_n) ? first(in_n[i] * "   ", 3) : "IN$i"
+        best_idx, min_val = -1, Inf
+        for idx in tier_indices
+            val = XT[idx, i]
+            if val < min_val
+                min_val, best_idx = val, idx
+            end
+        end
+        if best_idx != -1
+            tag_str = (best_idx in used_indices) ? "INP-$(tag_pre)(D)" : "INP-$(tag_pre)"
+            push!(cand_indices, best_idx)
+            push!(cand_tags, tag_str)
+            push!(used_indices, best_idx)
+        end
+    end
+    
+    # C. Output Maximisation Diversity (OUT-)
+    for i in 1:min(3, size(YP, 2))
+        tag_pre = i <= length(out_n) ? first(out_n[i] * "   ", 3) : "OUT$i"
+        m_goal = get(models[i], "Goal", Dict())
+        gtup = Main.Lib_Core.CORE_ExtractGoal_DDEF(m_goal)
+        best_idx, max_d = -1, -Inf
+        for idx in tier_indices
+            val = YP[idx, i]
+            d_val = Main.Lib_Core.CORE_CalcDesirability_DDEF(val, gtup)
+            if d_val > max_d
+                max_d, best_idx = d_val, idx
+            end
+        end
+        if best_idx != -1
+            tag_str = (best_idx in used_indices) ? "OUT-$(tag_pre)(D)" : "OUT-$(tag_pre)"
+            push!(cand_indices, best_idx)
+            push!(cand_tags, tag_str)
+            push!(used_indices, best_idx)
+        end
+    end
+    
+    # 4. Prepare DataFrame
+    ldf = VISE_PrepareLeadersDF_DDEF(XT[cand_indices, :], YP[cand_indices, :], SC[cand_indices], cand_tags, in_n, out_n, phase, C)
+    
+    # 5. Stoichiometric Safety Audit
+    ingreds = get(config, "Ingredients", [])
+    if !isempty(ingreds)
+        g_cfg = get(config, "Global", Dict())
+        sv    = Float64(get(g_cfg, "Volume", 5.0))
+        sc    = Float64(get(g_cfg, "Conc", 10.0))
+        
+        audit = Main.Lib_Mole.MOLE_AuditBatch_DDEF(ingreds, XT, sv, sc)
+        if !audit["IsFeasible"]
+            Main.Sys_Fast.FAST_Log_DDEF("VISE", "STOICHIOMETRY", "Experimental design contains physically questionable runs (Negative Mass).", "WARN")
+        else
+            Main.Sys_Fast.FAST_Log_DDEF("VISE", "STOICHIOMETRY", "Physical feasibility audit passed for candidate pool.", "OK")
+        end
+    end
+    
+    # 6. Boundary Warnings
+    warns = String[]
+    if !isempty(bp)
+        for i in 1:min(3, length(bp))
+            v_range = [bounds[i, 1], (bounds[i, 1] + bounds[i, 2]) / 2, bounds[i, 2]]
+            ok, msg = Main.Sys_Flow.FLOW_AskLeader_DDEF(bp[i], v_range)
+            !ok && push!(warns, "$(in_n[i]): $msg")
+        end
+    end
+    
+    return bp, bs, ldf, SC, warns
 end
+
+function VISE_PrepareLeadersDF_DDEF(xt, yp, sc, tags, in_n, out_n, phase, C)
+    df = DataFrame()
+    df[!, Symbol(C.COL_ID)] = tags
+    df[!, Symbol(C.COL_PHASE)] = fill(phase, length(tags))
+    df[!, Symbol(C.COL_STATUS)] = fill("Candidate", length(tags))
+    df[!, Symbol(C.COL_SCORE)] = round.(sc; digits=4)
+    
+    for (i, n) in enumerate(in_n)
+        col_sym = Symbol(C.PRE_INPUT * n)
+        df[!, col_sym] = round.(xt[:, i]; digits=3)
+    end
+    
+    for (i, n) in enumerate(out_n)
+        col_pred = Symbol(C.PRE_PRED * n)
+        df[!, col_pred] = round.(yp[:, i]; digits=3)
+        
+        # Result columns should be missing for candidates
+        col_res = Symbol(C.PRE_RESULT * n)
+        df[!, col_res] = Vector{Union{Missing, Float64}}(missing, length(tags))
+    end
+    
+    return df
+end
+
+function VISE_GeneratePredictions_DDEF(X, Y, models, goals)
+    yp = hcat([VISE_Predict_DDEF(m, X) for m in models]...)
+    pg = [Main.Lib_Core.CORE_ExtractGoal_DDEF(get(m, "Goal", Dict())) for m in models]
+    
+    sum_w = sum(g[5] for g in pg)
+    pow   = sum_w > 0.0 ? (1.0 / sum_w) : (length(models) > 0 ? 1.0 / length(models) : 1.0)
+    
+    n_points = size(X, 1)
+    sc = zeros(n_points)
+    
+    for i in 1:n_points
+        s = 1.0
+        for j in eachindex(models)
+            d = Main.Lib_Core.CORE_CalcDesirability_DDEF(yp[i, j], pg[j])
+            s *= d
+        end
+        score = s^pow
+        sc[i] = clamp(score, 0.0, 1.0)
+    end
+    
+    return yp, sc
+end
+
+function VISE_PreparePredictionsSheet_DDEF(df::DataFrame, phase::AbstractString, yp::AbstractMatrix, sc::AbstractVector, mask, out_n, C, Log)
+    # This prevents DataFrames.jl ArgumentError when assigning to non-existent columns.
+    for n in out_n
+        col_sym = Symbol(C.PRE_PRED * n)
+        if !(col_sym in propertynames(df))
+            df[!, col_sym] = Vector{Union{Float64, Missing}}(missing, nrow(df))
+        end
+    end
+    if !(Symbol(C.COL_SCORE) in propertynames(df))
+        df[!, Symbol(C.COL_SCORE)] = Vector{Union{Float64, Missing}}(missing, nrow(df))
+    end
+
+    idx_m = findall(mask)
+    for (i, r_idx) in enumerate(idx_m)
+        for (m, n) in enumerate(out_n) 
+            df[r_idx, Symbol(C.PRE_PRED * n)] = round(yp[i, m]; digits=3) 
+        end
+        df[r_idx, Symbol(C.COL_SCORE)] = round(sc[i]; digits=4)
+    end
+    return df
+end
+
+
+function VISE_AssembleBundle_DDEF(phase, in_n, out_n, models, bp, bs, ldf, xc, yc, opts, goals, yp, sc, radio, warns, vitals, anova, normality, residuals, sens, graphs, t0, C)
+    ui_mods = deepcopy(models); for m in ui_mods delete!(m, "_Closure") end
+    return Dict("Status"=>"OK", "Phase"=>phase, "InNames"=>in_n, "OutNames"=>out_n, "Models"=>ui_mods, "Goals"=>goals, "R2_Adj"=>[get(m, "R2_Adj", 0.0) for m in models], "Q2"=>[get(m, "Q2", 0.0) for m in models], "BestPoint"=>bp, "BestScore"=>bs, "Leaders"=>ldf, "X_Clean"=>xc, "Y_Clean"=>yc, "Graphs"=>graphs, "Vitals"=>vitals, "Sensitivities"=>sens, "ANOVA"=>anova, "Normality"=>normality, "Residuals"=>residuals, "RadioCorrection"=>radio, "BoundaryWarnings"=>warns, "Elapsed"=>"$(round(time()-t0; digits=1))s")
+end
+
+"""
+    VISE_ExportToExcel_DDEF(Res::Dict, FilePath::String) -> Bool
+Produces a high-fidelity academic Excel report with multiple analytical sheets.
+"""
+function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::String)
+    Main.Sys_Fast.FAST_Log_DDEF("VISE", "EXPORT", "Generating High-Fidelity Scientific Portfolio: $FilePath", "WAIT")
+    try
+        XLSX.openxlsx(FilePath, mode="w") do xf
+            sheet_ov       = xf[1]
+            XLSX.rename!(sheet_ov, "Summary")
+            sheet_ov["A1"] = "DaishoDoE Scientific Intelligence Report"
+            sheet_ov["A2"] = "Generated: $(Dates.now())"
+            sheet_ov["A3"] = "Project: $(get(Res, "Phase", "Unnamed Phase"))"
+
+            sheet_mod       = XLSX.addsheet!(xf, "Model_Statistics")
+            sheet_mod["A1"] = ["Response", "Model Type", "R2", "R2_Adj", "RMSE", "P-Value", "Normality (p)"]
+
+            X_Clean = Res["X_Clean"]
+            Y_Clean = Res["Y_Clean"]
+            
+            row_idx = 2
+            for (i, out_name) in enumerate(get(Res, "OutNames", []))
+                m    = Res["Models"][i]
+                norm = VISE_PerformNormalityTest_DDEF(m, X_Clean, Y_Clean[:, i])
+
+                sheet_mod[row_idx, 1] = out_name
+                sheet_mod[row_idx, 2] = get(m, "ModelType", "N/A")
+                sheet_mod[row_idx, 3] = round(get(m, "R2", 0.0); digits=4)
+                sheet_mod[row_idx, 4] = round(get(m, "R2_Adj", 0.0); digits=4)
+                sheet_mod[row_idx, 5] = round(get(m, "RMSE", 0.0); digits=4)
+                sheet_mod[row_idx, 6] = round(get(m, "P_Value", 1.0); digits=4)
+                sheet_mod[row_idx, 7] = norm["p"]
+
+                row_idx += 1
+            end
+
+            for (i, out_name) in enumerate(get(Res, "OutNames", []))
+                m         = Res["Models"][i]
+                safe_name = first(replace(out_name, r"[^\w]" => "_"), 25)
+
+                # Execution of Analysis of Variance (ANOVA) documentation.
+                sh_ano   = XLSX.addsheet!(xf, "ANOVA_$(safe_name)")
+                df_anova = VISE_GenerateAnovaTable_DDEF(m, X_Clean, Y_Clean[:, i])
+                XLSX.writetable!(sh_ano, df_anova; anchor_cell=XLSX.CellRef("A1"))
+
+                # Tabulation of model coefficients and diagnostic metrics.
+                sh_coef = XLSX.addsheet!(xf, "Coefs_$(safe_name)")
+                terms   = get(m, "TermNames", [])
+                coefs   = get(m, "Coefs", [])
+                p_vals  = get(m, "P_Coefs", [])
+                vifs    = get(m, "VIFs", [])
+
+                sh_coef["A1"] = ["Term", "Coefficient", "P-Value", "VIF", "Significance"]
+                for j in eachindex(terms)
+                    sh_coef[j+1, 1] = terms[j]
+                    sh_coef[j+1, 2] = round(coefs[j]; digits=4)
+                    sh_coef[j+1, 3] = isnan(p_vals[j]) ? "N/A" : round(p_vals[j]; digits=4)
+                    sh_coef[j+1, 4] = (j == 1) ? 1.0 : round(vifs[j]; digits=2)
+                    sh_coef[j+1, 5] = (!isnan(p_vals[j]) && p_vals[j] < 0.05) ? "*" : ""
+                end
+            end
+
+            # Integrated radiation and isothermal decay correction registry.
+            if haskey(Res, "RadioCorrection")
+                sh_rad       = XLSX.addsheet!(xf, "Radiation_Decay_Correction")
+                sh_rad["A1"] = ["Component", "Half-Life", "Unit", "Avg Delta-T (Hours)", "Avg Decay Factor", "Correction Applied"]
+                data         = Res["RadioCorrection"]
+                for (r_idx, itm) in enumerate(data)
+                    sh_rad[r_idx+1, 1] = itm["Name"]
+                    sh_rad[r_idx+1, 2] = itm["HalfLife"]
+                    sh_rad[r_idx+1, 3] = itm["Unit"]
+                    sh_rad[r_idx+1, 4] = round(get(itm, "AvgDeltaT", 0.0); digits=4)
+                    sh_rad[r_idx+1, 5] = round(get(itm, "AvgDF", 0.0); digits=6)
+                    sh_rad[r_idx+1, 6] = get(itm, "IsCorrected", false) ? "YES (Dynamic)" : "NO"
+                end
+            end
+        end
+        Main.Sys_Fast.FAST_Log_DDEF("VISE", "EXPORT", "Scientific Portfolio Generated with Legacy Fidelity.", "OK")
+        return true
+    catch e
+        Main.Sys_Fast.FAST_Log_DDEF("VISE", "EXPORT", "Excel export failed: $e", "FAIL")
+        return false
+    end
+end
+end # Module Lib_Vise

@@ -10,6 +10,7 @@ module Gui_Lens
 
 using Dash
 using DashBootstrapComponents
+using Dates
 using Main.Sys_Fast
 using Main.Sys_Flow
 using Main.Lib_Vise
@@ -22,12 +23,78 @@ using PlotlyJS: savefig, Plot, GenericTrace, Layout
 using ZipFile
 using Base64
 using XLSX
+using JSON3
 
 export LENS_Layout_DDEF, LENS_RegisterCallbacks_DDEF
 
 # ==============================================================================
 # PART A: UI INFRASTRUCTURE & LAYOUT
 # ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 0: PHASE EVOLUTION SLOT BUILDER
+# ------------------------------------------------------------------------------
+
+function LENS_BuildSlotCard_DDEF(i::Int)
+    return html_div([
+        html_div([
+            html_span("Slot $i", id="lens-slot-name-$i", className="small fw-bold colourtx-v5pb"),
+            html_span("", id="lens-slot-leader-$i", className="x-small colourtx-v3dl ms-2"),
+        ], className="d-flex align-items-center mb-1"),
+
+        dbc_radioitems(
+            id="lens-slot-mode-$i",
+            options=[
+                Dict("label" => " Keep", "value" => "KEEP"),
+                Dict("label" => " Scale", "value" => "SCALE"),
+                Dict("label" => " Replace", "value" => "REPLACE"),
+            ],
+            value="KEEP",
+            inline=true,
+            className="small mb-2",
+            inputClassName="me-1",
+            labelClassName="me-3 small",
+        ),
+
+        html_div(id="lens-slot-scale-div-$i", [
+            dbc_input(id="lens-slot-scale-name-$i", type="text", placeholder="New Variable Name (Optional)", size="sm", className="form-control-sm mb-1"),
+            dbc_row([
+                dbc_col([
+                    dbc_label(["Alpha ", html_span("(α)", className="ms-1"), " Multiplier"], className="x-small mb-0 colourtx-v3dl"),
+                    dbc_input(id="lens-slot-alpha-$i", type="number", value=1.0, step="any", size="sm", className="form-control-sm"),
+                ], width=4),
+                dbc_col([
+                    dbc_label(["Beta ", html_span("(β)", className="ms-1"), " Offset"], className="x-small mb-0 colourtx-v3dl"),
+                    dbc_input(id="lens-slot-beta-$i", type="number", value=0.0, step="any", size="sm", className="form-control-sm"),
+                ], width=4),
+                dbc_col([
+                    dbc_label("Transformed", className="x-small mb-0 colourtx-v3dl"),
+                    html_div("-", id="lens-slot-transformed-$i", className="small fw-bold colourtx-c1sm mt-1"),
+                ], width=4),
+            ], className="g-1 mb-1"),
+            dbc_row([
+                dbc_col(dbc_input(id="lens-slot-scale-min-$i", type="number", placeholder="Min Limit", step="any", size="sm", className="form-control-sm"), width=6),
+                dbc_col(dbc_input(id="lens-slot-scale-max-$i", type="number", placeholder="Max Limit", step="any", size="sm", className="form-control-sm"), width=6),
+            ], className="g-1"),
+        ], style=Dict("display" => "none")),
+
+        html_div(id="lens-slot-replace-div-$i", [
+            dbc_row([
+                dbc_col(dbc_input(id="lens-slot-replace-name-$i", type="text", placeholder="New Variable Name", size="sm", className="form-control-sm mb-1"), width=6),
+                dbc_col(dbc_input(id="lens-slot-replace-unit-$i", type="text", placeholder="New Unit", size="sm", className="form-control-sm mb-1"), width=6),
+            ], className="g-1"),
+            dbc_row([
+                dbc_col(dbc_input(id="lens-slot-replace-l1-$i", type="number", placeholder="Lower", step="any", size="sm", className="form-control-sm mb-1"), width=4),
+                dbc_col(dbc_input(id="lens-slot-replace-l2-$i", type="number", placeholder="Centre", step="any", size="sm", className="form-control-sm mb-1"), width=4),
+                dbc_col(dbc_input(id="lens-slot-replace-l3-$i", type="number", placeholder="Upper", step="any", size="sm", className="form-control-sm mb-1"), width=4),
+            ], className="g-1"),
+            dbc_row([
+                dbc_col(dbc_input(id="lens-slot-replace-min-$i", type="number", placeholder="Min Limit", step="any", size="sm", className="form-control-sm"), width=6),
+                dbc_col(dbc_input(id="lens-slot-replace-max-$i", type="number", placeholder="Max Limit", step="any", size="sm", className="form-control-sm"), width=6),
+            ], className="g-1"),
+        ], style=Dict("display" => "none")),
+    ], className="border rounded p-2 mb-2", style=Dict("backgroundColor" => "var(--colour-val1-lighig)"), id="lens-slot-card-$i")
+end
 
 # ------------------------------------------------------------------------------
 # SECTION 1: INTERFACE LAYOUT
@@ -80,7 +147,8 @@ function LENS_Layout_DDEF()
                         BASE_Separator_DDEF(),
                     ]),
                     BASE_ActionButton_DDEF("lens-btn-view-report",    "Summary",    "fas fa-file-alt", disabled=true),
-                    BASE_ActionButton_DDEF("lens-btn-next-phase",    "Next Phase", "fas fa-forward",  disabled=true),
+                    BASE_ActionButton_DDEF("lens-btn-next-phase",    "Next Phase", "fas fa-forward"),
+                    html_div(id="lens-phase-guard-msg", className="small text-center mb-1"),
                     BASE_NextButton_DDEF("lens-btn-run",            "Run Analysis", disabled=true),
 
                     dcc_download(id="lens-download-phase"),
@@ -153,6 +221,9 @@ function LENS_Layout_DDEF()
                 dcc_store(id="lens-store-sync-flag",     data=Dict("status" => 0, "vid" => "")), 
                 dcc_store(id="lens-signal-process",      data=Dict("ts" => 0, "success" => false)),
                 dcc_store(id="lens-store-diag-force",    data=0),
+                dcc_store(id="lens-store-slot-config",   data=Dict()),
+                dcc_store(id="lens-store-batch-status", data=Dict("next_pkg" => 0, "handle" => "", "expected" => 0)),
+                dcc_interval(id="lens-interval-batch", interval=2000, n_intervals=0, disabled=true),
             ]; xs=12, md=9),
         ], className="g-3"),
 
@@ -204,21 +275,26 @@ function LENS_Layout_DDEF()
 
         BASE_Modal_DDEF("lens-modal-preview", [html_i(className="fas fa-microscope me-2 colourtx-c4tg"), "Phase Evolution - Step 3/3"],
             [
+                dbc_alert([
+                    html_i(className="fas fa-info-circle me-2"),
+                    html_span("Notice: This wizard is strictly for configuring experimental search space matrix structure. ", className="fw-bold"),
+                    "To modify global system parameters (e.g. Half-Life, Constants, Volume), please click 'Export (XLSX)' on the main page and load the exported Vault directly into the design interface to use it as a shaping template."
+                ], className="small py-2 mb-3 border-0 shadow-sm colourbg-v1lw colourtx-v5pb", style=Dict("borderLeft" => "4px solid var(--colour-val3-darlow)")),
                 dbc_row([
                     dbc_col([
                         html_div([
-                            dbc_label("Design Control", className="x-small fw-bold text-uppercase mb-3 d-block colourtx-v3dl"),
+                            dbc_label("Design Control", className="x-small fw-bold text-uppercase mb-2 d-block colourtx-v3dl"),
                             dbc_label("Matrix Protocol", className="small mb-1"),
                             dcc_dropdown(id="lens-prev-dd-method", options=[
                                 Dict("label" => "Box-Behnken (15 Runs, Quadratic)", "value" => "BB15"),
                                 Dict("label" => "D-Optimal (15 Runs, Quadratic)",   "value" => "DOPT15"),
-                                Dict("label" => "Taguchi L9 (9 Runs, Linear)",     "value" => "TL09"),
-                                Dict("label" => "D-Optimal (9 Runs, Linear)",     "value" => "DOPT09"),
-                            ], value="TL09", clearable=false, className="mb-3"),
+                                Dict("label" => "Taguchi L9 (9 Runs, Linear)",      "value" => "TL09"),
+                                Dict("label" => "D-Optimal (9 Runs, Linear)",       "value" => "DOPT09"),
+                            ], value="TL09", clearable=false, className="mb-2"),
                             html_hr(className="my-3"),
-                            dbc_label("Zoom Factor", className="small mb-1 d-flex justify-content-between", children=[
-                                html_span("Wide-Scan (1.0)", className="colourtx-v5pb"),
-                                html_span("Fine-Scan (0.1)", className="colourtx-v5pb")
+                            dbc_label("Global Zoom", className="small mb-1 d-flex justify-content-between", children=[
+                                html_span("Wide (1.0)", className="colourtx-v5pb"),
+                                html_span("Fine (0.1)", className="colourtx-v5pb")
                             ]),
                             html_div(dcc_slider(id="lens-prev-slider-zoom",
                                 min=1, max=5, step=nothing, value=3,
@@ -230,21 +306,28 @@ function LENS_Layout_DDEF()
                                     4 => Dict("label" => "0.25", "style" => Dict("fontSize" => "10px")),
                                     5 => Dict("label" => "0.1",  "style" => Dict("fontSize" => "10px"))
                                 )),
-                                className="px-2 mb-4"),
+                                className="px-2 mb-2"),
                             html_div(id="lens-prev-slider-shift", style=Dict("display" => "none")),
-                        ], className="p-4 border-0 rounded h-100 shadow-sm colourbg-v0pw")
-                    ], xs=12, md=4),
+                        ], className="p-3 border-0 rounded shadow-sm colourbg-v0pw mb-3"),
+
+                        html_div([
+                            dbc_label("Variable Configuration", className="x-small fw-bold text-uppercase mb-2 d-block colourtx-v3dl"),
+                            LENS_BuildSlotCard_DDEF(1),
+                            LENS_BuildSlotCard_DDEF(2),
+                            LENS_BuildSlotCard_DDEF(3),
+                        ], className="p-3 border-0 rounded shadow-sm colourbg-v0pw"),
+                    ], xs=12, md=5),
 
                     dbc_col([
                         html_div([
-                            html_h6("Matrix Shift Visualisation", className="x-small fw-bold text-uppercase mb-2 colourtx-v3dl"),
+                            html_h6("Transition Visualisation", className="x-small fw-bold text-uppercase mb-2 colourtx-v3dl"),
                             dcc_graph(id="lens-graph-transition", config=Dict("displayModeBar" => false), style=Dict("height" => "250px"))
                         ], className="border-0 rounded p-3 mb-3 shadow-sm colourbg-v0pw"),
                         dbc_card([
                             dbc_cardheader([html_i(className="fas fa-th-list me-2"), "Calculated Boundaries"], className="small fw-bold border-0", style=Dict("backgroundColor" => "transparent")),
                             html_div(id="lens-container-preview-table", className="table-responsive p-2", style=Dict("maxHeight" => "200px", "overflowY" => "auto")),
                         ], className="shadow-sm border-0"),
-                    ], xs=12, md=8)
+                    ], xs=12, md=7)
                 ]),
                 html_div(id="lens-container-preview-audit", className="mt-3")
             ],
@@ -257,8 +340,8 @@ function LENS_Layout_DDEF()
         BASE_Modal_DDEF("lens-modal-radio-config", [html_i(className="fas fa-radiation-alt me-2 colourtx-c1sm"), "Radioactivity Decay Correction"],
             [
                 dbc_alert([
-                    html_strong("WARNING: "),
-                    "Radioactive correction processes must solely be applied to radioactivity units such as mCi, MBq, Ci, GBq, CPM, CPS."
+                    html_strong("NOTICE: "),
+                    "Radioactive correction supports both absolute activity measurements (units such as mCi, MBq, Ci, GBq, CPM, CPS) and relative yield metrics. Mapping an output to a specific input triggers a yield calculation, which determines the decay-compensated ratio between the final and initial states. In these cases, percentage-based units are standard and ensure mathematical consistency within the analytical model."
                 ], color="danger", className="small py-2 mb-3 fw-bold"),
                 dbc_row([
                     dbc_col([
@@ -270,23 +353,23 @@ function LENS_Layout_DDEF()
                             html_div(id="lens-radio-in-div-$i", className="mb-2 d-none", children=[
                                 html_span(id="lens-radio-in-lbl-$i", className="small fw-bold d-block colourtx-v5pb"),
                                 dbc_row([
-                                    dbc_col(dbc_input(id="lens-radio-in-name-$i", placeholder="Graph Name (e.g. Corr. F-18)", type="text", size="sm", className="form-control-sm"), width=8),
-                                    dbc_col(dbc_input(id="lens-radio-in-unit-$i", placeholder="Unit (e.g. mCi)", type="text", size="sm", className="form-control-sm"), width=4)
+                                    dbc_col(dbc_input(id="lens-radio-in-name-$i", placeholder="Corrected Display Alias", type="text", size="sm", className="form-control-sm"), width=8),
+                                    dbc_col(dbc_input(id="lens-radio-in-unit-$i", placeholder="Measurement Unit", type="text", size="sm", className="form-control-sm"), width=4)
                                 ], className="g-1")
                             ]) for i in 1:6
                         ])
                     ], md=6),
                     dbc_col([
                         html_h6("2. Reverse Decay & Yield (Outputs)", className="small fw-bold colourtx-v4dh border-bottom pb-1"),
-                        html_p("Map outputs to inputs to calculate yield:", className="x-small colourtx-v3dl mb-2"),
+                        html_p("Map response variables to source inputs for yield calculation:", className="x-small colourtx-v3dl mb-2"),
                         
                         html_div(children=[
                             html_div(id="lens-radio-out-div-$i", className="mb-3 d-none", children=[
                                 html_span(id="lens-radio-out-lbl-$i", className="small fw-bold d-block colourtx-v5pb"),
                                 dcc_dropdown(id="lens-radio-out-dd-$i", options=[Dict("label" => "None", "value" => "None")], value="None", clearable=false, className="small mb-1"),
                                 dbc_row([
-                                    dbc_col(dbc_input(id="lens-radio-out-name-$i", placeholder="Graph Name (e.g. RCY)", type="text", size="sm", className="form-control-sm"), width=8),
-                                    dbc_col(dbc_input(id="lens-radio-out-unit-$i", placeholder="Unit (e.g. %)", type="text", size="sm", className="form-control-sm"), width=4)
+                                    dbc_col(dbc_input(id="lens-radio-out-name-$i", placeholder="Corrected Result Display Alias", type="text", size="sm", className="form-control-sm"), width=8),
+                                    dbc_col(dbc_input(id="lens-radio-out-unit-$i", placeholder="Measurement Unit", type="text", size="sm", className="form-control-sm"), width=4)
                                 ], className="g-1")
                             ]) for i in 1:6
                         ])
@@ -317,7 +400,6 @@ Initialises the reactive architecture and callback registry for the LENS module.
 function LENS_RegisterCallbacks_DDEF(app)
     C = Sys_Fast.FAST_Data_DDEC
 
-
 # ------------------------------------------------------------------------------
 # SECTION 4: UPLOAD & SYNC PIPELINES
 # ------------------------------------------------------------------------------
@@ -341,44 +423,85 @@ function LENS_RegisterCallbacks_DDEF(app)
         Output("lens-input-project",  "value"),
         Input("store-master-vault",   "data"),
         State("lens-input-project",   "value"),
+        State("lens-store-batch-status", "data"),
         prevent_initial_call=true
-    ) do active_data, current_proj
+    ) do active_data, current_proj, batch_status
+        # Unified Initialisation of Session Metadata
+        is_loading = get(batch_status, "next_pkg", get(batch_status, :next_pkg, 0)) > 0
+        proj_v = isnothing(current_proj) || isempty(strip(string(current_proj))) ? "Daisho" : string(current_proj)
+        
         path = ""
         try
-            active_cont = ""
+            # Unified Veri Kimliği (VID) Extraction Protocol via FAST Architecture
+            active_cont = Sys_Fast.FAST_ExtractVid_DDEF(active_data)
+
+            # Sync-Lock Guard: Prevent vault sync from overriding the UI during background rendering phases.
+            # However, we MUST allow the sync-flag to update to the current VID even if loading.
+            if is_loading
+                # Selective Update: We return no_updates for everything EXCEPT the sync-flag and project name.
+                out = ntuple(_ -> Dash.no_update(), 27)
+                mutable_out = collect(Any, out)
+                
+                # Fetch minimal metadata for the flag
+                if !isempty(active_cont) && active_cont != "none"
+                    mutable_out[25] = Dict("status" => 1, "vid" => active_cont)
+                    mutable_out[27] = proj_v
+                end
+                return Tuple(mutable_out)
+            end
+            
+            # If nothing in vault, return no updates
+            (isempty(active_cont) || active_cont == "none") && return ntuple(_ -> Dash.no_update(), 27)
+
+            path = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
+            !isfile(path) && return ntuple(_ -> Dash.no_update(), 27)
+
+            df = Main.Sys_Fast.FAST_ReadExcel_DDEF(path, Main.Sys_Fast.FAST_Data_DDEC.SHEET_CONFIG)
+            config = Main.Sys_Fast.FAST_ReadConfig_DDEF(path)
+
+            col_phase = Symbol(Main.Sys_Fast.FAST_Data_DDEC.COL_PHASE)
+            phases = []
+            if hasproperty(df, col_phase)
+                phases = unique(filter(!ismissing, df[!, col_phase]))
+            end
+   
             active_fname = ""
             if active_data isa String
                 active_cont = active_data
             elseif active_data isa AbstractDict || active_data isa Dict
                 active_cont = get(active_data, "content", active_data)
                 active_fname = get(active_data, "filename", "")
+                # Sync Guard: If this is a science pulse from an active analysis, skip redundant I/O read.
+                if get(active_data, "type", "") == "SCIENCE_PULSE"
+                    return ntuple(_ -> Dash.no_update(), 27)
+                end
             end
 
-            extracted_proj = Sys_Fast.FAST_ExtractProjectFromFilename_DDEF(active_fname)
-            proj_v = (extracted_proj != "") ? extracted_proj : (isnothing(current_proj) || isempty(strip(string(current_proj))) ? "Daisho" : string(current_proj))
+            afname = (active_data isa Dict && haskey(active_data, "filename")) ? string(active_data["filename"]) : ""
+            extracted_proj = Main.Sys_Fast.FAST_ExtractProjectFromFilename_DDEF(afname)
+            (extracted_proj != "") && (proj_v = extracted_proj)
 
             if isnothing(active_cont) || active_cont == ""
-                return [], "No Data Source", "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 0, "vid" => ""), "d-none", proj_v
+                return ([], "No Data Source", "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 0, "vid" => ""), "d-none", proj_v, Dict(:next_pkg => 0, :handle => "", :expected => 0, :working => false))
             end
 
             Sys_Fast.FAST_Log_DDEF("LENS", "Sync", "Synchronising from Smart Vault (Handle: $(first(active_cont, 64))...)...", "INFO")
             path = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
-
             if !isfile(path)
-                 return [], html_span("❌ Data handle expired or missing. Please re-upload.", className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v
+                 return ([], html_span([html_i(className="fas fa-times-circle me-2"), "Data handle expired or missing. Please re-upload."], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v, Dict(:next_pkg => 0, :handle => "", :expected => 0, :working => false))
             end
 
             ext = lowercase(splitext(path)[2])
-            if ext != ".xlsx" && ext != ".xlsm"
+            if ext != ".xlsx"
                 Sys_Fast.FAST_CleanTransient_DDEF(path)
-                return [], html_span("❌ This is not a valid Excel file! (Please upload .xlsx)", className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v
+                return ([], html_span([html_i(className="fas fa-times-circle me-2"), "This is not a valid Excel file! (Please upload .xlsx)"], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v)
             end
 
             df = Sys_Fast.FAST_ReadExcel_DDEF(path, C.SHEET_DATA)
             isempty(df) && (df = Sys_Fast.FAST_ReadExcel_DDEF(path, "DATA_RECORDS"))
 
             if isempty(df)
-                return [], html_span("❌ No Valid Data Sheet", className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., Dict("status" => 2, "vid" => ""), "d-none", proj_v
+                return ([], html_span([html_i(className="fas fa-times-circle me-2"), "No Valid Data Sheet found in spreadsheet."], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v)
             end
 
             col_phase = Symbol(C.COL_PHASE)
@@ -424,10 +547,11 @@ function LENS_RegisterCallbacks_DDEF(app)
                 model_val  = "Linear"
             elseif method == "BB15" || method == "DOPT15"
                 model_opts = [
+                    Dict("label" => "Automatic", "value" => "Auto"),
                     Dict("label" => "Linear",    "value" => "Linear"),
                     Dict("label" => "Quadratic", "value" => "Quadratic"),
                 ]
-                model_val  = "Quadratic"
+                model_val  = "Auto"
             else
                 model_opts = [
                     Dict("label" => "Automatic", "value" => "Auto"),
@@ -483,7 +607,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         catch e
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "SYNC_FAIL", bt, "FAIL")
-            return [], html_span("❌ Sync Error: $(first(string(e), 120))", className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green",
+            return [], html_span([html_i(className="fas fa-times-circle me-2"), "Sync Error: $(first(string(e), 120))"], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green",
                 nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v
         finally
             # Execution of the high-priority transient resource cleanup protocol.
@@ -511,9 +635,12 @@ function LENS_RegisterCallbacks_DDEF(app)
         Output("sync-lens-analysis",   "data"),
         Output("lens-leaders-text",    "children"),
         Output("lens-radio-badge",     "children"),
-        Input("lens-btn-run", "n_clicks"),
-        State("lens-dd-phase", "value"),
-        State("lens-dd-model", "value"),
+        Output("lens-store-batch-status", "data"),
+        Output("lens-interval-batch",     "disabled"),
+        Input("lens-btn-run",          "n_clicks"),
+        Input("lens-interval-batch",   "n_intervals"),
+        State("lens-dd-phase",         "value"),
+        State("lens-dd-model",         "value"),
         [State("lens-goal-name-$i",   "value") for i in 1:3]...,
         [State("lens-goal-min-$i",    "value") for i in 1:3]...,
         [State("lens-goal-target-$i", "value") for i in 1:3]...,
@@ -522,20 +649,87 @@ function LENS_RegisterCallbacks_DDEF(app)
         [State("lens-goal-weight-$i", "value") for i in 1:3]...,
         State("lens-store-radio-correct", "data"),
         State("store-master-vault",       "data"),
+        State("lens-store-graphs",        "data"),
+        State("lens-store-batch-status",  "data"),
         prevent_initial_call=true
     ) do args...
-        n, phase, model = args[1:3]
+        trig = Main.Gui_Base.BASE_GetTrigger_DDEF(callback_context())
+        nu   = Dash.no_update()
+        if trig == "lens-interval-batch"
+            status = args[26]
+            st_next = get(status, "next_pkg", get(status, :next_pkg, 0))
+            st_work = get(status, "working",  get(status, :working,  false))
+            
+            # Streaming Protocol Heartbeat: Tracking state for $(st_next) in handle $(manifest_h)
+            (st_next > 0) && Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Poll", "Staging Pulse #$(st_next) [Manifest Check]...", "WAIT")
+            
+            (isnothing(status) || st_next == 0 || st_work) && return ntuple(_ -> nu, 10)
+            
+            manifest_h  = get(status, "handle", get(status, :handle, ""))
+            current_graphs = args[25]
+            
+            # manifest_h is the base path. We look for manifest.json first.
+            m_path = manifest_h * "_manifest.json"
+            pkg_h  = manifest_h * "_pkg$st_next.json"
+            
+            (!isfile(m_path) || !isfile(pkg_h)) && return ntuple(_ -> nu, 10)
+            
+            manifest = try; open(m_path, "r") do io; JSON3.read(io) end; catch; nothing; end
+            isnothing(manifest) && return ntuple(_ -> nu, 10)
+            total_pkgs = get(manifest, "total", 0)
+            
+            batch_data = try; open(pkg_h, "r") do io; JSON3.read(io) end; catch; nothing; end
+            isnothing(batch_data) && return ntuple(_ -> nu, 10)
+            new_graphs = batch_data["graphs"]
+                
+                updated_graphs = [current_graphs; new_graphs]
+                new_count      = length(updated_graphs)
+                
+                # Cleanup consumed chunk
+                try; rm(pkg_h; force=true); catch; end
+                
+                if st_next >= total_pkgs
+                    # Convergence: All 64+ units delivered successfully.
+                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Flow", "Streaming Concluded. Total Ensemble: $new_count units.", "OK")
+                    try; rm(m_path; force=true); catch; end
+                    return (updated_graphs, nu, nu, nu, nu, nu, nu, nu, Dict("next_pkg" => 0, "handle" => "", "working" => false), true)
+                else
+                    # Progression: Advancing to the next science packet in the transient pipeline.
+                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Flow", "Stream Segment $st_next/$total_pkgs accepted [Total: $new_count].", "OK")
+                    return (updated_graphs, nu, nu, nu, nu, nu, nu, nu, Dict("next_pkg" => st_next + 1, "handle" => manifest_h, "working" => false), false)
+                end
+            end
+        
 
-        is_rad_apply = args[22] === true
-        base64_file = args[23]
 
-        goals = Dict{String,Any}[]
-        gnames = collect(args[4:6])
-        gmins = collect(args[7:9])
-        gtargets = collect(args[10:12])
-        gmaxes = collect(args[13:15])
-        gtypes = collect(args[16:18])
-        gweights = collect(args[19:21])
+        t_start = time()
+        n, _, phase, model = args[1:4]
+
+        # Guards to prevent re-entry during pre-operation phase.
+        (n === nothing || n == 0) && return ntuple(_ -> nu, 10)
+
+        is_rad_apply = args[23] === true
+        base64_file  = args[24]
+
+        active_cont = ""
+        if base64_file isa String
+            active_cont = base64_file
+        elseif base64_file isa AbstractDict || base64_file isa Dict
+            active_cont = get(base64_file, "content", "")
+        end
+
+        if isnothing(active_cont) || isempty(active_cont)
+            return ntuple(_ -> nu, 10)
+        end
+
+        # Scientific objective extraction and sanitisation.
+        goals    = Dict{String,Any}[]
+        gnames   = collect(args[5:7])
+        gmins    = collect(args[8:10])
+        gtargets = collect(args[11:13])
+        gmaxes   = collect(args[14:16])
+        gtypes   = collect(args[17:19])
+        gweights = collect(args[20:22])
 
         for i in 1:3
             if !isnothing(gnames[i]) && strip(string(gnames[i])) != ""
@@ -550,81 +744,121 @@ function LENS_RegisterCallbacks_DDEF(app)
             end
         end
 
-        # Execution of the descriptive parameter extraction logic for project identification and content handles.
-        active_cont = ""
-        if base64_file isa String
-            active_cont = base64_file
-        elseif base64_file isa AbstractDict || base64_file isa Dict
-            active_cont = get(base64_file, "content", "")
+        # Implementation of a race-condition lock to preserve system state integrity.
+        # Implementation of a race-condition lock to preserve system state integrity.
+        if !Sys_Fast.FAST_AcquireLock_DDEF("VISE_ANALYSIS", "User triggered Analysis via lens-btn-run")
+            Sys_Fast.FAST_Log_DDEF("LENS", "LOCK_REJECT", "Analysis Busy. Request Debounced.", "WARN")
+            return nu, nu, html_span("⚠ Analysis in progress. Please wait.", className="fw-bold colourtx-c1sm"), nu, nu, nu, nu, nu, nu, true
         end
 
-        (n === nothing || n == 0) && return Dash.no_update(), Dash.no_update(), "", "", Dash.no_update(), Dash.no_update(), "", ""
-        if isnothing(active_cont) || isempty(active_cont)
-            return Dash.no_update(), Dash.no_update(), html_span("Please upload an Excel file first.", className="colourtx-c5hy"), "", Dash.no_update(), Dash.no_update(), "", ""
-        end
-
-        # Implementation of a race-condition lock to prevent concurrent analysis requests and preserve state integrity.
-        if !Sys_Fast.FAST_AcquireLock_DDEF("VISE_ANALYSIS", "User triggered GLM Analysis via lens-btn-run")
-            Sys_Fast.FAST_Log_DDEF("LENS", "LOCK_REJECT", "Analysis already running. New request rejected.", "WARN")
-            return Dash.no_update(), Dash.no_update(),
-                html_span("⚠ An analysis is already in progress. Please wait.", className="fw-bold colourtx-c5hy"),
-                Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update()
-        end
-
-        # Initialisation of the transient resource file prior to execution to ensure robust cleanup protocols.
         path = ""
         try
             path = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
             if !isfile(path)
-                return [], "", html_span("❌ Data session stale. Please re-upload dataset.", className="fw-bold colourtx-c0hr"), "", Dash.no_update(), Dash.no_update(),"",""
+                return nu, nu, html_span("❌ Session Stale. Re-upload dataset.", className="fw-bold colourtx-c0hr"), nu, nu, nu, nu, nu, nu, true
             end
+            
             Sys_Fast.FAST_Log_DDEF("LENS", "Process", "Starting GLM Analysis (Phase: $phase)...", "WAIT")
 
-            config_full = Sys_Fast.FAST_ReadConfig_DDEF(path)
-            full_radio_opts = get(config_full, "RadioOpts", Dict("Apply" => false))
+            config_full      = Sys_Fast.FAST_ReadConfig_DDEF(path)
+            full_radio_opts  = get(config_full, "RadioOpts", Dict("Apply" => false))
             full_radio_opts["Apply"] = is_rad_apply
 
-            opts = Dict{String,Any}(
-                "RadioOpts" => full_radio_opts
-            )
+            opts = Dict{String,Any}("RadioOpts" => full_radio_opts)
+            
+            phase_str   = isnothing(phase) ? "Phase1" : string(phase)
+            model_str   = isnothing(model) ? "Auto" : string(model)
+            cfg_updates = Dict{String,Any}("LensGoals" => goals, "RadioOpts" => opts["RadioOpts"])
 
-            phase_str = isnothing(phase) ? "Phase1" : string(phase)
-            model_str = isnothing(model) ? "Auto" : string(model)
-            res = Lib_Vise.VISE_Execute_DDEF(path, phase_str, goals, model_str; Opts=opts)
+            # 1. IMMEDIATE: Modelling + Priority Render (Groups 1-5: Pareto, Fit, Trend, Slice)
+            res = Lib_Vise.VISE_Execute_DDEF(path, phase_str, goals, model_str; 
+                Opts=opts, ConfigUpdates=cfg_updates, t_start=t_start, RenderMode=:Priority)
 
             if res["Status"] != "OK"
-                return [], "", html_span("❌ Analysis Failed: $(res["Message"])", className="colourtx-c0hr"), "", Dash.no_update(), Dash.no_update(), "", ""
+                return [], "", html_span("❌ Analysis Failed: $(res["Message"])", className="colourtx-c0hr"), "", nu, nu, "", "", nu, true
             end
 
             sci_report = Lib_Vise.VISE_GenerateScientificReport_DDEF(res)
-
-            graphs = [
-                Dict("figure" => PlotlyJS.JSON.parse(PlotlyJS.JSON.json(g["Plot"])), "title" => g["Title"])
-                for g in res["Graphs"]
+            
+            # Preparation of Pkg 1 (Immediate Plots: Pareto + Fit)
+            pkg1_graphs = [
+                Dict(
+                    "figure" => Dict("data" => g["Plot"].data, "layout" => g["Plot"].layout, "config" => g["Plot"].config),
+                    "title"  => g["Title"]
+                ) for g in res["Graphs"] 
             ]
+
+            Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Split", "(Pkg 1) Sent ($(length(pkg1_graphs)) units). Deferred render initiated...", "OK")
+            
+            # 1. Background Pulse Generator: Splits 64+ graphs into smaller chunks to stay below browser memory limits.
+            batch_base = joinpath(Sys_Fast.FAST_TempRoot_DDEC, "DDE_B_$(Dates.format(now(), "HHmmss_SSS"))")
+            
+            Threads.@spawn begin
+                try
+                    def_opts = copy(opts)
+                    def_opts["Mode"] = :Deferred
+                    
+                    deferred_raw = Main.Lib_Arts.ARTS_Render_DDEF(
+                        res["Models"], res["X_Clean"], res["Y_Clean"], res["InNames"], res["OutNames"], 
+                        res["Goals"], res["R2_Adj"], res["Q2"], def_opts, res["Leaders"], res["Sensitivities"], res["Residuals"]
+                    )
+                    
+                    # Scientific Burst Optimization: Increasing chunk size (32 per pulse) for high-performance ingestion.
+                    unit_limit = 32 
+                    total_units = length(deferred_raw)
+                    num_pkgs    = ceil(Int, total_units / unit_limit)
+
+                    # Streaming Protocol Step 1: Write the manifest BEFORE the loop so the poll begins instantly.
+                    open(batch_base * "_manifest.json", "w") do io
+                        JSON3.write(io, Dict("total" => num_pkgs + 1))
+                    end
+                    
+                    for p in 1:num_pkgs
+                        start_i = (p-1)*unit_limit + 1
+                        end_i   = min(p*unit_limit, total_units)
+                        chunk   = deferred_raw[start_i:end_i]
+                        
+                        pkg_graphs = [
+                            Dict(
+                                "figure" => Dict("data" => g["Plot"].data, "layout" => g["Plot"].layout, "config" => g["Plot"].config), 
+                                "title"  => g["Title"]
+                            ) for g in chunk
+                        ]
+                        
+                        # Streaming Protocol Step 2: Write chunk as it becomes available.
+                        ch_path = batch_base * "_pkg$(p+1).json"
+                        open(ch_path, "w") do io; JSON3.write(io, Dict("graphs" => pkg_graphs)) end
+                        # Silent Background Write (No Log to avoid race-verbosity)
+                    end
+                    
+                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Async", "Deferred portfolio split into $num_pkgs pulses [Total Units: $total_units].", "OK")
+                catch e
+                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Crash", "Deferred rendering or chunking failed: $e", "FAIL")
+                end
+            end
 
             summary_rows = [
                 html_tr([
-                        html_td(n, style=Dict("textAlign" => "center", "padding" => "6px"), className="fw-bold"),
-                        html_td(@sprintf("%.3f", res["R2_Adj"][i]), style=Dict("textAlign" => "center", "padding" => "6px")),
-                        html_td(@sprintf("%.3f", res["R2_Pred"][i]), style=Dict("textAlign" => "center", "padding" => "6px")),
-                        html_td(
-                            (haskey(res["Models"][i], "P_Value") && !isnan(res["Models"][i]["P_Value"])) ?
+                    html_td(n, style=Dict("textAlign" => "center", "padding" => "6px"), className="fw-bold"),
+                    html_td(@sprintf("%.3f", res["R2_Adj"][i]), style=Dict("textAlign" => "center", "padding" => "6px")),
+                    html_td(@sprintf("%.3f", res["Q2"][i]), style=Dict("textAlign" => "center", "padding" => "6px")),
+                    html_td(
+                        (haskey(res["Models"][i], "P_Value") && !isnan(res["Models"][i]["P_Value"])) ?
                             @sprintf("%.5f", res["Models"][i]["P_Value"]) : "N/A", style=Dict("textAlign" => "center", "padding" => "6px")
                         ),
-                    ], style=Dict("borderBottom" => "1px solid var(--colour-val2-liglow)")) for (i, n) in enumerate(res["OutNames"])
+                ], style=Dict("borderBottom" => "1px solid var(--colour-val2-liglow)")) for (i, n) in enumerate(res["OutNames"])
             ]
 
             summary = html_div([
                 html_table([
-                        html_thead(html_tr([
-                            html_th("Output", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px")),
-                            html_th("R² (Adj)", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px")),
-                            html_th("Q² (Pred)", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px")),
-                            html_th("P-Value", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px"))
-                        ])),
-                        html_tbody(summary_rows, style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)")),
-                    ], className="table table-sm table-borderless caption-top mb-1 mx-auto", style=Dict("width" => "95%", "marginTop" => "5px")),
+                    html_thead(html_tr([
+                        html_th("Output", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px")),
+                        html_th("R² (Adj)", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px")),
+                        html_th("Q² (Pred)", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px")),
+                        html_th("P-Value", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px"))
+                    ])),
+                    html_tbody(summary_rows, style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)"))
+                ], className="table table-sm table-borderless caption-top mb-1 mx-auto", style=Dict("width" => "95%", "marginTop" => "5px")),
 
 # ------------------------------------------------------------------------------
 # SECTION 6: MODEL PERFORMANCE & DIAGNOSTICS
@@ -652,7 +886,6 @@ function LENS_RegisterCallbacks_DDEF(app)
                     ], className="d-flex justify-content-center small py-1 rounded colourbg-v0pw")
                 ]) : html_div()),
 
-                # Implementation of the factor sensitivity mapping for optimization results.
                 (haskey(res, "Sensitivities") && !isempty(res["Sensitivities"]) ? html_div([
                     html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px dashed var(--colour-val1-lighig)", "margin" => "10px 0")),
                     html_h6("Factor Sensitivity (at Optimum)", className="fw-bold small text-center mb-2 colourtx-c1sm"),
@@ -664,8 +897,8 @@ function LENS_RegisterCallbacks_DDEF(app)
                         html_tbody([
                             html_tr([
                                 html_td(res["InNames"][fi], className="fw-bold", style=Dict("padding" => "4px")),
-                                [html_td(@sprintf("%.1f%%", res["Sensitivities"][mi][fi] * 100),
-                                    className = res["Sensitivities"][mi][fi] > 0.5 ? "colourtx-c0hr" : "colourtx-v5pb",
+                                [html_td(@sprintf("%.1f%%", res["Sensitivities"][mi][fi] * 100), 
+                                    className = res["Sensitivities"][mi][fi] > 0.5 ? "colourtx-c0hr" : "colourtx-v5pb", 
                                     style=Dict("textAlign" => "center", "padding" => "4px"))
                                  for mi in 1:length(res["OutNames"])]...
                             ]) for fi in 1:length(res["InNames"])
@@ -673,12 +906,9 @@ function LENS_RegisterCallbacks_DDEF(app)
                     ], className="table table-sm table-borderless small mx-auto", style=Dict("width" => "90%"))
                 ]) : html_div()),
 
-                # Implementation of the academic ANOVA & coefficients for regression analysis.
                 html_div([
                     html_hr(style=Dict("height" => "2px", "border" => "none", "borderTop" => "2px solid var(--colour-chr3-toncya)", "margin" => "15px 0")),
                     html_h6("ACADEMIC DIAGNOSTICS", className="fw-bold text-center mb-3 colourtx-c1sm", style=Dict("letterSpacing" => "1px")),
-
-                    # Orchestration of detailed ANOVA diagnostics for specific experimental outputs.
                     [html_div([
                         html_div("Analysis of Variance (ANOVA): $out_name", className="small fw-bold mb-1 colourtx-v4dh"),
                         # ANOVA Table
@@ -693,10 +923,10 @@ function LENS_RegisterCallbacks_DDEF(app)
                                 ])),
                                 html_tbody([
                                     html_tr([
-                                        html_td(r.Source, style=Dict("padding" => "2px")),
-                                        html_td(r.df,     style=Dict("padding" => "2px")),
-                                        html_td(isnan(r.MS) ? "-" : @sprintf("%.4f", r.MS), style=Dict("padding" => "2px")),
-                                        html_td(isnan(r.F)  ? "-" : @sprintf("%.2f", r.F),  style=Dict("padding" => "2px")),
+                                        html_td(r.Source, style=Dict("padding" => "2px")), 
+                                        html_td(r.df,     style=Dict("padding" => "2px")), 
+                                        html_td(isnan(r.MS) ? "-" : @sprintf("%.4f", r.MS), style=Dict("padding" => "2px")), 
+                                        html_td(isnan(r.F)  ? "-" : @sprintf("%.2f", r.F),  style=Dict("padding" => "2px")), 
                                         html_td(isnan(r.P)  ? "-" : @sprintf("%.4f", r.P),
                                             className = (!isnan(r.P) && r.P < 0.05) ? "fw-bold" : "",
                                             style=Dict("padding" => "2px"))
@@ -710,15 +940,15 @@ function LENS_RegisterCallbacks_DDEF(app)
                         let m = res["Models"][i]
                             html_table([
                                 html_thead(html_tr([
-                                    html_th("Term",    style=Dict("padding" => "2px")),
-                                    html_th("Beta",    style=Dict("padding" => "2px")),
-                                    html_th("P-Value", style=Dict("padding" => "2px")),
+                                    html_th("Term",    style=Dict("padding" => "2px")), 
+                                    html_th("Beta",    style=Dict("padding" => "2px")), 
+                                    html_th("P-Value", style=Dict("padding" => "2px")), 
                                     html_th("VIF",     style=Dict("padding" => "2px"))
                                 ])),
                                 html_tbody([
                                     html_tr([
-                                        html_td(m["TermNames"][j], style=Dict("padding" => "2px")),
-                                        html_td(@sprintf("%.4f", m["Coefs"][j]), style=Dict("padding" => "2px")),
+                                        html_td(m["TermNames"][j], style=Dict("padding" => "2px")), 
+                                        html_td(@sprintf("%.4f", m["Coefs"][j]), style=Dict("padding" => "2px")), 
                                         html_td(isnan(m["P_Coefs"][j]) ? "N/A" : @sprintf("%.4f", m["P_Coefs"][j]),
                                             className = (!isnan(m["P_Coefs"][j]) && m["P_Coefs"][j] < 0.05) ? "fw-bold" : "",
                                             style=Dict("padding" => "2px")),
@@ -734,7 +964,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 let warnings = get(res, "BoundaryWarnings", String[])
                     !isempty(warnings) ? dbc_alert([
                         html_div([
-                            html_i(className="fas fa-exclamation-triangle me-2"),
+                            html_i(className="fas fa-exclamation-triangle me-2"), 
                             html_strong("Boundary Warning (Search Space Limit)"),
                         ], className="mb-1"),
                         html_ul([html_li(w, className="mb-0") for w in warnings], className="ps-3 mb-0 small")
@@ -742,11 +972,8 @@ function LENS_RegisterCallbacks_DDEF(app)
                 end
             ])
 
-            Sys_Fast.FAST_UpdateConfig_DDEF(path, Dict("LensGoals" => goals, "RadioOpts" => opts["RadioOpts"]))
-
             updated_base64 = Sys_Fast.FAST_ReadToStore_DDEF(path)
 
-            # Orchestration of the Leader Candidate Identification Table for phase evolution.
             leaders_html = ""
             if haskey(res, "Leaders") && !isempty(res["Leaders"])
                 ldf = res["Leaders"]
@@ -799,22 +1026,32 @@ function LENS_RegisterCallbacks_DDEF(app)
             rad_badge = (haskey(res, "RadioCorrection") && !isempty(res["RadioCorrection"])) ?
                         dbc_badge([html_i(className="fas fa-radiation me-1 colourtx-v5pb"), "Radio-Corrected"], className="ms-2 fw-bold colourgl-c4tg colourtx-v5pb") : ""
 
-            elapsed_str   = get(res, "Elapsed", "")
-            elapsed_badge = isempty(elapsed_str) ? "" :
-                            html_span(" ($elapsed_str)", className="colourtx-v3dl")
-
             final_res = Sys_Fast.FAST_SanitiseJson_DDEF(res)
-            final_res["vid"] = updated_base64
+            # Architectural Optimization: Remove bulky graph objects from the persistent vault state.
+            # They are already displayed in the UI; keeping them in the store causes redundant serialization lag.
+            delete!(final_res, "Graphs") 
 
+            final_res["vid"]  = updated_base64
+            final_res["type"] = "SCIENCE_PULSE"
+            # Final Architectural Sync: Capture total duration AFTER all post-processing.
+            t_total       = round(time() - t_start; digits=1)
+            elapsed_badge = html_span(" ($(t_total)s)", className="colourtx-v3dl")
+
+            # Architectural Sync: Initiate pulse generator if in Priority/Deferred mode.
+            # In 'Priority' mode, we know Pkg 2 is coming, so we MUST set next_pkg=2.
+            is_staged = (get(opts, "RenderMode", :Priority) == :Priority)
+            
             return (
-                graphs, 
+                pkg1_graphs, 
                 summary, 
                 html_span(["✅ Analysis Complete", elapsed_badge], className="fw-bold small colourtx-c4tg"), 
                 sci_report, 
                 final_res, 
                 updated_base64, 
                 leaders_html, 
-                rad_badge
+                rad_badge,
+                Dict("next_pkg" => is_staged ? 2 : 0, "handle" => is_staged ? batch_base : "", "working" => false),
+                !is_staged
             )
 
         # ------------------------------------------------------------------------------
@@ -824,7 +1061,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         catch e
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "ANALYSIS_CRASH", bt, "FAIL")
-            return [], "", html_span("❌ Analysis Guard: Process aborted due to a technical exception.", className="fw-bold colourtx-c0hr"), "", Dash.no_update(), Dash.no_update(),"",""
+            return ntuple(_ -> nu, 10)
         finally
             # Execution of high-priority transient resource cleanup (mitigation of disk leakage).
             Sys_Fast.FAST_CleanTransient_DDEF(path)
@@ -838,7 +1075,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 # ------------------------------------------------------------------------------
 
     callback!(app,
-        [Output("lens-btn-$id", "disabled") for id in ["run", "view-report", "next-phase", "export-plots", "download-report", "export-excel"]]...,
+        [Output("lens-btn-$id", "disabled") for id in ["run", "view-report", "export-plots", "download-report", "export-excel"]]...,
         Input("store-master-vault",   "data"),
         Input("lens-store-sync-flag",  "data"),
         Input("lens-store-results",    "data"),
@@ -849,34 +1086,40 @@ function LENS_RegisterCallbacks_DDEF(app)
         if trig == "lens-store-diag-force" && diag_force > 0
             Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Emergency Unlock triggered via Diagnostics.", "OK")
             if !isnothing(results) && haskey(results, "vid")
-                return ntuple(_ -> false, 6)
+                return ntuple(_ -> false, 5)
             end
-            return false, true, true, true, true, true
+            return false, true, true, true, true
         end
 
         if isnothing(vault) || isempty(vault)
-            return ntuple(_ -> true, 6)
+            return ntuple(_ -> true, 5)
         end
 
-        curr_vid = ""
-        if vault isa String
-            curr_vid = vault
-        elseif vault isa AbstractDict || vault isa Dict
-            curr_vid = get(vault, "content", "")
+        curr_vid = Sys_Fast.FAST_ExtractVid_DDEF(vault)
+
+        if isnothing(curr_vid) || isempty(curr_vid)
+            return ntuple(_ -> true, 5)
         end
 
-        if !isnothing(results) && get(results, "vid", "") == curr_vid
+        # 1. Direct Analysis Match: Results are already calculated for this specific data.
+        if !isnothing(results) && Sys_Fast.FAST_ExtractVid_DDEF(results) == curr_vid
             Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Analysis valid for current data. Unlocked all.", "OK")
-            return ntuple(_ -> false, 6)
+            return ntuple(_ -> false, 5)
         end
 
-        if !isnothing(sync_flag) && get(sync_flag, "vid", "") == curr_vid && get(sync_flag, "status", 0) == 1
+        # 2. Sync State Match: Data is loaded but analysis is not yet run.
+        if !isnothing(sync_flag) && Sys_Fast.FAST_ExtractVid_DDEF(sync_flag) == curr_vid && get(sync_flag, "status", 0) == 1
             Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Sync validated. Unlocked Analysis Engine.", "OK")
-            return false, true, true, true, true, true
+            return false, true, true, true, true
         end
 
-        Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Data in transition or sync pending. Locking controls.", "WAIT")
-        return ntuple(_ -> true, 6)
+        # Exception: Diagnostics override for power users.
+        if !isnothing(diag_force) && diag_force > 0
+             return ntuple(_ -> false, 5)
+        end
+
+        Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Data in transition or sync pending [VID: $(first(curr_vid, 8))].", "WAIT")
+        return ntuple(_ -> true, 5)
     end
 
 # ------------------------------------------------------------------------------
@@ -952,6 +1195,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         return html_div(rows_html, style=Dict("display" => "flex", "flexDirection" => "column", "width" => "100%", "padding" => "2px 0"))
     end
 
+
 # ------------------------------------------------------------------------------
 # SECTION 10: PHASE EVOLUTION WIZARD (MODAL)
 # ------------------------------------------------------------------------------
@@ -960,6 +1204,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         Output("lens-modal-wizard",  "is_open"),
         Output("lens-modal-leader",  "is_open"),
         Output("lens-modal-preview", "is_open"),
+        Output("lens-phase-guard-msg", "children"),
         Input("lens-btn-next-phase", "n_clicks"),
         Input("lens-wiz-btn-next",   "n_clicks"),
         Input("lens-wiz-btn-cancel", "n_clicks"),
@@ -972,35 +1217,41 @@ function LENS_RegisterCallbacks_DDEF(app)
         State("lens-modal-wizard",  "is_open"),
         State("lens-modal-leader",  "is_open"),
         State("lens-modal-preview", "is_open"),
+        State("lens-store-results", "data"),
         prevent_initial_call=true
-    ) do n_open, n_w2L, n_w_can, n_L2w, n_L2p, n_L_can, n_p2L, n_p_can, sig, w_open, L_open, p_open
+    ) do n_open, n_w2L, n_w_can, n_L2w, n_L2p, n_L_can, n_p2L, n_p_can, sig, w_open, L_open, p_open, results
         trig = BASE_GetTrigger_DDEF(callback_context())
+        no_msg = Dash.no_update()
 
         if trig == "lens-wiz-btn-cancel" || trig == "lens-lead-btn-cancel" || trig == "lens-prev-btn-cancel" || (trig == "lens-signal-process" && get(sig, "success", false))
-            return false, false, false
+            return false, false, false, ""
         end
 
         if trig == "lens-btn-next-phase"
-            return true, false, false
+            has_analysis = !isnothing(results) && (results isa AbstractDict || results isa Dict) && get(results, "Status", "") == "OK"
+            if !has_analysis
+                return false, false, false, html_span([html_i(className="fas fa-info-circle me-1"), "Run the analysis first to identify leader candidates."], className="colourtx-c1sm fw-bold")
+            end
+            return true, false, false, ""
         end
 
         if trig == "lens-wiz-btn-next"
-            return false, true, false
+            return false, true, false, no_msg
         end
 
         if trig == "lens-lead-btn-back"
-            return true, false, false
+            return true, false, false, no_msg
         end
 
         if trig == "lens-lead-btn-confirm"
-            return false, false, true
+            return false, false, true, no_msg
         end
 
         if trig == "lens-prev-btn-back"
-            return false, true, false
+            return false, true, false, no_msg
         end
 
-        return Dash.no_update(), Dash.no_update(), Dash.no_update()
+        return Dash.no_update(), Dash.no_update(), Dash.no_update(), no_msg
     end
 
 # ------------------------------------------------------------------------------
@@ -1140,12 +1391,14 @@ function LENS_RegisterCallbacks_DDEF(app)
         return data, columns
     end
 
-    # Phase proposal generator.
     callback!(app,
         Output("lens-store-next-phase-proposal", "data"),
         Output("lens-prev-slider-zoom",  "value"),
         Output("lens-prev-slider-shift", "value"),
         Output("lens-prev-dd-method",    "value"),
+        [Output("lens-slot-name-$i",   "children") for i in 1:3]...,
+        [Output("lens-slot-leader-$i", "children") for i in 1:3]...,
+        [Output("lens-slot-mode-$i",   "value") for i in 1:3]...,
         Input("lens-lead-btn-confirm",  "n_clicks"),
         Input("lens-prev-slider-zoom",  "value"),
         Input("lens-prev-slider-shift", "value"),
@@ -1172,7 +1425,12 @@ function LENS_RegisterCallbacks_DDEF(app)
         ret_s = is_reset ? 0.0 : Dash.no_update()
         ret_m = is_reset ? "TL09" : Dash.no_update()
 
-        (isnothing(base64_file) || isnothing(sel_rows) || isempty(sel_rows)) && return Dict(), ret_z, ret_s, ret_m
+        nu = Dash.no_update()
+        slot_names   = Any[nu, nu, nu]
+        slot_leaders = Any[nu, nu, nu]
+        slot_modes   = Any[nu, nu, nu]
+
+        (isnothing(base64_file) || isnothing(sel_rows) || isempty(sel_rows)) && return Dict(), ret_z, ret_s, ret_m, slot_names..., slot_leaders..., slot_modes...
 
         row_sel = cand_data[sel_rows[1]+1]
         sel_id = haskey(row_sel, "EXP_ID") ? string(row_sel["EXP_ID"]) :
@@ -1185,67 +1443,125 @@ function LENS_RegisterCallbacks_DDEF(app)
         config_full = Sys_Fast.FAST_ReadConfig_DDEF(path)
 
         ingredients_raw = get(config_full, "Ingredients", [])
-        ingredients = if ingredients_raw isa Dict
+        ingredients = if ingredients_raw isa AbstractDict || ingredients_raw isa Dict
             [Dict{String,Any}(string(k) => v for (k, v) in pairs(val)) for val in values(ingredients_raw)]
         else
             [Dict{String,Any}(string(k) => v for (k, v) in pairs(val)) for val in ingredients_raw]
         end
         vars_config = filter(c -> get(c, "Role", "") == C.ROLE_VAR, ingredients)
 
-        # Execution of the Phase Evolution Logic (NextPhase) for analytical preview calculation.
         res = Sys_Flow.FLOW_NextPhase_DDEF(path, src, sel_id, Float64(z), Float64(s))
         Sys_Fast.FAST_CleanTransient_DDEF(path)
 
         res["SelectedZoom"]   = z
         res["SelectedShift"]  = s
         res["SelectedMethod"] = m
- 
-        # Synchronisation of radio-correction status for architectural UI warning triggers.
         res["IsRadioCorrected"] = !isnothing(results) && haskey(results, "RadioCorrection") && !isempty(results["RadioCorrection"])
+
+        if is_reset
+            leader_vals = get(res, "LeaderValues", Float64[])
+            for j in 1:min(3, length(vars_config))
+                vname = get(vars_config[j], "Name", "Var $j")
+                vunit = get(vars_config[j], "Unit", "")
+                lv    = j <= length(leader_vals) ? round(leader_vals[j]; digits=3) : 0.0
+                slot_names[j]   = vname
+                slot_leaders[j] = "Leader: $lv $vunit"
+                slot_modes[j]   = "KEEP"
+            end
+        end
         
-        return res, ret_z, ret_s, ret_m
+        return res, ret_z, ret_s, ret_m, slot_names..., slot_leaders..., slot_modes...
     end
 
-    # Render preview content for phase evolution.
     callback!(app,
         Output("lens-container-preview-table", "children"),
         Output("lens-container-preview-audit", "children"),
         Output("lens-graph-transition", "figure"),
         Input("lens-store-next-phase-proposal", "data"),
+        Input("lens-store-slot-config", "data"),
         prevent_initial_call=true
-    ) do res
-        (isnothing(res) || isempty(res) || res["Status"] != "OK") && return html_div("No proposal available."), "", Dict()
+    ) do res, slot_cfg
+        (isnothing(res) || isempty(res) || get(res, "Status", "") != "OK") && return html_div("No proposal available."), "", Dict()
 
         conf = res["NewConfig"]
- 
-        # Execution of the Phase Transformation Visualisation protocol.
-        # Utilisation of OldConfig (original boundaries) ensures chart synchronicity with NewConfig values.
+
         old_conf    = get(res, "OldConfig", conf)
         new_conf    = get(res, "NewConfig", conf)
         leader_vals = get(res, "LeaderValues", Float64[])
         header_info = get(res, "Global", Dict())
         vol         = Float64(get(header_info, "Volume", 5.0))
         conc        = Float64(get(header_info, "Concentration", 10.0))
+        zoom_f      = get(res, "SelectedZoom", 0.5)
 
         fd = Sys_Fast.FAST_Data_DDEC
-        
+
         display_conf = map(new_conf) do c
             Dict{String,Any}(string(k) => v for (k,v) in pairs(c))
+        end
+
+        slots = Dict{String,Any}[]
+        if !isnothing(slot_cfg) && (slot_cfg isa AbstractDict || slot_cfg isa Dict) && haskey(slot_cfg, "Slots")
+            raw_slots = slot_cfg["Slots"]
+            if raw_slots isa AbstractVector
+                slots = [(s isa AbstractDict || s isa Dict) ? Dict{String,Any}(string(k) => v for (k,v) in pairs(s)) : Dict{String,Any}() for s in raw_slots]
+            end
+        end
+
+        var_idx = 0
+        for c in display_conf
+            get(c, "Role", "") != fd.ROLE_VAR && continue
+            var_idx += 1
+            var_idx > length(slots) && continue
+            sl = slots[var_idx]
+            mode = get(sl, "Mode", "KEEP")
+
+            if mode == "SCALE" || mode == "REPLACE"
+                if haskey(sl, "NewName") && !isempty(sl["NewName"])
+                    c["Name"] = string(sl["NewName"])
+                end
+                if haskey(sl, "NewUnit") && !isempty(sl["NewUnit"])
+                    c["Unit"] = string(sl["NewUnit"])
+                end
+            end
+
+            if mode == "SCALE" && var_idx <= length(leader_vals)
+                α  = Float64(get(sl, "Alpha", 1.0))
+                β  = Float64(get(sl, "Beta",  0.0))
+                tv = Sys_Flow.FLOW_BridgeTransform_DDEF(Float64(leader_vals[var_idx]), α, β)
+                old_lvls = get(c, "Levels", [0.0, 0.0, 0.0])
+                # old_lvls from new_conf already has Zoom applied via NextPhase. So we just scale it by Alpha.
+                half_range = abs(old_lvls[3] - old_lvls[1]) * 0.5 * abs(α)
+                c["Levels"] = [round(tv - half_range; digits=4), round(tv; digits=4), round(tv + half_range; digits=4)]
+
+            elseif mode == "REPLACE"
+                nl1 = Float64(get(sl, "NewL1", 0.0))
+                nl2 = Float64(get(sl, "NewL2", 0.0))
+                nl3 = Float64(get(sl, "NewL3", 0.0))
+                c["Levels"] = [nl1, nl2, nl3]
+            end
+
+            # Inject Absolute Physical Boundaries independent of Levels
+            if haskey(sl, "NewMin")
+                c["Min"] = Float64(sl["NewMin"])
+            end
+            if haskey(sl, "NewMax")
+                c["Max"] = Float64(sl["NewMax"])
+            end
         end
 
         audit_rows = map(display_conf) do c
             lvls = get(c, "Levels", [0.0, 0.0, 0.0])
             Dict(
-                "Name" => string(get(c, "Name", "Unknown")), 
+                "Name" => string(get(c, "Name", "Unknown")),
                 "Role" => string(get(c, "Role", "Fixed")),
-                "L1"   => Float64(lvls[1]), "L2"   => Float64(lvls[2]), "L3"   => Float64(lvls[3]), 
+                "L1"   => Float64(lvls[1]), "L2" => Float64(lvls[2]), "L3" => Float64(lvls[3]),
                 "MW"   => Float64(get(c, "MW", 0.0)),
                 "Unit" => string(get(c, "Unit", "-"))
             )
         end
 
         audit_ok, audit_report, audit_results, _, _ = Main.Lib_Mole.MOLE_QuickAudit_DDEF(audit_rows, vol, conc)
-        
+
         if !isempty(audit_results)
             for c in display_conf
                 if get(c, "Role", "") == fd.ROLE_FILL
@@ -1260,15 +1576,33 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         fig = Sys_Flow.FLOW_RenderPhaseTransition_DDEF(old_conf, display_conf, leader_vals)
 
+        var_slot_idx = 0
         rows = []
         for c in display_conf
             role = get(c, "Role", "Variable")
             lvls = get(c, "Levels", [0.0, 0.0, 0.0])
+            slot_mode = ""
+            if role == fd.ROLE_VAR
+                var_slot_idx += 1
+                slot_mode = var_slot_idx <= length(slots) ? get(slots[var_slot_idx], "Mode", "KEEP") : "KEEP"
+            end
+
+            mode_badge = if slot_mode == "SCALE"
+                html_span(" S", className="badge ms-1 colourbg-c3tc colourtx-v5pb", style=Dict("fontSize" => "8px"))
+            elseif slot_mode == "REPLACE"
+                html_span(" R", className="badge ms-1 colourbg-c3tc colourtx-v5pb", style=Dict("fontSize" => "8px"))
+            else
+                ""
+            end
+
+            disp_name = get(c, "Name", "???")
+            disp_unit = get(c, "Unit", "")
+            final_name = (isempty(disp_unit) || disp_unit == "-") ? disp_name : "$disp_name $disp_unit"
+
             push!(rows, html_tr([
-                html_td(get(c, "Name", "???")),
-                html_td(role, className = role == "Variable" ? "colourtx-c1sm" : "colourtx-v5pb", style=Dict(
-                    "fontWeight" => role == "Variable" ? "bold" : "normal"
-                )),
+                html_td([final_name, mode_badge]),
+                html_td(role, className = role == fd.ROLE_VAR ? "colourtx-c1sm" : "colourtx-v5pb",
+                    style=Dict("fontWeight" => role == fd.ROLE_VAR ? "bold" : "normal")),
                 html_td(round(lvls[1], digits=3)),
                 html_td(html_b(round(lvls[2], digits=3)), className="colourbg-v0pw"),
                 html_td(round(lvls[3], digits=3))
@@ -1299,9 +1633,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 html_i(className="fas fa-radiation-alt fa-2x me-3"),
                 html_div([
                     html_h6("DECAY-CORRECTION DETECTED", className="fw-bold mb-1"),
-                    html_p([
-                        "Values are decay-corrected. Calculate required radioactivity and masses for your next experiment."
-                    ], className="mb-0 small")
+                    html_p("Values are decay-corrected. Calculate required radioactivity and masses for your next experiment.", className="mb-0 small")
                 ])
             ], className="d-flex align-items-center")
         ], className="mt-3 border-0 shadow colourgl-c5hy colourtx-v5pb") : html_div()
@@ -1309,7 +1641,6 @@ function LENS_RegisterCallbacks_DDEF(app)
         return tbl, [audit_html, radio_warn], fig
     end
 
-    # Commit phase to Excel.
     callback!(app,
         Output("lens-download-phase", "data"),
         Output("lens-signal-process", "data"),
@@ -1320,12 +1651,12 @@ function LENS_RegisterCallbacks_DDEF(app)
         State("lens-wiz-dd-source",    "value"),
         State("store-master-vault",    "data"),
         State("lens-input-project",    "value"),
+        State("lens-store-slot-config", "data"),
         prevent_initial_call=true
-    ) do n_commit, proposal, sel_rows, cand_data, src, base64_file, proj_v
+    ) do n_commit, proposal, sel_rows, cand_data, src, base64_file, proj_v, slot_cfg
         (isnothing(n_commit) || n_commit == 0 || isnothing(proposal) || get(proposal, "Status", "") != "OK") && return Dash.no_update()
         (isnothing(sel_rows) || isempty(sel_rows)) && return Dash.no_update()
- 
-        # Implementation of a standardised ID extraction orchestration helper.
+
         row_sel = cand_data[sel_rows[1]+1]
         sel_id = haskey(row_sel, "EXP_ID") ? string(row_sel["EXP_ID"]) :
                  haskey(row_sel, "ID")     ? string(row_sel["ID"]) :
@@ -1340,13 +1671,70 @@ function LENS_RegisterCallbacks_DDEF(app)
         res  = Sys_Flow.FLOW_BuildNextPhase_DDEF(path, src, sel_id, Float64(zoom), meth, Float64(shift))
 
         if res["Status"] == "OK"
-            new_vault = Sys_Fast.FAST_ReadToStore_DDEF(path)
-            # Retrieval of actual byte arrays for binary data download.
-            _, bytes = Sys_Fast.FAST_PrepareDownload_DDEF(path)
+            slots = Dict{String,Any}[]
+            if !isnothing(slot_cfg) && (slot_cfg isa AbstractDict || slot_cfg isa Dict) && haskey(slot_cfg, "Slots")
+                raw = slot_cfg["Slots"]
+                if raw isa AbstractVector
+                    slots = [(s isa AbstractDict || s isa Dict) ? Dict{String,Any}(string(k) => v for (k,v) in pairs(s)) : Dict{String,Any}() for s in raw]
+                end
+            end
 
+            has_custom = any(get(s, "Mode", "KEEP") != "KEEP" for s in slots)
+            if has_custom
+                leader_vals = get(proposal, "LeaderValues", Float64[])
+                config = Sys_Fast.FAST_ReadConfig_DDEF(path)
+                ingreds = get(config, "Ingredients", [])
+                fd = Sys_Fast.FAST_Data_DDEC
+
+                vi = 0
+                for c in ingreds
+                    c_dict = (c isa AbstractDict || c isa Dict) ? Dict{String,Any}(string(k) => v for (k,v) in pairs(c)) : c
+                    get(c_dict, "Role", "") != fd.ROLE_VAR && continue
+                    vi += 1
+                    vi > length(slots) && continue
+                    sl = slots[vi]
+                    mode = get(sl, "Mode", "KEEP")
+
+                    if mode == "SCALE" || mode == "REPLACE"
+                        if haskey(sl, "NewName") && !isempty(sl["NewName"])
+                            c_dict["Name"] = string(sl["NewName"])
+                        end
+                        if haskey(sl, "NewUnit") && !isempty(sl["NewUnit"])
+                            c_dict["Unit"] = string(sl["NewUnit"])
+                        end
+                    end
+
+                    if mode == "SCALE" && vi <= length(leader_vals)
+                        α  = Float64(get(sl, "Alpha", 1.0))
+                        β  = Float64(get(sl, "Beta",  0.0))
+                        tv = Sys_Flow.FLOW_BridgeTransform_DDEF(Float64(leader_vals[vi]), α, β)
+                        old_lvls = get(c_dict, "Levels", [0.0, 0.0, 0.0])
+                        hr = abs(Float64(old_lvls[3]) - Float64(old_lvls[1])) * 0.5 * abs(α)
+                        c_dict["Levels"] = [round(tv - hr; digits=4), round(tv; digits=4), round(tv + hr; digits=4)]
+
+                    elseif mode == "REPLACE"
+                        nl1 = Float64(get(sl, "NewL1", 0.0))
+                        nl2 = Float64(get(sl, "NewL2", 0.0))
+                        nl3 = Float64(get(sl, "NewL3", 0.0))
+                        c_dict["Levels"] = [nl1, nl2, nl3]
+                    end
+
+                    if haskey(sl, "NewMin")
+                        c_dict["Min"] = Float64(sl["NewMin"])
+                    end
+                    if haskey(sl, "NewMax")
+                        c_dict["Max"] = Float64(sl["NewMax"])
+                    end
+                end
+
+                Sys_Fast.FAST_UpdateConfig_DDEF(path, Dict("Ingredients" => ingreds))
+                Sys_Flow.FLOW_BuildNextPhase_DDEF(path, src, sel_id, Float64(zoom), meth, Float64(shift))
+            end
+
+            new_vault = Sys_Fast.FAST_ReadToStore_DDEF(path)
+            _, bytes = Sys_Fast.FAST_PrepareDownload_DDEF(path)
             Sys_Fast.FAST_CleanTransient_DDEF(path)
 
-            # Standardised Naming: Project, Phase, Tag (EVO), Extension (xlsx)
             proj_n = (isnothing(proj_v) || isempty(strip(string(proj_v)))) ? "Daisho" : string(proj_v)
             fname = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_n, res["TargetPhase"], "EVO", "xlsx")
 
@@ -1394,8 +1782,6 @@ function LENS_RegisterCallbacks_DDEF(app)
                 safe_title = Sys_Fast.FAST_SanitiseFilename_DDEF(title)
                 filepath   = joinpath(export_dir, "$(safe_title).png")
 
-                # Execution of the high-resolution export protocol specifically for ZIP archival.
-                # Title and plotting area coordinates are adjusted to avoid overlap at 640x800 resolution.
                 fig_dict["layout"]["width"]  = 640
                 fig_dict["layout"]["height"] = 800
                 fig_dict["layout"]["margin"]["t"] = 130
@@ -1425,11 +1811,11 @@ function LENS_RegisterCallbacks_DDEF(app)
             Sys_Fast.FAST_Log_DDEF("LENS", "Export", "Zipped $count high-res plots.", "OK")
             return (
                 Dict("filename" => fname, "content" => base64encode(bytes), "base64" => true),
-                html_span("✅ Successfully downloaded $count High-Res plots.", className="fw-bold colourtx-c4tg"),
+                html_span([html_i(className="fas fa-check-circle me-2"), "Successfully downloaded $count High-Res plots."], className="fw-bold colourtx-c4tg"),
             )
         catch e
             Sys_Fast.FAST_Log_DDEF("LENS", "Export_Error", string(e), "FAIL")
-            return Dash.no_update(), html_span("❌ Error during plot export (Kaleido missing?): $e", className="fw-bold colourtx-c0hr")
+            return Dash.no_update(), html_span([html_i(className="fas fa-times-circle me-2"), "Error during plot export (Kaleido missing?): $e"], className="fw-bold colourtx-c0hr")
         end
     end
 
@@ -1452,7 +1838,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             path = Sys_Fast.FAST_GetTransientPath_DDEF(mv)
  
             # Execution of the high-fidelity Excel export protocol initiated via Lib_Vise.
-            success = Lib_Vise.VISE_ExportToExcel_DDEF(path, res)
+            success = Lib_Vise.VISE_ExportToExcel_DDEF(res, path)
 
             if success
                 bytes = read(path)
@@ -1464,14 +1850,14 @@ function LENS_RegisterCallbacks_DDEF(app)
 
                 return (
                     Dict("filename" => fname, "content" => base64encode(bytes), "base64" => true),
-                    html_span("✅ Scientific XLSX downloaded.", className="fw-bold small colourtx-c4tg")
+                    html_span([html_i(className="fas fa-check-circle me-1"), "Scientific XLSX downloaded."], className="fw-bold small colourtx-c4tg")
                 )
             else
-                return Dash.no_update(), html_span("❌ Excel export failed.", className="small colourtx-c0hr")
+                return Dash.no_update(), html_span([html_i(className="fas fa-times-circle me-1"), "Excel export failed."], className="small colourtx-c0hr")
             end
         catch e
             Sys_Fast.FAST_Log_DDEF("LENS", "EXCEL_EXPORT_FAIL", string(e), "FAIL")
-            return Dash.no_update(), html_span("❌ Export Error: $e", className="small colourtx-c0hr")
+            return Dash.no_update(), html_span([html_i(className="fas fa-times-circle me-1"), "Export Error: $e"], className="small colourtx-c0hr")
         finally
             # Execution of high-priority transient resource cleanup.
             Sys_Fast.FAST_CleanTransient_DDEF(path)
@@ -1505,14 +1891,46 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
     # 2. Populate Modal Options from Smart Vault Data
+    # Unit 1: Radioactivity - Forward Configuration (Inputs)
     callback!(app,
         Output("lens-radio-dd-inputs", "options"),
-        [Output("lens-radio-out-dd-$i", "options") for i in 1:6]...,
-        [Output("lens-radio-out-div-$i", "className") for i in 1:6]...,
-        [Output("lens-radio-out-lbl-$i", "children") for i in 1:6]...,
         Output("lens-radio-dd-inputs", "value"),
         [Output("lens-radio-in-name-$i", "value") for i in 1:6]...,
         [Output("lens-radio-in-unit-$i", "value") for i in 1:6]...,
+        Input("lens-modal-radio-config", "is_open"),
+        State("store-master-vault", "data"),
+        prevent_initial_call=true
+    ) do is_open, active_data
+        (!is_open || isnothing(active_data) || active_data == "") && return [], [], fill("", 6)..., fill("", 6)...
+        
+        active_cont = active_data isa String ? active_data : get(active_data, "content", "")
+        (isnothing(active_cont) || active_cont == "") && return [], [], fill("", 6)..., fill("", 6)...
+
+        path   = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
+        config = Sys_Fast.FAST_ReadConfig_DDEF(path)
+        Sys_Fast.FAST_CleanTransient_DDEF(path)
+
+        ingreds = get(config, "Ingredients", [])
+        rad_inputs = filter(i -> get(i, "IsRadioactive", false) == true || Sys_Fast.FAST_SafeNum_DDEF(get(i, "HalfLife", 0.0)) > 0, ingreds)
+        in_options = [Dict("label" => get(i, "Name", ""), "value" => get(i, "Name", "")) for i in rad_inputs]
+        
+        radio_opts = get(config, "RadioOpts", Dict{String,Any}())
+        fwd_dict = get(radio_opts, "Forward", Dict{String,Any}())
+        fwd_keys = collect(keys(fwd_dict))
+
+        in_names = fill("", 6); in_units = fill("", 6)
+        for (idx, k) in enumerate(fwd_keys[1:min(length(fwd_keys), 6)])
+            in_names[idx] = get(fwd_dict[k], "Name", "")
+            in_units[idx] = get(fwd_dict[k], "Unit", "")
+        end
+        return in_options, fwd_keys, in_names..., in_units...
+    end
+
+    # Unit 2: Radioactivity - Reverse Mapping (Outputs)
+    callback!(app,
+        [Output("lens-radio-out-dd-$i", "options") for i in 1:6]...,
+        [Output("lens-radio-out-div-$i", "className") for i in 1:6]...,
+        [Output("lens-radio-out-lbl-$i", "children") for i in 1:6]...,
         [Output("lens-radio-out-dd-$i", "value") for i in 1:6]...,
         [Output("lens-radio-out-name-$i", "value") for i in 1:6]...,
         [Output("lens-radio-out-unit-$i", "value") for i in 1:6]...,
@@ -1520,11 +1938,10 @@ function LENS_RegisterCallbacks_DDEF(app)
         State("store-master-vault", "data"),
         prevent_initial_call=true
     ) do is_open, active_data
-        (!is_open) && return ntuple(_ -> Dash.no_update(), 50)
-        (isnothing(active_data) || active_data == "") && return [], fill([Dict("label"=>"None", "value"=>"None")], 6)..., fill("d-none", 6)..., fill("", 6)..., [], fill("", 6)..., fill("", 6)..., fill("None", 6)..., fill("", 6)..., fill("", 6)...
-
+        (!is_open || isnothing(active_data) || active_data == "") && return fill([Dict("label"=>"None", "value"=>"None")], 6)..., fill("d-none", 6)..., fill("", 6)..., fill("None", 6)..., fill("", 6)..., fill("", 6)...
+        
         active_cont = active_data isa String ? active_data : get(active_data, "content", "")
-        (isnothing(active_cont) || active_cont == "") && return [], fill([Dict("label"=>"None", "value"=>"None")], 6)..., fill("d-none", 6)..., fill("", 6)..., [], fill("", 6)..., fill("", 6)..., fill("None", 6)..., fill("", 6)..., fill("", 6)...
+        (isnothing(active_cont) || active_cont == "") && return fill([Dict("label"=>"None", "value"=>"None")], 6)..., fill("d-none", 6)..., fill("", 6)..., fill("None", 6)..., fill("", 6)..., fill("", 6)...
 
         path   = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
         config = Sys_Fast.FAST_ReadConfig_DDEF(path)
@@ -1540,29 +1957,14 @@ function LENS_RegisterCallbacks_DDEF(app)
         append!(out_options, in_options)
 
         radio_opts = get(config, "RadioOpts", Dict{String,Any}())
-        fwd_dict = get(radio_opts, "Forward", Dict{String,Any}())
         rev_dict = get(radio_opts, "ReverseMap", Dict{String,Any}())
         
-        fwd_keys = collect(keys(fwd_dict))
-
-        in_names = fill("", 6)
-        in_units = fill("", 6)
-        for (idx, k) in enumerate(fwd_keys[1:min(length(fwd_keys), 6)])
-            in_names[idx] = get(fwd_dict[k], "Name", "")
-            in_units[idx] = get(fwd_dict[k], "Unit", "")
-        end
-
-        out_div_classes = fill("d-none", 6)
-        out_lbls = fill("", 6)
-        out_src_vals = fill("None", 6)
-        out_names = fill("", 6)
-        out_units = fill("", 6)
+        out_div_classes = fill("d-none", 6); out_lbls = fill("", 6)
+        out_src_vals = fill("None", 6); out_names = fill("", 6); out_units = fill("", 6)
 
         for (idx, o) in enumerate(outputs[1:min(length(outputs), 6)])
             out_name = get(o, "Name", "")
-            out_div_classes[idx] = "mb-3 d-block"
-            out_lbls[idx] = out_name
-            
+            out_div_classes[idx] = "mb-3 d-block"; out_lbls[idx] = out_name
             if haskey(rev_dict, out_name)
                 mapping = rev_dict[out_name]
                 out_src_vals[idx] = get(mapping, "Source", "None")
@@ -1570,12 +1972,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 out_units[idx]    = get(mapping, "Unit", "")
             end
         end
-
-        return in_options, fill(out_options, 6)..., 
-               out_div_classes..., out_lbls..., 
-               fwd_keys, 
-               in_names..., in_units..., 
-               out_src_vals..., out_names..., out_units...
+        return fill(out_options, 6)..., out_div_classes..., out_lbls..., out_src_vals..., out_names..., out_units...
     end
 
     # 2.5 Dynamic Input Row Visibility Toggle
@@ -1711,6 +2108,137 @@ function LENS_RegisterCallbacks_DDEF(app)
         icon = apply_flag ? "fas fa-check me-2" : "fas fa-radiation-alt me-2"
 
         return apply_flag, btn_class, icon
+    end
+
+# ------------------------------------------------------------------------------
+# SECTION 15: PHASE EVOLUTION SLOT CONFIGURATION
+# ------------------------------------------------------------------------------
+
+    callback!(app,
+        [Output("lens-slot-scale-div-$i",   "style") for i in 1:3]...,
+        [Output("lens-slot-replace-div-$i", "style") for i in 1:3]...,
+        [Input("lens-slot-mode-$i", "value") for i in 1:3]...,
+        prevent_initial_call=true
+    ) do m1, m2, m3
+        modes = [m1, m2, m3]
+        show   = Dict("display" => "block")
+        hide   = Dict("display" => "none")
+        scale  = [m == "SCALE"   ? show : hide for m in modes]
+        repl   = [m == "REPLACE" ? show : hide for m in modes]
+        return (scale..., repl...)
+    end
+
+    callback!(app,
+        Output("lens-store-slot-config", "data"),
+        [Output("lens-slot-transformed-$i", "children") for i in 1:3]...,
+        [Input("lens-slot-mode-$i",  "value") for i in 1:3]...,
+        [Input("lens-slot-alpha-$i", "value") for i in 1:3]...,
+        [Input("lens-slot-beta-$i",  "value") for i in 1:3]...,
+        [Input("lens-slot-scale-name-$i", "value") for i in 1:3]...,
+        [Input("lens-slot-scale-min-$i",  "value") for i in 1:3]...,
+        [Input("lens-slot-scale-max-$i",  "value") for i in 1:3]...,
+        [Input("lens-slot-replace-name-$i", "value") for i in 1:3]...,
+        [Input("lens-slot-replace-unit-$i", "value") for i in 1:3]...,
+        [Input("lens-slot-replace-l1-$i",   "value") for i in 1:3]...,
+        [Input("lens-slot-replace-l2-$i",   "value") for i in 1:3]...,
+        [Input("lens-slot-replace-l3-$i",   "value") for i in 1:3]...,
+        [Input("lens-slot-replace-min-$i",  "value") for i in 1:3]...,
+        [Input("lens-slot-replace-max-$i",  "value") for i in 1:3]...,
+        State("lens-store-next-phase-proposal", "data"),
+        prevent_initial_call=true
+    ) do m1, m2, m3, a1, a2, a3, b1, b2, b3,
+         sn1, sn2, sn3, smin1, smin2, smin3, smax1, smax2, smax3,
+         rn1, rn2, rn3, ru1, ru2, ru3, rl1a, rl1b, rl1c, rl2a, rl2b, rl2c, rl3a, rl3b, rl3c, rmin1, rmin2, rmin3, rmax1, rmax2, rmax3, proposal
+
+        modes  = [m1, m2, m3]
+        alphas = [a1, a2, a3]
+        betas  = [b1, b2, b3]
+        
+        snames = [sn1, sn2, sn3]
+        smins  = [smin1, smin2, smin3]
+        smaxs  = [smax1, smax2, smax3]
+        
+        rnames = [rn1, rn2, rn3]
+        runits = [ru1, ru2, ru3]
+        rl1s   = [rl1a, rl1b, rl1c]
+        rl2s   = [rl2a, rl2b, rl2c]
+        rl3s   = [rl3a, rl3b, rl3c]
+        rmins  = [rmin1, rmin2, rmin3]
+        rmaxs  = [rmax1, rmax2, rmax3]
+
+        leader_vals = Float64[]
+        if !isnothing(proposal) && (proposal isa AbstractDict || proposal isa Dict) && haskey(proposal, "LeaderValues")
+            leader_vals = Float64.(get(proposal, "LeaderValues", Float64[]))
+        end
+
+        transformed_displays = fill("—", 3)
+        slots = Dict{String,Any}[]
+        for i in 1:3
+            mode = isnothing(modes[i]) ? "KEEP" : string(modes[i])
+            α  = Sys_Fast.FAST_SafeNum_DDEF(isnothing(alphas[i]) ? 1.0 : alphas[i])
+            β  = Sys_Fast.FAST_SafeNum_DDEF(isnothing(betas[i])  ? 0.0 : betas[i])
+
+            slot = Dict{String,Any}("Mode" => mode, "Alpha" => α, "Beta" => β)
+
+            # Utilisation of global input validation helpers from Sys_Fast
+            has_str(v) = Sys_Fast.FAST_IsPopulatedInput_DDEF(v)
+            has_num(v) = Sys_Fast.FAST_IsNumericInput_DDEF(v)
+
+            # Explicit extraction vectors to ensure index-safety
+            r_l1s = [rl1a, rl1b, rl1c]
+            r_l2s = [rl2a, rl2b, rl2c]
+            r_l3s = [rl3a, rl3b, rl3c]
+
+            if mode == "SCALE"
+                slot["NewName"]  = isnothing(snames[i]) ? "" : string(snames[i])
+                
+                has_min = has_num(smins[i])
+                has_max = has_num(smaxs[i])
+                if has_min
+                    slot["NewMin"] = Sys_Fast.FAST_SafeNum_DDEF(smins[i])
+                end
+                if has_max
+                    slot["NewMax"] = Sys_Fast.FAST_SafeNum_DDEF(smaxs[i])
+                end
+            elseif mode == "REPLACE"
+                slot["NewName"]  = isnothing(rnames[i]) ? "" : string(rnames[i])
+                slot["NewUnit"]  = isnothing(runits[i]) ? "" : string(runits[i])
+                
+                # Experimental Levels - use 0.0 as safe default if input is missing or invalid
+                v1 = Sys_Fast.FAST_SafeNum_DDEF(r_l1s[i])
+                v2 = Sys_Fast.FAST_SafeNum_DDEF(r_l2s[i])
+                v3 = Sys_Fast.FAST_SafeNum_DDEF(r_l3s[i])
+                
+                slot["NewL1"] = isnan(v1) ? 0.0 : v1
+                slot["NewL2"] = isnan(v2) ? 0.0 : v2
+                slot["NewL3"] = isnan(v3) ? 0.0 : v3
+
+                # Physical Absolute Bounds
+                has_min = has_num(rmins[i])
+                has_max = has_num(rmaxs[i])
+                if has_min
+                    slot["NewMin"] = Sys_Fast.FAST_SafeNum_DDEF(rmins[i])
+                end
+                if has_max
+                    slot["NewMax"] = Sys_Fast.FAST_SafeNum_DDEF(rmaxs[i])
+                end
+            end
+
+            if mode == "SCALE" && i <= length(leader_vals)
+                tv = Sys_Flow.FLOW_BridgeTransform_DDEF(leader_vals[i], α, β)
+                slot["TransformedVal"] = tv
+                transformed_displays[i] = string(round(tv; digits=3))
+            elseif mode == "REPLACE"
+                # Signal active replacement center to UI
+                target_val = Float64(get(slot, "NewL2", 0.0))
+                transformed_displays[i] = string(round(target_val; digits=3))
+            end
+
+            push!(slots, slot)
+        end
+
+        config = Dict{String,Any}("Slots" => slots)
+        return config, transformed_displays...
     end
 end
 
