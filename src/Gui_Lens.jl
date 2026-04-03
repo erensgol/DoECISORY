@@ -29,7 +29,8 @@ export LENS_Layout_DDEF, LENS_RegisterCallbacks_DDEF
 
 # Infrastructure: Thread-safe in-memory payload bridges for deferred batch rendering.
 # Single-writer (background thread) / single-reader (callback) guarantees safety.
-const LENS_BatchPayload_DDEC  = Ref{Any}(nothing)
+const LENS_BatchPayload_DDEC     = Ref{Any}(nothing)
+const LENS_LastPayloadTime_DDEC  = Ref{Float64}(0.0)
 
 # ==============================================================================
 # PART A: UI INFRASTRUCTURE & LAYOUT
@@ -664,30 +665,60 @@ function LENS_RegisterCallbacks_DDEF(app)
         if trig == "lens-interval-batch"
             status  = args[26]
             st_next = get(status, "next_pkg", get(status, :next_pkg, 0))
+            lpt     = LENS_LastPayloadTime_DDEC[]
             
-            (isnothing(status) || st_next == 0) && return ntuple(_ -> nu, 11)
+            # Scenario A: Delivery confirmed by UI (Terminal State).
+            if st_next == 0 && lpt > 0.0
+                Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Flow", "Termination confirmed by UI. Pipeline reset.", "OK")
+                LENS_BatchPayload_DDEC[] = nothing
+                LENS_LastPayloadTime_DDEC[] = 0.0
+                return (ntuple(_ -> nu, 9)..., true, nu)
+            end
             
-            Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Poll", "Staging Pulse #$(st_next)...", "WAIT")
+            # Robust Return: If we are already finished, force-disable the interval to prevent zombies.
+            (isnothing(status) || st_next == 0) && return (ntuple(_ -> nu, 9)..., true, nu)
             
             payload = LENS_BatchPayload_DDEC[]
-            isnothing(payload) && return ntuple(_ -> nu, 11)
             
-            LENS_BatchPayload_DDEC[] = nothing
+            # Scenario B: Payload exists - Delivery/Redelivery phase.
+            if !isnothing(payload)
+                # First Delivery Catch: Record the timestamp.
+                if LENS_LastPayloadTime_DDEC[] < 1.0
+                    LENS_LastPayloadTime_DDEC[] = time()
+                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Poll", "Staging Pulse #$(st_next) - Initiating Delivery...", "WAIT")
+                else
+                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Poll", "Staging Pulse #$(st_next) - Redelivering (Window: $(round(time() - LENS_LastPayloadTime_DDEC[]; digits=1))s)...", "WAIT")
+                end
+                
+                opt_data    = get(payload, "opt_results", nothing)
+                res_report  = isnothing(opt_data) ? nu : get(opt_data, "Report",  nu)
+                res_bundle  = isnothing(opt_data) ? nu : get(opt_data, "Bundle",  nu)
+                res_leaders = isnothing(opt_data) ? nu : get(opt_data, "Leaders", nu)
+                res_badge   = isnothing(opt_data) ? nu : get(opt_data, "Badge",   nu)
+                
+                vault_b64   = get(payload, "vault_b64",   nu)
+                g_count     = get(payload, "graph_count",  0)
+                graph_meta  = g_count > 0 ? Dict("count" => g_count, "ts" => time()) : nu
+                graph_blob  = get(payload, "graph_blob",   nu)
+                
+                # Deliver: We keep the interval enabled to allow retries until st_next == 0 is received.
+                return (graph_meta, nu, nu, res_report, res_bundle, vault_b64, res_leaders, res_badge, Dict("next_pkg" => 0, "handle" => "", "working" => false), false, graph_blob)
+            end
             
-            opt_data    = get(payload, "opt_results", nothing)
-            res_report  = isnothing(opt_data) ? nu : get(opt_data, "Report",  nu)
-            res_bundle  = isnothing(opt_data) ? nu : get(opt_data, "Bundle",  nu)
-            res_leaders = isnothing(opt_data) ? nu : get(opt_data, "Leaders", nu)
-            res_badge   = isnothing(opt_data) ? nu : get(opt_data, "Badge",   nu)
+            # Scenario C: No Payload - Polling or Timeout phase.
+            if LENS_LastPayloadTime_DDEC[] > 1.0
+                elapsed = time() - LENS_LastPayloadTime_DDEC[]
+                if elapsed >= 60.0
+                    Sys_Fast.FAST_Log_DDEF("LENS", "Security_Clear", "60s Grace Period expired. Emptying payload RAM.", "INFO")
+                    LENS_BatchPayload_DDEC[] = nothing
+                    LENS_LastPayloadTime_DDEC[] = 0.0
+                    return (ntuple(_ -> nu, 8)..., Dict("next_pkg" => 0, "handle" => "", "working" => false), true, nu)
+                end
+            end
             
-            # Vault Update: Re-read base64 AFTER BBO wrote Leaders sheet to Excel.
-            vault_b64   = get(payload, "vault_b64",   nu)
-            g_count     = get(payload, "graph_count",  0)
-            graph_meta  = g_count > 0 ? Dict("count" => g_count, "ts" => time()) : nu
-            graph_blob  = get(payload, "graph_blob",   nu)
-            
-            Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Flow", "Payload consumed [Graphs: $g_count]. Vault synced. Closing interval.", "OK")
-            return (graph_meta, nu, nu, res_report, res_bundle, vault_b64, res_leaders, res_badge, Dict("next_pkg" => 0, "handle" => "", "working" => false), true, graph_blob)
+            # Scenario D: True Waiting.
+            (st_next > 0) && Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Poll", "Staging Pulse #$(st_next)...", "WAIT")
+            return ntuple(_ -> nu, 11)
         end
 
         t_start = time()
@@ -746,6 +777,9 @@ function LENS_RegisterCallbacks_DDEF(app)
                 return nu, nu, html_span("❌ Session Stale. Re-upload dataset.", className="fw-bold colourtx-c0hr"), nu, nu, nu, nu, nu, nu, true, nu
             end
             
+            # Start of Scientific Cycle: Reset Timers and Lock Pipeline.
+            LENS_LastPayloadTime_DDEC[] = 0.1
+            
             Sys_Fast.FAST_Log_DDEF("LENS", "Process", "Starting GLM Analysis (Phase: $phase)...", "WAIT")
 
             config_full      = Sys_Fast.FAST_ReadConfig_DDEF(path)
@@ -776,6 +810,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             # Priority payload: Send the first 6 graphs as a JSON package to the browser immediately.
             pkg1_blob = JSON3.write(pkg1_graphs)
             LENS_BatchPayload_DDEC[] = nothing
+            LENS_LastPayloadTime_DDEC[] = 0.0
             local pkg1_copy = deepcopy(pkg1_graphs)
 
             Sys_Fast.FAST_Log_DDEF("LENS", "Render", "(Pkg 1) Prepared $(length(pkg1_graphs)) units for Priority delivery.", "OK")
@@ -1117,8 +1152,9 @@ function LENS_RegisterCallbacks_DDEF(app)
         Input("store-master-vault",   "data"),
         Input("lens-store-sync-flag",  "data"),
         Input("lens-store-results",    "data"),
-        Input("lens-store-diag-force", "data")
-    ) do vault, sync_flag, results, diag_force
+        Input("lens-store-diag-force", "data"),
+        Input("lens-interval-batch",   "n_intervals")
+    ) do vault, sync_flag, results, diag_force, _n_int
         trig = BASE_GetTrigger_DDEF(callback_context())
 
         if trig == "lens-store-diag-force" && diag_force > 0
@@ -1127,6 +1163,17 @@ function LENS_RegisterCallbacks_DDEF(app)
                 return ntuple(_ -> false, 5)
             end
             return false, true, true, true, true
+        end
+
+        # Deliver-to-Unlock Security Lock: Prevent re-entry while analysis or delivery is active.
+        lpt = LENS_LastPayloadTime_DDEC[]
+        if lpt > 0.0
+            # If lpt < 1.0, it's analysis phase. If lpt > 1.0, it's delivery phase.
+            # Safety Check: If timeout hasn't reached, keep it locked.
+            if lpt < 1.0 || (time() - lpt < 60.0)
+                has_res = !isnothing(results) && Sys_Fast.FAST_ExtractVid_DDEF(results) == Sys_Fast.FAST_ExtractVid_DDEF(vault)
+                return true, !has_res, !has_res, !has_res, !has_res
+            end
         end
 
         if isnothing(vault) || isempty(vault)
