@@ -638,7 +638,7 @@ function APP_Warmup_DDEF()::Nothing
         FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Scientific Engine (Phase-D: Diagnostics)...", "WAIT")
         Lib_Vise.VISE_GenerateAnovaTable_DDEF(mod_quad, X_dummy, vec(Y_dummy))
         Lib_Vise.VISE_PerformNormalityTest_DDEF(mod_quad, X_dummy, vec(Y_dummy))
-        Lib_Vise.VISE_SensitivityAnalysis_DDEF(mod_quad, [0.5, 0.5, 0.5])
+        Lib_Vise.VISE_SensitivityAnalysis_DDEF(mod_quad, [0.5, 0.5, 0.5], X_dummy)
 
         # PULSE 5: Analytical Orchestration Pulse
         FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Orchestration Engine (Phase-E: Finalisation)...", "WAIT")
