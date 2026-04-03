@@ -507,16 +507,20 @@ end
 
 """
     CORE_D_Efficiency_DDEF(X::Matrix) -> Float64
-Calculates D-Efficiency as a design quality metric representing the spread of points.
+Calculates D-Efficiency as a design quality metric (Log-Determinant based).
+Academic Standard: D = (|X'X| / N^p)^(1/p) where N is runs and p is parameters.
 """
 function CORE_D_Efficiency_DDEF(X::AbstractMatrix)
     R, C = size(X)
     R < C && return 0.0
     try
+        # Design matrix must be in coded space [-1, 1] for valid efficiency metrics.
         X_sc = CORE_CodeMatrix_DDEF(X)
-        # Normalised Fisher Information Determinant: (det(X'X) / R^p)^(1/p)
-        det_val = det(X_sc' * X_sc)
-        return (max(det_val, 0.0) / (R^C))^(1 / C)
+        M    = X_sc' * X_sc
+        # Determinant calculation with small Tikhonov guard for near-singular designs.
+        det_val = det(M + I * 1e-9)
+        eff = (max(det_val, 1e-18) / (R^C))^(1 / C)
+        return clamp(eff, 0.0, 1.0)
     catch
         return 0.0
     end

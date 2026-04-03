@@ -711,7 +711,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
         # SECTION 8: EXPORT & PERSISTENCE SERVICES
         # ------------------------------------------------------------------------------
 
-        success = Sys_Fast.FAST_InitMaster_DDEF(path,
+        success = Sys_Fast.FAST_InitialiseMaster_DDEF(path,
             [string(get(r, "Name", "")) for r in BASE_SafeRows_DDEF(in_data)],
             [string(get(r, "Name", "")) for r in output_data],
             df, ConfigDict)

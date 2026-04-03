@@ -308,7 +308,7 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhas
     out_names = [string(get(o, "Name", "")) for o in get(res, "Outputs", []) if !isempty(get(o, "Name", ""))]
     in_names  = [get(c, "Name", "") for c in NewConfig]
 
-    success = Main.Sys_Fast.FAST_InitMaster_DDEF(MasterFile, in_names, out_names, df, current_config)
+    success = Main.Sys_Fast.FAST_InitialiseMaster_DDEF(MasterFile, in_names, out_names, df, current_config)
     !success && return Dict("Status" => "FAIL", "Message" => "Excel commit failed for $TargetPhase.")
 
     Log("FLOW", "PHASE_BUILD", "Protocol $TargetPhase ($N_Runs runs) committed to Vault.", "OK")

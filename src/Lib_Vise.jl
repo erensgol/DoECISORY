@@ -205,10 +205,11 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
             end
         end
 
-        v  = VISE_CalcVIF_DDEF(Xd)
-        tn = VISE_GetTermNames_DDEF(InNames, ModelType)
+        X_Coded_Raw = Main.Lib_Core.CORE_CodeMatrix_DDEF(X_Raw)
+        Xd_Vif      = VISE_ExpandDesign_DDEF(X_Coded_Raw, ModelType)
+        v           = VISE_CalcVIF_DDEF(Xd_Vif)
+        tn          = VISE_GetTermNames_DDEF(InNames, ModelType)
         
-        # Guard against automatic type conversion failures (Float64 to String)
         res = VISE_RegressionResult_DDES(
             Beta, tn, 
             Float64(R2), Float64(R2a), Float64(RMSE), Float64(AIC), 
@@ -635,16 +636,24 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_B
     return Candidates, Predictions, Scores
 end
 
-function VISE_SensitivityAnalysis_DDEF(Model::AbstractDict, X_Point::AbstractVector{Float64}; delta=1e-4)
+function VISE_SensitivityAnalysis_DDEF(Model::AbstractDict, X_Point::AbstractVector{Float64}, X_Clean::AbstractMatrix{Float64})
     Dim, gradients = 3, zeros(3)
     base_pred = VISE_Predict_DDEF(Model, reshape(X_Point, 1, 3))[1]
-    for i in 1:3
-        Xp = copy(X_Point); Xp[i] += delta
+    
+    @inbounds for i in 1:3
+        c_min, c_max = minimum(view(X_Clean, :, i)), maximum(view(X_Clean, :, i))
+        span  = max(c_max - c_min, 1e-6)
+        delta = span * 0.001
+        
+        Xp = copy(X_Point)
+        Xp[i] += delta
         pred_p = VISE_Predict_DDEF(Model, reshape(Xp, 1, 3))[1]
         gradients[i] = abs(pred_p - base_pred) / delta
     end
+    
     total = sum(gradients)
-    return total > 0.0 ? gradients ./ total : fill(1.0/3.0, 3)
+    # Return relative percentage contributions (Normalised to 1.0)
+    return total > 1e-15 ? gradients ./ total : fill(1.0/3.0, 3)
 end
 
 function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
@@ -887,7 +896,10 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
         push!(anova_tables, VISE_GenerateAnovaTable_DDEF(m, X_Clean, Y_Clean[:, i]))
         push!(normality_res, VISE_PerformNormalityTest_DDEF(m, X_Clean, Y_Clean[:, i]))
         push!(residuals, Y_Clean[:, i] .- Y_Pred[:, i])
-        push!(sens_list, isempty(bp) ? zeros(3) : VISE_SensitivityAnalysis_DDEF(m, bp))
+        
+        sens_point = isempty(bp) ? vec(mean(X_Clean; dims=1)) : bp
+        push!(sens_list, VISE_SensitivityAnalysis_DDEF(m, sens_point, X_Clean))
+
         r2a, q2 = get(m, "R2_Adj", 0.0), get(m, "Q2", 0.0)
         (r2a - q2) > 0.20 && push!(warns, "$(OutNames_v[i]): Large R2 gap ($(round(r2a-q2; digits=2))). Potential overfitting.")
     end
@@ -905,7 +917,7 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
         
         vitals["D"] = m_health["D"]
         vitals["Condition"] = m_health["Condition"]
-        vif_list = [maximum(get(m, "VIFs", [0.0])) for m in models if haskey(m, "VIFs")]
+        vif_list = [maximum(get(m, "VIFs", [0.0])[2:end]) for m in models if haskey(m, "VIFs") && length(m["VIFs"]) > 1]
         vitals["MaxVIF"] = isempty(vif_list) ? 1.0 : maximum(vif_list)
         
         if n_samples > size(Xd_health, 2) + 2
