@@ -27,6 +27,11 @@ using JSON3
 
 export LENS_Layout_DDEF, LENS_RegisterCallbacks_DDEF
 
+# Infrastructure: Thread-safe in-memory payload bridges for deferred batch rendering.
+# Single-writer (background thread) / single-reader (callback) guarantees safety.
+const LENS_BatchPayload_DDEC = Ref{Any}(nothing)
+const LENS_GraphPayload_DDEC = Ref{Any}(nothing)
+
 # ==============================================================================
 # PART A: UI INFRASTRUCTURE & LAYOUT
 # ==============================================================================
@@ -223,6 +228,7 @@ function LENS_Layout_DDEF()
                 dcc_store(id="lens-store-diag-force",    data=0),
                 dcc_store(id="lens-store-slot-config",   data=Dict()),
                 dcc_store(id="lens-store-batch-status", data=Dict("next_pkg" => 0, "handle" => "", "expected" => 0)),
+                dcc_store(id="lens-store-graph-seed",   data=[]),
                 dcc_interval(id="lens-interval-batch", interval=2000, n_intervals=0, disabled=true),
             ]; xs=12, md=9),
         ], className="g-3"),
@@ -418,7 +424,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         [Output("lens-goal-weight-$i", "value") for i in 1:3]...,
         Output("lens-dd-model",       "options"),
         Output("lens-dd-model",       "value"),
-        Output("lens-store-sync-flag", "data"), 
+        Output("lens-store-sync-flag", "data"),
         Output("lens-panel-radio", "className"),
         Output("lens-input-project",  "value"),
         Input("store-master-vault",   "data"),
@@ -482,26 +488,26 @@ function LENS_RegisterCallbacks_DDEF(app)
             (extracted_proj != "") && (proj_v = extracted_proj)
 
             if isnothing(active_cont) || active_cont == ""
-                return ([], "No Data Source", "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 0, "vid" => ""), "d-none", proj_v, Dict(:next_pkg => 0, :handle => "", :expected => 0, :working => false))
+                return tuple([], "No Data Source", "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 0, "vid" => ""), "d-none", proj_v)
             end
 
             Sys_Fast.FAST_Log_DDEF("LENS", "Sync", "Synchronising from Smart Vault (Handle: $(first(active_cont, 64))...)...", "INFO")
             path = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
             if !isfile(path)
-                 return ([], html_span([html_i(className="fas fa-times-circle me-2"), "Data handle expired or missing. Please re-upload."], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v, Dict(:next_pkg => 0, :handle => "", :expected => 0, :working => false))
+                 return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "Data handle expired or missing. Please re-upload."], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v)
             end
 
             ext = lowercase(splitext(path)[2])
             if ext != ".xlsx"
                 Sys_Fast.FAST_CleanTransient_DDEF(path)
-                return ([], html_span([html_i(className="fas fa-times-circle me-2"), "This is not a valid Excel file! (Please upload .xlsx)"], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v)
+                return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "This is not a valid Excel file! (Please upload .xlsx)"], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v)
             end
 
             df = Sys_Fast.FAST_ReadExcel_DDEF(path, C.SHEET_DATA)
             isempty(df) && (df = Sys_Fast.FAST_ReadExcel_DDEF(path, "DATA_RECORDS"))
 
             if isempty(df)
-                return ([], html_span([html_i(className="fas fa-times-circle me-2"), "No Valid Data Sheet found in spreadsheet."], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v)
+                return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "No Valid Data Sheet found in spreadsheet."], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v)
             end
 
             col_phase = Symbol(C.COL_PHASE)
@@ -586,7 +592,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             has_radio = has_radio_headers || has_radio_config
             panel_class = has_radio ? "d-block mt-3" : "d-none"
 
-            return (
+            return tuple(
                 phases,
                 html_span("✅ System Synced", className="small fw-bold", style=Dict("color" => "var(--colour-chr4-tongre)")),
                 "w-100 mb-2 fw-bold",
@@ -607,8 +613,8 @@ function LENS_RegisterCallbacks_DDEF(app)
         catch e
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "SYNC_FAIL", bt, "FAIL")
-            return [], html_span([html_i(className="fas fa-times-circle me-2"), "Sync Error: $(first(string(e), 120))"], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green",
-                nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v
+            return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "Sync Error: $(first(string(e), 120))"], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green",
+                nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v)
         finally
             # Execution of the high-priority transient resource cleanup protocol.
             !isempty(path) && try
@@ -627,7 +633,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 # ------------------------------------------------------------------------------
 
     callback!(app,
-        Output("lens-store-graphs",    "data"),
+        Output("lens-store-graph-seed", "data"),
         Output("lens-results-text",    "children"),
         Output("lens-run-output",      "children"),
         Output("lens-store-report",    "data"),
@@ -656,49 +662,26 @@ function LENS_RegisterCallbacks_DDEF(app)
         trig = Main.Gui_Base.BASE_GetTrigger_DDEF(callback_context())
         nu   = Dash.no_update()
         if trig == "lens-interval-batch"
-            status = args[26]
+            status  = args[26]
             st_next = get(status, "next_pkg", get(status, :next_pkg, 0))
-            st_work = get(status, "working",  get(status, :working,  false))
             
-            (st_next > 0) && Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Poll", "Staging Pulse #$(st_next)...", "WAIT")
+            (isnothing(status) || st_next == 0) && return ntuple(_ -> nu, 10)
             
-            (isnothing(status) || st_next == 0 || st_work) && return ntuple(_ -> nu, 10)
+            Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Poll", "Staging Pulse #$(st_next)...", "WAIT")
             
-            manifest_h  = get(status, "handle", get(status, :handle, ""))
-            current_graphs = args[25]
+            payload = LENS_BatchPayload_DDEC[]
+            isnothing(payload) && return ntuple(_ -> nu, 10)
             
-            m_path = manifest_h * "_manifest.json"
-            pkg_h  = manifest_h * "_pkg$st_next.json"
+            LENS_BatchPayload_DDEC[] = nothing
             
-            (!isfile(m_path) || !isfile(pkg_h)) && return ntuple(_ -> nu, 10)
+            opt_data    = get(payload, "opt_results", nothing)
+            res_report  = isnothing(opt_data) ? nu : get(opt_data, "Report",  nu)
+            res_bundle  = isnothing(opt_data) ? nu : get(opt_data, "Bundle",  nu)
+            res_leaders = isnothing(opt_data) ? nu : get(opt_data, "Leaders", nu)
+            res_badge   = isnothing(opt_data) ? nu : get(opt_data, "Badge",   nu)
             
-            manifest = try; open(m_path, "r") do io; JSON3.read(io) end; catch; nothing; end
-            isnothing(manifest) && return ntuple(_ -> nu, 10)
-            
-            batch_data = try; open(pkg_h, "r") do io; JSON3.read(io) end; catch; nothing; end
-            isnothing(batch_data) && return ntuple(_ -> nu, 10)
-            
-            new_graphs = get(batch_data, "graphs", [])
-            opt_data   = get(batch_data, "opt_results", nothing)
-            
-            updated_graphs = [current_graphs; new_graphs]
-            new_count      = length(updated_graphs)
-            
-            try; rm(pkg_h; force=true); catch; end
-            
-            res_report   = isnothing(opt_data) ? nu : get(opt_data, "Report", nu)
-            res_bundle   = isnothing(opt_data) ? nu : get(opt_data, "Bundle", nu)
-            res_leaders  = isnothing(opt_data) ? nu : get(opt_data, "Leaders", nu)
-            res_badge    = isnothing(opt_data) ? nu : get(opt_data, "Badge", nu)
-
-            if st_next >= 2
-                Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Flow", "Streaming Concluded. Total Ensemble: $new_count units.", "OK")
-                try; rm(m_path; force=true); catch; end
-                return (updated_graphs, nu, nu, res_report, res_bundle, nu, res_leaders, res_badge, Dict("next_pkg" => 0, "handle" => "", "working" => false), true)
-            else
-                Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Flow", "Stream Segment $st_next accepted [Total: $new_count].", "OK")
-                return (updated_graphs, nu, nu, res_report, res_bundle, nu, res_leaders, res_badge, Dict("next_pkg" => st_next + 1, "handle" => manifest_h, "working" => false), false)
-            end
+            Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Flow", "Payload consumed. Graph delivery delegated. Closing interval.", "OK")
+            return (nu, nu, nu, res_report, res_bundle, nu, res_leaders, res_badge, Dict("next_pkg" => 0, "handle" => "", "working" => false), true)
         end
 
         t_start = time()
@@ -787,11 +770,9 @@ function LENS_RegisterCallbacks_DDEF(app)
 
             Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Split", "(Pkg 1) Sent ($(length(pkg1_graphs)) units). Background BBO & Render initiated...", "OK")
             
-            batch_base = joinpath(Sys_Fast.FAST_TempRoot_DDEC, "DDE_B_$(Dates.format(now(), "HHmmss_SSS"))")
-            
-            open(batch_base * "_manifest.json", "w") do io
-                JSON3.write(io, Dict("total" => 2))
-            end
+            LENS_BatchPayload_DDEC[] = nothing
+            LENS_GraphPayload_DDEC[] = nothing
+            local pkg1_copy = copy(pkg1_graphs)
 
             Threads.@spawn begin
                 try
@@ -859,14 +840,11 @@ function LENS_RegisterCallbacks_DDEF(app)
                     delete!(final_bundle, "Graphs")
                     delete!(final_bundle, "_Hidden_Sheets")
                     
-                    open(batch_base * "_pkg2.json", "w") do io
-                        JSON3.write(io, Dict(
-                            "graphs" => pkg_graphs,
-                            "opt_results" => Dict("Report" => rep_b, "Bundle" => final_bundle, "Leaders" => ld_html, "Badge" => rad_b)
-                        ))
-                    end
-                    
-                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Async", "Background Portfolio Compiled [Units: $(length(pkg_graphs))]. Pulse #2 Ready.", "OK")
+                    LENS_GraphPayload_DDEC[] = vcat(pkg1_copy, pkg_graphs)
+                    LENS_BatchPayload_DDEC[] = Dict{String,Any}(
+                        "opt_results" => Dict{String,Any}("Report" => rep_b, "Bundle" => final_bundle, "Leaders" => ld_html, "Badge" => rad_b)
+                    )
+                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Async", "Background Portfolio Compiled [Units: $(length(pkg_graphs))]. Payload Ready.", "OK")
                 catch e
                     Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Crash", "Background Task failed: $e", "FAIL")
                 end
@@ -1085,7 +1063,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 updated_base64, 
                 leaders_html, 
                 rad_badge,
-                Dict("next_pkg" => is_staged ? 2 : 0, "handle" => is_staged ? batch_base : "", "working" => false),
+                Dict("next_pkg" => is_staged ? 2 : 0, "handle" => "", "working" => false),
                 !is_staged
             )
 
@@ -1155,6 +1133,36 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Data in transition or sync pending [VID: $(first(curr_vid, 8))].", "WAIT")
         return ntuple(_ -> true, 5)
+    end
+
+# ------------------------------------------------------------------------------
+# SECTION 8B: GRAPH DELIVERY BRIDGE
+# ------------------------------------------------------------------------------
+# Graphs are delivered via this dedicated callback — NOT via the interval handler.
+# This avoids the HTTP response cancellation caused by competing interval ticks
+# when the payload is large (70 PlotlyJS figures).
+
+    callback!(app,
+        Output("lens-store-graphs", "data"),
+        Input("lens-store-graph-seed",   "data"),
+        Input("lens-store-batch-status", "data"),
+        prevent_initial_call=true
+    ) do seed, batch_status
+        nu = Dash.no_update()
+
+        gp = LENS_GraphPayload_DDEC[]
+        if !isnothing(gp)
+            LENS_GraphPayload_DDEC[] = nothing
+            Sys_Fast.FAST_Log_DDEF("LENS", "Graph_Deliver", "Full portfolio delivered [Units: $(length(gp))].", "OK")
+            return gp
+        end
+
+        if !isnothing(seed) && seed isa AbstractVector && !isempty(seed)
+            Sys_Fast.FAST_Log_DDEF("LENS", "Graph_Deliver", "Priority seed delivered [Units: $(length(seed))].", "OK")
+            return seed
+        end
+
+        return nu
     end
 
 # ------------------------------------------------------------------------------
