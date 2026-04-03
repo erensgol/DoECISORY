@@ -29,8 +29,8 @@ export LENS_Layout_DDEF, LENS_RegisterCallbacks_DDEF
 
 # Infrastructure: Thread-safe in-memory payload bridges for deferred batch rendering.
 # Single-writer (background thread) / single-reader (callback) guarantees safety.
-const LENS_BatchPayload_DDEC = Ref{Any}(nothing)
-const LENS_GraphPayload_DDEC = Ref{Any}(nothing)
+const LENS_BatchPayload_DDEC  = Ref{Any}(nothing)
+const LENS_GraphStore_DDEC    = Ref{Vector{Dict{String,Any}}}(Dict{String,Any}[])
 
 # ==============================================================================
 # PART A: UI INFRASTRUCTURE & LAYOUT
@@ -123,9 +123,9 @@ function LENS_Layout_DDEF()
                     BASE_Separator_DDEF(),
 
                     BASE_SidebarHeader_DDEF("EXPORT", icon="fas fa-file-export"),
-                    BASE_ActionButton_DDEF("lens-btn-export-plots",    "Plots",    "fas fa-camera-retro", disabled=true),
-                    BASE_ActionButton_DDEF("lens-btn-download-report", "Report",   "fas fa-file-export",  disabled=true),
-                    BASE_ActionButton_DDEF("lens-btn-export-excel",    "(XLSX)",   "fas fa-file-excel",   class="w-100 fw-bold mb-3", disabled=true),
+                    BASE_ActionButton_DDEF("lens-btn-export-plots",    "Plots",    "fas fa-camera-retro"),
+                    BASE_ActionButton_DDEF("lens-btn-download-report", "Report",   "fas fa-file-export"),
+                    BASE_ActionButton_DDEF("lens-btn-export-excel",    "(XLSX)",   "fas fa-file-excel",   class="w-100 fw-bold mb-3"),
                     BASE_Separator_DDEF(),
 
                     BASE_ControlGroup_DDEF("Project Name",
@@ -217,7 +217,7 @@ function LENS_Layout_DDEF()
                         id="lens-btn-next", outline=false, size="sm", className="ms-1 px-2 py-1 btn-white-bg"),
                 ], className="d-flex align-items-center justify-content-center py-2"), xs=12)),
 
-                dcc_store(id="lens-store-graphs",        data=[]),
+                dcc_store(id="lens-store-graph-meta",    data=Dict("count" => 0, "ts" => 0)),
                 dcc_store(id="lens-store-index",         data=0),
                 dcc_store(id="lens-store-report",        data=""),
                 dcc_store(id="lens-store-results",       data=Dict()),
@@ -228,7 +228,6 @@ function LENS_Layout_DDEF()
                 dcc_store(id="lens-store-diag-force",    data=0),
                 dcc_store(id="lens-store-slot-config",   data=Dict()),
                 dcc_store(id="lens-store-batch-status", data=Dict("next_pkg" => 0, "handle" => "", "expected" => 0)),
-                dcc_store(id="lens-store-graph-seed",   data=[]),
                 dcc_interval(id="lens-interval-batch", interval=2000, n_intervals=0, disabled=true),
             ]; xs=12, md=9),
         ], className="g-3"),
@@ -633,7 +632,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 # ------------------------------------------------------------------------------
 
     callback!(app,
-        Output("lens-store-graph-seed", "data"),
+        Output("lens-store-graph-meta", "data"),
         Output("lens-results-text",    "children"),
         Output("lens-run-output",      "children"),
         Output("lens-store-report",    "data"),
@@ -655,7 +654,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         [State("lens-goal-weight-$i", "value") for i in 1:3]...,
         State("lens-store-radio-correct", "data"),
         State("store-master-vault",       "data"),
-        State("lens-store-graphs",        "data"),
+        State("lens-store-graph-meta",    "data"),
         State("lens-store-batch-status",  "data"),
         prevent_initial_call=true
     ) do args...
@@ -680,8 +679,13 @@ function LENS_RegisterCallbacks_DDEF(app)
             res_leaders = isnothing(opt_data) ? nu : get(opt_data, "Leaders", nu)
             res_badge   = isnothing(opt_data) ? nu : get(opt_data, "Badge",   nu)
             
-            Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Flow", "Payload consumed. Graph delivery delegated. Closing interval.", "OK")
-            return (nu, nu, nu, res_report, res_bundle, nu, res_leaders, res_badge, Dict("next_pkg" => 0, "handle" => "", "working" => false), true)
+            # Vault Update: Re-read base64 AFTER BBO wrote Leaders sheet to Excel.
+            vault_b64   = get(payload, "vault_b64",   nu)
+            g_count     = get(payload, "graph_count",  0)
+            graph_meta  = g_count > 0 ? Dict("count" => g_count, "ts" => time()) : nu
+            
+            Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Flow", "Payload consumed [Graphs: $g_count]. Vault synced. Closing interval.", "OK")
+            return (graph_meta, nu, nu, res_report, res_bundle, vault_b64, res_leaders, res_badge, Dict("next_pkg" => 0, "handle" => "", "working" => false), true)
         end
 
         t_start = time()
@@ -745,7 +749,6 @@ function LENS_RegisterCallbacks_DDEF(app)
             config_full      = Sys_Fast.FAST_ReadConfig_DDEF(path)
             full_radio_opts  = get(config_full, "RadioOpts", Dict("Apply" => false))
             full_radio_opts["Apply"] = is_rad_apply
-
             opts = Dict{String,Any}("RadioOpts" => full_radio_opts)
             
             phase_str   = isnothing(phase) ? "Phase1" : string(phase)
@@ -756,23 +759,24 @@ function LENS_RegisterCallbacks_DDEF(app)
                 Opts=opts, ConfigUpdates=cfg_updates, t_start=t_start, RenderMode=:Priority, Optim=false)
 
             if res["Status"] != "OK"
-                return [], "", html_span("❌ Analysis Failed: $(res["Message"])", className="colourtx-c0hr"), "", nu, nu, "", "", nu, true
+                return (Dict("count" => 0, "ts" => 0), "", html_span("❌ Analysis Failed: $(res["Message"])", className="colourtx-c0hr"), "", nu, nu, "", "", nu, true)
             end
 
             sci_report = Lib_Vise.VISE_GenerateScientificReport_DDEF(res)
             
             pkg1_graphs = [
-                Dict(
-                    "figure" => Dict("data" => g["Plot"].data, "layout" => g["Plot"].layout, "config" => g["Plot"].config),
-                    "title"  => g["Title"]
+                Dict{String,Any}(
+                    "figure" => Dict{String,Any}("data" => g["Plot"].data, "layout" => g["Plot"].layout, "config" => g["Plot"].config),
+                    "title"  => string(g["Title"])
                 ) for g in res["Graphs"] 
             ]
 
-            Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Split", "(Pkg 1) Sent ($(length(pkg1_graphs)) units). Background BBO & Render initiated...", "OK")
-            
+            # Store priority graphs in server-side Ref (NOT via dcc_store).
+            LENS_GraphStore_DDEC[]   = pkg1_graphs
             LENS_BatchPayload_DDEC[] = nothing
-            LENS_GraphPayload_DDEC[] = nothing
             local pkg1_copy = copy(pkg1_graphs)
+
+            Sys_Fast.FAST_Log_DDEF("LENS", "Render", "(Pkg 1) Stored $(length(pkg1_graphs)) units in GraphStore. Background BBO initiated...", "OK")
 
             Threads.@spawn begin
                 try
@@ -786,17 +790,25 @@ function LENS_RegisterCallbacks_DDEF(app)
                         res["X_Clean"], res["Models"], goals, config_b, phase_str, in_n, out_n, opts, C, Log
                     )
                     
+                    # 1. Write pre-BBO sheets (DATA + predictions)
+                    sheets = get(res, "_Hidden_Sheets", Dict())
+                    !isempty(sheets) && Sys_Fast.FAST_SafeExcelWrite_DDEF(path, sheets)
+                    
+                    # 2. Write Leaders sheet for Phase Evolution Wizard
+                    if !isempty(ldf)
+                        Sys_Fast.FAST_SafeExcelWrite_DDEF(path, Dict(C.PREFIX_LEADERS * phase_str => ldf))
+                    end
+                    
+                    # 3. Build full result for report generation
                     res_b = copy(res)
                     res_b["BestPoint"] = bp
                     res_b["BestScore"] = bs
                     res_b["Leaders"]   = ldf
                     res_b["BoundaryWarnings"] = warns
                     
-                    sheets = get(res, "_Hidden_Sheets", Dict())
-                    !isempty(sheets) && Sys_Fast.FAST_SafeExcelWrite_DDEF(path, sheets)
-                    
                     rep_b = Lib_Vise.VISE_GenerateScientificReport_DDEF(res_b)
                     
+                    # 4. Build Leaders HTML
                     ld_html = ""
                     if !isempty(ldf)
                         lcols = names(ldf)
@@ -827,24 +839,35 @@ function LENS_RegisterCallbacks_DDEF(app)
                     rad_b = (haskey(res_b, "RadioCorrection") && !isempty(res_b["RadioCorrection"])) ?
                             dbc_badge([html_i(className="fas fa-radiation me-1 colourtx-v5pb"), "Radio-Corrected"], className="ms-2 fw-bold colourgl-c4tg colourtx-v5pb") : ""
 
+                    # 5. Render deferred graphs (64 units)
                     def_opts = copy(opts)
                     def_opts["Mode"] = :Deferred
                     def_raw = Main.Lib_Arts.ARTS_Render_DDEF(
                         res["Models"], res["X_Clean"], res["Y_Clean"], res["InNames"], res["OutNames"], 
                         goals, res["R2_Adj"], res["Q2"], def_opts, ldf, res["Sensitivities"], res["Residuals"]
                     )
+                    pkg_graphs = [Dict{String,Any}("figure" => Dict{String,Any}("data" => g["Plot"].data, "layout" => g["Plot"].layout, "config" => g["Plot"].config), "title" => string(g["Title"])) for g in def_raw]
                     
-                    pkg_graphs = [Dict("figure" => Dict("data" => g["Plot"].data, "layout" => g["Plot"].layout, "config" => g["Plot"].config), "title" => g["Title"]) for g in def_raw]
+                    # 6. Update GraphStore Ref: 6 → 70 (single atomic write)
+                    LENS_GraphStore_DDEC[] = vcat(pkg1_copy, pkg_graphs)
                     
+                    # 7. Re-read Excel as base64 for vault update (Leaders included!)
+                    updated_vault_b64 = Sys_Fast.FAST_ReadToStore_DDEF(path)
+                    
+                    # 8. Sanitise result bundle for store (remove heavy objects)
                     final_bundle = Sys_Fast.FAST_SanitiseJson_DDEF(res_b)
                     delete!(final_bundle, "Graphs")
                     delete!(final_bundle, "_Hidden_Sheets")
+                    final_bundle["vid"]  = updated_vault_b64
+                    final_bundle["type"] = "SCIENCE_PULSE"
                     
-                    LENS_GraphPayload_DDEC[] = vcat(pkg1_copy, pkg_graphs)
+                    # 9. Store payload for interval pickup (NO graphs, small payload)
                     LENS_BatchPayload_DDEC[] = Dict{String,Any}(
-                        "opt_results" => Dict{String,Any}("Report" => rep_b, "Bundle" => final_bundle, "Leaders" => ld_html, "Badge" => rad_b)
+                        "opt_results" => Dict{String,Any}("Report" => rep_b, "Bundle" => final_bundle, "Leaders" => ld_html, "Badge" => rad_b),
+                        "vault_b64"   => updated_vault_b64,
+                        "graph_count" => length(LENS_GraphStore_DDEC[])
                     )
-                    Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Async", "Background Portfolio Compiled [Units: $(length(pkg_graphs))]. Payload Ready.", "OK")
+                    Log("LENS", "Batch_Async", "Background Portfolio Compiled [Units: $(length(pkg_graphs))]. Payload Ready.", "OK")
                 catch e
                     Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Crash", "Background Task failed: $e", "FAIL")
                 end
@@ -1050,12 +1073,10 @@ function LENS_RegisterCallbacks_DDEF(app)
             t_total       = round(time() - t_start; digits=1)
             elapsed_badge = html_span(" ($(t_total)s)", className="colourtx-v3dl")
 
-            # Architectural Sync: Initiate pulse generator if in Priority/Deferred mode.
-            # In 'Priority' mode, we know Pkg 2 is coming, so we MUST set next_pkg=2.
-            is_staged = (get(opts, "RenderMode", :Priority) == :Priority)
+            is_staged = true  # Always staged: Pkg 2 (BBO + Deferred) is coming via background thread.
             
             return (
-                pkg1_graphs, 
+                Dict("count" => length(pkg1_graphs), "ts" => time()), 
                 summary, 
                 html_span(["✅ Analysis Complete", elapsed_badge], className="fw-bold small colourtx-c4tg"), 
                 sci_report, 
@@ -1063,13 +1084,12 @@ function LENS_RegisterCallbacks_DDEF(app)
                 updated_base64, 
                 leaders_html, 
                 rad_badge,
-                Dict("next_pkg" => is_staged ? 2 : 0, "handle" => "", "working" => false),
-                !is_staged
+                Dict("next_pkg" => 2, "handle" => "", "working" => false),
+                false  # interval enabled
             )
 
         # ------------------------------------------------------------------------------
         # SECTION 7: ANALYSIS ERROR GUARD & CLEANUP
-        # ------------------------------------------------------------------------------
 
         catch e
             bt = sprint(showerror, e, catch_backtrace())
@@ -1135,72 +1155,61 @@ function LENS_RegisterCallbacks_DDEF(app)
         return ntuple(_ -> true, 5)
     end
 
-# ------------------------------------------------------------------------------
-# SECTION 8B: GRAPH DELIVERY BRIDGE
-# ------------------------------------------------------------------------------
-# Graphs are delivered via this dedicated callback — NOT via the interval handler.
-# This avoids the HTTP response cancellation caused by competing interval ticks
-# when the payload is large (70 PlotlyJS figures).
 
-    callback!(app,
-        Output("lens-store-graphs", "data"),
-        Input("lens-store-graph-seed",   "data"),
-        Input("lens-store-batch-status", "data"),
-        prevent_initial_call=true
-    ) do seed, batch_status
-        nu = Dash.no_update()
-
-        gp = LENS_GraphPayload_DDEC[]
-        if !isnothing(gp)
-            LENS_GraphPayload_DDEC[] = nothing
-            Sys_Fast.FAST_Log_DDEF("LENS", "Graph_Deliver", "Full portfolio delivered [Units: $(length(gp))].", "OK")
-            return gp
-        end
-
-        if !isnothing(seed) && seed isa AbstractVector && !isempty(seed)
-            Sys_Fast.FAST_Log_DDEF("LENS", "Graph_Deliver", "Priority seed delivered [Units: $(length(seed))].", "OK")
-            return seed
-        end
-
-        return nu
-    end
 
 # ------------------------------------------------------------------------------
 # SECTION 9: GRAPH RENDERING & METADATA
 # ------------------------------------------------------------------------------
+# Architecture: Graphs live in server-side LENS_GraphStore_DDEC Ref.
+# Only a lightweight metadata dict (count + timestamp) travels through dcc_store.
+# update_index runs clientside for instant navigation.
+# render_graph runs server-side, fetching ONE figure per request from the Ref.
 
     callback!(ClientsideFunction("clientside", "update_index"), app,
         Output("lens-store-index", "data"),
         Output("lens-graph-input", "value"),
         Output("lens-graph-input", "max"),
-        Input("lens-store-graphs",  "data"),
-        Input("lens-btn-next",      "n_clicks"),
-        Input("lens-btn-prev",      "n_clicks"),
-        Input("lens-graph-input",   "value"),
-        State("lens-store-index",   "data"),
+        Input("lens-store-graph-meta", "data"),
+        Input("lens-btn-next",         "n_clicks"),
+        Input("lens-btn-prev",         "n_clicks"),
+        Input("lens-graph-input",      "value"),
+        State("lens-store-index",      "data"),
         prevent_initial_call=true
     )
 
-    # Clientside instant rendering and metadata synchronisation.
-    callback!(ClientsideFunction("clientside", "render_graph"), app,
+    # Server-side single-figure renderer — reads ONE graph from Ref per request.
+    callback!(app,
         Output("lens-graph-main",    "figure"),
         Output("lens-graph-title",   "children"),
         Output("lens-graph-counter", "children"),
         Input("lens-store-index",    "data"),
-        State("lens-store-graphs",   "data")
-    )
+        prevent_initial_call=true
+    ) do idx
+        store = LENS_GraphStore_DDEC[]
+        isempty(store) && return (Dict(), "No Visualisation Data", "/ 0")
+        count = length(store)
+        safe_i = clamp(idx + 1, 1, count)  # JS 0-indexed → Julia 1-indexed
+        item = store[safe_i]
+        fig = get(item, "figure", Dict())
+        return (
+            Dict("data" => get(fig, "data", []), "layout" => get(fig, "layout", Dict())),
+            get(item, "title", "Untitled Plot"),
+            "/ $count"
+        )
+    end
 
     # Metadata synchronisation for graph descriptive index panel.
     callback!(app,
         Output("lens-graph-info", "children"),
-        Input("lens-store-graphs", "data"),
+        Input("lens-store-graph-meta", "data"),
         prevent_initial_call=true
-    ) do g
-        (isnothing(g) || isempty(g)) && return ""
+    ) do meta
+        store = LENS_GraphStore_DDEC[]
+        isempty(store) && return ""
 
         counts = Dict{String,Int}()
         order = String[]
-        for item in g
+        for item in store
             t = split(get(item, "title", "Unknown"), ":")[1]
             if !haskey(counts, t)
                 push!(order, t)
@@ -1322,9 +1331,10 @@ function LENS_RegisterCallbacks_DDEF(app)
         State("lens-dd-phase",         "value"),
         prevent_initial_call=true
     ) do n1, n2, report, project, phase
-        if (isnothing(n1) || n1 == 0) && (isnothing(n2) || n2 == 0) && (isnothing(report) || isempty(report))
+        if (isnothing(n1) || n1 == 0) && (isnothing(n2) || n2 == 0)
             return Dash.no_update()
         end
+        
         (isnothing(report) || isempty(report)) && return Dash.no_update()
 
         proj  = isnothing(project) ? "Daisho" : project
@@ -1799,12 +1809,12 @@ function LENS_RegisterCallbacks_DDEF(app)
         Output("lens-download-plots",        "data"),
         Output("lens-export-plots-status", "children"),
         Input("lens-btn-export-plots", "n_clicks"),
-        State("lens-store-graphs",     "data"),
         State("lens-input-project",    "value"),
         State("lens-dd-phase",         "value"),
         prevent_initial_call=true
-    ) do n, graphs, proj_v, phase_v
-        (isnothing(n) || n == 0 || isnothing(graphs) || isempty(graphs)) &&
+    ) do n, proj_v, phase_v
+        graphs = LENS_GraphStore_DDEC[]
+        (isnothing(n) || n == 0 || isempty(graphs)) &&
             return Dash.no_update(), Dash.no_update()
 
         try
@@ -1819,20 +1829,19 @@ function LENS_RegisterCallbacks_DDEF(app)
 
             count = 0
             for (i, g) in enumerate(graphs)
-                fig_dict = PlotlyJS.JSON.parse(PlotlyJS.JSON.json(g["figure"]))
-                title    = get(g, "title", "Plot_$i")
- 
+                title      = get(g, "title", "Plot_$i")
                 safe_title = Sys_Fast.FAST_SanitiseFilename_DDEF(title)
                 filepath   = joinpath(export_dir, "$(safe_title).png")
 
-                fig_dict["layout"]["width"]  = 640
-                fig_dict["layout"]["height"] = 800
-                fig_dict["layout"]["margin"]["t"] = 130
+                layout_fields = deepcopy(g["figure"]["layout"].fields)
+                layout_fields[:width] = 640
+                layout_fields[:height] = 800
+                
+                margin_dict = deepcopy(get(layout_fields, :margin, Dict()))
+                margin_dict[:t] = 130
+                layout_fields[:margin] = margin_dict
 
-                traces     = [GenericTrace(d) for d in fig_dict["data"]]
-                layout_obj = Layout(fig_dict["layout"])
-                p          = Plot(traces, layout_obj)
-
+                p = Plot(deepcopy(g["figure"]["data"]), Layout(layout_fields))
                 savefig(p, filepath; width=640, height=800, scale=1.0)
                 count += 1
             end

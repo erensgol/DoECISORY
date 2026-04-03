@@ -1289,8 +1289,12 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::String)
             sheet_mod       = XLSX.addsheet!(xf, "Model_Statistics")
             sheet_mod["A1"] = ["Response", "Model Type", "R2", "R2_Adj", "RMSE", "P-Value", "Normality (p)"]
 
-            X_Clean = Res["X_Clean"]
-            Y_Clean = Res["Y_Clean"]
+            X_Raw = Res["X_Clean"]
+            Y_Raw = Res["Y_Clean"]
+            
+            # Guarantees that even if deserialized as Vector{Vector{Any}} from JSON, it becomes a Matrix.
+            X_Clean = X_Raw isa AbstractMatrix ? X_Raw : Matrix{Float64}(reduce(vcat, transpose.(Vector{Float64}.(X_Raw))))
+            Y_Clean = Y_Raw isa AbstractMatrix ? Y_Raw : Matrix{Float64}(reduce(vcat, transpose.(Vector{Float64}.(Y_Raw))))
             
             row_idx = 2
             for (i, out_name) in enumerate(get(Res, "OutNames", []))
