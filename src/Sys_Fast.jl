@@ -844,7 +844,12 @@ Returns empty string if the pattern doesn't match.
 function FAST_ExtractProjectFromFilename_DDEF(Filename::String)::String
     # Formulation of the extraction pattern: DDE_ProjectName_Phase_Tag_TS.ext.
     m = match(r"^DDE_(.*?)_P\d+_", Filename)
-    return isnothing(m) ? "" : string(m.captures[1])
+    !isnothing(m) && return string(m.captures[1])
+
+    # Fallback Protocol: If the filename is non-standard, return the base name minus extension.
+    base = splitext(Filename)[1]
+    (isempty(base) || base == "." ) && return ""
+    return base
 end
 
 # ------------------------------------------------------------------------------

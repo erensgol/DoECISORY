@@ -434,7 +434,7 @@ function LENS_RegisterCallbacks_DDEF(app)
     ) do active_data, current_proj, batch_status
         # Unified Initialisation of Session Metadata
         is_loading = get(batch_status, "next_pkg", get(batch_status, :next_pkg, 0)) > 0
-        proj_v = isnothing(current_proj) || isempty(strip(string(current_proj))) ? "Daisho" : string(current_proj)
+        proj_v = isnothing(current_proj) || isempty(strip(string(current_proj))) || lowercase(strip(string(current_proj))) == "daisho" ? "" : string(current_proj)
         
         path = ""
         try
@@ -483,9 +483,10 @@ function LENS_RegisterCallbacks_DDEF(app)
                 end
             end
 
-            afname = (active_data isa Dict && haskey(active_data, "filename")) ? string(active_data["filename"]) : ""
+            afname = (active_data isa AbstractDict && haskey(active_data, "filename")) ? string(active_data["filename"]) : ""
             extracted_proj = Main.Sys_Fast.FAST_ExtractProjectFromFilename_DDEF(afname)
             (extracted_proj != "") && (proj_v = extracted_proj)
+            (proj_v == "") && (proj_v = "Daisho")
 
             if isnothing(active_cont) || active_cont == ""
                 return tuple([], "No Data Source", "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 0, "vid" => ""), "d-none", proj_v)
@@ -2161,7 +2162,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         apply_flag = get(radio_opts, "Apply", false)
 
         btn_class = apply_flag ? "w-100 fw-bold lens-radio-active" : "w-100 fw-bold lens-radio-inactive"
-        icon = apply_flag ? "fas fa-check me-2" : "fas fa-radiation-alt me-2"
+        icon = apply_flag ? "fas fa-check-circle me-2" : "fas fa-times-circle me-2"
 
         return apply_flag, btn_class, icon
     end

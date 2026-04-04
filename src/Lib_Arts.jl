@@ -1063,7 +1063,7 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
             push!(tasks, t_diag)
         end
 
-        # [11, 12, 13] Design Space & Candidates & Golden Zone (SPACE - Composite Viz)
+        # [11, 12, 13] Design Space & Candidates & Optimal Zone (SPACE - Composite Viz)
         t_space = Threads.@spawn try
             # Critical Sanity Check: Ensure all constituent models are successfully trained.
             # Composite desirability maps require a complete model portfolio.
@@ -1079,10 +1079,10 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                         end
                     end
                 end
-                if get(Opts, "GoldenZone", true)
+                if get(Opts, "OptimalZone", true)
                     p_gz, _ = ARTS_Draw_DDEF(ARTS_PlotOptimalZone_DDES(), Models, Goals, X, InNames, Leaders_DF)
                     lock(graphs_lock) do
-                        push!(graphs, Dict("Type"=>"OptimalZone", "Title"=>"Golden Zone", "Plot"=>p_gz, "OutputIdx"=>length(OutNames)+1, "SubIdx"=>0))
+                        push!(graphs, Dict("Type"=>"OptimalZone", "Title"=>"Optimal Zone", "Plot"=>p_gz, "OutputIdx"=>length(OutNames)+1, "SubIdx"=>0))
                     end
                 end
             else
