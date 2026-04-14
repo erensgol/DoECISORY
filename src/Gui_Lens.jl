@@ -376,7 +376,7 @@ function LENS_Layout_DDEF()
                                 dbc_row([
                                     dbc_col(dbc_input(id="lens-radio-out-name-$i", placeholder="Corrected Result Display Alias", type="text", size="sm", className="form-control-sm"), width=8),
                                     dbc_col(dbc_input(id="lens-radio-out-unit-$i", placeholder="Measurement Unit", type="text", size="sm", className="form-control-sm"), width=4)
-                                ], className="g-1")
+                                ], id="lens-radio-out-alias-div-$i", className="g-1 d-none")
                             ]) for i in 1:6
                         ])
                     ], md=6)
@@ -438,7 +438,6 @@ function LENS_RegisterCallbacks_DDEF(app)
         
         path = ""
         try
-            # Unified Veri Kimliği (VID) Extraction Protocol via FAST Architecture
             active_cont = Sys_Fast.FAST_ExtractVid_DDEF(active_data)
 
             # Sync-Lock Guard: Prevent vault sync from overriding the UI during background rendering phases.
@@ -568,9 +567,29 @@ function LENS_RegisterCallbacks_DDEF(app)
                 model_val  = "Auto"
             end
 
+            # Apply Radio Correction Overrides to UI Goals
+            orig_goals_name = copy(goals_name)
+            radio_opts = get(config, "RadioOpts", Dict{String,Any}())
+            rev_dict = get(radio_opts, "ReverseMap", Dict{String,Any}())
+            for (i, name) in enumerate(orig_goals_name)
+                if haskey(rev_dict, name)
+                    mapping = rev_dict[name]
+                    alias = get(mapping, "Name", "")
+                    unit = get(mapping, "Unit", "")
+                    if !isempty(alias)
+                        goals_name[i] = alias * (isempty(unit) ? "" : " ($unit)")
+                    end
+                end
+            end
+
             saved_goals = get(config, "LensGoals", [])
             for (i, name) in enumerate(goals_name)
+                # Primary match via corrected alias, fallback to raw output name
                 g_idx = findfirst(g -> get(g, "Name", "") == name, saved_goals)
+                if isnothing(g_idx)
+                    g_idx = findfirst(g -> get(g, "Name", "") == orig_goals_name[i], saved_goals)
+                end
+                
                 if !isnothing(g_idx)
                     saved_g = saved_goals[g_idx]
                     goals_type[i]   = string(get(saved_g, "Type", "Nominal"))
@@ -881,7 +900,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                     def_opts = copy(opts)
                     def_opts["Mode"] = :Deferred
                     def_raw = Main.Lib_Arts.ARTS_Render_DDEF(
-                        res["Models"], res["X_Clean"], res["Y_Clean"], res["InNames"], res["OutNames"], 
+                        res["Models"], res["X_Clean"], res["Y_Clean"], get(res, "DisplayInNames", res["InNames"]), get(res, "DisplayOutNames", res["OutNames"]), 
                         goals, res["R2_Adj"], res["Q2"], def_opts, ldf, res["Sensitivities"], res["Residuals"]
                     )
                     pkg_graphs = [Dict{String,Any}("figure" => Dict{String,Any}("data" => g["Plot"].data, "layout" => g["Plot"].layout, "config" => g["Plot"].config), "title" => string(g["Title"])) for g in def_raw]
@@ -922,7 +941,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                         (haskey(res["Models"][i], "P_Value") && !isnan(res["Models"][i]["P_Value"])) ?
                             @sprintf("%.5f", res["Models"][i]["P_Value"]) : "N/A", style=Dict("textAlign" => "center", "padding" => "6px")
                         ),
-                ], style=Dict("borderBottom" => "1px solid var(--colour-val2-liglow)")) for (i, n) in enumerate(res["OutNames"])
+                ], style=Dict("borderBottom" => "1px solid var(--colour-val2-liglow)")) for (i, n) in enumerate(get(res, "DisplayOutNames", res["OutNames"]))
             ]
 
             summary = html_div([
@@ -968,16 +987,16 @@ function LENS_RegisterCallbacks_DDEF(app)
                     html_table([
                         html_thead(html_tr([
                             html_th("Factor", style=Dict("textAlign" => "left", "padding" => "4px")),
-                            [html_th(out, style=Dict("textAlign" => "center", "padding" => "4px")) for out in res["OutNames"]]...
+                            [html_th(out, style=Dict("textAlign" => "center", "padding" => "4px")) for out in get(res, "DisplayOutNames", res["OutNames"])]...
                         ])),
                         html_tbody([
                             html_tr([
-                                html_td(res["InNames"][fi], className="fw-bold", style=Dict("padding" => "4px")),
+                                html_td(get(res, "DisplayInNames", res["InNames"])[fi], className="fw-bold", style=Dict("padding" => "4px")),
                                 [html_td(@sprintf("%.1f%%", res["Sensitivities"][mi][fi] * 100), 
                                     className = res["Sensitivities"][mi][fi] > 0.5 ? "colourtx-c0hr" : "colourtx-v5pb", 
                                     style=Dict("textAlign" => "center", "padding" => "4px"))
-                                 for mi in 1:length(res["OutNames"])]...
-                            ]) for fi in 1:length(res["InNames"])
+                                 for mi in 1:length(get(res, "DisplayOutNames", res["OutNames"]))]...
+                            ]) for fi in 1:length(get(res, "DisplayInNames", res["InNames"]))
                         ])
                     ], className="table table-sm table-borderless small mx-auto", style=Dict("width" => "90%"))
                 ]) : html_div()),
@@ -1033,7 +1052,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                                 ])
                             ], className="table table-sm table-hover small mb-4 border")
                         end
-                    ]) for (i, out_name) in enumerate(res["OutNames"])]...
+                    ]) for (i, out_name) in enumerate(get(res, "DisplayOutNames", res["OutNames"]))]...
                 ], className="px-2 mt-3"),
 
                 # Orchestration of architectural boundary warnings and spatial limit detections (AskLeader Integration).
@@ -1067,13 +1086,26 @@ function LENS_RegisterCallbacks_DDEF(app)
                     push!(display_cols,  lcols[id_col])
                     push!(display_names, "ID")
                 end
-                for c in in_cols_l
+                for (i, c) in enumerate(in_cols_l)
                     push!(display_cols,  c)
-                    push!(display_names, replace(c, C.PRE_INPUT => ""))
+                    # Fetch from DisplayInNames if available, otherwise fallback to raw
+                    raw_n = replace(c, C.PRE_INPUT => "")
+                    idx = findfirst(==(raw_n), get(res, "InNames", []))
+                    if !isnothing(idx) && haskey(res, "DisplayInNames")
+                        push!(display_names, res["DisplayInNames"][idx])
+                    else
+                        push!(display_names, raw_n)
+                    end
                 end
-                for c in pred_cols_l
+                for (i, c) in enumerate(pred_cols_l)
                     push!(display_cols,  c)
-                    push!(display_names, replace(c, C.PRE_PRED => ""))
+                    raw_n = replace(c, C.PRE_PRED => "")
+                    idx = findfirst(==(raw_n), get(res, "OutNames", []))
+                    if !isnothing(idx) && haskey(res, "DisplayOutNames")
+                        push!(display_names, res["DisplayOutNames"][idx])
+                    else
+                        push!(display_names, raw_n)
+                    end
                 end
                 if !isnothing(score_col)
                     push!(display_cols,  lcols[score_col])
@@ -1509,6 +1541,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         res["SelectedShift"]  = s
         res["SelectedMethod"] = m
         res["IsRadioCorrected"] = !isnothing(results) && haskey(results, "RadioCorrection") && !isempty(results["RadioCorrection"])
+        res["RadioOpts"]        = get(config_full, "RadioOpts", Dict{String,Any}())
 
         if is_reset
             leader_vals = get(res, "LeaderValues", Float64[])
@@ -1648,6 +1681,17 @@ function LENS_RegisterCallbacks_DDEF(app)
             end
 
             disp_name = get(c, "Name", "???")
+            
+            # Apply Radio Correction Alias to Phase Preview
+            r_opts = get(res, "RadioOpts", Dict{String,Any}())
+            if get(r_opts, "Apply", false)
+                f_dict = get(r_opts, "Forward", Dict{String,Any}())
+                if haskey(f_dict, disp_name)
+                    alias = get(f_dict[disp_name], "Name", "")
+                    !isempty(alias) && (disp_name = alias)
+                end
+            end
+
             disp_unit = get(c, "Unit", "")
             final_name = (isempty(disp_unit) || disp_unit == "-") ? disp_name : "$disp_name $disp_unit"
 
@@ -1983,6 +2027,23 @@ function LENS_RegisterCallbacks_DDEF(app)
         return in_options, fwd_keys, in_names..., in_units...
     end
 
+    function LENS_IsRadioactiveTarget_DDEF(name::String, unit::String)
+        u = lowercase(strip(unit))
+        n = lowercase(strip(name))
+        
+        # Selection of outputs explicitly bearing absolute radiochemical measurement units.
+        if occursin(r"mci|mbq|ci|gbq|kbq|bq|cpm|cps|dpm|dps|activity", u)
+            return true
+        end
+        
+        # Fallback extrapolation for percentage-based yields mapping directly to isotope conversion efficiency.
+        if occursin(r"mci|mbq|ci|gbq|kbq|bq|cpm|cps|dpm|dps|activity|yield|rcy|rad|decay", n)
+            return true
+        end
+        
+        return false
+    end
+
     # Unit 2: Radioactivity - Reverse Mapping (Outputs)
     callback!(app,
         [Output("lens-radio-out-dd-$i", "options") for i in 1:6]...,
@@ -2019,7 +2080,10 @@ function LENS_RegisterCallbacks_DDEF(app)
         out_div_classes = fill("d-none", 6); out_lbls = fill("", 6)
         out_src_vals = fill("None", 6); out_names = fill("", 6); out_units = fill("", 6)
 
-        for (idx, o) in enumerate(outputs[1:min(length(outputs), 6)])
+        # Execution of Positive Selection Algorithmic Protocol (Whitelist)
+        rad_outputs = filter(o -> get(o, "IsRadioactive", false) == true || LENS_IsRadioactiveTarget_DDEF(get(o, "Name", ""), get(o, "Unit", "")), outputs)
+
+        for (idx, o) in enumerate(rad_outputs[1:min(length(rad_outputs), 6)])
             out_name = get(o, "Name", "")
             out_div_classes[idx] = "mb-3 d-block"; out_lbls[idx] = out_name
             if haskey(rev_dict, out_name)
@@ -2032,21 +2096,68 @@ function LENS_RegisterCallbacks_DDEF(app)
         return fill(out_options, 6)..., out_div_classes..., out_lbls..., out_src_vals..., out_names..., out_units...
     end
 
-    # 2.5 Dynamic Input Row Visibility Toggle
+    # 2.5 Dynamic Input Row Visibility Toggle & Intelligent Suggestions
     callback!(app,
         [Output("lens-radio-in-div-$i", "className") for i in 1:6]...,
         [Output("lens-radio-in-lbl-$i", "children") for i in 1:6]...,
+        [Output("lens-radio-in-name-$i", "placeholder") for i in 1:6]...,
+        [Output("lens-radio-in-unit-$i", "placeholder") for i in 1:6]...,
         Input("lens-radio-dd-inputs", "value"),
         prevent_initial_call=true
     ) do sel_vals
         vals = isnothing(sel_vals) ? String[] : (sel_vals isa String ? [sel_vals] : convert(Vector{String}, sel_vals))
         cls = fill("d-none", 6)
         lbl = fill("", 6)
+        ph_names = fill("Corrected Display Alias", 6)
+        ph_units = fill("Measurement Unit", 6)
+        
         for (i, v) in enumerate(vals[1:min(length(vals), 6)])
             cls[i] = "mb-2 d-block"
             lbl[i] = v
+            
+            # Active Contextual Placeholder Generation for Inputs (Forward Decay)
+            if !isnothing(v) && v != ""
+                ph_names[i] = "e.g. Decayed $v"
+                ph_units[i] = "e.g. MBq"
+            end
         end
-        return tuple(cls..., lbl...)
+        return tuple(cls..., lbl..., ph_names..., ph_units...)
+    end
+
+    # 2.8 Dynamic Output Row Visibility Toggle & Intelligent Suggestions
+    callback!(app,
+        [Output("lens-radio-out-alias-div-$i", "className") for i in 1:6]...,
+        [Output("lens-radio-out-name-$i", "placeholder") for i in 1:6]...,
+        [Output("lens-radio-out-unit-$i", "placeholder") for i in 1:6]...,
+        [Input("lens-radio-out-dd-$i", "value") for i in 1:6]...,
+        [State("lens-radio-out-lbl-$i", "children") for i in 1:6]...,
+        prevent_initial_call=true
+    ) do sel_args...
+        sel_vals = sel_args[1:6]
+        lbl_vals = sel_args[7:12]
+        
+        cls = fill("g-1 d-none", 6)
+        ph_names = fill("Corrected Result Display Alias", 6)
+        ph_units = fill("Measurement Unit", 6)
+        
+        for i in 1:6
+            v = sel_vals[i]
+            if !isnothing(v) && v != "None" && v != ""
+                cls[i] = "g-1 mt-1 d-flex"
+                
+                # Active Contextual Placeholder Generation
+                cur_lbl = lbl_vals[i]
+                if !isnothing(cur_lbl) && cur_lbl != ""
+                    clean_lbl = strip(replace(cur_lbl, r"(?i)yield|rcy|\(mbq\)|\(mci\)|\(ci\)|\(gbq\)|\(kbq\)|\(bq\)|\(cpm\)|\(cps\)|\(%|%\)|%" => ""))
+                    if isempty(clean_lbl)
+                        clean_lbl = "Activity"
+                    end
+                    ph_names[i] = "e.g. $clean_lbl Yield"
+                    ph_units[i] = "e.g. %"
+                end
+            end
+        end
+        return tuple(cls..., ph_names..., ph_units...)
     end
 
     # 3. Apply Configuration & Master Vault Sync

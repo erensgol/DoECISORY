@@ -23,7 +23,8 @@ export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF,
     CORE_ExtractLeader_DDEF, CORE_GenerateOptimalDesign_DDEF,
     CORE_OptimiseDesirability_DDEF, CORE_ValidateDesign_DDEF,
     CORE_D_Efficiency_DDEF, CORE_CalcDesignMetrics_DDEF, CORE_CodeMatrix_DDEF,
-    CORE_CalcDesirability_DDEF, CORE_ExtractGoal_DDEF, CORE_GetModelType_DDEF
+    CORE_CalcDesirability_DDEF, CORE_ExtractGoal_DDEF, CORE_GetModelType_DDEF,
+    CORE_DecayModifier_DDES, CORE_ApplyDecayPenalty_DDEF
 
 abstract type CORE_AbstractDesignMethod_DDET end
 struct CORE_MethodBB15_DDES <: CORE_AbstractDesignMethod_DDET end
@@ -266,12 +267,53 @@ function CORE_CalcDesirability_DDEF(::CORE_GoalNominal_DDES, Val::AbstractFloat,
     return clamp(res, 0.0, 1.0)
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 3B: DECAY-COUPLED OPTIMISATION MODIFIER
+# ------------------------------------------------------------------------------
+
 """
-    CORE_OptimiseDesirability_DDEF(Models, Goals, X_Bounds; MaxTime, PenaltyFn) -> Vector{Float64}
+    CORE_DecayModifier_DDES
+Carries radioactive decay parameters into the optimisation loop.
+When a time variable is identified among the design factors, this struct
+enables the objective function to penalise predictions by the exponential
+decay factor e^(-lambda * t), solving the time-yield paradox described in
+radiopharmaceutical DoE literature.
+
+Fields:
+- TimeIndex:       Column index of the time variable in the X matrix (1, 2, or 3).
+- Lambda:          Decay constant in minutes (ln(2) / half_life_minutes).
+- AffectedOutputs: Indices of output responses subject to decay correction.
+- IsotopeName:     Display name for logging and audit trail.
+"""
+struct CORE_DecayModifier_DDES
+    TimeIndex::Int
+    Lambda::Float64
+    AffectedOutputs::Vector{Int}
+    IsotopeName::String
+end
+
+"""
+    CORE_ApplyDecayPenalty_DDEF(Val, Modifier, x) -> Float64
+Applies the exponential decay penalty to a predicted response value.
+The time value is extracted from the candidate point x at the index
+specified by the modifier. Returns Val * e^(-lambda * t_minutes).
+"""
+function CORE_ApplyDecayPenalty_DDEF(Val::Float64, Mod::CORE_DecayModifier_DDES, x)::Float64
+    t_val = Float64(x[Mod.TimeIndex])
+    t_val <= 0.0 && return Val
+    return Val * exp(-Mod.Lambda * t_val)
+end
+
+"""
+    CORE_OptimiseDesirability_DDEF(Models, Goals, X_Bounds; MaxTime, PenaltyFn, DecayModifiers) -> (Vector{Float64}, Float64)
 Globally optimises parameters by maximising composite desirability using BlackBoxOptim.
+When DecayModifiers are supplied, the objective function applies exponential decay
+penalties to model predictions for affected outputs, enabling the solver to locate
+the peak time point where chemical conversion and radioactive preservation intersect.
 """
 function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractVector, X_Bounds::AbstractMatrix{Float64};
-    MaxTime::Float64=2.0, PenaltyFn::Union{Function,Nothing}=nothing)
+    MaxTime::Float64=2.0, PenaltyFn::Union{Function,Nothing}=nothing,
+    DecayModifiers::Vector{CORE_DecayModifier_DDES}=CORE_DecayModifier_DDES[])
     Dim       = 3
     NumModels = length(Models)
 
@@ -301,6 +343,16 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
         closures[m] = CORE_GetPredictor_DDEF(mod_type, private_beta)
     end
 
+    # Pre-compute decay lookup: for each model index, store applicable modifiers.
+    decay_lookup = Dict{Int, Vector{CORE_DecayModifier_DDES}}()
+    for dm in DecayModifiers
+        for oi in dm.AffectedOutputs
+            if oi >= 1 && oi <= NumModels
+                push!(get!(decay_lookup, oi, CORE_DecayModifier_DDES[]), dm)
+            end
+        end
+    end
+
     function CORE_CalcObjective_DDEF(x)
         s     = 1.0
         for m in 1:NumModels
@@ -310,6 +362,14 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
             if isnan(val) || isinf(val)
                 return 0.0 
             end
+
+            # Decay-Coupled Correction: Apply e^(-lambda * t) for affected outputs.
+            if haskey(decay_lookup, m)
+                for dm in decay_lookup[m]
+                    val = CORE_ApplyDecayPenalty_DDEF(val, dm, x)
+                end
+            end
+
             gtup = parsed_goals[m]
             d    = CORE_CalcDesirability_DDEF(val, gtup)
             s   *= d
@@ -325,7 +385,8 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
 
     search_range = [(X_Bounds[i, 1], X_Bounds[i, 2]) for i in 1:Dim]
 
-    Main.Sys_Fast.FAST_Log_DDEF("CORE", "BBO_START", "Initiating BlackBoxOptim for Global Desirability (MaxTime: $(MaxTime)s)...", "WAIT")
+    decay_msg = isempty(DecayModifiers) ? "" : " [DECAY-COUPLED: $(join([dm.IsotopeName for dm in DecayModifiers], ", "))]"
+    Main.Sys_Fast.FAST_Log_DDEF("CORE", "BBO_START", "Initiating BlackBoxOptim for Global Desirability (MaxTime: $(MaxTime)s)...$(decay_msg)", "WAIT")
 
     try
         res = bboptimize(CORE_CalcObjective_DDEF; SearchRange=search_range, NumDimensions=Dim, MaxTime=MaxTime, Method=:adaptive_de_rand_1_bin_radiuslimited, TraceMode=:silent)

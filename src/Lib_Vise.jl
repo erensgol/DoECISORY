@@ -31,7 +31,8 @@ export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
     VISE_SelectBestModel_DDEF, VISE_CalcMetrics_DDEF,
     VISE_SensitivityAnalysis_DDEF, VISE_GenerateScientificReport_DDEF,
     VISE_CalcVIF_DDEF, VISE_LackOfFit_DDEF, VISE_GenerateAnovaTable_DDEF,
-    VISE_PerformNormalityTest_DDEF, VISE_ExportToExcel_DDEF
+    VISE_PerformNormalityTest_DDEF, VISE_ExportToExcel_DDEF,
+    VISE_ExtractDecayModifiers_DDEF
 
 struct VISE_RegressionResult_DDES
     Beta::Vector{Float64}
@@ -558,10 +559,13 @@ function VISE_CrossValidate_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVect
 end
 
 """
-    VISE_GridSearch_DDEF(Models, Goals, Bounds; [Steps]) -> (X, Y_Pred, Scores)
+    VISE_GridSearch_DDEF(Models, Goals, Bounds; [Steps], [DecayModifiers]) -> (X, Y_Pred, Scores)
 Performs high-density grid search across factor space for desirability exploration.
+When DecayModifiers are provided, predictions for affected outputs are penalised by
+the exponential decay factor before desirability scoring.
 """
-function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_Bounds::AbstractMatrix{Float64}; Steps::Int=41)
+function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_Bounds::AbstractMatrix{Float64};
+    Steps::Int=41, DecayModifiers::Vector{Main.Lib_Core.CORE_DecayModifier_DDES}=Main.Lib_Core.CORE_DecayModifier_DDES[])
     Dim = 3
     compute_threads = Main.Sys_Fast.FAST_GetComputeThreads_DDEF()
     cap_limit, base_n = (compute_threads <= 4) ? (15_000, 21) : (100_000, 41)
@@ -619,11 +623,28 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_B
             end
             
             pow = sum_weights > 0.0 ? (1.0 / sum_weights) : (length(active_idx) > 0 ? 1.0 / length(active_idx) : 1.0)
+
+            # Pre-compute grid-level decay lookup for consistency with BBO objective.
+            grid_decay_lookup = Dict{Int, Vector{Main.Lib_Core.CORE_DecayModifier_DDES}}()
+            for dm in DecayModifiers
+                for oi in dm.AffectedOutputs
+                    if oi >= 1 && oi <= NumModels
+                        push!(get!(grid_decay_lookup, oi, Main.Lib_Core.CORE_DecayModifier_DDES[]), dm)
+                    end
+                end
+            end
             
             Threads.@threads for i in 1:NumPoints
                 s = 1.0
                 @inbounds for m_idx in active_idx
-                    s *= Main.Lib_Core.CORE_CalcDesirability_DDEF(Predictions[i, m_idx], parsed_goals[m_idx])
+                    pred_val = Predictions[i, m_idx]
+                    # Decay-Coupled Correction: Penalise by e^(-lambda * t) for affected outputs.
+                    if haskey(grid_decay_lookup, m_idx)
+                        for dm in grid_decay_lookup[m_idx]
+                            pred_val = Main.Lib_Core.CORE_ApplyDecayPenalty_DDEF(pred_val, dm, view(Candidates, i, :))
+                        end
+                    end
+                    s *= Main.Lib_Core.CORE_CalcDesirability_DDEF(pred_val, parsed_goals[m_idx])
                 end
                 res_val = s^pow
                 @inbounds Scores[i] = (isnan(res_val) || isinf(res_val)) ? 0.0 : clamp(res_val, 0.0, 1.0)
@@ -685,7 +706,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     end
 
     write(io, "### II. Response Surface Dimension Analysis\n")
-    out_names = Res["OutNames"]
+    out_names = get(Res, "DisplayOutNames", Res["OutNames"])
     for (m_idx, name) in enumerate(out_names)
         mod = Res["Models"][m_idx]
         mod["Status"] != "OK" && continue
@@ -720,7 +741,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         sens = get(Res, "Sensitivities", [])
         if !isempty(sens) && m_idx <= length(sens)
             s_vec = sens[m_idx]
-            in_names = get(Res, "InNames", [])
+            in_names = get(Res, "DisplayInNames", get(Res, "InNames", []))
             if !isempty(s_vec) && length(s_vec) == length(in_names)
                 perm = sortperm(s_vec; rev=true)
                 write(io, Printf.@sprintf("- **Primary Driver**: `%s` (contributes %.1f%% to response variance).\n", in_names[perm[1]], s_vec[perm[1]]*100))
@@ -877,6 +898,28 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
     InNames_v = collect(String, InNames)
     OutNames_v = collect(String, OutNames)
     
+    DispInNames  = copy(InNames_v)
+    DispOutNames = copy(OutNames_v)
+    r_opts = get(Opts, "RadioOpts", Dict{String,Any}())
+    if get(r_opts, "Apply", false)
+        f_dict = get(r_opts, "Forward", Dict{String,Any}())
+        r_dict = get(r_opts, "ReverseMap", Dict{String,Any}())
+        for (i, n) in enumerate(DispInNames)
+            if haskey(f_dict, n)
+                disp_n = get(f_dict[n], "Name", "")
+                disp_u = get(f_dict[n], "Unit", "")
+                !isempty(disp_n) && (DispInNames[i] = disp_n * (isempty(disp_u) ? "" : " ($disp_u)"))
+            end
+        end
+        for (i, n) in enumerate(DispOutNames)
+            if haskey(r_dict, n)
+                disp_n = get(r_dict[n], "Name", "")
+                disp_u = get(r_dict[n], "Unit", "")
+                !isempty(disp_n) && (DispOutNames[i] = disp_n * (isempty(disp_u) ? "" : " ($disp_u)"))
+            end
+        end
+    end
+
     # Mathematical Optimisation: BBO Pulse handled concurrently or skipped for Priority Start
     bp, bs, ldf, SC, warns = if Optim
         VISE_RunOptimisation_DDEF(X_Clean, models, Goals, config, Phase, InNames_v, OutNames_v, Opts, C, Log)
@@ -901,7 +944,7 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
         push!(sens_list, VISE_SensitivityAnalysis_DDEF(m, sens_point, X_Clean))
 
         r2a, q2 = get(m, "R2_Adj", 0.0), get(m, "Q2", 0.0)
-        (r2a - q2) > 0.20 && push!(warns, "$(OutNames_v[i]): Large R2 gap ($(round(r2a-q2; digits=2))). Potential overfitting.")
+        (r2a - q2) > 0.20 && push!(warns, "$(DispOutNames[i]): Large R2 gap ($(round(r2a-q2; digits=2))). Potential overfitting.")
     end
     
     # Forensic Stats (LOF, ANOVA, Normality, Vitals)
@@ -931,7 +974,7 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
     opts_with_mode = copy(Opts)
     opts_with_mode["Mode"] = RenderMode
 
-    graphs = Main.Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, InNames_v, OutNames_v, Goals, 
+    graphs = Main.Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, DispInNames, DispOutNames, Goals, 
         [get(m, "R2_Adj", 0.0) for m in models], [get(m, "Q2", 0.0) for m in models], opts_with_mode, ldf,
         sens_list, residuals)
         
@@ -939,7 +982,7 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
     sheet_leader     = C.PREFIX_LEADERS * Phase
     sheets_to_commit[sheet_leader] = ldf
     
-    res_bundle = VISE_AssembleBundle_DDEF(Phase, InNames_v, OutNames_v, models, bp, bs, ldf, X_Clean, Y_Clean, Opts, 
+    res_bundle = VISE_AssembleBundle_DDEF(Phase, InNames_v, OutNames_v, DispInNames, DispOutNames, models, bp, bs, ldf, X_Clean, Y_Clean, Opts, 
         Goals, Y_Pred, Actual_Scores, radio_audit, warns, vitals, anova_tables, normality_res, residuals, sens_list, graphs, t_start, C)
         
     return res_bundle, sheets_to_commit
@@ -1107,17 +1150,112 @@ function VISE_ApplyDecayKernel_DDEF!(X, Y, in_n, out_n, df, config, opts, C, Log
     return audit
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 20B: DECAY-COUPLED OPTIMISATION BRIDGE
+# ------------------------------------------------------------------------------
+
+"""
+    VISE_ExtractDecayModifiers_DDEF(InNames, OutNames, Config, Opts) -> Vector{CORE_DecayModifier_DDES}
+Extracts decay modifier parameters from the project configuration by cross-referencing
+radioactive ingredients with time-unit variables. This enables the optimisation engine
+to apply the exponential decay penalty e^(-lambda * t) during candidate evaluation,
+solving the radiopharmaceutical time-yield paradox.
+
+Automatic Detection Logic:
+1. Scan InNames for variables whose Unit is a temporal dimension (min, hours, sec, etc.).
+2. For each radioactive ingredient with HalfLife > 0, check if RadioOpts.ReverseMap
+   links any output to that ingredient.
+3. Build a CORE_DecayModifier_DDES with the time variable index, decay constant,
+   and affected output indices.
+"""
+function VISE_ExtractDecayModifiers_DDEF(in_n::AbstractVector{<:AbstractString}, out_n::AbstractVector{<:AbstractString},
+    config::AbstractDict, opts::AbstractDict)::Vector{Main.Lib_Core.CORE_DecayModifier_DDES}
+
+    modifiers = Main.Lib_Core.CORE_DecayModifier_DDES[]
+    !get(get(opts, "RadioOpts", Dict()), "Apply", false) && return modifiers
+
+    ingreds   = get(config, "Ingredients", [])
+    r_opts    = get(opts, "RadioOpts", Dict{String,Any}())
+    rev_dict  = get(r_opts, "ReverseMap", Dict{String,Any}())
+
+    # Step 1: Identify time variable indices among the 3 input factors.
+    time_indices = Int[]
+    for (idx, name) in enumerate(in_n)
+        ing_match = findfirst(i -> get(i, "Name", "") == name, ingreds)
+        if !isnothing(ing_match)
+            unit_str = string(get(ingreds[ing_match], "Unit", ""))
+            if Main.Lib_Mole.MOLE_IsTimeUnit_DDEF(unit_str)
+                push!(time_indices, idx)
+            end
+        end
+    end
+
+    isempty(time_indices) && return modifiers
+
+    # Step 2: For each radioactive ingredient, build modifiers.
+    for ing in ingreds
+        hl_raw  = Main.Sys_Fast.FAST_SafeNum_DDEF(get(ing, "HalfLife", 0.0))
+        hl_raw <= 0.0 && continue
+        is_rad  = get(ing, "IsRadioactive", false) == true
+        !is_rad && hl_raw <= 0.0 && continue
+
+        hl_unit = string(get(ing, "HalfLifeUnit", "Hours"))
+        hl_min  = Main.Lib_Mole.MOLE_ConvertTimeToMinutes_DDEF(hl_raw, hl_unit)
+        hl_min <= 0.0 && continue
+
+        lambda  = log(2) / hl_min
+        i_name  = string(get(ing, "Name", "Unknown"))
+
+        # Step 3: Determine which outputs are affected via ReverseMap.
+        affected = Int[]
+        for (out_name, out_data) in rev_dict
+            mapped_src = get(out_data, "Source", "None")
+            if mapped_src == i_name
+                o_idx = findfirst(==(out_name), out_n)
+                !isnothing(o_idx) && push!(affected, o_idx)
+            end
+        end
+
+        # Safety Guard: Only apply decay to explicitly mapped outputs.
+        # Outputs like Purity (%), pH, or particle size are decay-independent
+        # and must NOT receive the exponential penalty.
+        if isempty(affected)
+            Main.Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_BRIDGE",
+                "Isotope '$i_name' has no ReverseMap output mapping. Decay penalty skipped for this isotope. " *
+                "To enable decay-coupled optimisation, map at least one output to '$i_name' in the Radioactivity Correction panel.", "WARN")
+            continue
+        end
+
+        # Create one modifier per time variable (typically only one exists).
+        for t_idx in time_indices
+            push!(modifiers, Main.Lib_Core.CORE_DecayModifier_DDES(
+                t_idx, lambda, affected, i_name
+            ))
+        end
+    end
+
+    if !isempty(modifiers)
+        Main.Sys_Fast.FAST_Log_DDEF("VISE", "DECAY_BRIDGE",
+            "Decay-Coupled Optimisation ACTIVE: $(length(modifiers)) modifier(s) extracted [$(join([m.IsotopeName for m in modifiers], ", "))]", "OK")
+    end
+
+    return modifiers
+end
+
 function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n, opts, C, Log)
     !get(opts, "Optim", true) && return [], 0.0, DataFrame(), zeros(1), String[]
     
     bounds = hcat(minimum(X; dims=1)', maximum(X; dims=1)')
+
+    # Extract Decay Modifiers for the Time-Yield Paradox Resolution.
+    decay_mods = VISE_ExtractDecayModifiers_DDEF(in_n, out_n, config, opts)
     
     # 1. High-Density Grid Exploration
-    XT, YP, SC = VISE_GridSearch_DDEF(models, goals, bounds)
+    XT, YP, SC = VISE_GridSearch_DDEF(models, goals, bounds; DecayModifiers=decay_mods)
     
     # 2. Global Desirability Maximum (BlackBoxOptim)
     max_time = get(opts, "MaxTime", 2.0)
-    bp, bs = Main.Lib_Core.CORE_OptimiseDesirability_DDEF(models, goals, bounds; MaxTime=max_time)
+    bp, bs = Main.Lib_Core.CORE_OptimiseDesirability_DDEF(models, goals, bounds; MaxTime=max_time, DecayModifiers=decay_mods)
     
     # 3. Diversity Candidate Selection
     used_indices = Int[]
@@ -1279,9 +1417,9 @@ function VISE_PreparePredictionsSheet_DDEF(df::DataFrame, phase::AbstractString,
 end
 
 
-function VISE_AssembleBundle_DDEF(phase, in_n, out_n, models, bp, bs, ldf, xc, yc, opts, goals, yp, sc, radio, warns, vitals, anova, normality, residuals, sens, graphs, t0, C)
+function VISE_AssembleBundle_DDEF(phase, in_n, out_n, disp_in, disp_out, models, bp, bs, ldf, xc, yc, opts, goals, yp, sc, radio, warns, vitals, anova, normality, residuals, sens, graphs, t0, C)
     ui_mods = deepcopy(models); for m in ui_mods delete!(m, "_Closure") end
-    return Dict("Status"=>"OK", "Phase"=>phase, "InNames"=>in_n, "OutNames"=>out_n, "Models"=>ui_mods, "Goals"=>goals, "R2_Adj"=>[get(m, "R2_Adj", 0.0) for m in models], "Q2"=>[get(m, "Q2", 0.0) for m in models], "BestPoint"=>bp, "BestScore"=>bs, "Leaders"=>ldf, "X_Clean"=>xc, "Y_Clean"=>yc, "Graphs"=>graphs, "Vitals"=>vitals, "Sensitivities"=>sens, "ANOVA"=>anova, "Normality"=>normality, "Residuals"=>residuals, "RadioCorrection"=>radio, "BoundaryWarnings"=>warns, "Elapsed"=>"$(round(time()-t0; digits=1))s")
+    return Dict("Status"=>"OK", "Phase"=>phase, "InNames"=>in_n, "OutNames"=>out_n, "DisplayInNames"=>disp_in, "DisplayOutNames"=>disp_out, "Models"=>ui_mods, "Goals"=>goals, "R2_Adj"=>[get(m, "R2_Adj", 0.0) for m in models], "Q2"=>[get(m, "Q2", 0.0) for m in models], "BestPoint"=>bp, "BestScore"=>bs, "Leaders"=>ldf, "X_Clean"=>xc, "Y_Clean"=>yc, "Graphs"=>graphs, "Vitals"=>vitals, "Sensitivities"=>sens, "ANOVA"=>anova, "Normality"=>normality, "Residuals"=>residuals, "RadioCorrection"=>radio, "BoundaryWarnings"=>warns, "Elapsed"=>"$(round(time()-t0; digits=1))s")
 end
 
 """
@@ -1309,7 +1447,7 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::String)
             Y_Clean = Y_Raw isa AbstractMatrix ? Y_Raw : Matrix{Float64}(reduce(vcat, transpose.(Vector{Float64}.(Y_Raw))))
             
             row_idx = 2
-            for (i, out_name) in enumerate(get(Res, "OutNames", []))
+            for (i, out_name) in enumerate(get(Res, "DisplayOutNames", get(Res, "OutNames", [])))
                 m    = Res["Models"][i]
                 norm = VISE_PerformNormalityTest_DDEF(m, X_Clean, Y_Clean[:, i])
 
@@ -1324,7 +1462,7 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::String)
                 row_idx += 1
             end
 
-            for (i, out_name) in enumerate(get(Res, "OutNames", []))
+            for (i, out_name) in enumerate(get(Res, "DisplayOutNames", get(Res, "OutNames", [])))
                 m         = Res["Models"][i]
                 safe_name = first(replace(out_name, r"[^\w]" => "_"), 25)
 

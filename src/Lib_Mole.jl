@@ -19,7 +19,8 @@ export MOLE_ParseTable_DDEF, MOLE_QuickAudit_DDEF,
     MOLE_ValidatePhysicalUnit_DDEF, MOLE_AuditMatrix_DDEF, 
     MOLE_AuditBatch_DDEF, MOLE_ValidateDesignFeasibility_DDEF, 
     MOLE_Ingredient_DDES, MOLE_ApplyRadioDecay_DDEF, 
-    MOLE_ProcessDesign_DDEF, MOLE_GetPercentageEquivalent_DDEF
+    MOLE_ProcessDesign_DDEF, MOLE_GetPercentageEquivalent_DDEF,
+    MOLE_IsTimeUnit_DDEF, MOLE_ConvertTimeToMinutes_DDEF
 
 # ==============================================================================
 # PART A: CHEMICAL DATA STRUCTURES & MODELS
@@ -102,6 +103,17 @@ function MOLE_ConvertTimeToMinutes_DDEF(Value::Real, Unit::AbstractString)::Floa
     Value <= 0.0 && return 0.0
     u = uppercase(strip(Unit))
     return Float64(Value * get(MOLE_TimeFactorMap_DDEC, u, 1.0))
+end
+
+"""
+    MOLE_IsTimeUnit_DDEF(UnitStr) -> Bool
+Determines whether a given unit string represents a temporal dimension.
+Used by the Decay-Coupled Optimisation engine to automatically identify time variables.
+"""
+function MOLE_IsTimeUnit_DDEF(UnitStr::AbstractString)::Bool
+    u = uppercase(strip(UnitStr))
+    isempty(u) && return false
+    return haskey(MOLE_TimeFactorMap_DDEC, u)
 end
 
 # ------------------------------------------------------------------------------
