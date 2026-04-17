@@ -355,7 +355,7 @@ end
 
 """
     FLOW_WriteLeaders_DDEF(File, Phase, LeadersDF) -> Bool
-Persists prioritized candidates for the current phase to the shared master record.
+Persists prioritised candidates for the current phase to the shared master record.
 """
 function FLOW_WriteLeaders_DDEF(File::Union{String,Nothing}, Phase::Union{String,Nothing}, LeadersDF::DataFrame)
     (isnothing(File) || isempty(File) || isnothing(Phase) || isempty(Phase)) && return false

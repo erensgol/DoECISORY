@@ -459,7 +459,7 @@ function VISE_CalcMetrics_DDEF(Y_Real::AbstractVector{Float64}, Y_Pred::Abstract
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 11: PRIMARY TOURNAMENT MODEL SELECTION
+# SECTION 10: PRIMARY TOURNAMENT MODEL SELECTION
 # ------------------------------------------------------------------------------
 
 """
@@ -529,7 +529,7 @@ end
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 12: CROSS-VALIDATION & PRESS STATISTIC
+# SECTION 11: CROSS-VALIDATION & PRESS STATISTIC
 # ------------------------------------------------------------------------------
 
 """
@@ -772,7 +772,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 17: PHASE DATA LOADER & INGESTION
+# SECTION 12: PHASE DATA LOADER & INGESTION
 # ------------------------------------------------------------------------------
 
 """
@@ -792,12 +792,12 @@ function VISE_LoadPhaseData_DDEF(FilePath::String, Phase::String, C, Log)
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 18: ENSEMBLE MODELLING ORCHESTRATOR
+# SECTION 13: ENSEMBLE MODELLING ORCHESTRATOR
 # ------------------------------------------------------------------------------
 
 """
     VISE_TrainEnsemble_DDEF(X, Y, InNames, ModelType, Goals, Log) -> Vector{Dict}
-Parallelized ensemble trainer that selects the optimal model structure for each response variable.
+Parallelised ensemble trainer that selects the optimal model structure for each response variable.
 """
 function VISE_TrainEnsemble_DDEF(X::AbstractMatrix{Float64}, Y::AbstractMatrix{Float64}, InNames::AbstractVector{<:AbstractString}, ModelType::AbstractString, Goals::AbstractVector, Log)
     n_out = size(Y, 2)
@@ -826,7 +826,7 @@ function VISE_TrainEnsemble_DDEF(X::AbstractMatrix{Float64}, Y::AbstractMatrix{F
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 19: SYSTEM EXECUTION GATEWAY (VISE_EXECUTE)
+# SECTION 14: SYSTEM EXECUTION GATEWAY (VISE_EXECUTE)
 # ------------------------------------------------------------------------------
 
 function VISE_Execute_DDEF(DataFile::AbstractString, Phase::AbstractString, Goals::AbstractVector, ModelType::AbstractString="Auto"; 
@@ -989,7 +989,7 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 20: INTERNAL LOGISTIC HELPERS
+# SECTION 15: INTERNAL LOGISTIC HELPERS
 # ------------------------------------------------------------------------------
 
 function VISE_IngestMatrices_DDEF(df::DataFrame, config::AbstractDict, C, Log)
@@ -1151,7 +1151,7 @@ function VISE_ApplyDecayKernel_DDEF!(X, Y, in_n, out_n, df, config, opts, C, Log
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 20B: DECAY-COUPLED OPTIMISATION BRIDGE
+# SECTION 16: DECAY-COUPLED OPTIMISATION BRIDGE
 # ------------------------------------------------------------------------------
 
 """
@@ -1442,7 +1442,7 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::String)
             X_Raw = Res["X_Clean"]
             Y_Raw = Res["Y_Clean"]
             
-            # Guarantees that even if deserialized as Vector{Vector{Any}} from JSON, it becomes a Matrix.
+            # Guarantees that even if deserialised as Vector{Vector{Any}} from JSON, it becomes a Matrix.
             X_Clean = X_Raw isa AbstractMatrix ? X_Raw : Matrix{Float64}(reduce(vcat, transpose.(Vector{Float64}.(X_Raw))))
             Y_Clean = Y_Raw isa AbstractMatrix ? Y_Raw : Matrix{Float64}(reduce(vcat, transpose.(Vector{Float64}.(Y_Raw))))
             

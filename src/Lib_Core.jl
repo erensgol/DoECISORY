@@ -268,7 +268,7 @@ function CORE_CalcDesirability_DDEF(::CORE_GoalNominal_DDES, Val::AbstractFloat,
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 3B: DECAY-COUPLED OPTIMISATION MODIFIER
+# SECTION 5: DECAY-COUPLED OPTIMISATION MODIFIER
 # ------------------------------------------------------------------------------
 
 """
@@ -442,7 +442,7 @@ CORE_GetPredictor_DDEF(::CORE_ModelLinear_DDES, b) = (x) -> b[1] + b[2]*x[1] + b
 CORE_GetPredictor_DDEF(::CORE_ModelQuadratic_DDES, b) = (x) -> @inbounds (b[1] + b[2]*x[1] + b[3]*x[2] + b[4]*x[3] + b[5]*x[1]*x[2] + b[6]*x[1]*x[3] + b[7]*x[2]*x[3] + b[8]*x[1]*x[1] + b[9]*x[2]*x[2] + b[10]*x[3]*x[3])
 
 # ------------------------------------------------------------------------------
-# SECTION 5: LEADER DATA EXTRACTION
+# SECTION 6: LEADER DATA EXTRACTION
 # ------------------------------------------------------------------------------
 
 """
@@ -512,7 +512,7 @@ function CORE_ExtractLeader_DDEF(FilePath::AbstractString, PhaseCode::AbstractSt
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 6: DESIGN MATRIX VALIDATION
+# SECTION 7: DESIGN MATRIX VALIDATION
 # ------------------------------------------------------------------------------
 
 """
@@ -563,7 +563,7 @@ function CORE_ValidateDesign_DDEF(DesignMatrix::AbstractMatrix, Config::Abstract
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 7: DESIGN QUALITY METRICS (D, A, G, I Efficiency)
+# SECTION 8: DESIGN QUALITY METRICS (D, A, G, I Efficiency)
 # ------------------------------------------------------------------------------
 
 """

@@ -568,7 +568,7 @@ a:hover {
     .modal-xl, .modal-lg { max-width: 85vw !important; }
 }
 
-/* Base Mobile & Phablet Standardization */
+/* Base Mobile & Phablet Standardisation */
 @media (max-width: 1280px) {
     /* 1. Global Width & Centering */
     .app-container { 

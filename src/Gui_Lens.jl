@@ -37,7 +37,7 @@ const LENS_LastPayloadTime_DDEC  = Ref{Float64}(0.0)
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 0: PHASE EVOLUTION SLOT BUILDER
+# SECTION 1: PHASE EVOLUTION SLOT BUILDER
 # ------------------------------------------------------------------------------
 
 function LENS_BuildSlotCard_DDEF(i::Int)
@@ -102,7 +102,7 @@ function LENS_BuildSlotCard_DDEF(i::Int)
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 1: INTERFACE LAYOUT
+# SECTION 2: INTERFACE LAYOUT
 # ------------------------------------------------------------------------------
 
 """
@@ -223,7 +223,7 @@ function LENS_Layout_DDEF()
                 dcc_store(id="lens-store-results",       data=Dict()),
                 dcc_store(id="lens-store-radio-correct", data=true),
                 # Synchronisation flag for multi-platform session orchestration.
-                dcc_store(id="lens-store-sync-flag",     data=Dict("status" => 0, "vid" => "")), 
+                dcc_store(id="lens-store-sync-flag",     data=Dict("status" => 0, "dataid" => "")), 
                 dcc_store(id="lens-signal-process",      data=Dict("ts" => 0, "success" => false)),
                 dcc_store(id="lens-store-diag-force",    data=0),
                 dcc_store(id="lens-store-slot-config",   data=Dict()),
@@ -234,7 +234,7 @@ function LENS_Layout_DDEF()
         ], className="g-3"),
 
 # ------------------------------------------------------------------------------
-# SECTION 2: SYSTEM MODALS & DIALOGUES
+# SECTION 3: SYSTEM MODALS & DIALOGUES
 # ------------------------------------------------------------------------------
 
         # Interface orchestration for system modal dialogues and user interactions.
@@ -396,7 +396,7 @@ end
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 3: CALLBACK REGISTRY GATEWAY
+# SECTION 4: CALLBACK REGISTRY GATEWAY
 # ------------------------------------------------------------------------------
 
 """
@@ -407,7 +407,7 @@ function LENS_RegisterCallbacks_DDEF(app)
     C = Sys_Fast.FAST_Data_DDEC
 
 # ------------------------------------------------------------------------------
-# SECTION 4: UPLOAD & SYNC PIPELINES
+# SECTION 5: UPLOAD & SYNC PIPELINES
 # ------------------------------------------------------------------------------
 
     # Pipeline Orchestration Stage 1B: Global session synchronisation and objective initialisation.
@@ -438,10 +438,10 @@ function LENS_RegisterCallbacks_DDEF(app)
         
         path = ""
         try
-            active_cont = Sys_Fast.FAST_ExtractVid_DDEF(active_data)
+            active_cont = Sys_Fast.FAST_ExtractDataID_DDEF(active_data)
 
             # Sync-Lock Guard: Prevent vault sync from overriding the UI during background rendering phases.
-            # However, we MUST allow the sync-flag to update to the current VID even if loading.
+            # However, we MUST allow the sync-flag to update to the current DataID even if loading.
             if is_loading
                 # Selective Update: We return no_updates for everything EXCEPT the sync-flag and project name.
                 out = ntuple(_ -> Dash.no_update(), 27)
@@ -449,7 +449,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 
                 # Fetch minimal metadata for the flag
                 if !isempty(active_cont) && active_cont != "none"
-                    mutable_out[25] = Dict("status" => 1, "vid" => active_cont)
+                    mutable_out[25] = Dict("status" => 1, "dataid" => active_cont)
                     mutable_out[27] = proj_v
                 end
                 return Tuple(mutable_out)
@@ -488,26 +488,26 @@ function LENS_RegisterCallbacks_DDEF(app)
             (proj_v == "") && (proj_v = "Daisho")
 
             if isnothing(active_cont) || active_cont == ""
-                return tuple([], "No Data Source", "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 0, "vid" => ""), "d-none", proj_v)
+                return tuple([], "No Data Source", "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 0, "dataid" => ""), "d-none", proj_v)
             end
 
             Sys_Fast.FAST_Log_DDEF("LENS", "Sync", "Synchronising from Smart Vault (Handle: $(first(active_cont, 64))...)...", "INFO")
             path = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
             if !isfile(path)
-                 return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "Data handle expired or missing. Please re-upload."], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v)
+                 return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "Data handle expired or missing. Please re-upload."], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "dataid" => ""), "d-none", proj_v)
             end
 
             ext = lowercase(splitext(path)[2])
             if ext != ".xlsx"
                 Sys_Fast.FAST_CleanTransient_DDEF(path)
-                return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "This is not a valid Excel file! (Please upload .xlsx)"], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v)
+                return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "This is not a valid Excel file! (Please upload .xlsx)"], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "dataid" => ""), "d-none", proj_v)
             end
 
             df = Sys_Fast.FAST_ReadExcel_DDEF(path, C.SHEET_DATA)
             isempty(df) && (df = Sys_Fast.FAST_ReadExcel_DDEF(path, "DATA_RECORDS"))
 
             if isempty(df)
-                return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "No Valid Data Sheet found in spreadsheet."], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v)
+                return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "No Valid Data Sheet found in spreadsheet."], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "dataid" => ""), "d-none", proj_v)
             end
 
             col_phase = Symbol(C.COL_PHASE)
@@ -625,7 +625,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 goals_weight...,
                 model_opts,
                 model_val,
-                Dict("status" => 1, "vid" => active_cont),
+                Dict("status" => 1, "dataid" => active_cont),
                 panel_class,
                 proj_v
             )
@@ -634,7 +634,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "SYNC_FAIL", bt, "FAIL")
             return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "Sync Error: $(first(string(e), 120))"], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green",
-                nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "vid" => ""), "d-none", proj_v)
+                nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "dataid" => ""), "d-none", proj_v)
         finally
             # Execution of the high-priority transient resource cleanup protocol.
             !isempty(path) && try
@@ -649,7 +649,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 5: STATISTICAL ANALYSIS ENGINE
+# SECTION 6: STATISTICAL ANALYSIS ENGINE
 # ------------------------------------------------------------------------------
 
     callback!(app,
@@ -916,7 +916,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                     final_bundle = Sys_Fast.FAST_SanitiseJson_DDEF(res_b)
                     delete!(final_bundle, "Graphs")
                     delete!(final_bundle, "_Hidden_Sheets")
-                    final_bundle["vid"]  = updated_vault_b64
+                    final_bundle["dataid"]  = updated_vault_b64
                     final_bundle["type"] = "SCIENCE_PULSE"
                     
                     # 9. Store payload for interval pickup (NO graphs, small payload)
@@ -956,7 +956,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 ], className="table table-sm table-borderless caption-top mb-1 mx-auto", style=Dict("width" => "95%", "marginTop" => "5px")),
 
 # ------------------------------------------------------------------------------
-# SECTION 6: MODEL PERFORMANCE & DIAGNOSTICS
+# SECTION 7: MODEL PERFORMANCE & DIAGNOSTICS
 # ------------------------------------------------------------------------------
 
                 (haskey(res, "Vitals") ? html_div([
@@ -1135,11 +1135,11 @@ function LENS_RegisterCallbacks_DDEF(app)
                         dbc_badge([html_i(className="fas fa-radiation me-1 colourtx-v5pb"), "Radio-Corrected"], className="ms-2 fw-bold colourgl-c4tg colourtx-v5pb") : ""
 
             final_res = Sys_Fast.FAST_SanitiseJson_DDEF(res)
-            # Architectural Optimization: Remove bulky objects from persistent vault to prevent serialization lag.
+            # Architectural Optimisation: Remove bulky objects from persistent vault to prevent serialisation lag.
             delete!(final_res, "Graphs") 
             delete!(final_res, "_Hidden_Sheets")
 
-            final_res["vid"]  = updated_base64
+            final_res["dataid"]  = updated_base64
             final_res["type"] = "SCIENCE_PULSE"
             # Final Architectural Sync: Capture total duration AFTER all post-processing.
             t_total       = round(time() - t_start; digits=1)
@@ -1162,7 +1162,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             )
 
         # ------------------------------------------------------------------------------
-        # SECTION 7: ANALYSIS ERROR GUARD & CLEANUP
+        # SECTION 8: ANALYSIS ERROR GUARD & CLEANUP
 
         catch e
             bt = sprint(showerror, e, catch_backtrace())
@@ -1177,7 +1177,7 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 8: UI ORCHESTRATED ACTION CONTROLLER
+# SECTION 9: UI ORCHESTRATED ACTION CONTROLLER
 # ------------------------------------------------------------------------------
 
     callback!(app,
@@ -1192,7 +1192,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         if trig == "lens-store-diag-force" && diag_force > 0
             Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Emergency Unlock triggered via Diagnostics.", "OK")
-            if !isnothing(results) && haskey(results, "vid")
+            if !isnothing(results) && haskey(results, "dataid")
                 return ntuple(_ -> false, 5)
             end
             return false, true, true, true, true
@@ -1204,7 +1204,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             # If lpt < 1.0, it's analysis phase. If lpt > 1.0, it's delivery phase.
             # Safety Check: If timeout hasn't reached, keep it locked.
             if lpt < 1.0 || (time() - lpt < 60.0)
-                has_res = !isnothing(results) && Sys_Fast.FAST_ExtractVid_DDEF(results) == Sys_Fast.FAST_ExtractVid_DDEF(vault)
+                has_res = !isnothing(results) && Sys_Fast.FAST_ExtractDataID_DDEF(results) == Sys_Fast.FAST_ExtractDataID_DDEF(vault)
                 return true, !has_res, !has_res, !has_res, !has_res
             end
         end
@@ -1213,20 +1213,20 @@ function LENS_RegisterCallbacks_DDEF(app)
             return ntuple(_ -> true, 5)
         end
 
-        curr_vid = Sys_Fast.FAST_ExtractVid_DDEF(vault)
+        curr_dataid = Sys_Fast.FAST_ExtractDataID_DDEF(vault)
 
-        if isnothing(curr_vid) || isempty(curr_vid)
+        if isnothing(curr_dataid) || isempty(curr_dataid)
             return ntuple(_ -> true, 5)
         end
 
         # 1. Direct Analysis Match: Results are already calculated for this specific data.
-        if !isnothing(results) && Sys_Fast.FAST_ExtractVid_DDEF(results) == curr_vid
+        if !isnothing(results) && Sys_Fast.FAST_ExtractDataID_DDEF(results) == curr_dataid
             Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Analysis valid for current data. Unlocked all.", "OK")
             return ntuple(_ -> false, 5)
         end
 
         # 2. Sync State Match: Data is loaded but analysis is not yet run.
-        if !isnothing(sync_flag) && Sys_Fast.FAST_ExtractVid_DDEF(sync_flag) == curr_vid && get(sync_flag, "status", 0) == 1
+        if !isnothing(sync_flag) && Sys_Fast.FAST_ExtractDataID_DDEF(sync_flag) == curr_dataid && get(sync_flag, "status", 0) == 1
             Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Sync validated. Unlocked Analysis Engine.", "OK")
             return false, true, true, true, true
         end
@@ -1236,16 +1236,16 @@ function LENS_RegisterCallbacks_DDEF(app)
              return ntuple(_ -> false, 5)
         end
 
-        Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Data in transition or sync pending [VID: $(first(curr_vid, 8))].", "WAIT")
+        Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Data in transition or sync pending [DataID: $(first(curr_dataid, 8))].", "WAIT")
         return ntuple(_ -> true, 5)
     end
 
 
 
 # ------------------------------------------------------------------------------
-# SECTION 9: GRAPH RENDERING & METADATA
+# SECTION 10: GRAPH RENDERING & METADATA
 # ------------------------------------------------------------------------------
-# Architecture: Graphs are delivered as a mühürlü paket (Stateless Blob). 
+# Architecture: Graphs are delivered as a sealed package (Stateless Blob). 
 # All data is held in lens-store-graphs-blob (String JSON).
 # update_index and render_graph run clientside for instant, private navigation.
  
@@ -1280,7 +1280,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 
 
 # ------------------------------------------------------------------------------
-# SECTION 10: PHASE EVOLUTION WIZARD (MODAL)
+# SECTION 11: PHASE EVOLUTION WIZARD (MODAL)
 # ------------------------------------------------------------------------------
 
     callback!(app,
@@ -1338,7 +1338,7 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 11: SCIENTIFIC REPORT & DOWNLOAD
+# SECTION 12: SCIENTIFIC REPORT & DOWNLOAD
 # ------------------------------------------------------------------------------
 
     callback!(app,
@@ -1376,7 +1376,7 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 12: PHASE EVOLUTION WIZARD (LOGIC)
+# SECTION 13: PHASE EVOLUTION WIZARD (LOGIC)
 # ------------------------------------------------------------------------------
 
     callback!(app,
@@ -1845,7 +1845,7 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 13: DATA & PLOT EXPORT
+# SECTION 14: DATA & PLOT EXPORT
 # ------------------------------------------------------------------------------
 
     callback!(app,
@@ -1966,7 +1966,7 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 14: RADIOACTIVITY CORRECTION ARCHITECTURE
+# SECTION 15: RADIOACTIVITY CORRECTION ARCHITECTURE
 # ------------------------------------------------------------------------------
 
     # 1. Open/Close Modal
@@ -2279,7 +2279,7 @@ function LENS_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 15: PHASE EVOLUTION SLOT CONFIGURATION
+# SECTION 16: PHASE EVOLUTION SLOT CONFIGURATION
 # ------------------------------------------------------------------------------
 
     callback!(app,
@@ -2397,7 +2397,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 slot["TransformedVal"] = tv
                 transformed_displays[i] = string(round(tv; digits=3))
             elseif mode == "REPLACE"
-                # Signal active replacement center to UI
+                # Signal active replacement centre to UI
                 target_val = Float64(get(slot, "NewL2", 0.0))
                 transformed_displays[i] = string(round(target_val; digits=3))
             end

@@ -3,7 +3,7 @@ module Lib_Arts
 # ==============================================================================
 # DAISHODOE FRAMEWORK - LIB ARTS (VISUALISATION)
 # ==============================================================================
-# Description: Visualization and graphics module for academic data 
+# Description: Visualisation and graphics module for academic data 
 #              representation and response surface mapping.
 # Module Tag:  ARTS
 # ==============================================================================
@@ -92,7 +92,7 @@ const ARTS_SizeLabel_DDEC    = 11
 const ARTS_SizeTick_DDEC     = 9
 const ARTS_SizeLegend_DDEC   = 9
 const ARTS_SizeAnnot_DDEC    = 9
-const ARTS_SizeColorbar_DDEC = 8
+const ARTS_SizeColourbar_DDEC = 8
 const ARTS_SizeMarker_DDEC   = 7
 const ARTS_SizeLeader_DDEC   = 2
 const ARTS_WidthLine_DDEC    = 1.5
@@ -283,7 +283,7 @@ end
 
 """
     ARTS_HexToRGBA_DDEF(hex, alpha) -> String
-Converts hex color strings to RGBA format for Plotly transparency support.
+    Converts hex colour strings to RGBA format for Plotly transparency support.
 """
 function ARTS_HexToRGBA_DDEF(hex::AbstractString, alpha::AbstractFloat)
     h = replace(hex, "#" => "")
@@ -545,7 +545,7 @@ function ARTS_Draw_DDEF(::ARTS_PlotSurface_DDES, Model::AbstractDict, X::Abstrac
 
     trace = surface(; x=collect(x1), y=collect(x2), z=Z, colorscale=ARTS_ViridisScale_DDEC,
         contours=attr(z=attr(show=true, usecolormap=true, project_z=true)),
-        colorbar=attr(orientation="h", x=0.5, xanchor="center", y=-0.24, yanchor="top", thickness=15, len=0.6, tickfont=attr(size=ARTS_SizeColorbar_DDEC)))
+        colorbar=attr(orientation="h", x=0.5, xanchor="center", y=-0.24, yanchor="top", thickness=15, len=0.6, tickfont=attr(size=ARTS_SizeColourbar_DDEC)))
 
     layout = ARTS_BaseLayout_DDEF("Response Surface Mapping: $OutName")
     layout[:scene] = attr(xaxis=attr(title=Lbls[1]), yaxis=attr(title=Lbls[2]), zaxis=attr(title=OutName),
@@ -585,7 +585,7 @@ function ARTS_Draw_DDEF(::ARTS_PlotContour_DDES, Model::AbstractDict, X::Abstrac
 
     trace = contour(; x=collect(x1), y=collect(x2), z=Z, colorscale=ARTS_ViridisScale_DDEC,
         contours=attr(coloring="heatmap", showlabels=true, labelfont=attr(size=ARTS_SizeTick_DDEC)),
-        colorbar=attr(orientation="h", x=0.5, xanchor="center", y=-0.24, yanchor="top", thickness=15, len=0.6, tickfont=attr(size=ARTS_SizeColorbar_DDEC)))
+        colorbar=attr(orientation="h", x=0.5, xanchor="center", y=-0.24, yanchor="top", thickness=15, len=0.6, tickfont=attr(size=ARTS_SizeColourbar_DDEC)))
 
     layout = ARTS_BaseLayout_DDEF("Contour Projection Index: $OutName")
     layout[:xaxis][:title], layout[:yaxis][:title] = Lbls[1], Lbls[2]
@@ -777,7 +777,7 @@ function ARTS_RenderSpaceCore_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Id
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 20: 3D OPTIMAL ZONE VOLUME RENDERER
+# SECTION 18: 3D OPTIMAL ZONE VOLUME RENDERER
 # ------------------------------------------------------------------------------
 
 """
@@ -830,7 +830,7 @@ function ARTS_Draw_DDEF(::ARTS_PlotOptimalZone_DDES, Models, Goals, X::AbstractM
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 21: INTERACTION LANDSCAPE HEATMAP
+# SECTION 19: INTERACTION LANDSCAPE HEATMAP
 # ------------------------------------------------------------------------------
 
 """
@@ -856,7 +856,7 @@ function ARTS_Draw_DDEF(::ARTS_PlotInteractionMatrix_DDES, Model::AbstractDict, 
         colorbar=attr(
             title="Relative Impact",
             orientation="h", x=0.5, xanchor="center", y=-0.28, yanchor="top", 
-            thickness=12, len=0.7, tickfont=attr(size=ARTS_SizeColorbar_DDEC)
+            thickness=12, len=0.7, tickfont=attr(size=ARTS_SizeColourbar_DDEC)
         ),
         hovertemplate="Factor A: %{x}<br>Factor B: %{y}<br>Impact: %{z:.3f}<extra></extra>")
     
@@ -880,7 +880,7 @@ end
 ARTS_GetInteractionMatrix_DDEF(::Main.Lib_Core.CORE_ModelLinear_DDES, B::AbstractVector) = zeros(3, 3)
 
 # ------------------------------------------------------------------------------
-# SECTION 22: DIAGNOSTIC PLOTS
+# SECTION 20: DIAGNOSTIC PLOTS
 # ------------------------------------------------------------------------------
 
 function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::AbstractString)

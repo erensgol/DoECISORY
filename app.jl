@@ -351,7 +351,7 @@ function APP_RoutePage_DDEF(pathname::String)
         nt::Int, tstyle::String, tmsg::String = Sys_Fast.FAST_GetThreadInfo_DDEF()
         
         return html_div([
-            # Visual brand identity and scientific mission statement.
+            # Visual Orchestration: High-Fidelity Statistical Modelling and Data Optimisation.
             dbc_container([
                 dbc_row(dbc_col([
                     html_h1("DaishoDoE", 

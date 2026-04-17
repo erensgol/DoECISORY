@@ -29,7 +29,7 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
        FAST_FormatDuration_DDEF, FAST_ValidateDataFrame_DDEF, FAST_GetSystemQuote_DDEF,
        FAST_RoundCols_DDEF!, FAST_GetCol_DDEF, FAST_CleanHeader_DDEF,
        FAST_InitialiseWorkforce_DDEF, FAST_CleanWorkforce_DDEF, FAST_Data_DDEC,
-       FAST_SanitiseFilename_DDEF, FAST_LoadMemoFile_DDEF, FAST_ExtractVid_DDEF,
+       FAST_SanitiseFilename_DDEF, FAST_LoadMemoFile_DDEF, FAST_ExtractDataID_DDEF,
        FAST_ValidateSheetStructure_DDEF, FAST_FinaliseMasterWrite_DDEF
 
 # ==============================================================================
@@ -101,15 +101,15 @@ const FAST_TempRoot_DDEC = let
 end
 
 """
-    FAST_ExtractVid_DDEF(vault) -> String
-Standardised extraction of the Veri Kimliği (VID) from multi-source binary stores.
-Prioritises 'vid' (lowercase) for internal consistency, with failover to 'Vid' and 'content'.
+    FAST_ExtractDataID_DDEF(vault) -> String
+Standardised extraction of the Data Identity (DataID) from multi-source binary stores.
+Prioritises 'dataid' (lowercase) for internal consistency, with failover to 'DataID' and 'content'.
 """
-function FAST_ExtractVid_DDEF(vault)
+function FAST_ExtractDataID_DDEF(vault)
     (isnothing(vault) || isempty(vault)) && return ""
     vault isa String && return vault
     if vault isa AbstractDict || vault isa Dict
-        return string(get(vault, "vid", get(vault, "content", "")))
+        return string(get(vault, "dataid", get(vault, "DataID", get(vault, "content", ""))))
     end
     return ""
 end
@@ -1014,7 +1014,7 @@ end
 
 """
     FAST_LoadMemoFile_DDEF(FilePath::String) -> Dict{String, Any}
-Loads a standardized DDE Memo file (JSON) from the local filesystem.
+Loads a standardised DDE Memo file (JSON) from the local filesystem.
 Returns an empty dictionary if the file is not found or is corrupt.
 """
 function FAST_LoadMemoFile_DDEF(FilePath::String)::Dict{String,Any}

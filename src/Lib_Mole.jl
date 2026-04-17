@@ -203,7 +203,7 @@ Returns (Type, ScaleToSystemBase) where the base is mg for mass and fractions fo
 function MOLE_GetUnitType_DDEF(UnitStr::AbstractString)::Tuple{AbstractStoicUnit, Float64}
     u = lowercase(strip(UnitStr))
     
-    # Priority 1: High-Performance O(1) Centralized Lookup.
+    # Priority 1: High-Performance O(1) Centralised Lookup.
     static_lookup = get(MOLE_UnitMap_DDEC, u, nothing)
     !isnothing(static_lookup) && return static_lookup
 

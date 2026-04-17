@@ -6,7 +6,7 @@ colorTo: indigo
 sdk: docker
 pinned: false
 license: agpl-3.0
-short_description: Decision-Adaptive Interactive Sequential Hybrid Optimization
+short_description: Decision-Adaptive Interactive Sequential Hybrid Optimisation
 ---
 
 # DaishoDoE Framework
