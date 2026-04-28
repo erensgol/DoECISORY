@@ -568,8 +568,8 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_B
     Steps::Int=41, DecayModifiers::Vector{Main.Lib_Core.CORE_DecayModifier_DDES}=Main.Lib_Core.CORE_DecayModifier_DDES[])
     Dim = 3
     compute_threads = Main.Sys_Fast.FAST_GetComputeThreads_DDEF()
-    cap_limit, base_n = (compute_threads <= 4) ? (15_000, 21) : (100_000, 41)
-    eff_steps = base_n
+    cap_limit = (compute_threads <= 4) ? 15_000 : 100_000
+    eff_steps = Steps
     while eff_steps^Dim > cap_limit && eff_steps > 5
         eff_steps -= 2
     end
@@ -1251,7 +1251,8 @@ function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n,
     decay_mods = VISE_ExtractDecayModifiers_DDEF(in_n, out_n, config, opts)
     
     # 1. High-Density Grid Exploration
-    XT, YP, SC = VISE_GridSearch_DDEF(models, goals, bounds; DecayModifiers=decay_mods)
+    grid_steps = get(opts, "GridSteps", 41)
+    XT, YP, SC = VISE_GridSearch_DDEF(models, goals, bounds; Steps=grid_steps, DecayModifiers=decay_mods)
     
     # 2. Global Desirability Maximum (BlackBoxOptim)
     max_time = get(opts, "MaxTime", 2.0)
