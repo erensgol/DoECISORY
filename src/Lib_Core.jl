@@ -206,7 +206,7 @@ const CORE_GoalMap_DDEC = Dict{String, CORE_AbstractGoalType_DDET}(
     CORE_ExtractGoal_DDEF(Goal) -> Tuple
 Extracts and normalises goal parameters and returns a Trait + Parameter tuple.
 """
-function CORE_ExtractGoal_DDEF(Goal::AbstractDict)
+function CORE_ExtractGoal_DDEF(Goal::AbstractDict)::Tuple{CORE_AbstractGoalType_DDET, Float64, Float64, Float64, Float64}
     G_Min = Float64(get(Goal, "Min", -Inf))
     G_Max = Float64(get(Goal, "Max", Inf))
     G_Tgt_Raw = get(Goal, "Target", nothing)
@@ -230,15 +230,15 @@ CORE_ExtractGoal_DDEF(G::Tuple) = G
     CORE_CalcDesirability_DDEF(Val, Goal) -> Float64
 Calculates desirability scores via Multiple Dispatch.
 """
-function CORE_CalcDesirability_DDEF(Val::AbstractFloat, Goal::AbstractDict)
+function CORE_CalcDesirability_DDEF(Val::Float64, Goal::AbstractDict)::Float64
     return CORE_CalcDesirability_DDEF(Val, CORE_ExtractGoal_DDEF(Goal))
 end
 
-function CORE_CalcDesirability_DDEF(Val::AbstractFloat, GoalTup::Tuple{CORE_AbstractGoalType_DDET, Vararg})
-    return CORE_CalcDesirability_DDEF(GoalTup[1], Val, GoalTup[2:end]...)
+function CORE_CalcDesirability_DDEF(Val::Float64, GoalTup::Tuple{CORE_AbstractGoalType_DDET, Float64, Float64, Float64, Float64})::Float64
+    return CORE_CalcDesirability_DDEF(GoalTup[1], Val, GoalTup[2], GoalTup[3], GoalTup[4], GoalTup[5])
 end
 
-function CORE_CalcDesirability_DDEF(::CORE_GoalMaximise_DDES, Val::AbstractFloat, G_Min, G_Max, G_Tgt, Weight)
+function CORE_CalcDesirability_DDEF(::CORE_GoalMaximise_DDES, Val::Float64, G_Min::Float64, G_Max::Float64, G_Tgt::Float64, Weight::Float64)::Float64
     Val >= G_Tgt && return 1.0
     Val <= G_Min && return 0.0
     denom = G_Tgt - G_Min
@@ -246,7 +246,7 @@ function CORE_CalcDesirability_DDEF(::CORE_GoalMaximise_DDES, Val::AbstractFloat
     return clamp(res, 0.0, 1.0)
 end
 
-function CORE_CalcDesirability_DDEF(::CORE_GoalMinimise_DDES, Val::AbstractFloat, G_Min, G_Max, G_Tgt, Weight)
+function CORE_CalcDesirability_DDEF(::CORE_GoalMinimise_DDES, Val::Float64, G_Min::Float64, G_Max::Float64, G_Tgt::Float64, Weight::Float64)::Float64
     Val <= G_Tgt && return 1.0
     Val >= G_Max && return 0.0
     denom = G_Max - G_Tgt
@@ -254,7 +254,7 @@ function CORE_CalcDesirability_DDEF(::CORE_GoalMinimise_DDES, Val::AbstractFloat
     return clamp(res, 0.0, 1.0)
 end
 
-function CORE_CalcDesirability_DDEF(::CORE_GoalNominal_DDES, Val::AbstractFloat, G_Min, G_Max, G_Tgt, Weight)
+function CORE_CalcDesirability_DDEF(::CORE_GoalNominal_DDES, Val::Float64, G_Min::Float64, G_Max::Float64, G_Tgt::Float64, Weight::Float64)::Float64
     (Val <= G_Min || Val >= G_Max) && return 0.0
     abs(Val - G_Tgt) < 1e-12 && return 1.0
     if Val < G_Tgt
@@ -372,7 +372,7 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
 
             gtup = parsed_goals[m]
             d    = CORE_CalcDesirability_DDEF(val, gtup)
-            s   *= d
+            s   *= max(1e-12, d)
         end
         score = clamp(s^pow_factor, 0.0, 1.0)
 
@@ -437,9 +437,15 @@ function CORE_LocalRefinement_DDEF(obj_fn, start_x, range; iters=100)
     return current_x, current_score
 end
 
-CORE_GetModelType_DDEF(m::String) = occursin("linear", m) ? CORE_ModelLinear_DDES() : CORE_ModelQuadratic_DDES()
-CORE_GetPredictor_DDEF(::CORE_ModelLinear_DDES, b) = (x) -> b[1] + b[2]*x[1] + b[3]*x[2] + b[4]*x[3]
-CORE_GetPredictor_DDEF(::CORE_ModelQuadratic_DDES, b) = (x) -> @inbounds (b[1] + b[2]*x[1] + b[3]*x[2] + b[4]*x[3] + b[5]*x[1]*x[2] + b[6]*x[1]*x[3] + b[7]*x[2]*x[3] + b[8]*x[1]*x[1] + b[9]*x[2]*x[2] + b[10]*x[3]*x[3])
+function CORE_GetPredictor_DDEF(::CORE_ModelLinear_DDES, b::Vector{Float64})
+    length(b) < 4 && throw(ArgumentError("Linear coefficients vector must have at least 4 elements, got $(length(b))"))
+    return (x::AbstractVector{Float64}) -> (b[1] + b[2]*x[1] + b[3]*x[2] + b[4]*x[3])::Float64
+end
+
+function CORE_GetPredictor_DDEF(::CORE_ModelQuadratic_DDES, b::Vector{Float64})
+    length(b) < 10 && throw(ArgumentError("Quadratic coefficients vector must have at least 10 elements, got $(length(b))"))
+    return (x::AbstractVector{Float64}) -> (@inbounds (b[1] + b[2]*x[1] + b[3]*x[2] + b[4]*x[3] + b[5]*x[1]*x[2] + b[6]*x[1]*x[3] + b[7]*x[2]*x[3] + b[8]*x[1]*x[1] + b[9]*x[2]*x[2] + b[10]*x[3]*x[3]))::Float64
+end
 
 # ------------------------------------------------------------------------------
 # SECTION 6: LEADER DATA EXTRACTION

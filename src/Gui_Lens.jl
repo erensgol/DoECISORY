@@ -8,8 +8,8 @@ module Gui_Lens
 # Module Tag:  LENS
 # ==============================================================================
 
-using Dash
-using DashBootstrapComponents
+using Main.Dash
+using Main.DashBootstrapComponents
 using Dates
 using Main.Sys_Fast
 using Main.Sys_Flow
@@ -39,6 +39,89 @@ const LENS_LastPayloadTime_DDEC  = Ref{Float64}(0.0)
 # ------------------------------------------------------------------------------
 # SECTION 1: PHASE EVOLUTION SLOT BUILDER
 # ------------------------------------------------------------------------------
+
+"""
+    LENS_BuildLeadersHTML_DDEF(ldf::DataFrame, res::AbstractDict) -> Union{HTMLTable, String}
+Constructs a standardised, high-fidelity HTML table for leader run candidates.
+Includes robust key guards and fallback aliases for asynchronous safety.
+"""
+function LENS_BuildLeadersHTML_DDEF(ldf::DataFrame, res::AbstractDict)
+    (isempty(ldf) || size(ldf, 1) == 0) && return ""
+    
+    C = Main.Sys_Fast.FAST_Data_DDEC
+    lcols = names(ldf)
+    
+    # Robust Column Identification
+    id_col      = findfirst(c -> c == C.COL_EXP_ID || c == C.COL_ID || string(c) == "ID", lcols)
+    in_cols_l   = filter(c -> startswith(string(c), C.PRE_INPUT), lcols)
+    pred_cols_l = filter(c -> startswith(string(c), C.PRE_PRED),  lcols)
+    score_col   = findfirst(c -> c == C.COL_SCORE || string(c) == "Score" || string(c) == "SCORE", lcols)
+    
+    display_cols  = String[]
+    display_names = String[]
+    
+    # ID Column Mapping
+    if !isnothing(id_col)
+        push!(display_cols,  string(lcols[id_col]))
+        push!(display_names, "ID")
+    end
+    
+    # Inputs Mapping (with DisplayInNames fallback)
+    in_names_list = get(res, "InNames", String[])
+    disp_in_names = get(res, "DisplayInNames", in_names_list)
+    for c in in_cols_l
+        c_str = string(c)
+        push!(display_cols, c_str)
+        raw_n = replace(c_str, C.PRE_INPUT => "")
+        idx = findfirst(==(raw_n), in_names_list)
+        if !isnothing(idx) && idx <= length(disp_in_names)
+            push!(display_names, string(disp_in_names[idx]))
+        else
+            push!(display_names, raw_n)
+        end
+    end
+    
+    # Outputs Mapping (with DisplayOutNames fallback)
+    out_names_list = get(res, "OutNames", String[])
+    disp_out_names = get(res, "DisplayOutNames", out_names_list)
+    for c in pred_cols_l
+        c_str = string(c)
+        push!(display_cols, c_str)
+        raw_n = replace(c_str, C.PRE_PRED => "")
+        idx = findfirst(==(raw_n), out_names_list)
+        if !isnothing(idx) && idx <= length(disp_out_names)
+            push!(display_names, string(disp_out_names[idx]))
+        else
+            push!(display_names, raw_n)
+        end
+    end
+    
+    # Score Column Mapping
+    if !isnothing(score_col)
+        push!(display_cols,  string(lcols[score_col]))
+        push!(display_names, "Score")
+    end
+    
+    # HTML Rendering styling configuration
+    th_style = Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "4px 6px", "fontSize" => "10px", "whiteSpace" => "nowrap")
+    td_style = Dict("textAlign" => "center", "padding" => "3px 6px", "fontSize" => "10px")
+    
+    header_row = html_tr([html_th(n, style=th_style) for n in display_names])
+    body_rows  = [html_tr([
+        html_td(
+            let v = ldf[r, Symbol(c)]
+                ismissing(v) ? "-" : (v isa Number ? Printf.@sprintf("%.3f", v) : string(v))
+            end,
+            className = c == C.COL_SCORE ? "colourtx-c1sm" : "",
+            style=merge(td_style, c == C.COL_SCORE ? Dict("fontWeight" => "bold") : Dict())
+        ) for c in display_cols
+    ], style=Dict("borderBottom" => "1px solid var(--colour-val1-lighig)")) for r in 1:nrow(ldf)]
+    
+    return html_table([
+        html_thead(header_row),
+        html_tbody(body_rows),
+    ], className="table table-sm table-borderless mb-0 mx-auto", style=Dict("width" => "100%", "marginTop" => "5px"))
+end
 
 function LENS_BuildSlotCard_DDEF(i::Int)
     return html_div([
@@ -866,32 +949,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                     rep_b = Lib_Vise.VISE_GenerateScientificReport_DDEF(res_b)
                     
                     # 4. Build Leaders HTML
-                    ld_html = ""
-                    if !isempty(ldf)
-                        lcols = names(ldf)
-                        id_c = findfirst(c -> c == C.COL_EXP_ID || c == C.COL_ID, lcols)
-                        in_c = filter(c -> startswith(c, C.PRE_INPUT), lcols)
-                        pr_c = filter(c -> startswith(c, C.PRE_PRED),  lcols)
-                        sc_c = findfirst(==(C.COL_SCORE), lcols)
-                        dis_c = String[]; dis_n = String[]
-                        if !isnothing(id_c); push!(dis_c, lcols[id_c]); push!(dis_n, "ID") end
-                        for c in in_c; push!(dis_c, c); push!(dis_n, replace(c, C.PRE_INPUT => "")) end
-                        for c in pr_c; push!(dis_c, c); push!(dis_n, replace(c, C.PRE_PRED => "")) end
-                        if !isnothing(sc_c); push!(dis_c, lcols[sc_c]); push!(dis_n, "Score") end
-                        
-                        th_s = Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "4px 6px", "fontSize" => "10px", "whiteSpace" => "nowrap")
-                        td_s = Dict("textAlign" => "center", "padding" => "3px 6px", "fontSize" => "10px")
-                        
-                        ld_html = html_table([
-                            html_thead(html_tr([html_th(n, style=th_s) for n in dis_n])),
-                            html_tbody([html_tr([
-                                html_td(let v = ldf[r, Symbol(c)]; ismissing(v) ? "-" : (v isa Number ? @sprintf("%.3f", v) : string(v)) end,
-                                        className = c == C.COL_SCORE ? "colourtx-c1sm" : "",
-                                        style=merge(td_s, c == C.COL_SCORE ? Dict("fontWeight" => "bold") : Dict()))
-                                for c in dis_c
-                            ], style=Dict("borderBottom" => "1px solid var(--colour-val1-lighig)")) for r in 1:nrow(ldf)])
-                        ], className="table table-sm table-borderless mb-0 mx-auto", style=Dict("width" => "100%", "marginTop" => "5px"))
-                    end
+                    ld_html = LENS_BuildLeadersHTML_DDEF(ldf, res_b)
 
                     rad_b = (haskey(res_b, "RadioCorrection") && !isempty(res_b["RadioCorrection"])) ?
                             dbc_badge([html_i(className="fas fa-radiation me-1 colourtx-v5pb"), "Radio-Corrected"], className="ms-2 fw-bold colourgl-c4tg colourtx-v5pb") : ""
@@ -1071,65 +1129,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 
             leaders_html = ""
             if haskey(res, "Leaders") && !isempty(res["Leaders"])
-                ldf = res["Leaders"]
-                C = Sys_Fast.FAST_Data_DDEC
-                lcols = names(ldf)
-
-                id_col      = findfirst(c -> c == C.COL_EXP_ID || c == C.COL_ID, lcols)
-                in_cols_l   = filter(c -> startswith(c, C.PRE_INPUT), lcols)
-                pred_cols_l = filter(c -> startswith(c, C.PRE_PRED),  lcols)
-                score_col   = findfirst(==(C.COL_SCORE), lcols)
-
-                display_cols  = String[]
-                display_names = String[]
-                if !isnothing(id_col)
-                    push!(display_cols,  lcols[id_col])
-                    push!(display_names, "ID")
-                end
-                for (i, c) in enumerate(in_cols_l)
-                    push!(display_cols,  c)
-                    # Fetch from DisplayInNames if available, otherwise fallback to raw
-                    raw_n = replace(c, C.PRE_INPUT => "")
-                    idx = findfirst(==(raw_n), get(res, "InNames", []))
-                    if !isnothing(idx) && haskey(res, "DisplayInNames")
-                        push!(display_names, res["DisplayInNames"][idx])
-                    else
-                        push!(display_names, raw_n)
-                    end
-                end
-                for (i, c) in enumerate(pred_cols_l)
-                    push!(display_cols,  c)
-                    raw_n = replace(c, C.PRE_PRED => "")
-                    idx = findfirst(==(raw_n), get(res, "OutNames", []))
-                    if !isnothing(idx) && haskey(res, "DisplayOutNames")
-                        push!(display_names, res["DisplayOutNames"][idx])
-                    else
-                        push!(display_names, raw_n)
-                    end
-                end
-                if !isnothing(score_col)
-                    push!(display_cols,  lcols[score_col])
-                    push!(display_names, "Score")
-                end
-
-                th_style = Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "4px 6px", "fontSize" => "10px", "whiteSpace" => "nowrap")
-                td_style = Dict("textAlign" => "center", "padding" => "3px 6px", "fontSize" => "10px")
-
-                header_row = html_tr([html_th(n, style=th_style) for n in display_names])
-                body_rows  = [html_tr([
-                    html_td(
-                        let v = ldf[r, Symbol(c)]
-                            ismissing(v) ? "-" : (v isa Number ? @sprintf("%.3f", v) : string(v))
-                        end,
-                        className = c == C.COL_SCORE ? "colourtx-c1sm" : "",
-                        style=merge(td_style, c == C.COL_SCORE ? Dict("fontWeight" => "bold") : Dict())
-                    ) for c in display_cols
-                ], style=Dict("borderBottom" => "1px solid var(--colour-val1-lighig)")) for r in 1:nrow(ldf)]
-
-                leaders_html = html_table([
-                    html_thead(header_row),
-                    html_tbody(body_rows),
-                ], className="table table-sm table-borderless mb-0 mx-auto", style=Dict("width" => "100%", "marginTop" => "5px"))
+                leaders_html = LENS_BuildLeadersHTML_DDEF(res["Leaders"], res)
             end
             rad_badge = (haskey(res, "RadioCorrection") && !isempty(res["RadioCorrection"])) ?
                         dbc_badge([html_i(className="fas fa-radiation me-1 colourtx-v5pb"), "Radio-Corrected"], className="ms-2 fw-bold colourgl-c4tg colourtx-v5pb") : ""
@@ -1861,7 +1861,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         (isnothing(n) || n == 0 || isnothing(blob_st) || isempty(blob_st)) &&
             return Dash.no_update(), Dash.no_update()
 
-        graphs = JSON3.read(blob_st)
+        graphs = JSON3.read(blob_st, Vector{Dict{String, Any}})
         isempty(graphs) && return Dash.no_update(), Dash.no_update()
 
         try
@@ -2032,12 +2032,12 @@ function LENS_RegisterCallbacks_DDEF(app)
         n = lowercase(strip(name))
         
         # Selection of outputs explicitly bearing absolute radiochemical measurement units.
-        if occursin(r"mci|mbq|ci|gbq|kbq|bq|cpm|cps|dpm|dps|activity", u)
+        if occursin(r"\b(mci|mbq|ci|gbq|kbq|bq|cpm|cps|dpm|dps)\b|radioactivity|radio-activity", u)
             return true
         end
         
         # Fallback extrapolation for percentage-based yields mapping directly to isotope conversion efficiency.
-        if occursin(r"mci|mbq|ci|gbq|kbq|bq|cpm|cps|dpm|dps|activity|yield|rcy|rad|decay", n)
+        if occursin(r"\b(mci|mbq|ci|gbq|kbq|bq|cpm|cps|dpm|dps)\b|radioactivity|radio-activity|yield|rcy|rad\b|decay", n)
             return true
         end
         

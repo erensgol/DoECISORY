@@ -73,7 +73,7 @@ end
     FLOW_AskLeader_DDEF(LeaderVal, CurrentRange) -> (Valid, Msg)
 Evaluates the proximity of the selected leader to existing boundaries to prevent search space clipping.
 """
-function FLOW_AskLeader_DDEF(LeaderVal::Real, CurrentRange::AbstractVector{<:Real})
+function FLOW_AskLeader_DDEF(LeaderVal::Real, CurrentRange::Vector{Float64})
     status = FLOW_DetermineBoundaryStatus_DDEF(LeaderVal, CurrentRange[1], CurrentRange[3])
     return get(FLOW_BoundaryAlertMap_DDEC, typeof(status), (true, "Status OK."))
 end
@@ -189,10 +189,10 @@ function FLOW_GetCandidates_DDEF(MasterFile::Union{AbstractString,Nothing}, Curr
 end
 
 """
-    FLOW_CalcAdaptiveRange_DDEF(Val, L_Old, Zoom, Shift) -> Vector{Float64}
-Internal helper for search space adaptation logic.
+    FLOW_CalcAdaptiveRange_DDEF(Val, L_Old, Zoom, Shift, [MinLimit]) -> Vector{Float64}
+Internal helper for search space adaptation logic. Enforces MinLimit boundary clamping.
 """
-function FLOW_CalcAdaptiveRange_DDEF(Val::Real, L_Old::AbstractVector{<:Real}, Zoom::Real, Shift::Real)
+function FLOW_CalcAdaptiveRange_DDEF(Val::Real, L_Old::Vector{Float64}, Zoom::Real, Shift::Real, MinLimit::Real=0.0)::Vector{Float64}
     rng      = L_Old[3] - L_Old[1]
     status   = FLOW_DetermineBoundaryStatus_DDEF(Val, L_Old[1], L_Old[3])
     
@@ -202,7 +202,7 @@ function FLOW_CalcAdaptiveRange_DDEF(Val::Real, L_Old::AbstractVector{<:Real}, Z
     shift_val = Shift * (new_rng * 0.5)
     new_mid   = Val + shift_val
 
-    new_min = max(0.0, new_mid - new_rng / 2.0)
+    new_min = max(MinLimit, new_mid - new_rng / 2.0)
     new_max = new_min + new_rng
     
     # Absolute physical limit clamping (Forensic consistency).
@@ -220,8 +220,8 @@ end
     FLOW_BuildNextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor, Method, ShiftFactor) -> Dict
 Generates the subsequent experimental phase by mapping adaptive ranges to a coded design matrix.
 """
-function FLOW_BuildNextPhase_DDEF(MasterFile::Union{String,Nothing}, CurrentPhase::Union{String,Nothing},
-    SelectedLeaderID::Union{String,Nothing}="", ZoomFactor::Float64=0.5, Method::String="TL09", ShiftFactor::Float64=0.0)::Dict{String,Any}
+function FLOW_BuildNextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentPhase::Union{AbstractString,Nothing},
+    SelectedLeaderID::Union{AbstractString,Nothing}="", ZoomFactor::Real=0.5, Method::AbstractString="TL09", ShiftFactor::Real=0.0)::Dict{String,Any}
     
     (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict("Status" => "FAIL", "Message" => "Invalid master file path provided.")
     C   = Main.Sys_Fast.FAST_Data_DDEC
@@ -341,8 +341,9 @@ function FLOW_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5, Shif
         i, conf = vars[j]
         L_Old   = conf["Levels"]
         Val     = SelVals[j]
+        min_lim = Float64(get(conf, "Min", 0.0))
 
-        conf["Levels"] = FLOW_CalcAdaptiveRange_DDEF(Val, L_Old, ZoomFactor, ShiftFactor)
+        conf["Levels"] = FLOW_CalcAdaptiveRange_DDEF(Val, L_Old, ZoomFactor, ShiftFactor, min_lim)
 
         status = FLOW_DetermineBoundaryStatus_DDEF(Val, L_Old[1], L_Old[3])
         action = (abs(ShiftFactor) > 0.05) ? "SHIFT (MANUAL)" : get(FLOW_ActionTagMap_DDEC, typeof(status), "UPDATE")
@@ -357,7 +358,7 @@ end
     FLOW_WriteLeaders_DDEF(File, Phase, LeadersDF) -> Bool
 Persists prioritised candidates for the current phase to the shared master record.
 """
-function FLOW_WriteLeaders_DDEF(File::Union{String,Nothing}, Phase::Union{String,Nothing}, LeadersDF::DataFrame)
+function FLOW_WriteLeaders_DDEF(File::Union{AbstractString,Nothing}, Phase::Union{AbstractString,Nothing}, LeadersDF::DataFrame)
     (isnothing(File) || isempty(File) || isnothing(Phase) || isempty(Phase)) && return false
     
     C          = Main.Sys_Fast.FAST_Data_DDEC
@@ -391,21 +392,20 @@ end
 Enforces physical laboratory constraints on a transformed value.
 """
 function FLOW_BridgeValidate_DDEF(Val::Real, MinLimit::Real, MaxLimit::Real)::Tuple{Bool,Float64,String}
-    v_f   = Float64(Val)
-    min_f = Float64(MinLimit)
-    max_f = Float64(MaxLimit)
+    min_f = MinLimit
+    max_f = MaxLimit
 
-    min_f >= max_f && return (true, v_f, "")
+    min_f >= max_f && return (true, Val, "")
 
-    clamped = clamp(v_f, min_f, max_f)
-    if clamped != v_f
-        bound_name = (v_f < min_f) ? "LOWER" : "UPPER"
-        bound_val  = (v_f < min_f) ? min_f : max_f
-        msg = "Value $(round(v_f; digits=2)) exceeds $bound_name bound $(round(bound_val; digits=2)). Clamped."
+    clamped = clamp(Val, min_f, max_f)
+    if clamped != Val
+        bound_name = (Val < min_f) ? "LOWER" : "UPPER"
+        bound_val  = (Val < min_f) ? min_f : max_f
+        msg = "Value $(round(Val; digits=2)) exceeds $bound_name bound $(round(bound_val; digits=2)). Clamped."
         return (false, clamped, msg)
     end
 
-    return (true, v_f, "")
+    return (true, Val, "")
 end
 
 # ------------------------------------------------------------------------------

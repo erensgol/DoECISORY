@@ -8,8 +8,8 @@ module Gui_Base
 # Module Tag:  BASE
 # ==============================================================================
 
-using Dash
-using DashBootstrapComponents
+using Main.Dash
+using Main.DashBootstrapComponents
 using Main.Sys_Fast
 
 export BASE_StyleCell_DDEC, BASE_StyleInput_DDEC, BASE_StyleInputCentre_DDEC, 
@@ -84,30 +84,32 @@ const BASE_StyleInlineHeader_DDEC = Dict(
 
 const BASE_StyleHr_DDEC = Dict("borderColor" => "var(--colour-val1-lighig)", "margin" => "6px 0")
 
-const BASE_EmptyFigure_DDEC = Dict(
-    "data"   => [],
-    "layout" => Dict(
-        "width"          => 320,
-        "height"         => 400,
-        "autosize"       => false,
-        "paper_bgcolor"  => "var(--colour-val0-purwhi)",
-        "plot_bgcolor"   => "var(--colour-val2-liglow)",
-        "xaxis"          => Dict("visible" => false, "showgrid" => false, "zeroline" => false),
-        "yaxis"          => Dict("visible" => false, "showgrid" => false, "zeroline" => false),
-        "margin"         => Dict("l" => 0, "r" => 0, "t" => 0, "b" => 0),
-        "annotations"    => [
-            Dict(
-                "text"      => "<b>No Visualisation Data</b><br><span style='font-size:12px'>Run analysis to generate plots</span>",
-                "showarrow" => false,
-                "xref"      => "paper",
-                "yref"      => "paper",
-                "x"         => 0.5,
-                "y"         => 0.5,
-                "font"      => Dict("color" => "var(--colour-val4-darhig)", "size" => 16, "family" => "var(--font-sans)"),
-            )
-        ],
-    ),
-)
+const BASE_EmptyFigure_DDEC = let C = Sys_Fast.FAST_Data_DDEC
+    Dict(
+        "data"   => [],
+        "layout" => Dict(
+            "width"          => 320,
+            "height"         => 400,
+            "autosize"       => false,
+            "paper_bgcolor"  => C.COLOUR_PURWHI,
+            "plot_bgcolor"   => C.COLOUR_LIGLOW,
+            "xaxis"          => Dict("visible" => false, "showgrid" => false, "zeroline" => false),
+            "yaxis"          => Dict("visible" => false, "showgrid" => false, "zeroline" => false),
+            "margin"         => Dict("l" => 0, "r" => 0, "t" => 0, "b" => 0),
+            "annotations"    => [
+                Dict(
+                    "text"      => "<b>No Visualisation Data</b><br><span style='font-size:12px'>Run analysis to generate plots</span>",
+                    "showarrow" => false,
+                    "xref"      => "paper",
+                    "yref"      => "paper",
+                    "x"         => 0.5,
+                    "y"         => 0.5,
+                    "font"      => Dict("color" => C.COLOUR_DARHIG, "size" => 16, "family" => C.FONT_DEFAULT),
+                )
+            ],
+        ),
+    )
+end
 
 # ------------------------------------------------------------------------------
 # SECTION 2: GENERAL COMPONENT CONSTRUCTORS

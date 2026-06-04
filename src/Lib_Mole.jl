@@ -18,8 +18,8 @@ export MOLE_ParseTable_DDEF, MOLE_QuickAudit_DDEF,
     MOLE_CalcMass_DDEF, MOLE_ApproxEq_DDEF, 
     MOLE_ValidatePhysicalUnit_DDEF, MOLE_AuditMatrix_DDEF, 
     MOLE_AuditBatch_DDEF, MOLE_ValidateDesignFeasibility_DDEF, 
-    MOLE_Ingredient_DDES, MOLE_ApplyRadioDecay_DDEF, 
-    MOLE_ProcessDesign_DDEF, MOLE_GetPercentageEquivalent_DDEF,
+    MOLE_ApplyRadioDecay_DDEF, MOLE_ProcessDesign_DDEF, 
+    MOLE_GetPercentageEquivalent_DDEF,
     MOLE_IsTimeUnit_DDEF, MOLE_ConvertTimeToMinutes_DDEF
 
 # ==============================================================================
@@ -84,13 +84,6 @@ const MOLE_TimeFactorMap_DDEC = Dict{String, Float64}(
     "DAYS"      => 1440.0
 )
 
-struct MOLE_Ingredient_DDES
-    Name::String
-    Role::String            
-    Levels::Vector{Float64} 
-    MW::Float64             
-end
-
 # ------------------------------------------------------------------------------
 # SECTION 2: TIME-SERIES NORMALISATION GATEWAY
 # ------------------------------------------------------------------------------
@@ -124,14 +117,14 @@ end
     MOLE_ApplyRadioDecay_DDEF(RawValue, HalfLife, HalfLifeUnit, DeltaTMinutes; Reverse=false) -> Float64
 Calculates effective mass/activity after isothermal decay (Mapping for Forward or Reverse Decay).
 """
-function MOLE_ApplyRadioDecay_DDEF(RawValue::Float64, HalfLife::Float64, HalfLifeUnit::AbstractString, DeltaTMinutes::Float64; Reverse::Bool=false)
+function MOLE_ApplyRadioDecay_DDEF(RawValue::Real, HalfLife::Real, HalfLifeUnit::AbstractString, DeltaTMinutes::Real; Reverse::Bool=false)
     hl_minutes = MOLE_ConvertTimeToMinutes_DDEF(HalfLife, HalfLifeUnit)
-    hl_minutes <= 0.0 && return RawValue
+    hl_minutes <= 0.0 && return Float64(RawValue)
 
     lambda       = log(2) / hl_minutes
     decay_factor = exp((Reverse ? lambda : -lambda) * DeltaTMinutes)
     
-    return RawValue * decay_factor
+    return Float64(RawValue * decay_factor)
 end
 
 # ------------------------------------------------------------------------------
@@ -228,34 +221,12 @@ end
 # SECTION 7: MOLAR PERCENTAGE DISPATCH ENGINE
 # ------------------------------------------------------------------------------
 
-function MOLE_CalculatePercentage_DDEF(::MOLE_UnitMolar_DDES, Val, Scale, MW, Vol, Budget, RawU)
-    return Val * Scale * 100.0
-end
-
-function MOLE_CalculatePercentage_DDEF(::MOLE_UnitMass_DDES, Val, Scale, MW, Vol, Budget, RawU)
-    # Mass (mg) -> Millimoles -> % Relation
-    mmol = (Val * Scale) / MW
-    return (mmol / Budget) * 100.0
-end
-
-function MOLE_CalculatePercentage_DDEF(::MOLE_UnitConcentration_DDES, Val, Scale, MW, Vol, Budget, RawU)
-    # Concentration (mM) -> Millimoles -> % Relation
-    mmol = (Val * Scale) * (Vol / 1000.0)
-    return (mmol / Budget) * 100.0
-end
-
-function MOLE_CalculatePercentage_DDEF(::MOLE_UnitOther_DDES, Val, Scale, MW, Vol, Budget, RawU)
-    # Explicit fallback for Percentage Units that might be trapped.
-    occursin("%", RawU) && return Val * 1.0
-    return 0.0
-end
-
 """
     MOLE_GetPercentageEquivalent_DDEF(Value, UnitStr, MW, Vol, Conc) -> Float64
 Calculates the molar percentage contribution of a component within the system budget.
 This is used for accurate baseline validation (rough check) before full matrix generation.
 """
-function MOLE_GetPercentageEquivalent_DDEF(Value::Float64, UnitStr::AbstractString, MW::Float64, Vol::Float64, Conc::Float64)
+function MOLE_GetPercentageEquivalent_DDEF(Value::Float64, UnitStr::AbstractString, MW::Float64, Vol::Float64, Conc::Float64)::Float64
     (isnan(Vol) || isnan(Conc) || Vol <= 0.0 || Conc <= 0.0 || MW <= 0.0) && return 0.0
     budget = (Vol / 1000.0) * Conc
     budget <= 0.0 && return 0.0
@@ -263,10 +234,10 @@ function MOLE_GetPercentageEquivalent_DDEF(Value::Float64, UnitStr::AbstractStri
     return MOLE_CalculatePercentage_DDEF(u_type, Value, u_scale, MW, Vol, budget, lowercase(strip(UnitStr)))
 end
 
-MOLE_CalculatePercentage_DDEF(::MOLE_UnitMolar_DDES, v, s, mw, vol, b, u_str) = (u_str == "%m" || u_str == "%") ? v : v
-MOLE_CalculatePercentage_DDEF(::MOLE_UnitMass_DDES, v, s, mw, vol, b, u_str) = ((v * s) / mw / b) * 100.0
-MOLE_CalculatePercentage_DDEF(::MOLE_UnitConcentration_DDES, v, s, mw, vol, b, u_str) = (((vol / 1000.0) * (v * s)) / b) * 100.0
-MOLE_CalculatePercentage_DDEF(::MOLE_UnitOther_DDES, v, s, mw, vol, b, u_str) = 0.0
+MOLE_CalculatePercentage_DDEF(::MOLE_UnitMolar_DDES, v::Float64, s::Float64, mw::Float64, vol::Float64, b::Float64, u_str::AbstractString)::Float64 = (u_str == "%m" || u_str == "%") ? v : v
+MOLE_CalculatePercentage_DDEF(::MOLE_UnitMass_DDES, v::Float64, s::Float64, mw::Float64, vol::Float64, b::Float64, u_str::AbstractString)::Float64 = ((v * s) / mw / b) * 100.0
+MOLE_CalculatePercentage_DDEF(::MOLE_UnitConcentration_DDES, v::Float64, s::Float64, mw::Float64, vol::Float64, b::Float64, u_str::AbstractString)::Float64 = (((vol / 1000.0) * (v * s)) / b) * 100.0
+MOLE_CalculatePercentage_DDEF(::MOLE_UnitOther_DDES, v::Float64, s::Float64, mw::Float64, vol::Float64, b::Float64, u_str::AbstractString)::Float64 = 0.0
 
 """
     MOLE_ValidatePhysicalUnit_DDEF(ValueStr::String, ExpectedType::String) -> (Bool, Float64, String)
@@ -402,7 +373,12 @@ function MOLE_QuickAudit_DDEF(TableData::AbstractVector, Vol::Float64, Conc::Flo
 
     units = String[string(get(r, "Unit", "")) for r in D["Rows"]]
     mass_results = MOLE_CalcMass_DDEF(
-        D["Names"][idx_chem], D["MWs"][idx_chem], ratios[idx_chem], Vol, Conc, units[idx_chem]
+        Vector{String}(D["Names"][idx_chem]),
+        Vector{Float64}(D["MWs"][idx_chem]),
+        Vector{Float64}(ratios[idx_chem]),
+        Vol,
+        Conc,
+        Vector{String}(units[idx_chem])
     )
 
     total_moles_target_mmol = (Vol / 1000.0) * Conc
@@ -413,7 +389,7 @@ function MOLE_QuickAudit_DDEF(TableData::AbstractVector, Vol::Float64, Conc::Flo
             @printf(io, "![WARN] OVER-CONCENTRATED: Total moles (%.6f mmol) exceeds target (%.6f mmol). Breakdown reflects absolute input excess.\n", total_moles_calc, total_moles_target_mmol)
         # Identify instances of under-concentration and budget gaps.
         elseif total_moles_calc < total_moles_target_mmol * (1.0 - 1e-6) - 1e-9
-            @printf(io, "![WARN] UNDER-CONCENTRATED: Total moles (%.6f mmol) is below target budget. Ensure a 'Filler' or sufficient 'Ratio' components are defined.\n", total_moles_calc, total_moles_target_mmol)
+            @printf(io, "![WARN] UNDER-CONCENTRATED: Total moles (%.6f mmol) is below target budget (%.6f mmol). Ensure a 'Filler' or sufficient 'Ratio' components are defined.\n", total_moles_calc, total_moles_target_mmol)
         end
     end
 
@@ -631,7 +607,15 @@ function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
         if isempty(idx_chem)
             masses[i] = 0.0
         else
-            df        = MOLE_CalcMass_DDEF(n_chem, w_chem, r_chem, Vol, Conc, u_chem; SuppressLog=true)
+            df        = MOLE_CalcMass_DDEF(
+                Vector{String}(n_chem),
+                Vector{Float64}(w_chem),
+                Vector{Float64}(r_chem),
+                Vol,
+                Conc,
+                Vector{String}(u_chem);
+                SuppressLog=true
+            )
             masses[i] = sum(df.TARGET_MASS_mg)
         end
     end
@@ -785,7 +769,14 @@ function MOLE_ProcessDesign_DDEF(DesignMatrix::AbstractMatrix, TableData::Abstra
         
         chems = D["Idx_Chem"]
         units = String[string(get(r, "Unit", "-")) for r in D["Rows"][chems]]
-        m_df  = MOLE_CalcMass_DDEF(D["Names"][chems], D["MWs"][chems], current_ratios[chems], Vol, Conc, units)
+        m_df  = MOLE_CalcMass_DDEF(
+            Vector{String}(D["Names"][chems]),
+            Vector{Float64}(D["MWs"][chems]),
+            Vector{Float64}(current_ratios[chems]),
+            Vol,
+            Conc,
+            Vector{String}(units)
+        )
         
         for r in eachrow(m_df)
             k = C.PRE_MASS * r.Component * "_mg"

@@ -24,6 +24,7 @@ using Main.Lib_Mole
 using Main.Lib_Core
 using Main.Sys_Flow
 using HypothesisTests
+import HypothesisTests: pvalue
 
 export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
     VISE_Predict_DDEF, VISE_Execute_DDEF, VISE_CrossValidate_DDEF,
@@ -267,7 +268,7 @@ function VISE_LackOfFit_DDEF(X_Design::AbstractMatrix, Y::AbstractVector)
     n, p = size(X_Design)
     unique_rows = Dict{Vector{Float64},Vector{Float64}}()
     for i in 1:n
-        row = X_Design[i, :]
+        row = round.(Float64.(X_Design[i, :]); digits=5)
         push!(get!(unique_rows, row, Float64[]), Y[i])
     end
     ss_pe, df_pe = 0.0, 0
@@ -423,7 +424,7 @@ function VISE_PerformNormalityTest_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::
 
     try
         sw = HypothesisTests.ShapiroWilkTest(Resid)
-        p  = HypothesisTests.pvalue(sw)
+        p  = pvalue(sw)::Float64
         return Dict(
             "p"        => round(p; digits=4), 
             "IsNormal" => p > 0.05, 
@@ -466,7 +467,7 @@ end
     VISE_SelectBestModel_DDEF(X, Y, InNames) -> (BestModel, LogMsg)
 Evaluates multiple model structures and selects the optimal winner.
 """
-function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, InNames::AbstractVector{<:AbstractString}, RequestedType::AbstractString="Auto")
+function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, InNames::AbstractVector{<:AbstractString}, RequestedType::AbstractString="Auto")::Tuple{Dict{String, Any}, String}
     n      = size(X, 1)
     k      = 3
     # 1 + 2*3 + 3*(3-1)/2 = 10
@@ -477,7 +478,7 @@ function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector
     if req_type != "auto" && req_type != ""
         mod = VISE_Regress_DDEF(X, Y, req_type; InNames = InNames)
         mod["Q2"] = VISE_CrossValidate_DDEF(X, Y, req_type)
-        return (mod, "Forced $req_type")
+        return (convert(Dict{String, Any}, mod), "Forced $req_type")
     end
 
     # Evaluate candidate model structures including linear and quadratic variations.
@@ -485,7 +486,7 @@ function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector
     n > p_quad + 2 && push!(candidates, "quadratic")
 
     best_score  = -Inf
-    best_mod    = nothing
+    best_mod    = Dict{String, Any}()
     log_details = String[]
 
     for type_str in candidates
@@ -505,12 +506,12 @@ function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector
 
         if score > best_score
             best_score     = score
-            best_mod       = mod
+            best_mod       = convert(Dict{String, Any}, mod)
             best_mod["Q2"] = q2_safe
         end
     end
 
-    if isnothing(best_mod)
+    if isempty(best_mod)
         best_mod = Dict{String, Any}(
             "Status"    => "FAIL", 
             "Error"     => "All candidate models failed (collinear design or flat response variation).", 
@@ -537,7 +538,7 @@ end
 Calculates Predicted R² (Q²) using the PRESS statistic and Hat Matrix shortcut.
 """
 function VISE_CrossValidate_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Float64},
-    ModelType::AbstractString)
+    ModelType::AbstractString)::Float64
     N     = length(Y)
     N < 4 && return NaN
 
@@ -593,18 +594,20 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_B
     old_blas = LinearAlgebra.BLAS.get_num_threads()
     LinearAlgebra.BLAS.set_num_threads(1)
     try
-        # 1. Parallel Regression Matrix Expansion
+        # Pre-expand design matrices outside the thread loop to avoid garbage collection pressure
+        X_Linear = (RefType == "linear") ? X_Design : VISE_ExpandDesign_DDEF(Candidates, "linear")
+        X_Quadratic = (RefType == "quadratic") ? X_Design : VISE_ExpandDesign_DDEF(Candidates, "quadratic")
+
+        # 1. Parallel Regression Matrix Multiplication (Allocation-Free)
         Threads.@threads for m in 1:NumModels
             Mod = Models[m]
             Mod["Status"] != "OK" && continue
-            m_type_str = get(Mod, "ModelType", "quadratic")
-            m_type = Main.Lib_Core.CORE_GetModelType_DDEF(m_type_str)
+            m_type_str = lowercase(get(Mod, "ModelType", "quadratic"))
             Beta = collect(Float64, Mod["Coefs"])
-            if m_type_str != RefType
-                mul!(view(Predictions, :, m), VISE_ExpandMatrix_DDEF(m_type, Candidates), Beta)
-            else
-                mul!(view(Predictions, :, m), X_Design, Beta)
-            end
+            
+            X_eff = (m_type_str == "linear") ? X_Linear : X_Quadratic
+            mul!(view(Predictions, :, m), X_eff, Beta)
+            
             Active_Flags[m] = true
         end
 
@@ -799,9 +802,9 @@ end
     VISE_TrainEnsemble_DDEF(X, Y, InNames, ModelType, Goals, Log) -> Vector{Dict}
 Parallelised ensemble trainer that selects the optimal model structure for each response variable.
 """
-function VISE_TrainEnsemble_DDEF(X::AbstractMatrix{Float64}, Y::AbstractMatrix{Float64}, InNames::AbstractVector{<:AbstractString}, ModelType::AbstractString, Goals::AbstractVector, Log)
+function VISE_TrainEnsemble_DDEF(X::AbstractMatrix{Float64}, Y::AbstractMatrix{Float64}, InNames::AbstractVector{<:AbstractString}, ModelType::AbstractString, Goals::AbstractVector, Log)::Vector{Dict{String, Any}}
     n_out = size(Y, 2)
-    models = Vector{Dict}(undef, n_out)
+    models = Vector{Dict{String, Any}}(undef, n_out)
     tasks = Task[]
     for m in 1:n_out
         t = Threads.@spawn begin
@@ -1424,10 +1427,10 @@ function VISE_AssembleBundle_DDEF(phase, in_n, out_n, disp_in, disp_out, models,
 end
 
 """
-    VISE_ExportToExcel_DDEF(Res::Dict, FilePath::String) -> Bool
+    VISE_ExportToExcel_DDEF(Res::Dict, FilePath::AbstractString) -> Bool
 Produces a high-fidelity academic Excel report with multiple analytical sheets.
 """
-function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::String)
+function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::AbstractString)
     Main.Sys_Fast.FAST_Log_DDEF("VISE", "EXPORT", "Generating High-Fidelity Scientific Portfolio: $FilePath", "WAIT")
     try
         XLSX.openxlsx(FilePath, mode="w") do xf
@@ -1443,9 +1446,8 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::String)
             X_Raw = Res["X_Clean"]
             Y_Raw = Res["Y_Clean"]
             
-            # Guarantees that even if deserialised as Vector{Vector{Any}} from JSON, it becomes a Matrix.
-            X_Clean = X_Raw isa AbstractMatrix ? X_Raw : Matrix{Float64}(reduce(vcat, transpose.(Vector{Float64}.(X_Raw))))
-            Y_Clean = Y_Raw isa AbstractMatrix ? Y_Raw : Matrix{Float64}(reduce(vcat, transpose.(Vector{Float64}.(Y_Raw))))
+            X_Clean = VISE_PrepareMatrix_DDEF(X_Raw)
+            Y_Clean = VISE_PrepareMatrix_DDEF(Y_Raw)
             
             row_idx = 2
             for (i, out_name) in enumerate(get(Res, "DisplayOutNames", get(Res, "OutNames", [])))

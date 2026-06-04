@@ -8,8 +8,8 @@ module Gui_Deck
 # Module Tag:  DECK
 # ==============================================================================
 
-using Dash
-using DashBootstrapComponents
+using Main.Dash
+using Main.DashBootstrapComponents
 using Base64
 using DataFrames
 using Main.Sys_Fast
@@ -49,6 +49,54 @@ function DECK_GetDefaultRow_DDEF(i::Int)
         "Min" => 0.0, "Max" => 0.0, "MW" => 0.0, "Unit" => "-",
         "IsRadioactive" => false, "HalfLife" => 0.0, "HalfLifeUnit" => "Hours"
     )
+end
+
+"""
+    DECK_SafeNumZero_DDEF(x) -> Float64
+Converts `x` using `FAST_SafeNum_DDEF`. If the result is NaN, returns 0.0.
+"""
+function DECK_SafeNumZero_DDEF(x)
+    v = Sys_Fast.FAST_SafeNum_DDEF(x)
+    return isnan(v) ? 0.0 : v
+end
+
+"""
+    DECK_GetSafeKey_DDEF(d, k, def)
+Implementation of a robust key-access mechanism for polymorphic dictionary synchronisation.
+"""
+function DECK_GetSafeKey_DDEF(d, k, def)
+    isnothing(d) && return def
+    # Verification of primary string-based key existence.
+    v = get(d, string(k), nothing)
+    !isnothing(v) && return v
+    # Verification of secondary symbol-based key existence.
+    v = get(d, Symbol(k), nothing)
+    !isnothing(v) && return v
+    return def
+end
+
+"""
+    DECK_MapImportRow_DDEF(inputs::AbstractVector; override_roles::Bool=true) -> Vector{Dict{String,Any}}
+Maps imported factor raw data structures into the standardised Daisho row format.
+"""
+function DECK_MapImportRow_DDEF(inputs::AbstractVector; override_roles::Bool=true)
+    return map(enumerate(inputs)) do (i, m)
+        role_val = override_roles ? (i <= 3 ? "Variable" : "Fixed") : string(DECK_GetSafeKey_DDEF(m, "Role", "Variable"))
+        Dict(
+            "Name" => DECK_GetSafeKey_DDEF(m, "Name", ""), 
+            "Role" => role_val,
+            "L1" => DECK_GetSafeKey_DDEF(m, "L1", 0.0), 
+            "L2" => DECK_GetSafeKey_DDEF(m, "L2", 0.0),
+            "L3" => DECK_GetSafeKey_DDEF(m, "L3", 0.0), 
+            "Min" => DECK_GetSafeKey_DDEF(m, "Min", 0.0),
+            "Max" => DECK_GetSafeKey_DDEF(m, "Max", 0.0), 
+            "MW" => DECK_GetSafeKey_DDEF(m, "MW", 0.0),
+            "Unit" => DECK_GetSafeKey_DDEF(m, "Unit", "-"),
+            "IsRadioactive" => DECK_GetSafeKey_DDEF(m, "IsRadioactive", false),
+            "HalfLife" => Float64(DECK_GetSafeKey_DDEF(m, "HalfLife", 0.0)),
+            "HalfLifeUnit" => string(DECK_GetSafeKey_DDEF(m, "HalfLifeUnit", "Hours"))
+        )
+    end
 end
 
 # ------------------------------------------------------------------------------
@@ -968,19 +1016,9 @@ function DECK_RegisterCallbacks_DDEF(app)
 # SECTION 11: SYSTEM LEVEL HELPERS (POLYMORPHIC)
 # ------------------------------------------------------------------------------
 
-            # Implementation of a robust key-access mechanism for polymorphic dictionary synchronisation.
-            function DECK_GetSafeKey_DDEF(d, k, def)
-                isnothing(d) && return def
-                # Verification of primary string-based key existence.
-                v = get(d, string(k), nothing)
-                !isnothing(v) && return v
-                # Verification of secondary symbol-based key existence.
-                v = get(d, Symbol(k), nothing)
-                !isnothing(v) && return v
-                return def
-            end
+            # DECK_GetSafeKey_DDEF is defined at the module level
 
-            DECK_SafeNumZero_DDEF(x) = (v = Sys_Fast.FAST_SafeNum_DDEF(x); isnan(v) ? 0.0 : v)
+
 
             # Extraction and normalisation of global system parameters.
             idx_gl = 11 + DECK_MaxRows_DDEC + 2 + 9 * DECK_MaxRows_DDEC
@@ -1161,17 +1199,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     base64_data = split(up_memo, ",")[end]
                     json_str = String(base64decode(base64_data))
                     memo = JSON3.read(json_str)
-                    loaded_rows = map(enumerate(DECK_GetSafeKey_DDEF(memo, "Inputs", []))) do (i, m)
-                        Dict("Name" => DECK_GetSafeKey_DDEF(m, "Name", ""), 
-                            "Role" => (i <= 3 ? "Variable" : "Fixed"),
-                            "L1" => DECK_GetSafeKey_DDEF(m, "L1", 0.0), "L2" => DECK_GetSafeKey_DDEF(m, "L2", 0.0),
-                            "L3" => DECK_GetSafeKey_DDEF(m, "L3", 0.0), "Min" => DECK_GetSafeKey_DDEF(m, "Min", 0.0),
-                            "Max" => DECK_GetSafeKey_DDEF(m, "Max", 0.0), "MW" => DECK_GetSafeKey_DDEF(m, "MW", 0.0),
-                            "Unit" => DECK_GetSafeKey_DDEF(m, "Unit", "-"),
-                            "IsRadioactive" => DECK_GetSafeKey_DDEF(m, "IsRadioactive", false),
-                            "HalfLife" => Float64(DECK_GetSafeKey_DDEF(m, "HalfLife", 0.0)),
-                            "HalfLifeUnit" => string(DECK_GetSafeKey_DDEF(m, "HalfLifeUnit", "Hours")))
-                    end
+                    loaded_rows = DECK_MapImportRow_DDEF(DECK_GetSafeKey_DDEF(memo, "Inputs", []))
                     lbl = html_div([html_i(className="fas fa-folder-open me-2"), "Memory Loaded"],
                                    className="badge p-2 w-100", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr3-toncya)", "fontSize" =>"0.85rem"))
                     real_count = 0
@@ -1216,17 +1244,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, lbl, NO, NO, NO, NO, fill(NO, 6))
                 end
 
-                loaded_rows = map(enumerate(DECK_GetSafeKey_DDEF(memo, "Inputs", []))) do (i, m)
-                    Dict("Name" => DECK_GetSafeKey_DDEF(m, "Name", ""), 
-                        "Role" => (i <= 3 ? "Variable" : "Fixed"),
-                        "L1" => DECK_GetSafeKey_DDEF(m, "L1", 0.0), "L2" => DECK_GetSafeKey_DDEF(m, "L2", 0.0),
-                        "L3" => DECK_GetSafeKey_DDEF(m, "L3", 0.0), "Min" => DECK_GetSafeKey_DDEF(m, "Min", 0.0),
-                        "Max" => DECK_GetSafeKey_DDEF(m, "Max", 0.0), "MW" => DECK_GetSafeKey_DDEF(m, "MW", 0.0),
-                        "Unit" => DECK_GetSafeKey_DDEF(m, "Unit", "-"),
-                        "IsRadioactive" => DECK_GetSafeKey_DDEF(m, "IsRadioactive", false),
-                        "HalfLife" => Float64(DECK_GetSafeKey_DDEF(m, "HalfLife", 0.0)),
-                        "HalfLifeUnit" => string(DECK_GetSafeKey_DDEF(m, "HalfLifeUnit", "Hours")))
-                end
+                loaded_rows = DECK_MapImportRow_DDEF(DECK_GetSafeKey_DDEF(memo, "Inputs", []))
 
                 lbl = html_div([html_i(className="fas fa-book-medical me-2"), "Sample Applied (JSON)"],
                                className="badge p-2 w-100", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr1-shamag)", "fontSize" =>"0.85rem","boxShadow" =>"0 2px 5px var(--colour-val3-darlow)"))
@@ -1348,16 +1366,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                         data = JSON3.read(json_str)
                         
                         ingreds = DECK_GetSafeKey_DDEF(data, "Ingredients", DECK_GetSafeKey_DDEF(data, "Inputs", []))
-                        mapped = map(ingreds) do itm
-                            Dict("Name" => DECK_GetSafeKey_DDEF(itm, "Name", ""), "Role" => DECK_GetSafeKey_DDEF(itm, "Role", "Variable"),
-                                "L1" => DECK_GetSafeKey_DDEF(itm, "L1", 0.0), "L2" => DECK_GetSafeKey_DDEF(itm, "L2", 0.0),
-                                "L3" => DECK_GetSafeKey_DDEF(itm, "L3", 0.0), "Min" => DECK_GetSafeKey_DDEF(itm, "Min", 0.0), "Max" => DECK_GetSafeKey_DDEF(itm, "Max", 0.0), "MW" => DECK_GetSafeKey_DDEF(itm, "MW", 0.0),
-                                "Unit" => DECK_GetSafeKey_DDEF(itm, "Unit", "-"),
-                                "IsRadioactive" => DECK_GetSafeKey_DDEF(itm, "IsRadioactive", false),
-                                "HalfLife" => Float64(DECK_GetSafeKey_DDEF(itm, "HalfLife", 0.0)),
-                                "HalfLifeUnit" => string(DECK_GetSafeKey_DDEF(itm, "HalfLifeUnit", "Hours")),
-                                )
-                        end
+                        mapped = DECK_MapImportRow_DDEF(ingreds; override_roles=false)
                         real_count = 0
                         for (i, r) in enumerate(mapped)
                             if !isempty(strip(string(get(r, "Name", ""))))
@@ -1407,16 +1416,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                             all_ingreds = DECK_GetSafeKey_DDEF(cfg, "Ingredients", [])
                             filtered_ingreds = filter(itm -> string(get(itm, "Role", get(itm, :Role, ""))) != "Filler", all_ingreds)
                             
-                            mapped = map(enumerate(filtered_ingreds)) do (i, itm)
-                                Dict("Name" => DECK_GetSafeKey_DDEF(itm, "Name", ""), 
-                                    "Role" => (i <= 3 ? "Variable" : "Fixed"),
-                                    "L1" => DECK_GetSafeKey_DDEF(itm, "L1", 0.0), "L2" => DECK_GetSafeKey_DDEF(itm, "L2", 0.0),
-                                    "L3" => DECK_GetSafeKey_DDEF(itm, "L3", 0.0), "Min" => DECK_GetSafeKey_DDEF(itm, "Min", 0.0), "Max" => DECK_GetSafeKey_DDEF(itm, "Max", 0.0), "MW" => DECK_GetSafeKey_DDEF(itm, "MW", 0.0),
-                                    "Unit" => DECK_GetSafeKey_DDEF(itm, "Unit", "-"),
-                                    "IsRadioactive" => DECK_GetSafeKey_DDEF(itm, "IsRadioactive", false),
-                                    "HalfLife" => Float64(DECK_GetSafeKey_DDEF(itm, "HalfLife", 0.0)),
-                                    "HalfLifeUnit" => string(DECK_GetSafeKey_DDEF(itm, "HalfLifeUnit", "Hours")))
-                            end
+                            mapped = DECK_MapImportRow_DDEF(filtered_ingreds)
                             real_count = 0
                             for (i, r) in enumerate(mapped)
                                 if !isempty(strip(string(get(r, "Name", ""))))
@@ -1528,7 +1528,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             trig == "deck-btn-audit-close" && return Dash.no_update(), false
             trig != "deck-btn-audit" && return Dash.no_update(), is_op
 
-            DECK_SafeNumZero_DDEF(x) = (v = Sys_Fast.FAST_SafeNum_DDEF(x); isnan(v) ? 0.0 : v)
+
             count = isnothing(store_data) ? 1 : get(store_data, "count", 1)
             rows = Dict{String,Any}[]
             for i in 1:count
@@ -1691,7 +1691,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             all_mws = collect(args[offset+7DECK_MaxRows_DDEC:offset+8DECK_MaxRows_DDEC-1])
             all_units = collect(args[offset+8DECK_MaxRows_DDEC:offset+9DECK_MaxRows_DDEC-1])
 
-            DECK_SafeNumZero_DDEF(x) = (v = Sys_Fast.FAST_SafeNum_DDEF(x); isnan(v) ? 0.0 : v)
+
             count = isnothing(store_data) ? 1 : get(store_data, "count", 1)
             in_d = Dict{String,Any}[]
             for i in 1:count

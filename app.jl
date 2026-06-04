@@ -12,6 +12,17 @@
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
+# SECTION 0: AUTOMATIC DEPENDENCY BOOTSTRAP
+# ------------------------------------------------------------------------------
+using Logging
+Logging.disable_logging(Logging.Error)
+using Pkg
+if Pkg.project().path != joinpath(@__DIR__, "Project.toml")
+    Pkg.activate(@__DIR__)
+end
+Pkg.instantiate()
+
+# ------------------------------------------------------------------------------
 # SECTION 1: ENVIRONMENT & STABILITY CONFIGURATIONS
 # ------------------------------------------------------------------------------
 
@@ -35,12 +46,16 @@ ENV["GKSwstype"]               = "100"
 ENV["JULIA_WEBIO_NOT_AVAILABLE"] = "1"
 ENV["PLOTLY_KALEIDO_NO_SANDBOX"] = "1"
 
+using Logging
+Logging.disable_logging(Logging.Error)
+old_stderr = stderr
+redirect_stderr(devnull)
 using Dash
 using DashBootstrapComponents
-using Pkg
+redirect_stderr(old_stderr)
+
 using DataFrames
 using PlotlyJS
-using Logging
 using LoggingExtras
 
 # ------------------------------------------------------------------------------
@@ -54,7 +69,8 @@ else
     8060 
 end
 
-const APP_HasRevise_DDEC = if APP_IsHfSpaces_DDEC
+const APP_HasSysimage_DDEC = occursin(r"sysimage\.(dll|so|dylib)", unsafe_string(Base.JLOptions().image_file))
+const APP_HasRevise_DDEC = if APP_IsHfSpaces_DDEC || APP_HasSysimage_DDEC
     false
 else
     try
@@ -139,13 +155,14 @@ using Main.Gui_Base
 using Main.Gui_Deck
 using Main.Gui_Lens
 
+Logging.disable_logging(Logging.BelowMinLevel)
 FAST_Log_DDEF("BOOT", "Complete", "All Modules Integrated", "OK")
-
-Sys_Fast.FAST_InitialiseWorkforce_DDEF()
 
 # ==============================================================================
 # PART B: UI FRAMEWORK & DASH LAYOUT
 # ==============================================================================
+
+function APP_MainRun_DDEF()
 
 # ------------------------------------------------------------------------------
 # SECTION 6: DASH APP INITIALISATION
@@ -194,7 +211,7 @@ app.index_string = """
 # SECTION 7: GLOBAL UI COMPONENTS
 # ------------------------------------------------------------------------------
 
-const APP_Navbar_DDEC = html_div([
+APP_Navbar_DDEC = html_div([
     html_div([
         dcc_link(html_div([
             html_img(src="/assets/favicon.ico", style=Dict("height" => "32px", "marginRight" => "10px", "borderRadius" => "4px")),
@@ -215,13 +232,13 @@ const APP_Navbar_DDEC = html_div([
     ], className="nav-actions", style=Dict("flex" => "1", "textAlign" => "right")),
 ], className="glass-navbar d-flex align-items-center justify-content-between")
 
-const APP_Content_DDEC = html_div(id="page-content", className="app-container")
+APP_Content_DDEC = html_div(id="page-content", className="app-container")
 
 # ------------------------------------------------------------------------------
 # SECTION 8: APPLICATION PERSISTENCE STORES
 # ------------------------------------------------------------------------------
 
-const APP_SystemReady_DDEC = Threads.Atomic{Bool}(false)
+APP_SystemReady_DDEC = Threads.Atomic{Bool}(false)
 
 app.layout = html_div([
     dcc_location(id="url", refresh=false),
@@ -312,7 +329,7 @@ function APP_SyncVault_DDEF(deck::Any, lens::Any, lens_analysis::Any)
     ctx = callback_context()
     isempty(ctx.triggered) && return Dash.no_update()
     
-    trig::String = split(ctx.triggered[1].prop_id, ".")[1]
+    trig = split(ctx.triggered[1].prop_id, ".")[1]
 
     if trig == "sync-deck-content"
         return deck
@@ -338,10 +355,10 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    APP_RoutePage_DDEF(pathname::String) -> Any
+    APP_RoutePage_DDEF(pathname::AbstractString) -> Any
 Top-level routing orchestrator for navigating between experimental and analytical modules.
 """
-function APP_RoutePage_DDEF(pathname::String)
+function APP_RoutePage_DDEF(pathname::AbstractString)
     if pathname == "/design"
         return DECK_Layout_DDEF()
     elseif pathname == "/analysis"
@@ -522,19 +539,39 @@ end
 Manages the visibility of the initial loading screen based on background JIT pre-compilation status.
 """
 function APP_HandleLoadingOverlay_DDEF(n::Any)
-    ready::Bool = APP_SystemReady_DDEC[]
-    n_val::Int  = isnothing(n) ? 0 : Int(n)
+    try
+        ready::Bool = APP_SystemReady_DDEC[]
+        
+        # Safe numeric parsing of interval count
+        n_val = 0
+        if !isnothing(n)
+            parsed_n = tryparse(Int, string(n))
+            n_val = isnothing(parsed_n) ? 0 : parsed_n
+        end
 
-    # Status check logging active during pre-operation phase with regulated polling frequency.
-    if !ready && n_val % 10 == 0
-        Sys_Fast.FAST_Log_DDEF("BOOT", "UI_SYNC", "Status Check: Waiting for System Pre-compilation... (Poll #$n_val)", "INFO")
-    end
+        # Status check logging active during pre-operation phase with regulated polling frequency.
+        if !ready && n_val % 10 == 0
+            Sys_Fast.FAST_Log_DDEF("BOOT", "UI_SYNC", "Status Check: Waiting for System Pre-compilation... (Poll #$n_val)", "INFO")
+        end
 
-    if ready
+        if ready
+            return Dict("display" => "none"), true
+        end
+        
+        # If JIT has been polling for too long (e.g. > 15 intervals = 30 seconds), force unlock as fail-safe
+        if n_val > 15
+            Sys_Fast.FAST_Log_DDEF("BOOT", "UI_SYNC", "Timeout threshold exceeded ($n_val polls). Force releasing loading overlay.", "WARN")
+            APP_SystemReady_DDEC[] = true
+            return Dict("display" => "none"), true
+        end
+
+        return Dash.no_update(), false
+    catch e
+        Sys_Fast.FAST_Log_DDEF("BOOT", "UI_SYNC_FAIL", "Error in loading overlay sync: $e. Releasing lock.", "FAIL")
+        # Fail-safe: Always release the overlay on exception
+        APP_SystemReady_DDEC[] = true
         return Dict("display" => "none"), true
     end
-    
-    return Dash.no_update(), false
 end
 
 callback!(app,
@@ -676,14 +713,14 @@ function APP_Warmup_DDEF()::Nothing
         Lib_Arts.ARTS_Draw_DDEF(Lib_Arts.ARTS_PlotQQ_DDES(), rand(10), "Pulse-Q")
         
         GC.gc()
+        APP_SystemReady_DDEC[] = true
+        elapsed                = round(time() - t0; digits=2)
+        FAST_Log_DDEF("BOOT", "Pre-compilation", "JIT complete ($(elapsed)s) — System Ready.", "OK")
     catch e
-        FAST_Log_DDEF("BOOT", "Warmup_Warn", "JIT pulse encountered warnings: $(sprint(showerror, e))", "WARN")
+        FAST_Log_DDEF("BOOT", "Warmup_Fail", "JIT pre-compilation failed: $(sprint(showerror, e))", "FAIL")
+        # Fail-safe recovery: Force system ready to prevent permanent UI loading lock
+        APP_SystemReady_DDEC[] = true
     end
-
-    APP_SystemReady_DDEC[] = true
-    elapsed                = round(time() - t0; digits=2)
-    
-    FAST_Log_DDEF("BOOT", "Pre-compilation", "JIT complete ($(elapsed)s) — System Ready.", "OK")
     return nothing
 end
 
@@ -712,3 +749,8 @@ catch e
     println("\n>>> CRITICAL SERVER BOOT ERROR: $e")
     rethrow(e)
 end
+
+end # function APP_MainRun_DDEF
+
+# Start the application
+APP_MainRun_DDEF()

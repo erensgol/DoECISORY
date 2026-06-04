@@ -203,7 +203,7 @@ function ARTS_AdaptiveGridN_DDEF(preferred::Integer, max_total::Integer=ARTS_Max
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 6: DYNAMIC HARDWARE RESOLUTION & DOWNSAMPLING
+# SECTION 6: DYNAMIC HARDWARE RESOLUTION & DOWNSAMPLING & MATRIX PREPARATION
 # ------------------------------------------------------------------------------
 
 """
@@ -211,7 +211,7 @@ end
 Returns a dynamic grid resolution (N) based on available system hardware threads.
 Rule: N=61 for ≤4 threads, N=101 for >4 threads.
 """
-function ARTS_GetDynamicN_DDEF()::Integer
+function ARTS_GetDynamicN_DDEF()::Int
     threads = Main.Sys_Fast.FAST_GetComputeThreads_DDEF()
     return (threads <= 4 ? 61 : 101)
 end
@@ -282,6 +282,65 @@ function ARTS_SmoothMatrix_DDEF(Z::AbstractMatrix{Float64}, passes::Integer=1)
 end
 
 """
+    ARTS_PrepareMatrix_DDEF(M) -> Matrix{Float64}
+Defensive matrix converter for JSON/store deserialised arrays or generic matrices.
+"""
+function ARTS_PrepareMatrix_DDEF(M::Matrix{Float64})
+    return M
+end
+
+function ARTS_PrepareMatrix_DDEF(M::AbstractMatrix)
+    return Float64.(collect(M))
+end
+
+function ARTS_PrepareMatrix_DDEF(M::AbstractVector)
+    if !isempty(M) && all(m -> m isa AbstractVector, M)
+        return Float64.(reduce(vcat, transpose.(collect.(M))))
+    end
+    return Float64.(collect(M))
+end
+
+function ARTS_PrepareMatrix_DDEF(M::Any)
+    return Float64.(collect(M))
+end
+
+"""
+    ARTS_PrepareStringVector_DDEF(S) -> Vector{String}
+Defensive string vector converter that returns the vector directly if already Vector{String}.
+"""
+function ARTS_PrepareStringVector_DDEF(S::Vector{String})
+    return S
+end
+
+function ARTS_PrepareStringVector_DDEF(S::AbstractVector)
+    return collect(String, map(string, S))
+end
+
+"""
+    ARTS_PrepareFloatVector_DDEF(V) -> Vector{Float64}
+Defensive float vector converter that returns the vector directly if already Vector{Float64}.
+"""
+function ARTS_PrepareFloatVector_DDEF(V::Vector{Float64})
+    return V
+end
+
+function ARTS_PrepareFloatVector_DDEF(V::AbstractVector)
+    return collect(Float64, V)
+end
+
+"""
+    ARTS_PrepareNestedVector_DDEF(N) -> Vector{Vector{Float64}}
+Defensive nested float vector converter that returns the vector directly if already Vector{Vector{Float64}}.
+"""
+function ARTS_PrepareNestedVector_DDEF(N::Vector{Vector{Float64}})
+    return N
+end
+
+function ARTS_PrepareNestedVector_DDEF(N::AbstractVector)
+    return [collect(Float64, s) for s in N]
+end
+
+"""
     ARTS_HexToRGBA_DDEF(hex, alpha) -> String
     Converts hex colour strings to RGBA format for Plotly transparency support.
 """
@@ -324,23 +383,11 @@ function ARTS_GenerateAlphaViridis_DDEF(thresh::AbstractFloat)
 end
 
 # ==============================================================================
-# PART B: MULTI-OBJECTIVE DESIRABILITY ENGINE (REDIRECTS)
+# PART B: ACADEMIC DIAGNOSTICS & PLOTTING
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 7: MULTI-OBJECTIVE GOAL REDIRECTS
-# ------------------------------------------------------------------------------
-
-# ------------------------------------------------------------------------------
-# SECTION 8: DERRINGER DESIRABILITY SCORING (DEPRECATED IN ARTS)
-# ------------------------------------------------------------------------------
-
-# ==============================================================================
-# PART C: ACADEMIC DIAGNOSTICS & PLOTTING
-# ==============================================================================
-
-# ------------------------------------------------------------------------------
-# SECTION 9: PARETO ANALYSIS VISUALISER (MULTIPLE DISPATCH)
+# SECTION 7: PARETO ANALYSIS VISUALISER (MULTIPLE DISPATCH)
 # ------------------------------------------------------------------------------
 
 """
@@ -401,7 +448,7 @@ function ARTS_Draw_DDEF(::ARTS_PlotPareto_DDES, Model::AbstractDict, OutName::Ab
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 10: PREDICTION ACCURACY PLOTS
+# SECTION 8: PREDICTION ACCURACY PLOTS
 # ------------------------------------------------------------------------------
 
 """
@@ -431,11 +478,11 @@ function ARTS_Draw_DDEF(::ARTS_PlotFit_DDES, Y_Real::AbstractVector{Float64}, Y_
 end
 
 # ==============================================================================
-# PART D: RESPONSE SURFACE METHODOLOGY (RSM) ANALYTICS
+# PART C: RESPONSE SURFACE METHODOLOGY (RSM) ANALYTICS
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 11: RSM INTERNAL PREDICTION GATEWAY
+# SECTION 9: RSM INTERNAL PREDICTION GATEWAY
 # ------------------------------------------------------------------------------
 
 """
@@ -492,7 +539,7 @@ function ARTS_PredictQuadratic_DDEF(X, Beta, buff_Xd)
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 12: PREDICTION GRID CONSTRUCTOR
+# SECTION 10: PREDICTION GRID CONSTRUCTOR
 # ------------------------------------------------------------------------------
 
 function ARTS_BuildGrid_DDEF(X::AbstractMatrix{Float64}, ix::Integer, iy::Integer, N_requested::Integer, buff_Grid::Union{Nothing, AbstractMatrix{Float64}}=nothing)
@@ -514,7 +561,7 @@ function ARTS_BuildGrid_DDEF(X::AbstractMatrix{Float64}, ix::Integer, iy::Intege
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 13: 3D RESPONSE SURFACE RENDERER
+# SECTION 11: 3D RESPONSE SURFACE RENDERER
 # ------------------------------------------------------------------------------
 
 """
@@ -556,7 +603,7 @@ function ARTS_Draw_DDEF(::ARTS_PlotSurface_DDES, Model::AbstractDict, X::Abstrac
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 14: 2D CONTOUR PROJECTION RENDERER 
+# SECTION 12: 2D CONTOUR PROJECTION RENDERER 
 # ------------------------------------------------------------------------------
 
 """
@@ -594,11 +641,11 @@ function ARTS_Draw_DDEF(::ARTS_PlotContour_DDES, Model::AbstractDict, X::Abstrac
 end
 
 # ==============================================================================
-# PART E: SOLUTION SPACE MAPPING & OPTIMISATION
+# PART D: SOLUTION SPACE MAPPING & OPTIMISATION
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 15: INTERACTION SLICE ANALYSER
+# SECTION 13: INTERACTION SLICE ANALYSER
 # ------------------------------------------------------------------------------
 
 """
@@ -638,7 +685,7 @@ function ARTS_Draw_DDEF(::ARTS_PlotSlice_DDES, Model::AbstractDict, X::AbstractM
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 16: MAIN EFFECT TREND VISUALISER
+# SECTION 14: MAIN EFFECT TREND VISUALISER
 # ------------------------------------------------------------------------------
 
 """
@@ -672,7 +719,7 @@ function ARTS_Draw_DDEF(::ARTS_PlotTrend_DDES, Model::AbstractDict, X::AbstractM
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 17: DESIRABILITY SPACE EXPLORER
+# SECTION 15: DESIRABILITY SPACE EXPLORER
 # ------------------------------------------------------------------------------
 
 """
@@ -777,7 +824,7 @@ function ARTS_RenderSpaceCore_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Id
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 18: 3D OPTIMAL ZONE VOLUME RENDERER
+# SECTION 16: 3D OPTIMAL ZONE VOLUME RENDERER
 # ------------------------------------------------------------------------------
 
 """
@@ -830,7 +877,7 @@ function ARTS_Draw_DDEF(::ARTS_PlotOptimalZone_DDES, Models, Goals, X::AbstractM
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 19: INTERACTION LANDSCAPE HEATMAP
+# SECTION 17: INTERACTION LANDSCAPE HEATMAP
 # ------------------------------------------------------------------------------
 
 """
@@ -880,7 +927,7 @@ end
 ARTS_GetInteractionMatrix_DDEF(::Main.Lib_Core.CORE_ModelLinear_DDES, B::AbstractVector) = zeros(3, 3)
 
 # ------------------------------------------------------------------------------
-# SECTION 20: DIAGNOSTIC PLOTS
+# SECTION 18: DIAGNOSTIC PLOTS
 # ------------------------------------------------------------------------------
 
 function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::AbstractString)
@@ -934,7 +981,7 @@ function ARTS_Draw_DDEF(::ARTS_PlotSensitivity_DDES, Sens::AbstractVector{Float6
 end
 
 # ==============================================================================
-# PART G: SYSTEM DISPATCH & ORCHESTRATION
+# PART E: SYSTEM DISPATCH & ORCHESTRATION
 # ==============================================================================
 
 """
@@ -948,6 +995,16 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
     ARTS_SafeErrorLog_DDEF(tag, msg, e) = Main.Sys_Fast.FAST_Log_DDEF("ARTS", tag, "$msg: $(typeof(e)) -> $(sprint(showerror, e))", "WARN")
     Main.Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_INIT", "Parallel Visual Dispatch Initiated...", "WAIT")
 
+    # Defensive conversion of JSON-deserialised or generic inputs
+    X_f64 = ARTS_PrepareMatrix_DDEF(X)
+    Y_f64 = ARTS_PrepareMatrix_DDEF(Y)
+    InNames_str = ARTS_PrepareStringVector_DDEF(InNames)
+    OutNames_str = ARTS_PrepareStringVector_DDEF(OutNames)
+    R2s_f64 = ARTS_PrepareFloatVector_DDEF(R2s)
+    Q2s_f64 = ARTS_PrepareFloatVector_DDEF(Q2s)
+    Sens_f64 = ARTS_PrepareNestedVector_DDEF(Sens)
+    Residuals_f64 = ARTS_PrepareNestedVector_DDEF(Residuals)
+
     Combos = collect(combinations(1:3, 2))
     tasks  = Task[]
 
@@ -959,14 +1016,14 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
     
     # --- STAGE 1: PRIORITY GROUPS (1: Pareto, 2: Fit) ---
     if Mode == :Full || Mode == :Priority
-        for m in eachindex(OutNames)
+        for m in eachindex(OutNames_str)
             Models[m]["Status"] != "OK" && continue
-            name   = OutNames[m]
-            y_pred = ARTS_Predict_DDEF(Models[m], X)
+            name   = OutNames_str[m]
+            y_pred = ARTS_Predict_DDEF(Models[m], X_f64)
 
             # [1] Pareto (QA)
             t1 = Threads.@spawn try
-                p = ARTS_Draw_DDEF(ARTS_PlotPareto_DDES(), Models[m], name, R2s[m], Q2s[m])
+                p = ARTS_Draw_DDEF(ARTS_PlotPareto_DDES(), Models[m], name, R2s_f64[m], Q2s_f64[m])
                 lock(graphs_lock) do
                     push!(graphs, Dict("Type"=>"Pareto", "Title"=>"Pareto: $name", "Plot"=>p, "OutputIdx"=>m, "SubIdx"=>0))
                 end
@@ -975,7 +1032,7 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
 
             # [2] Fit Audit (QA)
             t2 = Threads.@spawn try
-                p = ARTS_Draw_DDEF(ARTS_PlotFit_DDES(), Y[:, m], y_pred, name)
+                p = ARTS_Draw_DDEF(ARTS_PlotFit_DDES(), Y_f64[:, m], y_pred, name)
                 lock(graphs_lock) do
                     push!(graphs, Dict("Type"=>"Fit", "Title"=>"Fit Audit: $name", "Plot"=>p, "OutputIdx"=>m, "SubIdx"=>0))
                 end
@@ -989,17 +1046,17 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
 
     # --- STAGE 2: DEFERRED GROUPS (3-13: RESP, SURFACE, DIAG, SPACE) ---
     if Mode == :Full || Mode == :Deferred
-        for m in eachindex(OutNames)
+        for m in eachindex(OutNames_str)
             Models[m]["Status"] != "OK" && continue
-            name   = OutNames[m]
-            y_pred = ARTS_Predict_DDEF(Models[m], X)
+            name   = OutNames_str[m]
+            y_pred = ARTS_Predict_DDEF(Models[m], X_f64)
 
             # [3] Response Trends (RESP)
             for v in 1:3
                 tv = Threads.@spawn try
-                    p = ARTS_Draw_DDEF(ARTS_PlotTrend_DDES(), Models[m], X, Y[:, m], [v], [InNames[v]], name)
+                    p = ARTS_Draw_DDEF(ARTS_PlotTrend_DDES(), Models[m], X_f64, Y_f64[:, m], [v], [InNames_str[v]], name)
                     lock(graphs_lock) do
-                        push!(graphs, Dict("Type"=>"Trend", "Title"=>"Trend: $name ($(InNames[v]))", "Plot"=>p, "OutputIdx"=>m, "SubIdx"=>v))
+                        push!(graphs, Dict("Type"=>"Trend", "Title"=>"Trend: $name ($(InNames_str[v]))", "Plot"=>p, "OutputIdx"=>m, "SubIdx"=>v))
                     end
                 catch e; ARTS_SafeErrorLog_DDEF("ERR_P3_TREND", "Trend failed", e); end
                 push!(tasks, tv)
@@ -1008,10 +1065,10 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
             # [4] Interaction Slices (RESP)
             for (ix, c) in enumerate(Combos)
                 ts = Threads.@spawn try
-                    lbls_12 = [InNames[c[1]], InNames[c[2]]]
-                    lbls_21 = [InNames[c[2]], InNames[c[1]]]
-                    p1 = ARTS_Draw_DDEF(ARTS_PlotSlice_DDES(), Models[m], X, [c[1], c[2]], lbls_12, name)
-                    p2 = ARTS_Draw_DDEF(ARTS_PlotSlice_DDES(), Models[m], X, [c[2], c[1]], lbls_21, name)
+                    lbls_12 = [InNames_str[c[1]], InNames_str[c[2]]]
+                    lbls_21 = [InNames_str[c[2]], InNames_str[c[1]]]
+                    p1 = ARTS_Draw_DDEF(ARTS_PlotSlice_DDES(), Models[m], X_f64, [c[1], c[2]], lbls_12, name)
+                    p2 = ARTS_Draw_DDEF(ARTS_PlotSlice_DDES(), Models[m], X_f64, [c[2], c[1]], lbls_21, name)
                     lock(graphs_lock) do
                         push!(graphs, Dict("Type"=>"Slice", "Title"=>"Interact: $name ($(lbls_12[1]) by $(lbls_12[2]))", "Plot"=>p1, "OutputIdx"=>m, "SubIdx"=>ix))
                         push!(graphs, Dict("Type"=>"Slice", "Title"=>"Interact: $name ($(lbls_21[1]) by $(lbls_21[2]))", "Plot"=>p2, "OutputIdx"=>m, "SubIdx"=>ix))
@@ -1022,7 +1079,7 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
 
             # [5] Interaction Matrix (RESP)
             t5 = Threads.@spawn try
-                p = ARTS_Draw_DDEF(ARTS_PlotInteractionMatrix_DDES(), Models[m], InNames, name)
+                p = ARTS_Draw_DDEF(ARTS_PlotInteractionMatrix_DDES(), Models[m], InNames_str, name)
                 lock(graphs_lock) do
                     push!(graphs, Dict("Type"=>"IntMatrix", "Title"=>"Landscape: $name", "Plot"=>p, "OutputIdx"=>m, "SubIdx"=>0))
                 end
@@ -1032,9 +1089,9 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
             # [6 & 7] Surface & Contour (SURFACE)
             for (ix, c) in enumerate(Combos)
                 tsury = Threads.@spawn try
-                    lbls = [InNames[c[1]], InNames[c[2]]]
-                    p1 = ARTS_Draw_DDEF(ARTS_PlotSurface_DDES(), Models[m], X, [c[1], c[2]], lbls, name)
-                    p2 = ARTS_Draw_DDEF(ARTS_PlotContour_DDES(), Models[m], X, [c[1], c[2]], lbls, name)
+                    lbls = [InNames_str[c[1]], InNames_str[c[2]]]
+                    p1 = ARTS_Draw_DDEF(ARTS_PlotSurface_DDES(), Models[m], X_f64, [c[1], c[2]], lbls, name)
+                    p2 = ARTS_Draw_DDEF(ARTS_PlotContour_DDES(), Models[m], X_f64, [c[1], c[2]], lbls, name)
                     lock(graphs_lock) do
                         push!(graphs, Dict("Type"=>"Surface", "Title"=>"RSM: $name ($(lbls[1])-$(lbls[2]))", "Plot"=>p1, "OutputIdx"=>m, "SubIdx"=>ix))
                         push!(graphs, Dict("Type"=>"Contour", "Title"=>"Contour: $name ($(lbls[1])-$(lbls[2]))", "Plot"=>p2, "OutputIdx"=>m, "SubIdx"=>ix))
@@ -1045,16 +1102,16 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
 
             # [8, 9, 10] Forensics (QQ, Residuals, Sensitivity)
             t_diag = Threads.@spawn try
-                if m <= length(Residuals) && !isempty(Residuals[m])
-                    p_qq = ARTS_Draw_DDEF(ARTS_PlotQQ_DDES(), Residuals[m], name)
-                    p_res = ARTS_Draw_DDEF(ARTS_PlotResiduals_DDES(), y_pred, Residuals[m], name)
+                if m <= length(Residuals_f64) && !isempty(Residuals_f64[m])
+                    p_qq = ARTS_Draw_DDEF(ARTS_PlotQQ_DDES(), Residuals_f64[m], name)
+                    p_res = ARTS_Draw_DDEF(ARTS_PlotResiduals_DDES(), y_pred, Residuals_f64[m], name)
                     lock(graphs_lock) do
                         push!(graphs, Dict("Type"=>"QQ", "Title"=>"Q-Q: $name", "Plot"=>p_qq, "OutputIdx"=>m, "SubIdx"=>0))
                         push!(graphs, Dict("Type"=>"Residuals", "Title"=>"Errors: $name", "Plot"=>p_res, "OutputIdx"=>m, "SubIdx"=>0))
                     end
                 end
-                if m <= length(Sens) && !isempty(Sens[m])
-                    p_sens = ARTS_Draw_DDEF(ARTS_PlotSensitivity_DDES(), Sens[m], InNames, name)
+                if m <= length(Sens_f64) && !isempty(Sens_f64[m])
+                    p_sens = ARTS_Draw_DDEF(ARTS_PlotSensitivity_DDES(), Sens_f64[m], InNames_str, name)
                     lock(graphs_lock) do
                         push!(graphs, Dict("Type"=>"Sensitivity", "Title"=>"Sensitivity: $name", "Plot"=>p_sens, "OutputIdx"=>m, "SubIdx"=>0))
                     end
@@ -1070,19 +1127,19 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
             if all(m -> get(m, "Status", "FAIL") == "OK", Models)
                 if get(Opts, "DesignSpace", true) && !isempty(Combos)
                     for (ix, c) in enumerate(Combos)
-                        lbls = [InNames[c[1]], InNames[c[2]], InNames[first(setdiff(1:3, c))]]
-                        p_sp = ARTS_Draw_DDEF(ARTS_PlotDesignSpace_DDES(), Models, Goals, X, c, lbls, Leaders_DF)
-                        p_ca, _ = ARTS_Draw_DDEF(ARTS_PlotCandidates_DDES(), Models, Goals, X, c, lbls, Leaders_DF)
+                        lbls = [InNames_str[c[1]], InNames_str[c[2]], InNames_str[first(setdiff(1:3, c))]]
+                        p_sp = ARTS_Draw_DDEF(ARTS_PlotDesignSpace_DDES(), Models, Goals, X_f64, c, lbls, Leaders_DF)
+                        p_ca, _ = ARTS_Draw_DDEF(ARTS_PlotCandidates_DDES(), Models, Goals, X_f64, c, lbls, Leaders_DF)
                         lock(graphs_lock) do
-                            push!(graphs, Dict("Type"=>"DesignSpace", "Title"=>"Space: $(lbls[1])-$(lbls[2])", "Plot"=>p_sp, "OutputIdx"=>length(OutNames)+1, "SubIdx"=>ix))
-                            push!(graphs, Dict("Type"=>"Candidates", "Title"=>"Candidates: $(lbls[1])-$(lbls[2])", "Plot"=>p_ca, "OutputIdx"=>length(OutNames)+1, "SubIdx"=>ix))
+                            push!(graphs, Dict("Type"=>"DesignSpace", "Title"=>"Space: $(lbls[1])-$(lbls[2])", "Plot"=>p_sp, "OutputIdx"=>length(OutNames_str)+1, "SubIdx"=>ix))
+                            push!(graphs, Dict("Type"=>"Candidates", "Title"=>"Candidates: $(lbls[1])-$(lbls[2])", "Plot"=>p_ca, "OutputIdx"=>length(OutNames_str)+1, "SubIdx"=>ix))
                         end
                     end
                 end
                 if get(Opts, "OptimalZone", true)
-                    p_gz, _ = ARTS_Draw_DDEF(ARTS_PlotOptimalZone_DDES(), Models, Goals, X, InNames, Leaders_DF)
+                    p_gz, _ = ARTS_Draw_DDEF(ARTS_PlotOptimalZone_DDES(), Models, Goals, X_f64, InNames_str, Leaders_DF)
                     lock(graphs_lock) do
-                        push!(graphs, Dict("Type"=>"OptimalZone", "Title"=>"Optimal Zone", "Plot"=>p_gz, "OutputIdx"=>length(OutNames)+1, "SubIdx"=>0))
+                        push!(graphs, Dict("Type"=>"OptimalZone", "Title"=>"Optimal Zone", "Plot"=>p_gz, "OutputIdx"=>length(OutNames_str)+1, "SubIdx"=>0))
                     end
                 end
             else
@@ -1109,4 +1166,4 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
     return graphs
 end
 
-end # module Lib_Arts
+end

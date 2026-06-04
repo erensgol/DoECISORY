@@ -2,8 +2,8 @@
 # DAISHODOE - HUGGING FACE SPACES DOCKERFILE 
 # ======================================================================================
 
-# Use the official Julia 1.11 image
-FROM julia:1.11-bookworm
+# Use the official Julia 1.12 image
+FROM julia:1.12-bookworm
 
 # Switch to root to install ALL missing system dependencies for Plotly/Kaleido/WebIO
 USER root

@@ -386,7 +386,7 @@ end
 Writes to the Excel file using a buffered approach to prevent data truncation.
 Implements robust retry logic for "File in Use" scenarios.
 """
-function FAST_SafeExcelWrite_DDEF(File::String, Updates::Dict{String,DataFrame})::Nothing
+function FAST_SafeExcelWrite_DDEF(File::AbstractString, Updates::Dict{<:AbstractString,DataFrame})::Nothing
     isempty(File) && return nothing
     
     all_data    = Dict{String,DataFrame}()
@@ -470,8 +470,10 @@ function FAST_SafeExcelWrite_DDEF(File::String, Updates::Dict{String,DataFrame})
                 FAST_Log_DDEF("FAST", "IO_WRITE", "Updates synchronised: $(File)", "OK")
                 
                 # Zero-Bug Sync Protocol: Invalidate RAM cache to ensure next read hits the physical disk.
-                if haskey(FAST_ConfigCache_DDEC, File)
-                    delete!(FAST_ConfigCache_DDEC, File)
+                lock(FAST_ConfigCacheLock_DDEC) do
+                    if haskey(FAST_ConfigCache_DDEC, File)
+                        delete!(FAST_ConfigCache_DDEC, File)
+                    end
                 end
                 
                 return nothing
@@ -490,7 +492,7 @@ function FAST_SafeExcelWrite_DDEF(File::String, Updates::Dict{String,DataFrame})
     return nothing
 end
 
-FAST_SafeExcelWrite_DDEF(::Nothing, ::Dict{String,DataFrame}) = nothing
+FAST_SafeExcelWrite_DDEF(::Nothing, ::Dict{<:AbstractString,DataFrame}) = nothing
 
 """
     FAST_RoundCols_DDEF!(df::DataFrame)::DataFrame
@@ -914,13 +916,16 @@ end
 
 # Scientific Configuration Cache (Transient memory buffer for Zero-IO Analysis)
 const FAST_ConfigCache_DDEC = Dict{String, Any}() # Path => (Timestamp, Dict)
+const FAST_ConfigCacheLock_DDEC = ReentrantLock()
 
 """
     FAST_ClearConfigCache_DDEF() 
 Manually invalidates the MasterConfig cache.
 """
 function FAST_ClearConfigCache_DDEF()
-    empty!(FAST_ConfigCache_DDEC)
+    lock(FAST_ConfigCacheLock_DDEC) do
+        empty!(FAST_ConfigCache_DDEC)
+    end
     return true
 end
 
@@ -930,15 +935,21 @@ Reads the MasterConfig from an existing Excel file's CONFIG sheet with transpare
 """
 FAST_ReadConfig_DDEF(::Nothing) = Dict{String,Any}()
 
-function FAST_ReadConfig_DDEF(File::String)::Dict{String,Any}
+function FAST_ReadConfig_DDEF(File::AbstractString)::Dict{String,Any}
     isempty(File) && return Dict{String,Any}()
     
     # 1. Scientific Cache Audit
     now_ts = time()
-    if haskey(FAST_ConfigCache_DDEC, File)
-        ts, cache_dict = FAST_ConfigCache_DDEC[File]
-        (now_ts - ts) < 120.0 && return cache_dict
+    cached = lock(FAST_ConfigCacheLock_DDEC) do
+        if haskey(FAST_ConfigCache_DDEC, File)
+            ts, cache_dict = FAST_ConfigCache_DDEC[File]
+            if (now_ts - ts) < 120.0
+                return cache_dict
+            end
+        end
+        return nothing
     end
+    !isnothing(cached) && return cached
 
     try
         C = FAST_Data_DDEC
@@ -956,7 +967,9 @@ function FAST_ReadConfig_DDEF(File::String)::Dict{String,Any}
         end
         
         config = JSON3.read(js_val, Dict{String,Any})
-        FAST_ConfigCache_DDEC[File] = (now_ts, config)
+        lock(FAST_ConfigCacheLock_DDEC) do
+            FAST_ConfigCache_DDEC[File] = (now_ts, config)
+        end
         return config
     catch e
         FAST_Log_DDEF("FAST", "READ_CONFIG_FAIL", "Error reading config from $File: $e", "WARN")
@@ -970,7 +983,7 @@ Surgically updates specific keys in the MasterConfig stored in the Excel file.
 """
 FAST_UpdateConfig_DDEF(::Nothing, ::Dict) = false
 
-function FAST_UpdateConfig_DDEF(File::String, Updates::Dict)::Bool
+function FAST_UpdateConfig_DDEF(File::AbstractString, Updates::Dict)::Bool
     try
         (isempty(File) || !isfile(File)) && return false
         C = FAST_Data_DDEC
@@ -1017,7 +1030,7 @@ end
 Loads a standardised DDE Memo file (JSON) from the local filesystem.
 Returns an empty dictionary if the file is not found or is corrupt.
 """
-function FAST_LoadMemoFile_DDEF(FilePath::String)::Dict{String,Any}
+function FAST_LoadMemoFile_DDEF(FilePath::AbstractString)::Dict{String,Any}
     try
         if !isfile(FilePath)
             FAST_Log_DDEF("FAST", "MEMO_NOT_FOUND", "Project reference $FilePath missing.", "WARN")
@@ -1038,22 +1051,46 @@ end
 
 # Global atomic lock pool — keyed by operation name
 const FAST_OperationLocks_DDEC = Dict{String,ReentrantLock}()
+const FAST_OperationLockTimes_DDEC = Dict{String,Float64}()
 const FAST_LockGuard_DDEC = ReentrantLock()
 
 """
-    FAST_AcquireLock_DDEF(op_name, Reason::String="Unspecified") -> Bool
-Attempts to acquire a named operation lock without blocking. Status telemetry is documented for system transparency.
+    FAST_AcquireLock_DDEF(op_name, Reason::AbstractString="Unspecified") -> Bool
+Attempts to acquire a named operation lock without blocking. If the lock is held for more than 10.0 seconds, it is forcefully reset and re-acquired. Status telemetry is documented for system transparency.
 """
-FAST_AcquireLock_DDEF(::Nothing, ::String="Unspecified") = false
+FAST_AcquireLock_DDEF(::Nothing, ::AbstractString="Unspecified") = false
 
-function FAST_AcquireLock_DDEF(op_name::String, Reason::String="Unspecified")::Bool
+function FAST_AcquireLock_DDEF(op_name::AbstractString, Reason::AbstractString="Unspecified")::Bool
     isempty(op_name) && return false
+    now_time = time()
+    
     lock(FAST_LockGuard_DDEC) do
         haskey(FAST_OperationLocks_DDEC, op_name) || (FAST_OperationLocks_DDEC[op_name] = ReentrantLock())
+        
+        # Check lock timeout (10 seconds)
+        lk = FAST_OperationLocks_DDEC[op_name]
+        if islocked(lk) && haskey(FAST_OperationLockTimes_DDEC, op_name)
+            held_duration = now_time - FAST_OperationLockTimes_DDEC[op_name]
+            if held_duration > 10.0
+                FAST_Log_DDEF("SYS", "LOCK_TIMEOUT", "Lock: $op_name has been held for $(round(held_duration; digits=1))s. Force unlocking.", "WARN")
+                try
+                    while islocked(lk)
+                        unlock(lk)
+                    end
+                catch e
+                    FAST_Log_DDEF("SYS", "LOCK_TIMEOUT_ERR", "Failed to force unlock: $e", "FAIL")
+                end
+                delete!(FAST_OperationLockTimes_DDEC, op_name)
+            end
+        end
     end
+    
     lk = FAST_OperationLocks_DDEC[op_name]
     success = trylock(lk)
     if success
+        lock(FAST_LockGuard_DDEC) do
+            FAST_OperationLockTimes_DDEC[op_name] = now_time
+        end
         FAST_Log_DDEF("SYS", "LOCK_ACQUIRE", "Lock: $op_name | Reason: $Reason", "OK")
     else
         FAST_Log_DDEF("SYS", "LOCK_REJECT", "Lock: $op_name | Active Process Detected", "WARN")
@@ -1062,12 +1099,12 @@ function FAST_AcquireLock_DDEF(op_name::String, Reason::String="Unspecified")::B
 end
 
 """
-    FAST_ReleaseLock_DDEF(op_name::Union{String,Nothing})
+    FAST_ReleaseLock_DDEF(op_name::Union{AbstractString,Nothing})
 Releases the named operation lock safely. Telemetry records release status and handles reentrancy or ownership violations.
 """
 FAST_ReleaseLock_DDEF(::Nothing) = nothing
 
-function FAST_ReleaseLock_DDEF(op_name::String)
+function FAST_ReleaseLock_DDEF(op_name::AbstractString)
     isempty(op_name) && return nothing
     haskey(FAST_OperationLocks_DDEC, op_name) || return nothing
     lk = FAST_OperationLocks_DDEC[op_name]
@@ -1078,6 +1115,9 @@ function FAST_ReleaseLock_DDEF(op_name::String)
             if still_locked
                 FAST_Log_DDEF("SYS", "LOCK_RELEASE_PARTIAL", "Lock: $op_name (Reentrancy Level Decreased)", "INFO")
             else
+                lock(FAST_LockGuard_DDEC) do
+                    delete!(FAST_OperationLockTimes_DDEC, op_name)
+                end
                 FAST_Log_DDEF("SYS", "LOCK_RELEASE", "Lock: $op_name (Active Lock: OFF)", "INFO")
             end
         catch e
@@ -1096,6 +1136,7 @@ Clears all operation locks from the global pool. Reserved exclusively for system
 function FAST_ForceReleaseAll_DDEF()
     lock(FAST_LockGuard_DDEC) do
         empty!(FAST_OperationLocks_DDEC)
+        empty!(FAST_OperationLockTimes_DDEC)
     end
     FAST_Log_DDEF("SYS", "LOCK_FLUSH", "All operation locks successfully cleared during system recovery.", "WARN")
     return nothing
