@@ -1,7 +1,7 @@
 module Gui_Deck
 
 # ==============================================================================
-# DAISHODOE FRAMEWORK - GUI DECK (EXPERIMENTAL DESIGN)
+# DOECISORY - GUI DECK (EXPERIMENTAL DESIGN)
 # ==============================================================================
 # Description: Experimental design workspace, matrix generation, and protocol 
 #              export.
@@ -77,7 +77,7 @@ end
 
 """
     DECK_MapImportRow_DDEF(inputs::AbstractVector; override_roles::Bool=true) -> Vector{Dict{String,Any}}
-Maps imported factor raw data structures into the standardised Daisho row format.
+Maps imported factor raw data structures into the standardised DoECISORY row format.
 """
 function DECK_MapImportRow_DDEF(inputs::AbstractVector; override_roles::Bool=true)
     return map(enumerate(inputs)) do (i, m)
@@ -390,7 +390,7 @@ function DECK_Layout_DDEF()
                         ], style=Dict("display" => "none"))
                 ], style=Dict("display" => "none"))
             ], xs=12)),
-            BASE_PageHeader_DDEF("Experimental Design and Protocol Management", "The system is architected to operate with 3 independent (x) and 3 dependent (y) variables, functioning with 5 degrees of freedom (df)."),
+            BASE_PageHeader_DDEF("Experimental Design and Protocol Management", "Configure 3-factor design matrices, factor boundaries, and stoichiometry to generate experimental protocols."),
 
                 dbc_row([
                     # Initialisation of the Left Interface Column for factor definition.
@@ -507,15 +507,62 @@ function DECK_Layout_DDEF()
                                 BASE_ControlGroup_DDEF("Design Method",
                                     dcc_dropdown(id="deck-dd-method",
                                         options = [
-                                            Dict("label" => "Box-Behnken (15 Runs, Quadratic)", "value" => "BB15"),
-                                            Dict("label" => "D-Optimal (15 Runs, Quadratic)",   "value" => "DOPT15"),
-                                            Dict("label" => "Taguchi L9 (9 Runs, Linear)",       "value" => "TL09"),
-                                            Dict("label" => "D-Optimal (9 Runs, Linear)",       "value" => "DOPT09"),
+                                            Dict("label" => "Box-Behnken (15 Runs, Quadratic)",        "value" => "BB15"),
+                                            Dict("label" => "Central Composite (17 Runs, Quadratic)",    "value" => "CD17"),
+                                            Dict("label" => "D-Optimal (14 Runs, Quadratic)",            "value" => "DF14"),
+                                            Dict("label" => "Taguchi L9 (9 Runs, Linear)",               "value" => "TL09"),
                                         ],
                                         value     = "BB15", 
                                         clearable = false, 
-                                        className = "mb-3"
+                                        className = "mb-2 dd-method-compact"
                                     )),
+                                
+                                html_div(id="deck-direction-container", style=Dict("display" => "none"), children=[
+                                    html_div([
+                                        dbc_label("Target Factor Directions (DF14)", className="x-small fw-bold text-uppercase mb-2 d-block colourtx-v3dl"),
+                                        dbc_row([
+                                            dbc_col([
+                                                dbc_label("X₁ Direction", className="x-small mb-1 d-block fw-semibold"),
+                                                dcc_dropdown(
+                                                    id="deck-dir-x1",
+                                                    options=[
+                                                        Dict("label" => "−1 (Min)", "value" => -1),
+                                                        Dict("label" => "+1 (Max)", "value" => 1),
+                                                    ],
+                                                    value=-1,
+                                                    clearable=false,
+                                                    className="small"
+                                                ),
+                                            ], xs=12, className="mb-2"),
+                                            dbc_col([
+                                                dbc_label("X₂ Direction", className="x-small mb-1 d-block fw-semibold"),
+                                                dcc_dropdown(
+                                                    id="deck-dir-x2",
+                                                    options=[
+                                                        Dict("label" => "−1 (Min)", "value" => -1),
+                                                        Dict("label" => "+1 (Max)", "value" => 1),
+                                                    ],
+                                                    value=-1,
+                                                    clearable=false,
+                                                    className="small"
+                                                ),
+                                            ], xs=12, className="mb-2"),
+                                            dbc_col([
+                                                dbc_label("X₃ Direction", className="x-small mb-1 d-block fw-semibold"),
+                                                dcc_dropdown(
+                                                    id="deck-dir-x3",
+                                                    options=[
+                                                        Dict("label" => "−1 (Min)", "value" => -1),
+                                                        Dict("label" => "+1 (Max)", "value" => 1),
+                                                    ],
+                                                    value=-1,
+                                                    clearable=false,
+                                                    className="small"
+                                                ),
+                                            ], xs=12, className="mb-1"),
+                                        ], className="g-1"),
+                                    ], className="p-2 border rounded colourbg-v0pw mb-3", style=Dict("borderColor" => "var(--colour-val1-lighig)"))
+                                ]),
                                 
                                 BASE_Separator_DDEF(),
                                 
@@ -560,7 +607,7 @@ end
     DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method) -> (Success, Message)
 Orchestrates the generation and validation of an experimental protocol Excel document.
 """
-function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, stoch_data, project="Daisho")
+function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, stoch_data, project="DoECISORY"; direction=[-1, -1, -1])
     C = Sys_Fast.FAST_Data_DDEC
     # Local alias definitions for architectural scoping.
     L_PT   = Main.Lib_Mole.MOLE_ParseTable_DDEF
@@ -667,7 +714,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
             push!(all_out_names, n)
         end
 
-        design_coded = Lib_Core.CORE_GenDesign_DDEF(method, num_vars)
+        design_coded = Lib_Core.CORE_GenDesign_DDEF(method, num_vars, direction)
         N_Runs       = size(design_coded, 1)
         configs      = [Dict("Levels" => [D["Rows"][i]["L1"], D["Rows"][i]["L2"], D["Rows"][i]["L3"]]) for i in D["Idx_Var"]]
         real_matrix  = Lib_Core.CORE_MapLevels_DDEF(design_coded, configs)
@@ -751,7 +798,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
 
         ConfigDict = Dict(
             "Ingredients" => D["Rows"],
-            "Global"      => Dict("Volume" => sv, "Conc" => sc, "Method" => method, "ProjectName" => project, "FillerName" => f_name, "FillerMW" => f_mw, "DEfficiency" => d_eff),
+            "Global"      => Dict("Volume" => sv, "Conc" => sc, "Method" => method, "Direction" => direction, "ProjectName" => project, "FillerName" => f_name, "FillerMW" => f_mw, "DEfficiency" => d_eff),
             "Outputs"     => output_data,
         )
         
@@ -797,6 +844,19 @@ function DECK_RegisterCallbacks_DDEF(app)
 # ------------------------------------------------------------------------------
 # SECTION 10: INTERFACE & STATE CALLBACKS
 # ------------------------------------------------------------------------------
+
+    # Visibility Orchestration of DF14 Direction Selection Panel
+    callback!(app,
+        Output("deck-direction-container", "style"),
+        Input("deck-dd-method", "value"),
+        prevent_initial_call=false
+    ) do method
+        if method == "DF14"
+            return Dict("display" => "block")
+        else
+            return Dict("display" => "none")
+        end
+    end
 
     # Unit 1: UI Visibility & Row Orchestration
     callback!(app,
@@ -1024,7 +1084,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             idx_gl = 11 + DECK_MaxRows_DDEC + 2 + 9 * DECK_MaxRows_DDEC
             vol_v    = DECK_SafeNumZero_DDEF(args[idx_gl])
             conc_v   = DECK_SafeNumZero_DDEF(args[idx_gl+1])
-            proj_v   = isnothing(args[idx_gl+17]) ? "Daisho" : string(args[idx_gl+17])
+            proj_v   = isnothing(args[idx_gl+17]) ? "DoECISORY" : string(args[idx_gl+17])
             phase_v  = isnothing(args[idx_gl+18]) ? "Phase1" : string(args[idx_gl+18])
             method_v = isnothing(args[idx_gl+19]) ? "BB15" : string(args[idx_gl+19])
             
@@ -1264,7 +1324,7 @@ function DECK_RegisterCallbacks_DDEF(app)
 
                 g = get(memo, "Global", Dict())
                 vol_v = get(g, "Volume", 0.0); conc_v = get(g, "Conc", 0.0)
-                proj_v = string(get(g, "ProjectName", "Daisho"))
+                proj_v = string(get(g, "ProjectName", "DoECISORY"))
                 method_v = string(get(g, "Method", "BB15"))
 
                 loaded_stoch = Dict("FillerName" => string(get(g, "FillerName", "")), "FillerMW" => Float64(get(g, "FillerMW", 0.0)), "Volume" => Float64(vol_v), "Conc" => Float64(conc_v))
@@ -1346,7 +1406,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     if up_cont == ""
                         rows = [DECK_GetDefaultRow_DDEF(i) for i in 1:5]
                         # Persistence of state when no content is provided.
-                        return DECK_Return_DDEF(Dict("rows" => rows, "count" => 5), rows, [Dict("label" => "Loading...", "value" => "NONE")], 0.0, 0.0, "Daisho", "BoxBehnken", NO, NO, "No data source", "NONE", NO, fill(NO, 6))
+                        return DECK_Return_DDEF(Dict("rows" => rows, "count" => 5), rows, [Dict("label" => "Loading...", "value" => "NONE")], 0.0, 0.0, "DoECISORY", "BoxBehnken", NO, NO, "No data source", "NONE", NO, fill(NO, 6))
                     end
                     
                     # Extraction of the project identifier from the transient filename.
@@ -1663,6 +1723,9 @@ function DECK_RegisterCallbacks_DDEF(app)
         [State("deck-mw-$i", "value") for i in 1:DECK_MaxRows_DDEC]...,
         [State("deck-unit-$i", "value") for i in 1:DECK_MaxRows_DDEC]...,
         State("deck-store-stoch-settings", "data"),
+        State("deck-dir-x1", "value"),
+        State("deck-dir-x2", "value"),
+        State("deck-dir-x3", "value"),
         prevent_initial_call=true
     ) do args...
         try
@@ -1670,7 +1733,14 @@ function DECK_RegisterCallbacks_DDEF(app)
             out_names = collect(args[3:5])
             out_units = collect(args[6:8])
             vol, conc, method, session_data, store_data, master_vault = args[9:14]
-            stoch_settings = args[end]
+            stoch_settings = args[end-3]
+            dir_x1 = something(args[end-2], -1)
+            dir_x2 = something(args[end-1], -1)
+            dir_x3 = something(args[end],   -1)
+            dx1 = dir_x1 isa Number ? Int(dir_x1) : parse(Int, string(dir_x1))
+            dx2 = dir_x2 isa Number ? Int(dir_x2) : parse(Int, string(dir_x2))
+            dx3 = dir_x3 isa Number ? Int(dir_x3) : parse(Int, string(dir_x3))
+            direction_vec = [dx1, dx2, dx3]
             (n === nothing || n == 0) && return Dash.no_update(), "", Dash.no_update()
  
             offset = 15
@@ -1754,7 +1824,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             else
                 path = Sys_Fast.FAST_GetTransientPath_DDEF()
             end
-            ok, msg = DECK_GenerateProtocol_DDEF(path, in_d, out_d, vol, conc, method, stoch_settings, project)
+            ok, msg = DECK_GenerateProtocol_DDEF(path, in_d, out_d, vol, conc, method, stoch_settings, project; direction=direction_vec)
                 !ok && return Dash.no_update(), html_div(msg, className="", style=Dict("color" => "var(--colour-chr0-huered)")), Dash.no_update()
 
             store_content = Sys_Fast.FAST_ReadToStore_DDEF(path)
@@ -1938,11 +2008,21 @@ function DECK_RegisterCallbacks_DDEF(app)
         [State("deck-mw-$i", "value") for i in 1:DECK_MaxRows_DDEC]...,
         [State("deck-unit-$i", "value") for i in 1:DECK_MaxRows_DDEC]...,
         State("deck-store-stoch-settings", "data"),
+        State("deck-dir-x1", "value"),
+        State("deck-dir-x2", "value"),
+        State("deck-dir-x3", "value"),
         prevent_initial_call=true
     ) do args...
         try
             n_op, n_cl, is_op, method, vol, conc, store_data = args[1:7]
-            stoch_settings = args[end]
+            stoch_settings = args[end-3]
+            dir_x1 = something(args[end-2], -1)
+            dir_x2 = something(args[end-1], -1)
+            dir_x3 = something(args[end],   -1)
+            dx1 = dir_x1 isa Number ? Int(dir_x1) : parse(Int, string(dir_x1))
+            dx2 = dir_x2 isa Number ? Int(dir_x2) : parse(Int, string(dir_x2))
+            dx3 = dir_x3 isa Number ? Int(dir_x3) : parse(Int, string(dir_x3))
+            direction_vec = [dx1, dx2, dx3]
             ctx = callback_context()
             trig = isempty(ctx.triggered) ? "" : split(ctx.triggered[1].prop_id, ".")[1]
             trig == "deck-btn-sci-audit-close" && return Dash.no_update(), false
@@ -1998,7 +2078,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             num_vars != 3 && return html_div("Protocol requires exactly 3 Variables. Detection: $num_vars", className="fw-bold", style=Dict("color" => "var(--colour-chr0-huered)")), true
 
             # Generate virtual design for audit
-            design_coded = Lib_Core.CORE_GenDesign_DDEF(method, 3)
+            design_coded = Lib_Core.CORE_GenDesign_DDEF(method, 3, direction_vec)
             configs = [Dict("Levels" => [D["Rows"][i]["L1"], D["Rows"][i]["L2"], D["Rows"][i]["L3"]]) for i in D["Idx_Var"]]
             real_matrix = Lib_Core.CORE_MapLevels_DDEF(design_coded, configs)
  

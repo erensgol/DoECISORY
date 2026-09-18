@@ -1,7 +1,7 @@
 module Lib_Vise
 
 # ==============================================================================
-# DAISHODOE FRAMEWORK - LIB VISE (STATISTICAL ANALYSIS)
+# DOECISORY - LIB VISE (STATISTICAL ANALYSIS)
 # ==============================================================================
 # Description: Statistical analysis module for modelling (GLM), sensitivity 
 #              analysis, and multi-objective optimisation tasks.
@@ -569,17 +569,16 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_B
     Steps::Int=41, DecayModifiers::Vector{Main.Lib_Core.CORE_DecayModifier_DDES}=Main.Lib_Core.CORE_DecayModifier_DDES[])
     Dim = 3
     compute_threads = Main.Sys_Fast.FAST_GetComputeThreads_DDEF()
-    cap_limit = (compute_threads <= 4) ? 15_000 : 100_000
-    eff_steps = Steps
-    while eff_steps^Dim > cap_limit && eff_steps > 5
-        eff_steps -= 2
-    end
+    eff_steps = (compute_threads <= 4) ? 21 : 41
+
     Ranges = [range(X_Bounds[i, 1], X_Bounds[i, 2]; length=eff_steps) for i in 1:Dim]
     Iter = Iterators.product(Ranges...)
     NumPoints = length(Iter)
     Candidates = Matrix{Float64}(undef, NumPoints, Dim)
     @inbounds for (i, pt) in enumerate(Iter)
-        for d in 1:Dim Candidates[i, d] = pt[d] end
+        for d in 1:Dim
+            Candidates[i, d] = pt[d]
+        end
     end
     RefType = isempty(Models) ? "quadratic" : get(Models[1], "ModelType", "quadratic")
     X_Design = VISE_ExpandDesign_DDEF(Candidates, RefType)
@@ -682,7 +681,7 @@ end
 
 function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     io = IOBuffer()
-    write(io, "# DAISHODOE ANALYTICAL REPORT (SCIENTIFIC COMPENDIUM)\n")
+    write(io, "# DOECISORY ANALYTICAL REPORT (SCIENTIFIC COMPENDIUM)\n")
     write(io, Printf.@sprintf("*Protocol Execution: %s | [ACADEMIC PRECISION MODE] *\n", Dates.format(now(), "yyyy-mm-dd HH:MM")))
     write(io, "---\n\n")
 
@@ -769,7 +768,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         write(io, "> [!IMPORTANT]\n> **Global Optimisation in Progress**: Mathematical convergence in the background. Results will be visible in Pulse #2.\n\n")
     end
 
-    write(io, "*Generated via the DaishoDoE Modular Framework $(Main.Sys_Fast.FAST_Data_DDEC.VERSION). Formatted in compliance with academic reporting standards.*\n")
+    write(io, "*Generated via DoECISORY $(Main.Sys_Fast.FAST_Data_DDEC.VERSION). Formatted in compliance with academic reporting standards.*\n")
 
     return String(take!(io))
 end
@@ -1249,39 +1248,63 @@ function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n,
     !get(opts, "Optim", true) && return [], 0.0, DataFrame(), zeros(1), String[]
     
     bounds = hcat(minimum(X; dims=1)', maximum(X; dims=1)')
-
-    # Extract Decay Modifiers for the Time-Yield Paradox Resolution.
     decay_mods = VISE_ExtractDecayModifiers_DDEF(in_n, out_n, config, opts)
     
-    # 1. High-Density Grid Exploration
+    # 1. High-Density Harmonic Grid Exploration
     grid_steps = get(opts, "GridSteps", 41)
     XT, YP, SC = VISE_GridSearch_DDEF(models, goals, bounds; Steps=grid_steps, DecayModifiers=decay_mods)
     
-    # 2. Global Desirability Maximum (BlackBoxOptim)
+    # 2. Continuous Global Desirability Maximum (BlackBoxOptim)
     max_time = get(opts, "MaxTime", 2.0)
     bp, bs = Main.Lib_Core.CORE_OptimiseDesirability_DDEF(models, goals, bounds; MaxTime=max_time, DecayModifiers=decay_mods)
     
-    # 3. Diversity Candidate Selection
-    used_indices = Int[]
-    cand_indices = Int[]
-    cand_tags    = String[]
-    
+    # Predict outputs for continuous BBO point
+    num_models = length(models)
+    bp_mat = reshape(Float64.(bp), 1, 3)
+    yp_bbo = zeros(Float64, 1, num_models)
+    for m in 1:num_models
+        if models[m]["Status"] == "OK"
+            yp_bbo[1, m] = VISE_Predict_DDEF(models[m], bp_mat)[1]
+        end
+    end
+
+    for dm in decay_mods
+        for oi in dm.AffectedOutputs
+            if oi >= 1 && oi <= num_models
+                yp_bbo[1, oi] = Main.Lib_Core.CORE_ApplyDecayPenalty_DDEF(yp_bbo[1, oi], dm, bp)
+            end
+        end
+    end
+
+    # 3. Fuse BBO Optimum and Grid Candidates into 14-Leader Vault
     num_candidates = length(SC)
-    top_indices = partialsortperm(SC, 1:min(8, num_candidates); rev=true)
+    top_grid_indices = partialsortperm(SC, 1:min(8, num_candidates); rev=true)
+
+    candidate_pool = Tuple{Vector{Float64}, Vector{Float64}, Float64, Bool}[]
+    push!(candidate_pool, (Float64.(bp), vec(yp_bbo), Float64(bs), true))
+
+    for idx in top_grid_indices
+        pt_x = XT[idx, :]
+        dist_to_bbo = sum(abs.(pt_x .- bp) ./ max.(1e-5, bounds[:, 2] .- bounds[:, 1]))
+        if dist_to_bbo > 0.01
+            push!(candidate_pool, (pt_x, YP[idx, :], SC[idx], false))
+        end
+    end
+
+    sort!(candidate_pool; by=x -> x[3], rev=true)
+    selected_top = candidate_pool[1:min(8, length(candidate_pool))]
     
-    bench_score = SC[top_indices[1]]
+    cand_x_list = [c[1] for c in selected_top]
+    cand_y_list = [c[2] for c in selected_top]
+    cand_sc_list = [c[3] for c in selected_top]
+    cand_tags = String[@sprintf("TOP-%02d", k) for k in 1:length(selected_top)]
+    
+    bench_score = cand_sc_list[1]
     score_limit = bench_score * 0.90
     tier_indices = findall(>=(score_limit), SC)
-    
-    # A. Global Top Leaders
-    for k in 1:min(8, length(top_indices))
-        p_idx = top_indices[k]
-        push!(cand_indices, p_idx)
-        push!(cand_tags, @sprintf("TOP-%02d", k))
-        push!(used_indices, p_idx)
-    end
-    
-    # B. Input Minimisation Diversity (INP-)
+    (isempty(tier_indices)) && (tier_indices = top_grid_indices)
+
+    # 4. Input Minimisation Diversity (3 Leaders: INP-X1, INP-X2, INP-X3)
     for i in 1:min(3, size(XT, 2))
         tag_pre = i <= length(in_n) ? first(in_n[i] * "   ", 3) : "IN$i"
         best_idx, min_val = -1, Inf
@@ -1292,14 +1315,14 @@ function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n,
             end
         end
         if best_idx != -1
-            tag_str = (best_idx in used_indices) ? "INP-$(tag_pre)(D)" : "INP-$(tag_pre)"
-            push!(cand_indices, best_idx)
-            push!(cand_tags, tag_str)
-            push!(used_indices, best_idx)
+            push!(cand_x_list, XT[best_idx, :])
+            push!(cand_y_list, YP[best_idx, :])
+            push!(cand_sc_list, SC[best_idx])
+            push!(cand_tags, "INP-$(tag_pre)")
         end
     end
-    
-    # C. Output Maximisation Diversity (OUT-)
+
+    # 5. Output Maximisation Diversity (3 Leaders: OUT-Y1, OUT-Y2, OUT-Y3)
     for i in 1:min(3, size(YP, 2))
         tag_pre = i <= length(out_n) ? first(out_n[i] * "   ", 3) : "OUT$i"
         m_goal = get(models[i], "Goal", Dict())
@@ -1313,32 +1336,35 @@ function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n,
             end
         end
         if best_idx != -1
-            tag_str = (best_idx in used_indices) ? "OUT-$(tag_pre)(D)" : "OUT-$(tag_pre)"
-            push!(cand_indices, best_idx)
-            push!(cand_tags, tag_str)
-            push!(used_indices, best_idx)
+            push!(cand_x_list, XT[best_idx, :])
+            push!(cand_y_list, YP[best_idx, :])
+            push!(cand_sc_list, SC[best_idx])
+            push!(cand_tags, "OUT-$(tag_pre)")
         end
     end
-    
-    # 4. Prepare DataFrame
-    ldf = VISE_PrepareLeadersDF_DDEF(XT[cand_indices, :], YP[cand_indices, :], SC[cand_indices], cand_tags, in_n, out_n, phase, C)
-    
-    # 5. Stoichiometric Safety Audit
+
+    final_XT = reduce(vcat, [reshape(v, 1, :) for v in cand_x_list])
+    final_YP = reduce(vcat, [reshape(v, 1, :) for v in cand_y_list])
+    final_SC = cand_sc_list
+
+    ldf = VISE_PrepareLeadersDF_DDEF(final_XT, final_YP, final_SC, cand_tags, in_n, out_n, phase, C)
+
+    # 6. Stoichiometric Safety Audit
     ingreds = get(config, "Ingredients", [])
     if !isempty(ingreds)
         g_cfg = get(config, "Global", Dict())
         sv    = Float64(get(g_cfg, "Volume", 5.0))
         sc    = Float64(get(g_cfg, "Conc", 10.0))
         
-        audit = Main.Lib_Mole.MOLE_AuditBatch_DDEF(ingreds, XT, sv, sc)
+        audit = Main.Lib_Mole.MOLE_AuditBatch_DDEF(ingreds, final_XT, sv, sc)
         if !audit["IsFeasible"]
-            Main.Sys_Fast.FAST_Log_DDEF("VISE", "STOICHIOMETRY", "Experimental design contains physically questionable runs (Negative Mass).", "WARN")
+            Main.Sys_Fast.FAST_Log_DDEF("VISE", "STOICHIOMETRY", "Experimental design contains physically questionable runs.", "WARN")
         else
-            Main.Sys_Fast.FAST_Log_DDEF("VISE", "STOICHIOMETRY", "Physical feasibility audit passed for candidate pool.", "OK")
+            Main.Sys_Fast.FAST_Log_DDEF("VISE", "STOICHIOMETRY", "Physical feasibility audit passed for $(nrow(ldf)) candidate leaders.", "OK")
         end
     end
-    
-    # 6. Boundary Warnings
+
+    # 7. Boundary Warnings
     warns = String[]
     if !isempty(bp)
         for i in 1:min(3, length(bp))
@@ -1347,7 +1373,7 @@ function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n,
             !ok && push!(warns, "$(in_n[i]): $msg")
         end
     end
-    
+
     return bp, bs, ldf, SC, warns
 end
 
@@ -1436,7 +1462,7 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::AbstractString)
         XLSX.openxlsx(FilePath, mode="w") do xf
             sheet_ov       = xf[1]
             XLSX.rename!(sheet_ov, "Summary")
-            sheet_ov["A1"] = "DaishoDoE Scientific Intelligence Report"
+            sheet_ov["A1"] = "DoECISORY Scientific Intelligence Report"
             sheet_ov["A2"] = "Generated: $(Dates.now())"
             sheet_ov["A3"] = "Project: $(get(Res, "Phase", "Unnamed Phase"))"
 

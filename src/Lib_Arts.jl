@@ -1,7 +1,7 @@
 module Lib_Arts
 
 # ==============================================================================
-# DAISHODOE FRAMEWORK - LIB ARTS (VISUALISATION)
+# DOECISORY - LIB ARTS (VISUALISATION)
 # ==============================================================================
 # Description: Visualisation and graphics module for academic data 
 #              representation and response surface mapping.

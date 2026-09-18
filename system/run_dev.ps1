@@ -1,4 +1,4 @@
-# DaishoDoE - PowerShell Developer Reviser Mode
+# DoECISORY - PowerShell Developer Reviser Mode
 # Monitors the src/ directory and restarts Julia upon changes.
 
 $HOST_URL = "http://127.0.0.1:8060"
@@ -6,7 +6,7 @@ $PROJECT_DIR = (Get-Item $PSScriptRoot).Parent.FullName
 $SOURCE_DIR = Join-Path $PROJECT_DIR "src"
 $APP_FILE = Join-Path $PROJECT_DIR "app.jl"
 
-$env:DAISHO_DEV = "true"
+$env:DOECISORY_DEV = "true"
 
 $julia_proc = $null
 
@@ -20,7 +20,7 @@ function Write-Log {
     $ts = Get-Date -Format "HH:mm:ss.fff"
     
     # --------------------------------------------------------------------------
-    # DAISHODOE AESTHETIC STANDARD (12:15 Alignment)
+    # DOECISORY AESTHETIC STANDARD (12:15 Alignment)
     # [TS] Blue | Source Green (12) : Event TypeColor (15) Detail TypeColor
     # --------------------------------------------------------------------------
     
@@ -45,12 +45,12 @@ function Start-Julia {
     $SYSIMG_FLAG = ""
     if (Test-Path $SYSIMG_PATH) {
         $SYSIMG_FLAG = "--sysimage `"$SYSIMG_PATH`""
-        Write-Log -Source "DAISHO" -Evt "Sysimage" -Detail "Pre-compiled sysimage DETECTED. Fast Boot enabled." -Type "OK"
+        Write-Log -Source "DOECISORY" -Evt "Sysimage" -Detail "Pre-compiled sysimage DETECTED. Fast Boot enabled." -Type "OK"
     } else {
-        Write-Log -Source "DAISHO" -Evt "Sysimage" -Detail "No sysimage found. Standard JIT boot." -Type "WARN"
+        Write-Log -Source "DOECISORY" -Evt "Sysimage" -Detail "No sysimage found. Standard JIT boot." -Type "WARN"
     }
 
-    Write-Log -Source "DAISHO" -Evt "Initialise" -Detail "Starting Julia engine..." -Type "OK"
+    Write-Log -Source "DOECISORY" -Evt "Initialise" -Detail "Starting Julia engine..." -Type "OK"
     # Use Start-Process with a single quoted path to handle spaces in directory names
     $script:julia_proc = Start-Process -FilePath "julia" `
         -ArgumentList "--depwarn=no $SYSIMG_FLAG --threads auto -O0 --project=`"$PROJECT_DIR`" `"$APP_FILE`" 2>nul" `
@@ -85,10 +85,10 @@ try {
         if ($julia_proc.HasExited) {
             $restart_count++
             if ($restart_count -gt 3) {
-                Write-Log -Source "DAISHO" -Evt "BOOT_FAIL" -Detail "Exiting after 3 consecutive failures." -Type "FAIL"
+                Write-Log -Source "DOECISORY" -Evt "BOOT_FAIL" -Detail "Exiting after 3 consecutive failures." -Type "FAIL"
                 break
             }
-            Write-Log -Source "DAISHO" -Evt "RESTART" -Detail "Process terminated. Restarting ($restart_count/3)..." -Type "WARN"
+            Write-Log -Source "DOECISORY" -Evt "RESTART" -Detail "Process terminated. Restarting ($restart_count/3)..." -Type "WARN"
             Start-Sleep -Seconds 2
             $julia_proc = Start-Julia
             $last_mtime = Get-SrcMtime

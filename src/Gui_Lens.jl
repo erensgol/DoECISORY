@@ -1,7 +1,7 @@
 module Gui_Lens
 
 # ==============================================================================
-# DAISHODOE FRAMEWORK - GUI LENS (STATISTICAL ANALYSIS)
+# DOECISORY - GUI LENS (STATISTICAL ANALYSIS)
 # ==============================================================================
 # Description: Data analysis, model fitting (GLM), and high-fidelity 
 #              visualisation.
@@ -194,7 +194,7 @@ Constructs the primary statistical analysis and visualisation interface layout.
 """
 function LENS_Layout_DDEF()
     return dbc_container([
-        BASE_PageHeader_DDEF("Statistical Modelling and Data Optimisation", "Analyse experimental outcomes, evaluate complex factor interactions via robust mathematical models, and ascertain optimal solution matrices."),
+        BASE_PageHeader_DDEF("Statistical Modelling and Data Optimisation", "Fit response surface models, visualise 2D and 3D interactions, and determine optimal formulation conditions."),
 
         dbc_row([
             # Initialisation of the Left Interface Column for analysis configuration.
@@ -321,7 +321,7 @@ function LENS_Layout_DDEF()
 # ------------------------------------------------------------------------------
 
         # Interface orchestration for system modal dialogues and user interactions.
-        BASE_Modal_DDEF("lens-modal-report", "DaishoDoE Scientific Intelligence Report",
+        BASE_Modal_DDEF("lens-modal-report", "DoECISORY Scientific Intelligence Report",
             html_pre(id="lens-report-content", className="p-4 rounded small academic-report", style=Dict("whiteSpace" => "pre-wrap", "fontFamily" => "monospace", "maxHeight" => "600px", "overflowY" => "auto")),
             dbc_button(["Download Report (TXT)"], id="lens-btn-download-txt", className="w-100 colourgl-c4tg"); size="lg"),
         BASE_Modal_DDEF("lens-modal-wizard", [html_i(className="fas fa-layer-group me-2 colourtx-c1sm"), "Phase Evolution - Step 1/3"],
@@ -375,11 +375,57 @@ function LENS_Layout_DDEF()
                             dbc_label("Design Control", className="x-small fw-bold text-uppercase mb-2 d-block colourtx-v3dl"),
                             dbc_label("Matrix Protocol", className="small mb-1"),
                             dcc_dropdown(id="lens-prev-dd-method", options=[
-                                Dict("label" => "Box-Behnken (15 Runs, Quadratic)", "value" => "BB15"),
-                                Dict("label" => "D-Optimal (15 Runs, Quadratic)",   "value" => "DOPT15"),
-                                Dict("label" => "Taguchi L9 (9 Runs, Linear)",      "value" => "TL09"),
-                                Dict("label" => "D-Optimal (9 Runs, Linear)",       "value" => "DOPT09"),
-                            ], value="TL09", clearable=false, className="mb-2"),
+                                Dict("label" => "Taguchi (L9, Linear)",                     "value" => "TL09"),
+                                Dict("label" => "Box-Behnken (BBD15, Quadratic)",           "value" => "BB15"),
+                                Dict("label" => "Central Composite (CCD17, Quadratic)",     "value" => "CD17"),
+                                Dict("label" => "D-Optimal (D-FFCCD14, Quadratic)",         "value" => "DF14"),
+                            ], value="TL09", clearable=false, className="mb-2 dd-method-compact"),
+                            html_div(id="lens-prev-direction-container", style=Dict("display" => "none"), children=[
+                                dbc_label("Target Factor Directions (DF14)", className="x-small fw-bold text-uppercase mb-2 d-block colourtx-v3dl"),
+                                html_div([
+                                    dbc_row([
+                                        dbc_col([
+                                            dbc_label("X₁ Direction", className="x-small mb-1 d-block fw-semibold"),
+                                            dcc_dropdown(
+                                                id="lens-prev-dir-x1",
+                                                options=[
+                                                    Dict("label" => "−1 (Min)", "value" => -1),
+                                                    Dict("label" => "+1 (Max)", "value" => 1),
+                                                ],
+                                                value=-1,
+                                                clearable=false,
+                                                className="small",
+                                            ),
+                                        ], xs=12, md=4, className="mb-2"),
+                                        dbc_col([
+                                            dbc_label("X₂ Direction", className="x-small mb-1 d-block fw-semibold"),
+                                            dcc_dropdown(
+                                                id="lens-prev-dir-x2",
+                                                options=[
+                                                    Dict("label" => "−1 (Min)", "value" => -1),
+                                                    Dict("label" => "+1 (Max)", "value" => 1),
+                                                ],
+                                                value=-1,
+                                                clearable=false,
+                                                className="small",
+                                            ),
+                                        ], xs=12, md=4, className="mb-2"),
+                                        dbc_col([
+                                            dbc_label("X₃ Direction", className="x-small mb-1 d-block fw-semibold"),
+                                            dcc_dropdown(
+                                                id="lens-prev-dir-x3",
+                                                options=[
+                                                    Dict("label" => "−1 (Min)", "value" => -1),
+                                                    Dict("label" => "+1 (Max)", "value" => 1),
+                                                ],
+                                                value=-1,
+                                                clearable=false,
+                                                className="small",
+                                            ),
+                                        ], xs=12, md=4, className="mb-2"),
+                                    ], className="g-2"),
+                                ], className="p-2 border rounded colourbg-v0pw mb-2", style=Dict("borderColor" => "var(--colour-val1-lighig)"))
+                            ]),
                             html_hr(className="my-3"),
                             dbc_label("Global Zoom", className="small mb-1 d-flex justify-content-between", children=[
                                 html_span("Wide (1.0)", className="colourtx-v5pb"),
@@ -493,6 +539,19 @@ function LENS_RegisterCallbacks_DDEF(app)
 # SECTION 5: UPLOAD & SYNC PIPELINES
 # ------------------------------------------------------------------------------
 
+    # Visibility Orchestration of Phase Transition DF14 Direction Selection Panel
+    callback!(app,
+        Output("lens-prev-direction-container", "style"),
+        Input("lens-prev-dd-method", "value"),
+        prevent_initial_call=false
+    ) do method
+        if method == "DF14"
+            return Dict("display" => "block")
+        else
+            return Dict("display" => "none")
+        end
+    end
+
     # Pipeline Orchestration Stage 1B: Global session synchronisation and objective initialisation.
     callback!(app,
         Output("lens-dd-phase",       "options"),
@@ -517,7 +576,7 @@ function LENS_RegisterCallbacks_DDEF(app)
     ) do active_data, current_proj, batch_status
         # Unified Initialisation of Session Metadata
         is_loading = get(batch_status, "next_pkg", get(batch_status, :next_pkg, 0)) > 0
-        proj_v = isnothing(current_proj) || isempty(strip(string(current_proj))) || lowercase(strip(string(current_proj))) == "daisho" ? "" : string(current_proj)
+        proj_v = isnothing(current_proj) || isempty(strip(string(current_proj))) || lowercase(strip(string(current_proj))) == "doecisory" || lowercase(strip(string(current_proj))) == "daisho" ? "" : string(current_proj)
         
         path = ""
         try
@@ -568,7 +627,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             afname = (active_data isa AbstractDict && haskey(active_data, "filename")) ? string(active_data["filename"]) : ""
             extracted_proj = Main.Sys_Fast.FAST_ExtractProjectFromFilename_DDEF(afname)
             (extracted_proj != "") && (proj_v = extracted_proj)
-            (proj_v == "") && (proj_v = "Daisho")
+            (proj_v == "") && (proj_v = "DoECISORY")
 
             if isnothing(active_cont) || active_cont == ""
                 return tuple([], "No Data Source", "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 0, "dataid" => ""), "d-none", proj_v)
@@ -631,16 +690,16 @@ function LENS_RegisterCallbacks_DDEF(app)
             config = Sys_Fast.FAST_ReadConfig_DDEF(path)
             method = get(get(config, "Global", Dict()), "Method", "")
 
-            if method == "TL09" || method == "DOPT09"
+            if method == "TL09"
                 model_opts = [Dict("label" => "Linear", "value" => "Linear")]
                 model_val  = "Linear"
-            elseif method == "BB15" || method == "DOPT15"
+            elseif method in ["BB15", "CD17", "DF14"]
                 model_opts = [
-                    Dict("label" => "Automatic", "value" => "Auto"),
-                    Dict("label" => "Linear",    "value" => "Linear"),
                     Dict("label" => "Quadratic", "value" => "Quadratic"),
+                    Dict("label" => "Linear",    "value" => "Linear"),
+                    Dict("label" => "Automatic", "value" => "Auto"),
                 ]
-                model_val  = "Auto"
+                model_val  = "Quadratic"
             else
                 model_opts = [
                     Dict("label" => "Automatic", "value" => "Auto"),
@@ -1368,9 +1427,9 @@ function LENS_RegisterCallbacks_DDEF(app)
         
         (isnothing(report) || isempty(report)) && return Dash.no_update()
 
-        proj  = isnothing(project) ? "Daisho" : project
+        proj  = isnothing(project) ? "DoECISORY" : project
         ph    = isnothing(phase)   ? "Phase1" : phase
-        fname = "Daisho_$(proj)_$(ph)_Scientific_Report.txt"
+        fname = "DoECISORY_$(proj)_$(ph)_Scientific_Report.txt"
 
         return Dict("filename" => fname, "content" => report)
     end
@@ -1748,8 +1807,11 @@ function LENS_RegisterCallbacks_DDEF(app)
         State("store-master-vault",    "data"),
         State("lens-input-project",    "value"),
         State("lens-store-slot-config", "data"),
+        State("lens-prev-dir-x1",      "value"),
+        State("lens-prev-dir-x2",      "value"),
+        State("lens-prev-dir-x3",      "value"),
         prevent_initial_call=true
-    ) do n_commit, proposal, sel_rows, cand_data, src, base64_file, proj_v, slot_cfg
+    ) do n_commit, proposal, sel_rows, cand_data, src, base64_file, proj_v, slot_cfg, dir_x1, dir_x2, dir_x3
         (isnothing(n_commit) || n_commit == 0 || isnothing(proposal) || get(proposal, "Status", "") != "OK") && return Dash.no_update()
         (isnothing(sel_rows) || isempty(sel_rows)) && return Dash.no_update()
 
@@ -1763,8 +1825,16 @@ function LENS_RegisterCallbacks_DDEF(app)
         shift = get(proposal, "SelectedShift", 0.0)
         meth  = get(proposal, "SelectedMethod", "TL09")
 
+        dir_x1_raw = something(dir_x1, -1)
+        dir_x2_raw = something(dir_x2, -1)
+        dir_x3_raw = something(dir_x3, -1)
+        dx1 = dir_x1_raw isa Number ? Int(dir_x1_raw) : parse(Int, string(dir_x1_raw))
+        dx2 = dir_x2_raw isa Number ? Int(dir_x2_raw) : parse(Int, string(dir_x2_raw))
+        dx3 = dir_x3_raw isa Number ? Int(dir_x3_raw) : parse(Int, string(dir_x3_raw))
+        direction_vec = [dx1, dx2, dx3]
+
         path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
-        res  = Sys_Flow.FLOW_BuildNextPhase_DDEF(path, src, sel_id, Float64(zoom), meth, Float64(shift))
+        res  = Sys_Flow.FLOW_BuildNextPhase_DDEF(path, src, sel_id, Float64(zoom), meth, Float64(shift); Direction=direction_vec)
 
         if res["Status"] == "OK"
             slots = Dict{String,Any}[]
@@ -1831,7 +1901,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             _, bytes = Sys_Fast.FAST_PrepareDownload_DDEF(path)
             Sys_Fast.FAST_CleanTransient_DDEF(path)
 
-            proj_n = (isnothing(proj_v) || isempty(strip(string(proj_v)))) ? "Daisho" : string(proj_v)
+            proj_n = (isnothing(proj_v) || isempty(strip(string(proj_v)))) ? "DoECISORY" : string(proj_v)
             fname = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_n, res["TargetPhase"], "EVO", "xlsx")
 
             return (
@@ -1866,12 +1936,12 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         try
             # Standardised Naming: Project, Phase, Tag (ARTS), Extension (zip)
-            proj_n = (isnothing(proj_v) || isempty(strip(string(proj_v)))) ? "Daisho" : string(proj_v)
+            proj_n = (isnothing(proj_v) || isempty(strip(string(proj_v)))) ? "DoECISORY" : string(proj_v)
             ph_n   = (isnothing(phase_v) || isempty(strip(string(phase_v)))) ? "Phase1" : string(phase_v)
             fname  = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_n, ph_n, "ARTS", "zip")
 
             temp_uuid  = replace(string(Base.UUID(rand(UInt128))), "-" => "")
-            export_dir = joinpath(Sys_Fast.FAST_TempRoot_DDEC, "DaishoRender_$temp_uuid")
+            export_dir = joinpath(Sys_Fast.FAST_TempRoot_DDEC, "DoECISORYRender_$temp_uuid")
             mkpath(export_dir)
 
             count = 0
@@ -1945,7 +2015,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 bytes = read(path)
                 
                 # Standardised Naming: Project, Phase, Tag (SCI), Extension (xlsx)
-                proj_n = (isnothing(proj) || isempty(strip(string(proj)))) ? "Daisho" : string(proj)
+                proj_n = (isnothing(proj) || isempty(strip(string(proj)))) ? "DoECISORY" : string(proj)
                 ph_n   = (isnothing(phase) || isempty(strip(string(phase)))) ? "Phase1" : string(phase)
                 fname  = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_n, ph_n, "SCI", "xlsx")
 

@@ -1,7 +1,7 @@
 module Sys_Flow
 
 # ==============================================================================
-# DAISHODOE FRAMEWORK - SYSTEM FLOW (PROCESS & STATE)
+# DOECISORY - SYSTEM FLOW (PROCESS & STATE)
 # ==============================================================================
 # Description: Experimental phase management, transition logic, and state 
 #              synchronisation bus.
@@ -221,7 +221,8 @@ end
 Generates the subsequent experimental phase by mapping adaptive ranges to a coded design matrix.
 """
 function FLOW_BuildNextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentPhase::Union{AbstractString,Nothing},
-    SelectedLeaderID::Union{AbstractString,Nothing}="", ZoomFactor::Real=0.5, Method::AbstractString="TL09", ShiftFactor::Real=0.0)::Dict{String,Any}
+    SelectedLeaderID::Union{AbstractString,Nothing}="", ZoomFactor::Real=0.5, Method::AbstractString="TL09", ShiftFactor::Real=0.0;
+    Direction::Vector{Int}=[-1, -1, -1])::Dict{String,Any}
     
     (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict("Status" => "FAIL", "Message" => "Invalid master file path provided.")
     C   = Main.Sys_Fast.FAST_Data_DDEC
@@ -264,7 +265,7 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, Cur
     var_indices = findall(c -> get(c, "Role", "") == C.ROLE_VAR, NewConfig)
     length(var_indices) != 3 && return Dict("Status" => "FAIL", "Message" => "System requires 3 ingredients for phase transitions.")
 
-    design_coded = Main.Lib_Core.CORE_GenDesign_DDEF(Method, 3)
+    design_coded = Main.Lib_Core.CORE_GenDesign_DDEF(Method, 3, Direction)
     N_Runs       = size(design_coded, 1)
 
     configs     = [Dict("Levels" => get(NewConfig[i], "Levels", [0.0, 0.0, 0.0])) for i in var_indices]
@@ -303,6 +304,7 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, Cur
 
     g_info                   = get(current_config, "Global", Dict{String,Any}())
     g_info["Method"]         = Method
+    g_info["Direction"]      = Direction
     current_config["Global"] = g_info
 
     out_names = [string(get(o, "Name", "")) for o in get(res, "Outputs", []) if !isempty(get(o, "Name", ""))]

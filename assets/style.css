@@ -1,10 +1,10 @@
 /* ======================================================================================
-   DAISHODOE - PROTOCOL THEME (2026)
+   DOECISORY - PROTOCOL THEME (2026)
    ====================================================================================== */
 
 /* --- 0. DESIGN TOKENS (:root) --- */
 :root {
-    /* Daisho Palette (Sys_Fast.jl - FAST_Constants_DDES) */
+    /* DoECISORY Palette (Sys_Fast.jl - FAST_Constants_DDES) */
     --colour-val0-purwhi: #FFFFFF;
     --colour-val1-lighig: #E6E6E6;
     --colour-val2-liglow: #DCDCDC;
@@ -32,7 +32,7 @@
     --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-/* --- 1. COLOR MAPPING UTILITIES (Daisho Palette) --- */
+/* --- 1. COLOR MAPPING UTILITIES (DoECISORY Palette) --- */
 
 /* Group A: Standard Backgrounds */
 .colourbg-v0pw { background-color: var(--colour-val0-purwhi); }
@@ -386,6 +386,41 @@ a:hover {
 .Select-clear-zone:hover { color: var(--colour-chr0-huered) !important; }
 .Select-noresults { background-color: var(--colour-val0-purwhi) !important; color: var(--colour-val3-darlow) !important; }
 
+/* Targeted compact font sizing for specific dense dropdowns */
+.dd-method-compact .Select-value-label,
+.dd-method-compact .Select-placeholder,
+.dd-method-compact .Select-input input,
+#deck-dd-method .Select-value-label,
+#deck-dd-method .Select-placeholder,
+#deck-dd-method .Select-input input,
+#lens-prev-dd-method .Select-value-label,
+#lens-prev-dd-method .Select-placeholder,
+#lens-prev-dd-method .Select-input input {
+    font-size: 0.76rem !important;
+    line-height: 1.3 !important;
+}
+
+.dd-method-compact .Select-option,
+#deck-dd-method .Select-option,
+#lens-prev-dd-method .Select-option {
+    font-size: 0.74rem !important;
+    padding: 6px 10px !important;
+    line-height: 1.3 !important;
+    white-space: nowrap !important;
+}
+
+.dd-method-compact .Select-menu-outer,
+#deck-dd-method .Select-menu-outer,
+#lens-prev-dd-method .Select-menu-outer,
+.dd-method-compact .Select-menu,
+#deck-dd-method .Select-menu,
+#lens-prev-dd-method .Select-menu {
+    min-width: 100% !important;
+    width: max-content !important;
+    max-width: 340px !important;
+    z-index: 999999 !important;
+}
+
 /* --- 7. BUTTONS --- */
 .btn {
     border-radius: var(--rad-sm) !important;
@@ -513,10 +548,10 @@ a:hover {
 
 .spinner-grow, .spinner-border { display: none !important; }
 ._dash-loading { display: flex !important; align-items: center; justify-content: center; min-height: 48px; color: transparent !important; }
-._dash-loading::after { content: ''; width: 24px; height: 24px; border: 2px solid var(--colour-val1-lighig); border-top-color: var(--colour-chr1-shamag); border-radius: 50%; animation: daisho-spin 0.6s linear infinite; display: block; box-shadow: 0 0 10px var(--colour-val1-lighig); }
+._dash-loading::after { content: ''; width: 24px; height: 24px; border: 2px solid var(--colour-val1-lighig); border-top-color: var(--colour-chr1-shamag); border-radius: 50%; animation: doecisory-spin 0.6s linear infinite; display: block; box-shadow: 0 0 10px var(--colour-val1-lighig); }
 
 .dash-spinner * { display: none !important; }
-.dash-spinner { width: 28px !important; height: 28px !important; margin: auto !important; border: 2px solid var(--colour-val1-lighig) !important; border-top-color: var(--colour-chr1-shamag) !important; border-radius: 50% !important; animation: daisho-spin 0.6s linear infinite !important; box-shadow: 0 0 10px var(--colour-val1-lighig) !important; background: transparent !important; display: block !important; }
+.dash-spinner { width: 28px !important; height: 28px !important; margin: auto !important; border: 2px solid var(--colour-val1-lighig) !important; border-top-color: var(--colour-chr1-shamag) !important; border-radius: 50% !important; animation: doecisory-spin 0.6s linear infinite !important; box-shadow: 0 0 10px var(--colour-val1-lighig) !important; background: transparent !important; display: block !important; }
 
 /* Dedicated startup overlay spinner */
 .sys-spinner {
@@ -526,7 +561,7 @@ a:hover {
     border: 3px solid var(--colour-val1-lighig);
     border-top-color: var(--colour-chr1-shamag);
     border-radius: 50%;
-    animation: daisho-spin 0.8s linear infinite;
+    animation: doecisory-spin 0.8s linear infinite;
     box-shadow: 0 0 15px var(--colour-val3-darlow);
     background: transparent;
     display: block;
@@ -535,14 +570,14 @@ a:hover {
 #lens-graph-main { display: block; margin: 0 auto; max-width: 320px; width: 100%; aspect-ratio: 320 / 400; }
 #lens-graph-main._dash-loading::after, #deck-run-output._dash-loading::after { width: 40px; height: 40px; border-width: 3px; margin: 100px auto; }
 
-@keyframes daisho-spin {
+@keyframes doecisory-spin {
     to { transform: rotate(360deg); }
 }
 
 /* Shimmer Effect */
 .glass-loading-status { background: var(--colour-val0-purwhi); border-radius: var(--rad-sm); padding: 0.6rem 1.2rem; color: var(--colour-val4-darhig); font-size: 0.8rem; text-align: center; border: 1px solid var(--colour-val1-lighig); }
 
-@keyframes daisho-shimmer {
+@keyframes doecisory-shimmer {
     0% { background-position: 200% 0; }
     100% { background-position: -200% 0; }
 }

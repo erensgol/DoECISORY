@@ -1,5 +1,5 @@
 # ==============================================================================
-# DaishoDoE Sysimage Compiler
+# DoECISORY Sysimage Compiler
 # ==============================================================================
 # Usage:  julia --threads auto --project=. build/compiler.jl
 # Output: build/engine.dll (Windows) / .so (Linux)
@@ -9,7 +9,7 @@ using Pkg
 using TOML
 
 println("\n" * "="^60)
-println("  DaishoDoE Sysimage Compiler")
+println("  DoECISORY Sysimage Compiler")
 println("="^60 * "\n")
 
 # --- 1. Setup ---------------------------------------------------------------

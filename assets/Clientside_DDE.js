@@ -1,5 +1,5 @@
 /**
- * DaishoDoE - Clientside Acceleration Bridge
+ * DoECISORY - Clientside Acceleration Bridge
  * Extends Dash functionality with high-speed JS callbacks for instant graph navigation.
  * Architecture: Graphs live server-side in a Ref. Only metadata (count + timestamp)
  * travels through dcc_store. render_graph is server-side (single figure per request).
@@ -12,7 +12,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
             const context = window.dash_clientside.callback_context;
             const trigger = context.triggered.length > 0 ? context.triggered[0].prop_id : "";
             const tot = (meta && meta.count) ? meta.count : 0;
-            console.log("[DAISHO] Graph Meta Count:", tot, "| Trigger:", trigger);
+            console.log("[DOECISORY] Graph Meta Count:", tot, "| Trigger:", trigger);
 
             if (trigger.includes('lens-store-graph-meta.data')) {
                 if (tot === 0) return [0, 1, 1];
@@ -56,7 +56,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                  const item = graphs[safe_i];
                  const fig = item.figure || {};
                  
-                 console.log("[DAISHO] Rendering Plot:", item.title, "| Index:", safe_i);
+                 console.log("[DOECISORY] Rendering Plot:", item.title, "| Index:", safe_i);
                  
                  return [
                      {
@@ -67,7 +67,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                      "/ " + count
                  ];
              } catch (e) {
-                 console.error("[DAISHO] Blob Parsing Failed:", e);
+                 console.error("[DOECISORY] Blob Parsing Failed:", e);
                  return [{}, "Data Corruption Error", "/ 0"];
              }
         },
@@ -148,7 +148,7 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
                     namespace: "dash_html_components"
                 };
             } catch (e) {
-                console.error("[DAISHO] Info Build Failed:", e);
+                console.error("[DOECISORY] Info Build Failed:", e);
                 return "Error building index.";
             }
         }

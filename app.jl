@@ -1,6 +1,4 @@
-# ==============================================================================
-# DAISHODOE FRAMEWORK - APP MAIN (ORCHESTRATOR)
-# ==============================================================================
+# DOECISORY - APP MAIN (ORCHESTRATOR)
 # Description: Primary application entry point, routing orchestrator, and UI layout definition.
 # Author:      Ecz. Eren Selim GÖL
 # Version:     v1.0-dev
@@ -28,7 +26,7 @@ Pkg.instantiate()
 
 let
     base_tmp = tempdir()
-    wf_path  = endswith(rstrip(base_tmp, ['/', '\\']), "DaishoDoE_Workforce") ? base_tmp : joinpath(base_tmp, "DaishoDoE_Workforce")
+    wf_path  = endswith(rstrip(base_tmp, ['/', '\\']), "DoECISORY_Workforce") ? base_tmp : joinpath(base_tmp, "DoECISORY_Workforce")
     if !isdir(wf_path)
         mkpath(wf_path)
     end
@@ -37,7 +35,7 @@ let
     ENV["TEMP"]                   = wf_path
     ENV["TMPDIR"]                 = wf_path
     
-    # Force PlotlyJS/Kaleido (Chromium Engine) into Workforce
+    # Force PlotlyJS/Kaleido (Chromium) into Workforce
     ENV["CHROME_USER_DATA_DIR"]   = wf_path
     ENV["CHROME_CRASH_DUMPS_DIR"] = wf_path
 end
@@ -105,7 +103,7 @@ Sys_Fast.FAST_InitialiseWorkforce_DDEF()
 println("\e[1m               \e[32m_\e[0m")
 println("\e[1m   \e[34m_\e[0m       _ \e[31m_\e[32m(_)\e[35m_\e[0m     |")
 println("\e[1m  \e[34m(_)\e[0m     | \e[31m(_)\e[0m \e[35m(_)\e[0m    |  System Status: \e[32m[OPTIMAL]\e[0m")
-println("\e[1m   _ _   _| |_  __ _   |  \e[1mDaishoDoE Framework\e[0m v1.0-dev")
+println("\e[1m   _ _   _| |_  __ _   |  \e[1mDoECISORY\e[0m v1.0-dev")
 println("\e[1m  | | | | | | |/ _` |  |  Author: E.S. GÖL, Pharmacist  ")
 println("\e[1m  | | |_| | | | (_| |  |  Department of Radiopharmacy")
 println("\e[1m _/ |\\__'_|_|_|\\__'_|  |  Hacettepe University. 2026.")
@@ -181,7 +179,7 @@ app = dash(;
     suppress_callback_exceptions = true,
 )
 
-app.title = "DaishoDoE"
+app.title = "DoECISORY"
 
 app.index_string = """
 <!DOCTYPE html>
@@ -215,7 +213,7 @@ APP_Navbar_DDEC = html_div([
     html_div([
         dcc_link(html_div([
             html_img(src="/assets/favicon.ico", style=Dict("height" => "32px", "marginRight" => "10px", "borderRadius" => "4px")),
-            html_span("DaishoDoE", className="fw-bold tracking-tight", style=Dict("color" => "var(--colour-val5-purbla)")),
+            html_span("DoECISORY", className="fw-bold tracking-tight", style=Dict("color" => "var(--colour-val5-purbla)")),
         ], className="nav-brand"), href="/", style=Dict("textDecoration" => "none")),
     ], style=Dict("flex" => "1")),
 
@@ -289,8 +287,8 @@ app.layout = html_div([
     html_div(id="sys-loading-overlay", children=[
         html_div([
             html_div(className="sys-spinner"),
-            html_h4("DaishoDoE", className="fw-bold mb-2 text-center", style=Dict("color" => "var(--colour-val5-purbla)")),
-            html_p("Synchronising scientific modules...", className="text-center",
+            html_h4("DoECISORY", className="fw-bold mb-2 text-center", style=Dict("color" => "var(--colour-val5-purbla)")),
+            html_p("Synchronising modules...", className="text-center",
                 style=Dict("color" => "var(--colour-val3-darlow)", "margin" => "0"), id="sys-loading-msg"),
         ], style=Dict(
             "position"      => "relative",
@@ -371,11 +369,15 @@ function APP_RoutePage_DDEF(pathname::AbstractString)
             # Visual Orchestration: High-Fidelity Statistical Modelling and Data Optimisation.
             dbc_container([
                 dbc_row(dbc_col([
-                    html_h1("DaishoDoE", 
+                    html_h1("DoECISORY", 
                         className = "fw-bold display-4 mb-3", 
                         style     = Dict("letterSpacing" => "-0.04em", "color" => "var(--colour-val5-purbla)")
                     ),
-                    html_p("A Decision-Adaptive, Interactive, and Sequential Hybrid Optimisation Framework for Design of Experiments (DoE)",
+                    html_p([
+                        "Design of Experiments with",
+                        html_br(),
+                        "Computational Interactive Sequential Optimization for Response Yield"
+                    ],
                         className = "lead mb-2", 
                         style     = Dict("color" => "var(--colour-val4-darhig)", "maxWidth" => "800px", "margin" => "0 auto")
                     ),
@@ -398,7 +400,7 @@ function APP_RoutePage_DDEF(pathname::AbstractString)
                                 )
                             ),
                             html_h3("Experimental Design", className="fw-bold mb-2", style=Dict("color" => "var(--colour-val5-purbla)")),
-                            html_p("Synthesise robust test matrices utilising Box-Behnken and Taguchi methodologies. Automatically generate protocol workspaces for 3-factor experimental architectures.",
+                            html_p("Generate experimental matrices using Box-Behnken, Central Composite, D-Optimal, or Taguchi methods. Define factor ranges, units, and stoichiometry to produce protocols.",
                                 className="small mb-0", style=Dict("color" => "var(--colour-val4-darhig)", "lineHeight" => "1.6")),
                         ], className="glass-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")), href="/design", style=Dict("textDecoration" => "none")),
                     ], xs=12, md=6, className="mb-4"),
@@ -415,7 +417,7 @@ function APP_RoutePage_DDEF(pathname::AbstractString)
                                 )
                             ),
                             html_h3("Statistical Analysis", className="fw-bold mb-2", style=Dict("color" => "var(--colour-val5-purbla)")),
-                            html_p("Execute rigorous data analysis via GLM regression, dynamically visualise desirability functions, and determine optimal formulations through mathematical modelling.",
+                            html_p("Fit response surface models to experimental data, generate 2D contour and 3D surface plots, and apply desirability functions to identify optimal experimental conditions.",
                                 className="small mb-0", style=Dict("color" => "var(--colour-val4-darhig)", "lineHeight" => "1.6")),
                         ], className="glass-panel h-100 p-4", style=Dict("transition" => "transform 0.2s ease, box-shadow 0.2s ease", "cursor" => "pointer")), href="/analysis", style=Dict("textDecoration" => "none")),
                     ], xs=12, md=6, className="mb-4"),
@@ -600,7 +602,7 @@ Orchestrates Just-In-Time (JIT) pre-compilation. Prioritises speed in local deve
 """
 function APP_Warmup_DDEF()::Nothing
     t0     = time()
-    is_dev = get(ENV, "DAISHO_DEV", "false") == "true"
+    is_dev = get(ENV, "DOECISORY_DEV", get(ENV, "DAISHO_DEV", "false")) == "true"
 
     # Production environment integrity ensured through comprehensive scientific warmup.
     if APP_IsHfSpaces_DDEC && !is_dev
@@ -733,7 +735,7 @@ Threads.@spawn APP_Warmup_DDEF()
 try
     env_label = APP_IsHfSpaces_DDEC ? "Cloud (HF Spaces)" : "Local $(Threads.nthreads())T"
     
-    Sys_Fast.FAST_Log_DDEF("SERVER", "Ready", "DaishoDoE Engine listening on :$(APP_Port_DDEC) ($env_label)", "OK")
+    Sys_Fast.FAST_Log_DDEF("SERVER", "Ready", "DoECISORY listening on :$(APP_Port_DDEC) ($env_label)", "OK")
     custom_logger = ActiveFilteredLogger(current_logger()) do rec
         if rec.level == Logging.Error && contains(string(rec.message), "operation canceled")
             Sys_Fast.FAST_Log_DDEF("SERVER", "DISCONNECT", "Connection reset by browser (ECANCELED)", "INFO")

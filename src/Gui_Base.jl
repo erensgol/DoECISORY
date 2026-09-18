@@ -1,7 +1,7 @@
 module Gui_Base
 
 # ==============================================================================
-# DAISHODOE FRAMEWORK - GUI BASE (SHARED UI COMPONENTS)
+# DOECISORY - GUI BASE (SHARED UI COMPONENTS)
 # ==============================================================================
 # Description: Reusable Dash-Bootstrap components and high-fidelity styling 
 #              tokens.
@@ -540,7 +540,7 @@ function BASE_SystemAuditUI_DDEF()
     status_text = (nt > 1 && mem_perc <= 0.9) ? "System Status: MISSION READY" : "System Status: SUB-OPTIMAL"
 
     return dbc_container([
-        html_h6("DAISHODOE SYSTEM DIAGNOSTICS", className="fw-bold mb-3 colourtx-c3te text-center", style=Dict("letterSpacing" => "1px")),
+        html_h6("DOECISORY SYSTEM DIAGNOSTICS", className="fw-bold mb-3 colourtx-c3te text-center", style=Dict("letterSpacing" => "1px")),
         html_hr(style=BASE_StyleHr_DDEC),
         dbc_row([
             dbc_col(BASE_MiniVitals_DDEF("Thread Count", "$nt [$thread_stat]", thread_colour), xs=12, md=3),

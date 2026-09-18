@@ -1,30 +1,34 @@
 ---
-title: DaishoDoE
+title: DoECISORY
 emoji: 🧪
 colorFrom: purple
 colorTo: indigo
 sdk: docker
 pinned: false
 license: agpl-3.0
-short_description: Decision-Adaptive Interactive Sequential Hybrid Optimisation
+short_description: Design of Experiments with Computational Interactive Sequential Optimization for Response Yield
 ---
 
-# DaishoDoE Framework
+# DoECISORY
 
-**A Decision-Adaptive, Interactive, and Sequential Hybrid Optimisation Framework for Design of Experiments (DoE)**
+**Design of Experiments with Computational Interactive Sequential Optimization for Response Yield**
 
-Developed at **Hacettepe University, Department of Radiopharmacy**, DaishoDoE is a high-performance scientific framework designed to revolutionise the way experimental designs are synthesised and analysed. Built entirely in **Julia** with a high-fidelity **Dash** interface, it provides researchers with robust tools for DOE methodologies including Box-Behnken, Taguchi, and more.
+Developed at **Hacettepe University, Department of Radiopharmacy**, DoECISORY is a high-performance scientific system designed to revolutionise the way experimental designs are synthesised and analysed. Built entirely in **Julia** with a high-fidelity **Dash** interface, it provides researchers with robust tools for DOE methodologies including Box-Behnken, Taguchi, Central Composite, and D-Optimal designs.
 
 ---
 
 ## Project Vision & Architecture
 
-DaishoDoE is engineered for academic excellence and scientific integrity. It follows a strict functional and stateless architecture, ensuring reproducibility and stability in complex computational environments.
+DoECISORY is engineered for academic excellence and scientific integrity. It follows a strict functional and stateless architecture, ensuring reproducibility and stability in complex computational environments.
 
 - **Lib_Mole**: Stoichiometry and chemical calculations.
 - **Lib_Core**: Mathematical algorithms and matrix generation.
 - **Lib_Vise**: Statistical engines (GLM, Regression, Hypothesis Testing).
 - **Lib_Arts**: High-fidelity visualisation using PlotlyJS (Viridis palette).
+- **Sys_Fast**: High-speed Excel I/O, transient memory management and system utilities.
+- **Sys_Flow**: Cross-phase scientific state transitions and design iteration.
+
+---
 
 # Deployment & Usage
 
@@ -34,7 +38,7 @@ The application is ready for cloud interaction and can be accessed at:
 
 ### Local Installation
 For superior computational performance, local installation is recommended.
-To run DaishoDoE locally:
+To run DoECISORY locally:
 
 1. Clone the repository:
    ```bash
@@ -42,8 +46,8 @@ To run DaishoDoE locally:
    cd DaishoDoE
    ```
 2. Start the application:
-   - **Windows**: Run `run_DDE.bat`
-   - **Manual**: `julia --project -e "include(\"app.jl\")"`
+   - **Windows**: Run `Run_DoE.bat`
+   - **Manual**: `julia --project=. app.jl`
 
 ---
 
@@ -60,4 +64,4 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 
 **Pharmacist Eren Selim GÖL**  
 *Lead Software Architect & Julia Developer*  
-Hacettepe University, Department of Radiopharmacy.  
+Hacettepe University, Department of Radiopharmacy.

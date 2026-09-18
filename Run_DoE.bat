@@ -1,5 +1,5 @@
 @echo off
-TITLE DaishoDoE Framework System Gateway
+TITLE DoECISORY Gateway
 COLOR 0F
 CLS
 
@@ -9,8 +9,8 @@ set "t=%t:,=.%0"
 echo.
 echo  ==============================================================
 echo.
-echo                      DaishoDoE Framework
-echo                         System Gateway
+echo                          DoECISORY
+echo                        System Gateway
 echo.
 echo  ==============================================================
 echo.

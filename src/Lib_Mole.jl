@@ -1,7 +1,7 @@
 module Lib_Mole
 
 # ==============================================================================
-# DAISHODOE FRAMEWORK - LIB MOLE (STOICHIOMETRY)
+# DOECISORY - LIB MOLE (STOICHIOMETRY)
 # ==============================================================================
 # Description: Module for stoichiometry, unit-aware mass calculations, and 
 #              chemical auditing processes.

@@ -1,5 +1,5 @@
 # ==============================================================================
-# DaishoDoE Precompilation Workload
+# DoECISORY Precompilation Workload
 # ==============================================================================
 # Executed during sysimage creation to pre-compile critical code paths.
 # This file is not a runtime script — it is consumed by PackageCompiler.
@@ -8,7 +8,7 @@
 # Environment configuration (mirrors app.jl Section 1)
 let
     base_tmp = tempdir()
-    wf_path  = endswith(rstrip(base_tmp, ['/', '\\']), "DaishoDoE_Workforce") ? base_tmp : joinpath(base_tmp, "DaishoDoE_Workforce")
+    wf_path  = endswith(rstrip(base_tmp, ['/', '\\']), "DoECISORY_Workforce") ? base_tmp : joinpath(base_tmp, "DoECISORY_Workforce")
     if !isdir(wf_path); mkpath(wf_path) end
     ENV["TMP"]    = wf_path
     ENV["TEMP"]   = wf_path
@@ -101,8 +101,8 @@ Y_dummy = [50 + 10*r[1] + 5*r[2] - 2*r[3] + 8*r[1]^2 + 6*r[2]^2 + 4*r[3]^2 for r
 
 Lib_Core.CORE_GenDesign_DDEF("BB15", 3)
 Lib_Core.CORE_GenDesign_DDEF("TL09", 3)
-try; Lib_Core.CORE_GenDesign_DDEF("DOPT15", 3); catch; end
-try; Lib_Core.CORE_GenDesign_DDEF("DOPT09", 3); catch; end
+Lib_Core.CORE_GenDesign_DDEF("CD17", 3)
+Lib_Core.CORE_GenDesign_DDEF("DF14", 3, [-1, -1, -1])
 
 configs_bench = [Dict("Levels" => [-1.0, 0.0, 1.0]) for _ in 1:3]
 Lib_Core.CORE_MapLevels_DDEF(X_dummy, configs_bench)

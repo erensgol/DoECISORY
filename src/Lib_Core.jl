@@ -1,7 +1,7 @@
 module Lib_Core
 
 # ==============================================================================
-# DAISHODOE FRAMEWORK - LIB CORE (CORE MATRICES)
+# DOECISORY - LIB CORE (CORE MATRICES)
 # ==============================================================================
 # Description: Module for experimental design generation, coordinate mapping, 
 #              and adaptive search algorithms.
@@ -12,7 +12,6 @@ using Random
 using LinearAlgebra
 using Printf
 using Main.Sys_Fast
-using ExperimentalDesign
 using Distributions
 using StatsModels
 using DataFrames
@@ -20,24 +19,24 @@ using BlackBoxOptim
 
 
 export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF,
-    CORE_ExtractLeader_DDEF, CORE_GenerateOptimalDesign_DDEF,
+    CORE_ExtractLeader_DDEF, CORE_GenDf14Design_DDEF, CORE_ExpandModelMatrix_DDEF,
     CORE_OptimiseDesirability_DDEF, CORE_ValidateDesign_DDEF,
     CORE_D_Efficiency_DDEF, CORE_CalcDesignMetrics_DDEF, CORE_CodeMatrix_DDEF,
     CORE_CalcDesirability_DDEF, CORE_ExtractGoal_DDEF, CORE_GetModelType_DDEF,
-    CORE_DecayModifier_DDES, CORE_ApplyDecayPenalty_DDEF
+    CORE_DecayModifier_DDES, CORE_ApplyDecayPenalty_DDEF,
+    CORE_MethodBB15_DDES, CORE_MethodTL09_DDES, CORE_MethodCD17_DDES, CORE_MethodDF14_DDES
 
 abstract type CORE_AbstractDesignMethod_DDET end
 struct CORE_MethodBB15_DDES <: CORE_AbstractDesignMethod_DDET end
 struct CORE_MethodTL09_DDES <: CORE_AbstractDesignMethod_DDET end
-struct CORE_MethodDOpt15_DDES <: CORE_AbstractDesignMethod_DDET end
-struct CORE_MethodDOpt09_DDES <: CORE_AbstractDesignMethod_DDET end
-struct CORE_MethodUnknown_DDES <: CORE_AbstractDesignMethod_DDET end
+struct CORE_MethodCD17_DDES <: CORE_AbstractDesignMethod_DDET end
+struct CORE_MethodDF14_DDES <: CORE_AbstractDesignMethod_DDET end
 
 const CORE_MethodMap_DDEC = Dict{String, CORE_AbstractDesignMethod_DDET}(
-    "BB15"   => CORE_MethodBB15_DDES(),
-    "TL09"   => CORE_MethodTL09_DDES(),
-    "DOPT15" => CORE_MethodDOpt15_DDES(),
-    "DOPT09" => CORE_MethodDOpt09_DDES()
+    "BB15" => CORE_MethodBB15_DDES(),
+    "TL09" => CORE_MethodTL09_DDES(),
+    "CD17" => CORE_MethodCD17_DDES(),
+    "DF14" => CORE_MethodDF14_DDES()
 )
 
 abstract type CORE_AbstractModelType_DDET end
@@ -60,37 +59,99 @@ export CORE_AbstractModelType_DDET, CORE_ModelLinear_DDES, CORE_ModelQuadratic_D
 # SECTION 1: CONSTANTS - Pre-allocated design matrices
 # ------------------------------------------------------------------------------
 
-const CORE_Bb15Design_DDEC = Int8[
-    -1 -1 0; -1 1 0; 1 -1 0; 1 1 0;
-    -1 0 -1; -1 0 1; 1 0 -1; 1 0 1;
-    0 -1 -1; 0 -1 1; 0 1 -1; 0 1 1;
-    0 0 0; 0 0 0; 0 0 0
-]
-
 const CORE_Tl09Design_DDEC = Int8[
-    -1 -1 -1; -1 0 0; -1 1 1;
-    0 -1 0; 0 0 1; 0 1 -1;
-    1 -1 1; 1 0 -1; 1 1 0
+    -1 -1 -1;
+    -1  0  0;
+    -1  1  1;
+     0 -1  0;
+     0  0  1;
+     0  1 -1;
+     1 -1  1;
+     1  0 -1;
+     1  1  0
 ]
 
+const CORE_Bb15Design_DDEC = Int8[
+     0  0  0;
+    -1 -1  0;
+     1 -1  0;
+    -1  1  0;
+     1  1  0;
+     0  0  0;
+    -1  0 -1;
+     1  0 -1;
+    -1  0  1;
+     1  0  1;
+     0  0  0;
+     0 -1 -1;
+     0  1 -1;
+     0 -1  1;
+     0  1  1
+]
+
+const CORE_Cd17Design_DDEC = Int8[
+     0  0  0;
+     1 -1 -1;
+    -1  1 -1;
+    -1 -1  1;
+     1  1  1;
+     0  0  0;
+     1 -1  1;
+    -1  1  1;
+     1  1 -1;
+    -1 -1 -1;
+     0  0  0;
+    -1  0  0;
+     1  0  0;
+     0 -1  0;
+     0  1  0;
+     0  0 -1;
+     0  0  1
+]
+
+function CORE_GenDf14Design_DDEF(direction::AbstractVector=[-1, -1, -1])::Matrix{Int8}
+    s1 = Int8(length(direction) >= 1 && direction[1] >= 0 ? 1 : -1)
+    s2 = Int8(length(direction) >= 2 && direction[2] >= 0 ? 1 : -1)
+    s3 = Int8(length(direction) >= 3 && direction[3] >= 0 ? 1 : -1)
+    return Int8[
+         0   0   0;
+        s1   0   0;
+         1  -1  -1;
+        -1   1  -1;
+         1   1   1;
+         0   0   0;
+         0  s2   0;
+        -1  -1   1;
+         1  -1   1;
+        -1   1   1;
+         0   0   0;
+         0   0  s3;
+         1   1  -1;
+        -1  -1  -1
+    ]
+end
+
 """
-    CORE_GenDesign_DDEF(Method::String, FactorCount::Int) -> Matrix{Int8}
+    CORE_GenDesign_DDEF(Method::AbstractString, FactorCount::Integer=3, Direction::AbstractVector=[-1, -1, -1]) -> Matrix{Int8}
 Generates a coded (-1, 0, 1) experimental design matrix for the specified method.
-Supports Box-Behnken (BB15), Taguchi (TL09), and D-Optimal designs.
+Supports Box-Behnken (BB15), Taguchi (TL09), Central Composite (CD17), and Fractional D-Optimal (DF14).
 """
-function CORE_GenDesign_DDEF(Method::AbstractString, FactorCount::Integer=3)
-    C = Main.Sys_Fast.FAST_Data_DDEC
+function CORE_GenDesign_DDEF(Method::AbstractString, FactorCount::Integer=3, Direction::AbstractVector=[-1, -1, -1])
     Main.Sys_Fast.FAST_Log_DDEF("CORE", "DESIGN_GEN", "Generating matrix for $Method (Strict 3-Var Mode)", "WAIT")
-    method_type = CORE_GetMethodType_DDEF(Method, C)
-    design = CORE_GenerateMatrix_DDEF(method_type, FactorCount)
+    method_type = CORE_GetMethodType_DDEF(Method)
+    design = CORE_GenerateMatrix_DDEF(method_type, FactorCount, Direction)
     R, C_dim = size(design)
     Main.Sys_Fast.FAST_Log_DDEF("CORE", "GEN_SUCCESS", "$R Runs x $C_dim Variables created.", "OK")
     return design
 end
 
-function CORE_GetMethodType_DDEF(m::AbstractString, C)::CORE_AbstractDesignMethod_DDET
+CORE_GenDesign_DDEF(Method::AbstractString, FactorCount::Integer; Direction::AbstractVector=[-1, -1, -1]) = CORE_GenDesign_DDEF(Method, FactorCount, Direction)
+CORE_GenDesign_DDEF(Method::AbstractString; Direction::AbstractVector=[-1, -1, -1]) = CORE_GenDesign_DDEF(Method, 3, Direction)
+
+function CORE_GetMethodType_DDEF(m::AbstractString)::CORE_AbstractDesignMethod_DDET
     u = uppercase(strip(m))
-    return get(CORE_MethodMap_DDEC, u, CORE_MethodUnknown_DDES())
+    haskey(CORE_MethodMap_DDEC, u) && return CORE_MethodMap_DDEC[u]
+    throw(ArgumentError("Unknown experimental design method: '$m'. Valid options: TL09, BB15, CD17, DF14."))
 end
 
 function CORE_GetModelType_DDEF(m::AbstractString)::CORE_AbstractModelType_DDET
@@ -100,14 +161,11 @@ end
 
 CORE_GetModelType_DDEF(m::CORE_AbstractModelType_DDET) = m
 
-CORE_GenerateMatrix_DDEF(::CORE_MethodBB15_DDES, fc) = copy(CORE_Bb15Design_DDEC)
-CORE_GenerateMatrix_DDEF(::CORE_MethodTL09_DDES, fc) = copy(CORE_Tl09Design_DDEC)
-CORE_GenerateMatrix_DDEF(::CORE_MethodDOpt15_DDES, fc) = CORE_GenerateOptimalDesign_DDEF(fc, 15)
-CORE_GenerateMatrix_DDEF(::CORE_MethodDOpt09_DDES, fc) = CORE_GenerateOptimalDesign_DDEF(fc, 9)
-function CORE_GenerateMatrix_DDEF(mt::CORE_MethodUnknown_DDES, fc)
-    Main.Sys_Fast.FAST_Log_DDEF("CORE", "METHOD_ERROR", "Undefined Method", "FAIL")
-    return Int8[;;]
-end
+CORE_GenerateMatrix_DDEF(::CORE_MethodTL09_DDES, fc::Integer, dir::AbstractVector=[-1, -1, -1]) = copy(CORE_Tl09Design_DDEC)
+CORE_GenerateMatrix_DDEF(::CORE_MethodBB15_DDES, fc::Integer, dir::AbstractVector=[-1, -1, -1]) = copy(CORE_Bb15Design_DDEC)
+CORE_GenerateMatrix_DDEF(::CORE_MethodCD17_DDES, fc::Integer, dir::AbstractVector=[-1, -1, -1]) = copy(CORE_Cd17Design_DDEC)
+CORE_GenerateMatrix_DDEF(::CORE_MethodDF14_DDES, fc::Integer, dir::AbstractVector=[-1, -1, -1]) = CORE_GenDf14Design_DDEF(dir)
+
 
 # ------------------------------------------------------------------------------
 # SECTION 2: COORDINATE MAPPING (Coded -> Physical)
@@ -115,7 +173,8 @@ end
 
 """
     CORE_MapLevels_DDEF(CodedMatrix, Config) -> Matrix{Float64}
-Maps coded entries (-1, 0, 1) to physical units based on factor level configurations.
+Maps coded entries in [-1, 1] to physical units via piecewise linear interpolation.
+Backward compatible: integer coded values (-1, 0, 1) yield identical results to discrete indexing.
 """
 function CORE_MapLevels_DDEF(CodedMatrix::AbstractMatrix, Config::AbstractVector)
     rows = size(CodedMatrix, 1)
@@ -123,63 +182,15 @@ function CORE_MapLevels_DDEF(CodedMatrix::AbstractMatrix, Config::AbstractVector
 
     result = Matrix{Float64}(undef, rows, cols)
     @inbounds for i in 1:cols
-        lvls    = get(Config[i], "Levels", zeros(3))
+        lvls = get(Config[i], "Levels", zeros(3))
         length(lvls) < 3 && (lvls = zeros(3))
-        indices = clamp.(round.(Int, view(CodedMatrix, :, i)) .+ 2, 1, 3)
-        result[:, i] .= getindex.(Ref(lvls), indices)
+        L1, L2, L3 = Float64(lvls[1]), Float64(lvls[2]), Float64(lvls[3])
+        for r in 1:rows
+            c = Float64(CodedMatrix[r, i])
+            result[r, i] = c < 0.0 ? L2 + c * (L2 - L1) : L2 + c * (L3 - L2)
+        end
     end
     return result
-end
-
-# ------------------------------------------------------------------------------
-# SECTION 3: OPTIMAL DESIGN GENERATION
-# ------------------------------------------------------------------------------
-
-"""
-    CORE_GenerateOptimalDesign_DDEF(FactorCount::Int, RunCount::Int) -> Matrix{Int8}
-Generates a D-Optimal design matrix for quadratic response surfaces via `ExperimentalDesign.jl`.
-"""
-function CORE_GenerateOptimalDesign_DDEF(FactorCount::Integer=3, RunCount::Integer=15)
-    C           = Main.Sys_Fast.FAST_Data_DDEC
-    FactorCount = 3
-    Main.Sys_Fast.FAST_Log_DDEF("CORE", "OPTIMAL_GEN", "Generating D-Optimal design for strict 3-variable system ($RunCount runs).", "WAIT")
-
-    try
-        factor_dists = fill(DiscreteUniform(-1, 1), FactorCount)
-        design_dist  = DesignDistribution(factor_dists)
-
-        pool_size  = min(3^FactorCount, 1000)
-        candidates = rand(design_dist, pool_size)
-
-        term_syms = [Symbol("x", i) for i in 1:FactorCount]
-        rename!(candidates.matrix, term_syms)
-
-        # Utilise StatsModels terms to maintain structural formula integrity.
-        main_terms  = [term(s) for s in term_syms]
-        inter_terms = []
-        for i in 1:FactorCount
-            for j in (i+1):FactorCount
-                push!(inter_terms, main_terms[i] & main_terms[j])
-            end
-        end
-        quad_terms = [main_terms[i] & main_terms[i] for i in 1:FactorCount]
-
-        all_terms = reduce(+, [main_terms; inter_terms; quad_terms])
-        f         = FormulaTerm(term(0), all_terms)
-
-        Main.Sys_Fast.FAST_Log_DDEF("CORE", "OPTIMAL_GEN", "D-Optimal model structure established successfully.", "WAIT")
-
-        opt_design = Base.invokelatest(OptimalDesign, candidates, f, RunCount)
-
-        res_matrix = Matrix{Int8}(round.(Matrix(opt_design.matrix)))
-
-        R, C_dim = size(res_matrix)
-        Main.Sys_Fast.FAST_Log_DDEF("CORE", "GEN_SUCCESS", "$R Runs x $C_dim Variables D-Optimal created.", "OK")
-        return res_matrix
-    catch e
-        Main.Sys_Fast.FAST_Log_DDEF("CORE", "GEN_FAIL", "Failed to generate optimal design: $e", "FAIL")
-        return zeros(Int8, RunCount, FactorCount)
-    end
 end
 
 # ==============================================================================
@@ -573,27 +584,6 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    CORE_D_Efficiency_DDEF(X::Matrix) -> Float64
-Calculates D-Efficiency as a design quality metric (Log-Determinant based).
-Academic Standard: D = (|X'X| / N^p)^(1/p) where N is runs and p is parameters.
-"""
-function CORE_D_Efficiency_DDEF(X::AbstractMatrix)
-    R, C = size(X)
-    R < C && return 0.0
-    try
-        # Design matrix must be in coded space [-1, 1] for valid efficiency metrics.
-        X_sc = CORE_CodeMatrix_DDEF(X)
-        M    = X_sc' * X_sc
-        # Determinant calculation with small Tikhonov guard for near-singular designs.
-        det_val = det(M + I * 1e-9)
-        eff = (max(det_val, 1e-18) / (R^C))^(1 / C)
-        return clamp(eff, 0.0, 1.0)
-    catch
-        return 0.0
-    end
-end
-
-"""
     CORE_CodeMatrix_DDEF(X::Matrix, [Bounds]) -> Matrix{Float64}
 Codes a physical matrix into the [-1, 1] interval for scale-invariant mathematical analysis.
 """
@@ -619,7 +609,6 @@ function CORE_CodeMatrix_DDEF(X::AbstractMatrix, Bounds::Union{AbstractMatrix, N
         elseif b_min >= -1.0001 && b_max <= 1.0001 && abs(b_min + b_max) < 1e-3
             X_coded[:, j] .= col_safe
         else
-            # Linear transformation: x_coded = 2 * (x - min) / (max - min) - 1
             X_coded[:, j] .= 2.0 .* (col_safe .- b_min) ./ range_val .- 1.0
         end
     end
@@ -627,40 +616,116 @@ function CORE_CodeMatrix_DDEF(X::AbstractMatrix, Bounds::Union{AbstractMatrix, N
 end
 
 """
-    CORE_CalcDesignMetrics_DDEF(X::Matrix) -> Dict
-Calculates a comprehensive suite of design quality metrics including D, A, G, and I efficiency.
+    CORE_ExpandModelMatrix_DDEF(X::AbstractMatrix, ModelType::CORE_AbstractModelType_DDET) -> Matrix{Float64}
+Expands coded 3-factor design matrix to full linear (p=4) or quadratic (p=10) model matrix.
+Columns for Quadratic: [1, x1, x2, x3, x1*x2, x1*x3, x2*x3, x1^2, x2^2, x3^2].
+Columns for Linear:    [1, x1, x2, x3].
 """
-function CORE_CalcDesignMetrics_DDEF(X::AbstractMatrix)
+function CORE_ExpandModelMatrix_DDEF(X::AbstractMatrix, ModelType::CORE_AbstractModelType_DDET=CORE_ModelQuadratic_DDES())::Matrix{Float64}
     R, C = size(X)
-    res  = Dict("D" => 0.0, "A" => 0.0, "G" => 0.0, "I" => 0.0, "Condition" => Inf)
-    R < C && return res
+    C != 3 && throw(ArgumentError("DoECISORY model matrix expansion requires exactly 3 factor columns. Found: $C"))
+
+    if isa(ModelType, CORE_ModelLinear_DDES)
+        X_exp = Matrix{Float64}(undef, R, 4)
+        @inbounds for i in 1:R
+            X_exp[i, 1] = 1.0
+            X_exp[i, 2] = Float64(X[i, 1])
+            X_exp[i, 3] = Float64(X[i, 2])
+            X_exp[i, 4] = Float64(X[i, 3])
+        end
+        return X_exp
+    else
+        X_exp = Matrix{Float64}(undef, R, 10)
+        @inbounds for i in 1:R
+            x1, x2, x3 = Float64(X[i, 1]), Float64(X[i, 2]), Float64(X[i, 3])
+            X_exp[i, 1]  = 1.0
+            X_exp[i, 2]  = x1
+            X_exp[i, 3]  = x2
+            X_exp[i, 4]  = x3
+            X_exp[i, 5]  = x1 * x2
+            X_exp[i, 6]  = x1 * x3
+            X_exp[i, 7]  = x2 * x3
+            X_exp[i, 8]  = x1 * x1
+            X_exp[i, 9]  = x2 * x2
+            X_exp[i, 10] = x3 * x3
+        end
+        return X_exp
+    end
+end
+
+function CORE_ExpandModelMatrix_DDEF(X::AbstractMatrix, ModelType::AbstractString)::Matrix{Float64}
+    return CORE_ExpandModelMatrix_DDEF(X, CORE_GetModelType_DDEF(ModelType))
+end
+
+"""
+    CORE_D_Efficiency_DDEF(X::AbstractMatrix, [ModelType]) -> Float64
+Calculates academic D-Efficiency based on normalized Fisher information determinant:
+D = (|X'X| / N^p)^(1/p) where N is run count and p is number of model parameters (10 for quadratic, 4 for linear).
+"""
+function CORE_D_Efficiency_DDEF(X::AbstractMatrix, ModelType::CORE_AbstractModelType_DDET=CORE_ModelQuadratic_DDES())::Float64
+    R, _ = size(X)
+    effective_model = (R < 10 && ModelType isa CORE_ModelQuadratic_DDES) ? CORE_ModelLinear_DDES() : ModelType
+    X_sc = CORE_CodeMatrix_DDEF(X)
+    X_exp = CORE_ExpandModelMatrix_DDEF(X_sc, effective_model)
+    p = size(X_exp, 2)
+    R < p && return 0.0
 
     try
-        X_sc = CORE_CodeMatrix_DDEF(X)
-        XtX  = X_sc' * X_sc
-        
+        M = X_exp' * X_exp
+        det_val = det(M)
+        det_val <= 0.0 && return 0.0
+        eff = (det_val / (Float64(R)^p))^(1.0 / p)
+        return clamp(eff, 0.0, 1.0)
+    catch
+        return 0.0
+    end
+end
+
+function CORE_D_Efficiency_DDEF(X::AbstractMatrix, ModelType::AbstractString)::Float64
+    return CORE_D_Efficiency_DDEF(X, CORE_GetModelType_DDEF(ModelType))
+end
+
+"""
+    CORE_CalcDesignMetrics_DDEF(X::AbstractMatrix, [ModelType]) -> Dict
+Calculates a comprehensive suite of design quality metrics including D, A, G, and I efficiency
+using the expanded model matrix (10 parameters for quadratic, 4 parameters for linear).
+"""
+function CORE_CalcDesignMetrics_DDEF(X::AbstractMatrix, ModelType::CORE_AbstractModelType_DDET=CORE_ModelQuadratic_DDES())
+    R, C = size(X)
+    res  = Dict("D" => 0.0, "A" => 0.0, "G" => 0.0, "I" => 0.0, "Condition" => Inf)
+    C != 3 && return res
+
+    effective_model = (R < 10 && ModelType isa CORE_ModelQuadratic_DDES) ? CORE_ModelLinear_DDES() : ModelType
+    X_sc = CORE_CodeMatrix_DDEF(X)
+    X_exp = CORE_ExpandModelMatrix_DDEF(X_sc, effective_model)
+    p = size(X_exp, 2)
+    R < p && return res
+
+    try
+        XtX = X_exp' * X_exp
         res["Condition"] = cond(XtX)
 
-        # D-Efficiency representing the determinant-based design quality metric.
-        det_val  = det(XtX)
-        res["D"] = (max(det_val, 0.0) / (R^C))^(1 / C)
+        det_val = det(XtX)
+        res["D"] = det_val > 0.0 ? clamp((det_val / (Float64(R)^p))^(1.0 / p), 0.0, 1.0) : 0.0
 
-        # A-Efficiency representing the average variance-based design quality metric.
-        inv_XtX  = pinv(XtX)
-        res["A"] = C / (R * tr(inv_XtX))
+        inv_XtX = pinv(XtX)
+        tr_inv = tr(inv_XtX)
+        res["A"] = tr_inv > 0.0 ? clamp(p / (R * tr_inv), 0.0, 1.0) : 0.0
 
-        # G-Efficiency representing the maximum variance-based design quality metric.
-        lev      = diag(X_sc * inv_XtX * X_sc')
-        max_var  = maximum(lev)
-        res["G"] = C / (R * max_var)
+        lev = diag(X_exp * inv_XtX * X_exp')
+        max_var = maximum(lev)
+        res["G"] = max_var > 0.0 ? clamp(p / (R * max_var), 0.0, 1.0) : 0.0
 
-        # I-Efficiency representing the integrated variance-based design quality metric.
-        res["I"] = C / (R * mean(lev))
-
+        mean_lev = sum(lev) / length(lev)
+        res["I"] = mean_lev > 0.0 ? clamp(p / (R * mean_lev), 0.0, 1.0) : 0.0
     catch e
         Main.Sys_Fast.FAST_Log_DDEF("CORE", "METRICS_ERR", "Stability error in design metrics: $e", "WARN")
     end
     return res
+end
+
+function CORE_CalcDesignMetrics_DDEF(X::AbstractMatrix, ModelType::AbstractString)
+    return CORE_CalcDesignMetrics_DDEF(X, CORE_GetModelType_DDEF(ModelType))
 end
 
 end

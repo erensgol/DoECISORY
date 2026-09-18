@@ -1,5 +1,5 @@
 # ======================================================================================
-# DAISHODOE - HUGGING FACE SPACES DOCKERFILE 
+# DOECISORY - HUGGING FACE SPACES DOCKERFILE 
 # ======================================================================================
 
 # Use the official Julia 1.12 image

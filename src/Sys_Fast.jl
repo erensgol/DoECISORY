@@ -1,7 +1,7 @@
 module Sys_Fast
 
 # ==============================================================================
-# DAISHODOE FRAMEWORK - SYSTEM FAST (IO & UTILS)
+# DOECISORY - SYSTEM FAST (IO & UTILS)
 # ==============================================================================
 # Description: High-speed I/O (Excel/XLSX), system-wide logging, and transient 
 #              data orchestration.
@@ -81,8 +81,8 @@ Base.@kwdef struct FAST_Constants_DDES
     ROLE_FIX::String       = "Fixed"
     METHOD_BB15::String    = "BB15"
     METHOD_TL09::String    = "TL09"
-    METHOD_DOPT15::String  = "DOPT15"
-    METHOD_DOPT09::String  = "DOPT09"
+    METHOD_CD17::String    = "CD17"
+    METHOD_DF14::String    = "DF14"
 end
 
 const FAST_Data_DDEC = FAST_Constants_DDES()
@@ -97,7 +97,7 @@ Dedicated directory for transient operations to prevent system-wide data scatter
 """
 const FAST_TempRoot_DDEC = let
     base = rstrip(tempdir(), ['/', '\\'])
-    endswith(base, "DaishoDoE_Workforce") ? base : joinpath(base, "DaishoDoE_Workforce")
+    endswith(base, "DoECISORY_Workforce") ? base : joinpath(base, "DoECISORY_Workforce")
 end
 
 """
@@ -148,7 +148,7 @@ function FAST_CleanWorkforce_DDEF(all::Bool=false)::Nothing
         for (root, dirs, files) in walkdir(FAST_TempRoot_DDEC; topdown=false)
             for f in files
                 # Integrity Protocol: Enforcement of restricted deletion for files non-compliant with DDE patterns.
-                if all || startswith(f, "DAISHO_TEMP_") || startswith(f, "DDE_")
+                if all || startswith(f, "DOECISORY_TEMP_") || startswith(f, "DAISHO_TEMP_") || startswith(f, "DDE_")
                     try
                         rm(joinpath(root, f); force=true)
                     catch
@@ -447,6 +447,8 @@ function FAST_SafeExcelWrite_DDEF(File::AbstractString, Updates::Dict{<:Abstract
 
     # 4. Atomic Write & Style Protocol
     if !isempty(valid_pairs)
+        dir_target = dirname(File)
+        !isdir(dir_target) && mkpath(dir_target)
         for attempt in 1:max_retries
             try
                 # Windows-Specific: Initial delay to ensure previous handles are released.
@@ -632,7 +634,7 @@ end
 
 """
     FAST_GetLabDefaults_DDEF()::Dict{String,Any}
-Provides the canonical initial state for a fresh Daisho session.
+Provides the canonical initial state for a fresh DoECISORY session.
 """
 function FAST_GetLabDefaults_DDEF()::Dict{String,Any}
     # Using explicit types for standard return
@@ -831,7 +833,7 @@ Template: DDE_[Proj]_[Phase]_[Tag]_[Timestamp].[Ext]
 """
 function FAST_GenerateSmartName_DDEF(Project::String, Phase::String, Tag::String, Ext::String="xlsx")::String
     p_raw    = strip(Project)
-    p_clean  = (isempty(p_raw) || lowercase(p_raw) == "daisho") ? "Daisho" : FAST_SanitiseFilename_DDEF(p_raw)
+    p_clean  = (isempty(p_raw) || lowercase(p_raw) == "doecisory" || lowercase(p_raw) == "daisho") ? "DoECISORY" : FAST_SanitiseFilename_DDEF(p_raw)
     ph_clean = replace(Phase, "Phase" => "P")
     ts       = Dates.format(now(), "yyyy_mmdd_HHMM")
     
@@ -840,7 +842,7 @@ end
 
 """
     FAST_ExtractProjectFromFilename_DDEF(Filename::String) -> String
-Extracts the project name from a Daisho standard filename.
+Extracts the project name from a DoECISORY standard filename.
 Returns empty string if the pattern doesn't match.
 """
 function FAST_ExtractProjectFromFilename_DDEF(Filename::String)::String
@@ -867,7 +869,7 @@ function FAST_GetTransientPath_DDEF()::String
     isdir(FAST_TempRoot_DDEC) || mkpath(FAST_TempRoot_DDEC)
     ts = Dates.format(now(), "HHmmss_SSS")
     rnd = rand(1000:9999)
-    return joinpath(FAST_TempRoot_DDEC, "DAISHO_TEMP_$(ts)_$(rnd).xlsx")
+    return joinpath(FAST_TempRoot_DDEC, "DOECISORY_TEMP_$(ts)_$(rnd).xlsx")
 end
 
 FAST_GetTransientPath_DDEF(::Nothing) = FAST_GetTransientPath_DDEF()

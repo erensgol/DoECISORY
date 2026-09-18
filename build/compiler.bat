@@ -1,10 +1,10 @@
 @echo off
-TITLE DaishoDoE Sysimage Compiler
+TITLE DoECISORY Sysimage Compiler
 COLOR 0E
 CLS
 
 echo ============================================================
-echo   DaishoDoE Sysimage Compiler
+echo   DoECISORY Sysimage Compiler
 echo   Do not close this window. This process takes an hour.
 echo ============================================================
 echo.

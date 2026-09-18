@@ -1,5 +1,5 @@
 @echo off
-TITLE DaishoDoE [Main Entry Mode]
+TITLE DoECISORY [Main Entry Mode]
 COLOR 0A
 CLS
 
@@ -8,7 +8,7 @@ cd /d "%~dp0.."
 
 set "t=%TIME: =0%"
 set "t=%t:,=.%0"
-echo [%t%] BOOT        : Setup           Booting DaishoDoE...
+echo [%t%] BOOT        : Setup           Booting DoECISORY...
 echo [%t%] BOOT        : Setup           Verifying Julia Environment...
 
 REM Check if Julia is in PATH
