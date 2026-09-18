@@ -1,8 +1,8 @@
 ---
 title: DoECISORY
 emoji: 🧪
-colorFrom: purple
-colorTo: indigo
+colorFrom: yellow
+colorTo: purple
 sdk: docker
 pinned: false
 license: agpl-3.0
@@ -23,9 +23,9 @@ DoECISORY is engineered for academic excellence and scientific integrity. It fol
 
 - **Lib_Mole**: Stoichiometry and chemical calculations.
 - **Lib_Core**: Mathematical algorithms and matrix generation.
-- **Lib_Vise**: Statistical engines (GLM, Regression, Hypothesis Testing).
+- **Lib_Vise**: Statistical engines (Regression, Hypothesis Testing).
 - **Lib_Arts**: High-fidelity visualisation using PlotlyJS (Viridis palette).
-- **Sys_Fast**: High-speed Excel I/O, transient memory management and system utilities.
+- **Sys_Fast**: Excel I/O, transient memory management and system utilities.
 - **Sys_Flow**: Cross-phase scientific state transitions and design iteration.
 
 ---
@@ -34,7 +34,7 @@ DoECISORY is engineered for academic excellence and scientific integrity. It fol
 
 ### Cloud Deployment
 The application is ready for cloud interaction and can be accessed at:  
-[https://erensgol-daishodoe.hf.space](https://erensgol-daishodoe.hf.space)
+[https://erensgol-doecisory.hf.space]
 
 ### Local Installation
 For superior computational performance, local installation is recommended.
@@ -42,8 +42,8 @@ To run DoECISORY locally:
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/erensgol/DaishoDoE.git
-   cd DaishoDoE
+   git clone https://github.com/erensgol/DoECISORY.git
+   cd DoECISORY
    ```
 2. Start the application:
    - **Windows**: Run `Run_DoE.bat`
@@ -63,5 +63,5 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 # Author & Contact
 
 **Pharmacist Eren Selim GÖL**  
-*Lead Software Architect & Julia Developer*  
-Hacettepe University, Department of Radiopharmacy.
+*Lead Software Architect*  
+https://www.linkedin.com/in/erensgol
