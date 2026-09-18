@@ -6,7 +6,7 @@ colorTo: indigo
 sdk: docker
 pinned: false
 license: agpl-3.0
-short_description: Design of Experiments with Computational Interactive Sequential Optimization for Response Yield
+short_description: DoE with Computational Interactive SeqOpt for Response Yield
 ---
 
 # DoECISORY
