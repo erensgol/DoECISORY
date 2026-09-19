@@ -2,7 +2,7 @@
 # DoECISORY Sysimage Compiler
 # ==============================================================================
 # Usage:  julia --threads auto --project=. build/compiler.jl
-# Output: build/engine.dll (Windows) / .so (Linux)
+# Output: build/sysimage.dll (Windows) / .so (Linux)
 # ==============================================================================
 
 using Pkg
@@ -55,7 +55,7 @@ cp(proj_toml, proj_backup; force=true)
 cp(mani_toml, mani_backup; force=true)
 println("[BUILD] Backups created.")
 
-# --- 4. Build (with guaranteed restore) -------------------------------------
+# --- 4. Build -------------------------------------
 
 try
     # Phase 1: Trace workload (PlotlyJS must be present for Sys_Flow.jl)
@@ -90,7 +90,22 @@ try
     Pkg.instantiate()
     println("[BUILD] PlotlyJS removed. Manifest re-resolved.")
 
-    # Phase 3: Read remaining packages from Project.toml dynamically
+    # Phase 3: Filter precompile statements to eliminate removed or undeclared modules
+    if isfile(stmts_path)
+        println("[BUILD] Filtering precompile statements (removing PlotlyJS and local Main references)...")
+        raw_lines = readlines(stmts_path)
+        filtered_lines = filter(raw_lines) do line
+            !occursin("PlotlyJS", line) && !occursin("PlotlyBase", line) && !occursin("Main.", line)
+        end
+        open(stmts_path, "w") do io
+            for line in filtered_lines
+                println(io, line)
+            end
+        end
+        println("[BUILD] Statements filtered: $(length(raw_lines)) -> $(length(filtered_lines)) clean statements.")
+    end
+
+    # Phase 4: Read remaining packages from Project.toml dynamically
     proj_data = TOML.parsefile(proj_toml)
     dep_names = collect(keys(get(proj_data, "deps", Dict())))
     filter!(n -> n != "PackageCompiler", dep_names)
@@ -104,7 +119,7 @@ try
         sysimage_path              = sysimg_path,
         precompile_statements_file = stmts_path,
         cpu_target                 = PackageCompiler.default_app_cpu_target(),
-        incremental                = false,
+        incremental                = true,
     )
 
     elapsed     = round(time() - t0; digits=1)
@@ -119,7 +134,7 @@ try
     println("  Path:  $sysimg_path")
     println()
     println("  Launch: julia --sysimage build/$sysimg_name --threads auto --project=. app.jl")
-    println("  Or double-click run_DDE.bat (auto-detects sysimage).")
+    println("  Or double-click Run_DoE.bat (auto-detects sysimage).")
     println("="^60 * "\n")
 
 finally

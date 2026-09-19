@@ -5,7 +5,7 @@ CLS
 
 echo ============================================================
 echo   DoECISORY Sysimage Compiler
-echo   Do not close this window. This process takes an hour.
+echo   Do not close this window. This process takes about 10-15 minutes.
 echo ============================================================
 echo.
 
@@ -15,7 +15,7 @@ julia --threads auto --project=. build\compiler.jl
 echo.
 IF %ERRORLEVEL% EQU 0 (
     COLOR 0A
-    echo   SUCCESS! Launch the system using run_DDE.bat.
+    echo   SUCCESS! Launch the system using Run_DoE.bat.
 ) ELSE (
     COLOR 0C
     echo   ERROR ENCOUNTERED. Please check the logs above.

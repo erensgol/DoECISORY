@@ -5,6 +5,12 @@
 # This file is not a runtime script — it is consumed by PackageCompiler.
 # ==============================================================================
 
+using Pkg
+const _PROJECT_ROOT = abspath(joinpath(@__DIR__, ".."))
+if Pkg.project().path != joinpath(_PROJECT_ROOT, "Project.toml")
+    Pkg.activate(_PROJECT_ROOT)
+end
+
 # Environment configuration (mirrors app.jl Section 1)
 let
     base_tmp = tempdir()
@@ -27,13 +33,11 @@ using Dash
 using DashBootstrapComponents
 Logging.disable_logging(Logging.BelowMinLevel)
 
-using Pkg
 using DataFrames
 using LoggingExtras
 # NOTE: PlotlyJS loaded via Lib_Arts include (not in sysimage packages)
 
 # --- Module Loading (mirrors app.jl Section 3-5) ---
-const _PROJECT_ROOT = abspath(joinpath(@__DIR__, ".."))
 
 include(joinpath(_PROJECT_ROOT, "src", "Sys_Fast.jl"))
 using Main.Sys_Fast
@@ -108,7 +112,7 @@ configs_bench = [Dict("Levels" => [-1.0, 0.0, 1.0]) for _ in 1:3]
 Lib_Core.CORE_MapLevels_DDEF(X_dummy, configs_bench)
 Lib_Core.CORE_D_Efficiency_DDEF(X_dummy)
 
-# 5. Linear regression (GLM/StatsModels — heaviest JIT)
+# 5. Linear regression (StatsModels)
 names_in = ["X1", "X2", "X3"]
 mod_lin = Lib_Vise.VISE_Regress_DDEF(X_dummy, vec(Y_dummy), "linear"; InNames=names_in)
 

@@ -602,7 +602,7 @@ Orchestrates Just-In-Time (JIT) pre-compilation. Prioritises speed in local deve
 """
 function APP_Warmup_DDEF()::Nothing
     t0     = time()
-    is_dev = get(ENV, "DOECISORY_DEV", get(ENV, "DAISHO_DEV", "false")) == "true"
+    is_dev = get(ENV, "DOECISORY_DEV", "false") == "true"
 
     # Production environment integrity ensured through comprehensive scientific warmup.
     if APP_IsHfSpaces_DDEC && !is_dev

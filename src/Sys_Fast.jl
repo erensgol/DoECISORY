@@ -30,7 +30,7 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
        FAST_RoundCols_DDEF!, FAST_GetCol_DDEF, FAST_CleanHeader_DDEF,
        FAST_InitialiseWorkforce_DDEF, FAST_CleanWorkforce_DDEF, FAST_Data_DDEC,
        FAST_SanitiseFilename_DDEF, FAST_LoadMemoFile_DDEF, FAST_ExtractDataID_DDEF,
-       FAST_ValidateSheetStructure_DDEF, FAST_FinaliseMasterWrite_DDEF
+       FAST_ValidateSheetStructure_DDEF, FAST_FinaliseMasterWrite_DDEF, FAST_ActiveGroup_DDEC
 
 # ==============================================================================
 # PART A: SYSTEM ARCHITECTURE & TRANSIENT WORKFORCE
@@ -148,7 +148,7 @@ function FAST_CleanWorkforce_DDEF(all::Bool=false)::Nothing
         for (root, dirs, files) in walkdir(FAST_TempRoot_DDEC; topdown=false)
             for f in files
                 # Integrity Protocol: Enforcement of restricted deletion for files non-compliant with DDE patterns.
-                if all || startswith(f, "DOECISORY_TEMP_") || startswith(f, "DAISHO_TEMP_") || startswith(f, "DDE_")
+                if all || startswith(f, "DOECISORY_TEMP_") || startswith(f, "DDE_")
                     try
                         rm(joinpath(root, f); force=true)
                     catch
@@ -202,6 +202,7 @@ end
 # ------------------------------------------------------------------------------
 
 # Static pre-computation of ANSI escape sequences for synchronised console telemetry.
+const FAST_ActiveGroup_DDEC = Ref{String}("")
 const FAST_LogColours_DDEC = Dict{Symbol, String}(
     :INFO => "\e[34m",
     :OK   => "\e[32m",
@@ -220,9 +221,11 @@ function FAST_Log_DDEF(::Val{Type}, Source, Event, Detail) where {Type}
     c       = get(FAST_LogColours_DDEC, Type, "\e[34m")
     ts      = Dates.format(now(), "HH:MM:SS.sss")
     det_str = isnothing(Detail) ? "null" : string(Detail)
+    grp_pfx = isempty(FAST_ActiveGroup_DDEC[]) ? "" : "[$(FAST_ActiveGroup_DDEC[])] "
+    src_fmt = grp_pfx * string(Source)
     
-    @printf("\e[34m[%s]%s \e[32m%-12s%s: %s%-15s%s %s%s%s\n",
-        ts, FAST_LogReset_DDEC, string(Source), FAST_LogReset_DDEC, c, string(Event), FAST_LogReset_DDEC, c, det_str, FAST_LogReset_DDEC)
+    @printf("\e[34m[%s]%s \e[32m%-14s%s: %s%-15s%s %s%s%s\n",
+        ts, FAST_LogReset_DDEC, src_fmt, FAST_LogReset_DDEC, c, string(Event), FAST_LogReset_DDEC, c, det_str, FAST_LogReset_DDEC)
     flush(stdout)
 end
 
@@ -833,7 +836,7 @@ Template: DDE_[Proj]_[Phase]_[Tag]_[Timestamp].[Ext]
 """
 function FAST_GenerateSmartName_DDEF(Project::String, Phase::String, Tag::String, Ext::String="xlsx")::String
     p_raw    = strip(Project)
-    p_clean  = (isempty(p_raw) || lowercase(p_raw) == "doecisory" || lowercase(p_raw) == "daisho") ? "DoECISORY" : FAST_SanitiseFilename_DDEF(p_raw)
+    p_clean  = (isempty(p_raw) || lowercase(p_raw) == "doecisory") ? "DoECISORY" : FAST_SanitiseFilename_DDEF(p_raw)
     ph_clean = replace(Phase, "Phase" => "P")
     ts       = Dates.format(now(), "yyyy_mmdd_HHMM")
     

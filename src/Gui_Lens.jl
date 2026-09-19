@@ -576,7 +576,7 @@ function LENS_RegisterCallbacks_DDEF(app)
     ) do active_data, current_proj, batch_status
         # Unified Initialisation of Session Metadata
         is_loading = get(batch_status, "next_pkg", get(batch_status, :next_pkg, 0)) > 0
-        proj_v = isnothing(current_proj) || isempty(strip(string(current_proj))) || lowercase(strip(string(current_proj))) == "doecisory" || lowercase(strip(string(current_proj))) == "daisho" ? "" : string(current_proj)
+        proj_v = isnothing(current_proj) || isempty(strip(string(current_proj))) || lowercase(strip(string(current_proj))) == "doecisory" ? "" : string(current_proj)
         
         path = ""
         try
