@@ -615,7 +615,7 @@ function APP_Warmup_DDEF()::Nothing
         return nothing
     end
 
-    FAST_Log_DDEF("BOOT", "Pre-compilation", "Initiating Scientific JIT Pulse...", "WAIT")
+    FAST_Log_DDEF("BOOT", "Pre-compilation", "Initiating JIT Pulse...", "WAIT") 
 
     try
         Sys_Fast.FAST_SafeNum_DDEF("42.0")
@@ -648,7 +648,7 @@ function APP_Warmup_DDEF()::Nothing
         goal_dummy = Dict{String, Any}("Type"=>"Maximise", "Min"=>0.0, "Max"=>20.0, "Target"=>15.0, "Weight"=>1.0, "WeightVal" => 1.0)
 
         # PULSE 1: Linear Path Warmup
-        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Scientific Engine (Phase-A: Linear)...", "WAIT")
+        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Algorithmic Layer (Phase-A: Linear)...", "WAIT")
         mod_lin = Lib_Vise.VISE_Regress_DDEF(X_dummy, vec(Y_dummy), "linear"; InNames=names_in)
         mod_lin["Goal"] = goal_dummy
         Lib_Vise.VISE_GridSearch_DDEF([mod_lin], [goal_dummy], bounds_dummy; Steps=11)
@@ -656,14 +656,14 @@ function APP_Warmup_DDEF()::Nothing
         Lib_Arts.ARTS_Draw_DDEF(Lib_Arts.ARTS_PlotSurface_DDES(), mod_lin, X_dummy, [1, 2], ["X1", "X2"], "Pulse-L")
 
         # PULSE 2: Quadratic Path Warmup
-        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Scientific Engine (Phase-B: Quadratic)...", "WAIT")
+        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Algorithmic Layer (Phase-B: Quadratic)...", "WAIT")
         mod_quad = Lib_Vise.VISE_Regress_DDEF(X_dummy, vec(Y_dummy), "quadratic"; InNames=names_in)
         mod_quad["Goal"] = goal_dummy
         Lib_Vise.VISE_GridSearch_DDEF([mod_quad], [goal_dummy], bounds_dummy; Steps=11)
         FAST_Log_DDEF("BOOT", "Warmup", "Phase-B completed. Pulsing Phase-C...", "OK")
 
         # PULSE 3: Optimisation & Stoichiometry Pulse (The BBO & Mole Path)
-        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Scientific Engine (Phase-C: BBO & Audit)...", "WAIT")
+        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Algorithmic Layer (Phase-C: BBO & Audit)...", "WAIT")
         
         # Pre-compiling the Global Multi-Objective Optimiser (BlackBoxOptim)
         # Using a very short MaxTime for warmup
@@ -674,13 +674,13 @@ function APP_Warmup_DDEF()::Nothing
         Lib_Mole.MOLE_AuditBatch_DDEF(ingredients_dummy, X_dummy, 5.0, 10.0)
 
         # PULSE 4: Diagnostic Statistics Pulse (ANOVA & Normality)
-        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Scientific Engine (Phase-D: Diagnostics)...", "WAIT")
+        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Algorithmic Layer (Phase-D: Diagnostics)...", "WAIT")
         Lib_Vise.VISE_GenerateAnovaTable_DDEF(mod_quad, X_dummy, vec(Y_dummy))
         Lib_Vise.VISE_PerformNormalityTest_DDEF(mod_quad, X_dummy, vec(Y_dummy))
         Lib_Vise.VISE_SensitivityAnalysis_DDEF(mod_quad, [0.5, 0.5, 0.5], X_dummy)
 
-        # PULSE 5: Analytical Orchestration Pulse
-        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Orchestration Engine (Phase-E: Finalisation)...", "WAIT")
+        # PULSE 5: Integration Layer Warmup
+        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Integration Layer (Phase-E: Finalisation)...", "WAIT")
 
         df_mock = DataFrame()
         df_mock[!, "$(pfx_in)X1"] = X_dummy[:, 1]
@@ -698,11 +698,11 @@ function APP_Warmup_DDEF()::Nothing
         # Optimised for JIT Speed: 0.1s BBO and Staged Rendering Portfolio Pulse
         warmup_opts = Dict{String, Any}("MaxTime" => 0.1, "GridSteps" => 11)
         
-        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Orchestration Engine (Linear Mode)...", "WAIT")
+        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Integration Layer (Linear Mode)...", "WAIT")
         Lib_Vise.VISE_ExecuteCore_DDEF(df_mock, config_mock, "PulsePhase", [goal_dummy], "linear"; 
             t_start=time(), Opts=warmup_opts, RenderMode=:Full)
         
-        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Orchestration Engine (Quadratic Mode)...", "WAIT")
+        FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Integration Layer (Quadratic Mode)...", "WAIT")
         Lib_Vise.VISE_ExecuteCore_DDEF(df_mock, config_mock, "PulsePhase", [goal_dummy], "quadratic"; 
             t_start=time(), Opts=warmup_opts, RenderMode=:Full)
 

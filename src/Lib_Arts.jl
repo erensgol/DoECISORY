@@ -735,7 +735,7 @@ end
     ARTS_RenderCandidates_DDEF(Models, Goals, X, Idx, Lbls, [Best_Point]) -> (Plot, PctString)
 Visualises the top quartile of the desirability space (Optimal Solution Space).
 """
-function ARTS_RenderCandidates_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame=DataFrame())
+function ARTS_RenderCandidates_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Idx::Union{AbstractVector{<:Integer}, Tuple{Integer, Integer}}, Lbls::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame=DataFrame())
     return ARTS_Draw_DDEF(ARTS_PlotCandidates_DDES(), Models, Goals, X, Idx, Lbls, Leaders_DF)
 end
 
@@ -765,7 +765,7 @@ function ARTS_AddLeaderMarkers_DDEF!(traces::Vector{GenericTrace}, Leaders_DF::A
     end
 end
 
-function ARTS_RenderSpaceCore_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame, is_candidate::Bool)
+function ARTS_RenderSpaceCore_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Idx::Union{AbstractVector{<:Integer}, Tuple{Integer, Integer}}, Lbls::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame, is_candidate::Bool)
     ix, iy = Idx[1], Idx[2]
     N = ARTS_GetDynamicN_DDEF()
     iz = first(setdiff(1:3, Idx))
@@ -1101,7 +1101,7 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                 push!(tasks, tsury)
             end
 
-            # [8, 9, 10] Forensics (QQ, Residuals, Sensitivity)
+            # [8, 9, 10] Diagnostics (QQ, Residuals, Sensitivity)
             t_diag = Threads.@spawn try
                 if m <= length(Residuals_f64) && !isempty(Residuals_f64[m])
                     p_qq = ARTS_Draw_DDEF(ARTS_PlotQQ_DDES(), Residuals_f64[m], name)
@@ -1117,7 +1117,7 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                         push!(graphs, Dict("Type"=>"Sensitivity", "Title"=>"Sensitivity: $name", "Plot"=>p_sens, "OutputIdx"=>m, "SubIdx"=>0))
                     end
                 end
-            catch e; ARTS_SafeErrorLog_DDEF("ERR_P810_DIAG", "Forensics failed", e); end
+            catch e; ARTS_SafeErrorLog_DDEF("ERR_P810_DIAG", "Diagnostics failed", e); end
             push!(tasks, t_diag)
         end
 
@@ -1129,8 +1129,8 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                 if get(Opts, "DesignSpace", true) && !isempty(Combos)
                     for (ix, c) in enumerate(Combos)
                         lbls = [InNames_str[c[1]], InNames_str[c[2]], InNames_str[first(setdiff(1:3, c))]]
-                        p_sp = ARTS_Draw_DDEF(ARTS_PlotDesignSpace_DDES(), Models, Goals, X_f64, c, lbls, Leaders_DF)
-                        p_ca, _ = ARTS_Draw_DDEF(ARTS_PlotCandidates_DDES(), Models, Goals, X_f64, c, lbls, Leaders_DF)
+                        p_sp = ARTS_Draw_DDEF(ARTS_PlotDesignSpace_DDES(), Models, Goals, X_f64, [c[1], c[2]], lbls, Leaders_DF)
+                        p_ca, _ = ARTS_Draw_DDEF(ARTS_PlotCandidates_DDES(), Models, Goals, X_f64, [c[1], c[2]], lbls, Leaders_DF)
                         lock(graphs_lock) do
                             push!(graphs, Dict("Type"=>"DesignSpace", "Title"=>"Space: $(lbls[1])-$(lbls[2])", "Plot"=>p_sp, "OutputIdx"=>length(OutNames_str)+1, "SubIdx"=>ix))
                             push!(graphs, Dict("Type"=>"Candidates", "Title"=>"Candidates: $(lbls[1])-$(lbls[2])", "Plot"=>p_ca, "OutputIdx"=>length(OutNames_str)+1, "SubIdx"=>ix))

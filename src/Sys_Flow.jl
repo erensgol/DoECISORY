@@ -38,9 +38,9 @@ struct FLOW_BoundaryUpper_DDES <: AbstractFLOW_BoundaryStatus end
 Centralised map for translating boundary traits into user alerts and system flags.
 """
 const FLOW_BoundaryAlertMap_DDEC = Dict{DataType, Tuple{Bool, String}}(
-    FLOW_BoundarySafe_DDES  => (true,  "Leader point near centre. Suggest zooming in for finer scan."),
-    FLOW_BoundaryLower_DDES => (false, "Leader point too close to LOWER bound! Shift search space left?"),
-    FLOW_BoundaryUpper_DDES => (false, "Leader point too close to UPPER bound! Shift search space right?")
+    FLOW_BoundarySafe_DDES  => (true,  "Optimal candidate point near centre. Suggest zooming in for finer scan."),
+    FLOW_BoundaryLower_DDES => (false, "Optimal candidate point near LOWER boundary limit. Consider shifting search range downward."),
+    FLOW_BoundaryUpper_DDES => (false, "Optimal candidate point near UPPER boundary limit. Consider shifting search range upward.")
 )
 
 """

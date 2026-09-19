@@ -13,7 +13,7 @@ short_description: DoE with Computational Interactive SeqOpt for Response Yield
 
 **Design of Experiments with Computational Interactive Sequential Optimization for Response Yield**
 
-Developed at **Hacettepe University, Department of Radiopharmacy**, DoECISORY is a high-performance scientific system designed to revolutionise the way experimental designs are synthesised and analysed. Built entirely in **Julia** with a high-fidelity **Dash** interface, it provides researchers with robust tools for DOE methodologies including Box-Behnken, Taguchi, Central Composite, and D-Optimal designs.
+Developed at **Hacettepe University, Department of Radiopharmacy**, DoECISORY is a high-performance scientific system designed to standardise and accelerate the computational synthesis and analysis of experimental designs. Built entirely in **Julia** with a high-fidelity **Dash** interface, it provides researchers with robust tools for DOE methodologies including Box-Behnken, Taguchi, Central Composite, and D-Optimal designs.
 
 ---
 
@@ -63,5 +63,5 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 # Author & Contact
 
 **Pharmacist Eren Selim GÖL**  
-*Lead Software Architect*  
+*Lead Architect & Julia Developer*
 https://www.linkedin.com/in/erensgol

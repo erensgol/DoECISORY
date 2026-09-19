@@ -112,7 +112,7 @@ configs_bench = [Dict("Levels" => [-1.0, 0.0, 1.0]) for _ in 1:3]
 Lib_Core.CORE_MapLevels_DDEF(X_dummy, configs_bench)
 Lib_Core.CORE_D_Efficiency_DDEF(X_dummy)
 
-# 5. Linear regression (StatsModels)
+# 5. Linear regression (Native OLS via LinearAlgebra)
 names_in = ["X1", "X2", "X3"]
 mod_lin = Lib_Vise.VISE_Regress_DDEF(X_dummy, vec(Y_dummy), "linear"; InNames=names_in)
 

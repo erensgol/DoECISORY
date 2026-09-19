@@ -53,7 +53,8 @@ function Start-Julia {
     Write-Log -Source "DOECISORY" -Evt "Initialise" -Detail "Starting Julia engine..." -Type "OK"
     # Use Start-Process with a single quoted path to handle spaces in directory names
     $script:julia_proc = Start-Process -FilePath "julia" `
-        -ArgumentList "--depwarn=no $SYSIMG_FLAG --threads auto -O0 --project=`"$PROJECT_DIR`" `"$APP_FILE`" 2>nul" `
+        -ArgumentList "--depwarn=no $SYSIMG_FLAG --threads auto -O0 --project=`"$PROJECT_DIR`" `"$APP_FILE`"" `
+        -RedirectStandardError "NUL" `
         -WorkingDirectory $PROJECT_DIR `
         -PassThru `
         -NoNewWindow

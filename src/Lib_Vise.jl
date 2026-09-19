@@ -219,7 +219,7 @@ function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Flo
         )
         return Dict(res)
     catch e
-        Main.Sys_Fast.FAST_Log_DDEF("VISE", "MODELLING", "Forensic Failure: $(string(e))", "FAIL")
+        Main.Sys_Fast.FAST_Log_DDEF("VISE", "MODELLING", "Diagnostics Failure: $(string(e))", "FAIL")
         return Dict{String, Any}("Status" => "FAIL", "Error" => string(e))
     end
 end
@@ -459,12 +459,12 @@ function VISE_CalcMetrics_DDEF(Y_Real::AbstractVector{Float64}, Y_Pred::Abstract
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 10: PRIMARY TOURNAMENT MODEL SELECTION
+# SECTION 10: AUTOMATED MODEL SELECTION
 # ------------------------------------------------------------------------------
 
 """
     VISE_SelectBestModel_DDEF(X, Y, InNames) -> (BestModel, LogMsg)
-Evaluates multiple model structures and selects the optimal winner.
+Evaluates multiple candidate model structures and selects the optimal model.
 """
 function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, InNames::AbstractVector{<:AbstractString}, RequestedType::AbstractString="Auto")::Tuple{Dict{String, Any}, String}
     n      = size(X, 1)
@@ -472,7 +472,7 @@ function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector
     # 1 + 2*3 + 3*(3-1)/2 = 10
     p_quad = 10
     
-    # Execution Logic: If a specific type is requested (and not 'Auto'), bypass tournament.
+    # Execution Logic: If a specific type is requested (and not 'Auto'), bypass model selection.
     req_type = lowercase(RequestedType)
     if req_type != "auto" && req_type != ""
         mod = VISE_Regress_DDEF(X, Y, req_type; InNames = InNames)
@@ -948,7 +948,7 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
         (r2a - q2) > 0.20 && push!(warns, "$(DispOutNames[i]): Large R2 gap ($(round(r2a-q2; digits=2))). Potential overfitting.")
     end
     
-    # Forensic Stats (LOF, ANOVA, Normality, Vitals)
+    # Model Diagnostic Statistics (LOF, ANOVA, Normality, Vitals)
     vitals = Dict("D" => 0.0, "Condition" => Inf, "MaxVIF" => 0.0, "LOF" => 1.0)
     try
         best_m_idx = findfirst(m -> get(m, "ModelType", "") == "quadratic", models)
@@ -969,7 +969,7 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
             vitals["LOF"] = p_lof
         end
     catch e
-        Log("VISE", "VITALS_WARN", "Health diagnostics incomplete: $e", "WARN")
+        Log("VISE", "METRICS_WARN", "Design quality evaluation incomplete: $e", "WARN")
     end
     
     opts_with_mode = copy(Opts)

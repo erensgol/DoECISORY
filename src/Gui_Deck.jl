@@ -1634,7 +1634,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 ))
             end
 
-            # Orchestration of the Virtual Filler Inclusion Protocol for stoichiometric integrity.
+            # Automated stoichiometric solvent balancing and filler inclusion.
             processed_rows = filter(r -> get(r, "Role", get(r, :Role, "")) != "Filler", copy(rows))
             
             if !isnothing(stoch_settings)

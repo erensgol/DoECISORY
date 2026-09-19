@@ -826,12 +826,12 @@ end
 FAST_InitialiseMaster_DDEF(::Nothing, args...) = false
 
 # ------------------------------------------------------------------------------
-# SECTION 13: FILENAME GENERATION (SMART)
+# SECTION 13: STRUCTURED PROTOCOL FILENAME GENERATION
 # ------------------------------------------------------------------------------
 
 """
     FAST_GenerateSmartName_DDEF(Project, Phase, Tag, [Extension]) -> String
-Generates a unique, descriptive filename according to the project protocol.
+Generates a standardised, timestamped protocol filename according to the DDE specification.
 Template: DDE_[Proj]_[Phase]_[Tag]_[Timestamp].[Ext]
 """
 function FAST_GenerateSmartName_DDEF(Project::String, Phase::String, Tag::String, Ext::String="xlsx")::String
