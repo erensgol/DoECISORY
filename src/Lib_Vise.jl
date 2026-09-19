@@ -3,15 +3,13 @@ module Lib_Vise
 # ==============================================================================
 # DOECISORY - LIB VISE (STATISTICAL ANALYSIS)
 # ==============================================================================
-# Description: Statistical analysis module for modelling (GLM), sensitivity 
+# Description: Statistical analysis module for modelling (OLS), sensitivity 
 #              analysis, and multi-objective optimisation tasks.
 # Module Tag:  VISE
 # ==============================================================================
 
-using GLM
 using DataFrames
 using JSON3
-using Combinatorics
 using Base.Threads
 using LinearAlgebra
 using Statistics
@@ -81,11 +79,12 @@ function VISE_GetTermNames_DDEF(InNames::AbstractVector{<:AbstractString}, Model
     return VISE_GetTerms_DDEF(m_type, InNames)
 end
 
+const VISE_FactorPairs_DDEC = ((1, 2), (1, 3), (2, 3))
+
 VISE_GetTerms_DDEF(::Main.Lib_Core.CORE_ModelLinear_DDES, InNames) = ["Intercept"; InNames]
 function VISE_GetTerms_DDEF(::Main.Lib_Core.CORE_ModelQuadratic_DDES, InNames)
-    K = 3
     names = ["Intercept"; InNames]
-    for (c1, c2) in combinations(1:K, 2)
+    for (c1, c2) in VISE_FactorPairs_DDEC
         push!(names, "$(InNames[c1]) × $(InNames[c2])")
     end
     for n in InNames

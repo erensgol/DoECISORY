@@ -3,7 +3,7 @@ module Gui_Lens
 # ==============================================================================
 # DOECISORY - GUI LENS (STATISTICAL ANALYSIS)
 # ==============================================================================
-# Description: Data analysis, model fitting (GLM), and high-fidelity 
+# Description: Data analysis, model fitting (OLS), and high-fidelity 
 #              visualisation.
 # Module Tag:  LENS
 # ==============================================================================
@@ -942,7 +942,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             # Start of Scientific Cycle: Reset Timers and Lock Pipeline.
             LENS_LastPayloadTime_DDEC[] = 0.1
             
-            Sys_Fast.FAST_Log_DDEF("LENS", "Process", "Starting GLM Analysis (Phase: $phase)...", "WAIT")
+            Sys_Fast.FAST_Log_DDEF("LENS", "Process", "Starting OLS Analysis (Phase: $phase)...", "WAIT")
 
             config_full      = Sys_Fast.FAST_ReadConfig_DDEF(path)
             full_radio_opts  = get(config_full, "RadioOpts", Dict("Apply" => false))

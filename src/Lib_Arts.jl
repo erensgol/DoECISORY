@@ -12,7 +12,6 @@ using Base.Threads
 using PlotlyJS
 using Printf
 using Statistics
-using Combinatorics
 using Distributions
 using DataFrames
 using Main.Sys_Fast
@@ -70,6 +69,8 @@ const ARTS_Theme_DDEC = let C = Main.Sys_Fast.FAST_Data_DDEC
         FONT   = C.FONT_DEFAULT
     )
 end
+
+const ARTS_FactorPairs_DDEC = ((1, 2), (1, 3), (2, 3))
 
 const ARTS_ViridisScale_DDEC = let C = Main.Sys_Fast.FAST_Data_DDEC
     [
@@ -1005,7 +1006,7 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
     Sens_f64 = ARTS_PrepareNestedVector_DDEF(Sens)
     Residuals_f64 = ARTS_PrepareNestedVector_DDEF(Residuals)
 
-    Combos = collect(combinations(1:3, 2))
+    Combos = ARTS_FactorPairs_DDEC
     tasks  = Task[]
 
     # ------------------------------------------------------------------------------

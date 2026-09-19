@@ -47,7 +47,7 @@ const TRACKER = Dict{String, GroupTracker}(
     "G1" => GroupTracker("[G1] Sys_Fast Utilities & Excel I/O", 0, 0, 0),
     "G2" => GroupTracker("[G2] Lib_Core Matrices & Desirability Engine", 0, 0, 0),
     "G3" => GroupTracker("[G3] Lib_Mole Stoichiometry & Radio-Decay", 0, 0, 0),
-    "G4" => GroupTracker("[G4] Lib_Vise Statistical Modeling & GLM", 0, 0, 0),
+    "G4" => GroupTracker("[G4] Lib_Vise Statistical Modeling & OLS", 0, 0, 0),
     "G5" => GroupTracker("[G5] Sys_Flow Process Transitions & ACTA", 0, 0, 0),
     "G6" => GroupTracker("[G6] Presentation, UI State & E2E Pipeline", 0, 0, 0)
 )
@@ -237,10 +237,10 @@ const SUITE_START_TIME = time()
     end
 
     # ==========================================================================
-    # GROUP 4: Lib_Vise Statistical Modeling & GLM (15 Tests)
+    # GROUP 4: Lib_Vise Statistical Modeling & OLS (15 Tests)
     # ==========================================================================
     Sys_Fast.FAST_ActiveGroup_DDEC[] = "G4"
-    @testset "Group 4: Lib_Vise Statistical Modeling & GLM" begin
+    @testset "Group 4: Lib_Vise Statistical Modeling & OLS" begin
         X_reg = Float64.(Lib_Core.CORE_Bb15Design_DDEC)
         Y_reg = [10.0 + 2.0*r[1] + 3.0*(r[2]^2) for r in eachrow(X_reg)]
         names_in = ["X1", "X2", "X3"]
