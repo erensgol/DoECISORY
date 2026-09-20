@@ -601,8 +601,10 @@ LENS_RegisterCallbacks_DDEF(app)
 Orchestrates Just-In-Time (JIT) pre-compilation. Prioritises speed in local development environments.
 """
 function APP_Warmup_DDEF()::Nothing
-    t0     = time()
-    is_dev = get(ENV, "DOECISORY_DEV", "false") == "true"
+    t0           = time()
+    is_dev       = get(ENV, "DOECISORY_DEV", "false") == "true"
+    is_fast_boot = get(ENV, "DOECISORY_FAST_BOOT", "false") == "true" || 
+                   occursin("sysimage", lowercase(unsafe_string(Base.JLOptions().image_file)))
 
     # Production environment integrity ensured through comprehensive scientific warmup.
     if APP_IsHfSpaces_DDEC && !is_dev
@@ -610,6 +612,11 @@ function APP_Warmup_DDEF()::Nothing
         sleep(2)
     elseif is_dev
         FAST_Log_DDEF("BOOT", "Warmup", "Development Mode: Fast Boot triggered.", "INFO")
+        Sys_Fast.FAST_SafeNum_DDEF("1.0")
+        APP_SystemReady_DDEC[] = true
+        return nothing
+    elseif is_fast_boot
+        FAST_Log_DDEF("BOOT", "Warmup", "Sysimage active (JIT pulse bypassed).", "OK")
         Sys_Fast.FAST_SafeNum_DDEF("1.0")
         APP_SystemReady_DDEC[] = true
         return nothing
@@ -742,6 +749,24 @@ try
             return false
         end
         return true
+    end
+
+    if !APP_IsHfSpaces_DDEC && get(ENV, "DOECISORY_NO_BROWSER", "false") != "true"
+        @async begin
+            sleep(0.6)
+            try
+                if Sys.iswindows()
+                    run(`cmd /c start http://127.0.0.1:$(APP_Port_DDEC)`; wait=false)
+                    sleep(0.5)
+                    run(`powershell -NoProfile -NonInteractive -Command "(New-Object -ComObject WScript.Shell).AppActivate('DoECISORY')"`; wait=false)
+                elseif Sys.isapple()
+                    run(`open http://127.0.0.1:$(APP_Port_DDEC)`; wait=false)
+                else
+                    run(`xdg-open http://127.0.0.1:$(APP_Port_DDEC)`; wait=false)
+                end
+            catch
+            end
+        end
     end
 
     with_logger(custom_logger) do

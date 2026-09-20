@@ -20,8 +20,8 @@ function Write-Log {
     $ts = Get-Date -Format "HH:mm:ss.fff"
     
     # --------------------------------------------------------------------------
-    # DOECISORY AESTHETIC STANDARD (12:15 Alignment)
-    # [TS] Blue | Source Green (12) : Event TypeColor (15) Detail TypeColor
+    # DOECISORY AESTHETIC STANDARD (14:15 Alignment)
+    # [TS] Blue | Source Green (14) : Event TypeColor (15) Detail TypeColor
     # --------------------------------------------------------------------------
     
     $fg = "Blue" # Default INFO
@@ -33,7 +33,7 @@ function Write-Log {
     Write-Host "[" -NoNewline -ForegroundColor Blue
     Write-Host "$ts" -NoNewline -ForegroundColor Blue
     Write-Host "] " -NoNewline -ForegroundColor Blue
-    Write-Host "$($Source.PadRight(12))" -NoNewline -ForegroundColor Green
+    Write-Host "$($Source.PadRight(14))" -NoNewline -ForegroundColor Green
     Write-Host ": " -NoNewline
     Write-Host "$($Evt.PadRight(15)) " -NoNewline -ForegroundColor $fg
     Write-Host "$Detail" -ForegroundColor $fg
@@ -45,12 +45,7 @@ function Start-Julia {
     $SYSIMG_FLAG = ""
     if (Test-Path $SYSIMG_PATH) {
         $SYSIMG_FLAG = "--sysimage `"$SYSIMG_PATH`""
-        Write-Log -Source "DOECISORY" -Evt "Sysimage" -Detail "Pre-compiled sysimage DETECTED. Fast Boot enabled." -Type "OK"
-    } else {
-        Write-Log -Source "DOECISORY" -Evt "Sysimage" -Detail "No sysimage found. Standard JIT boot." -Type "WARN"
     }
-
-    Write-Log -Source "DOECISORY" -Evt "Initialise" -Detail "Starting Julia engine..." -Type "OK"
     # Use Start-Process with a single quoted path to handle spaces in directory names
     $script:julia_proc = Start-Process -FilePath "julia" `
         -ArgumentList "--depwarn=no $SYSIMG_FLAG --threads auto -O0 --project=`"$PROJECT_DIR`" `"$APP_FILE`"" `
@@ -67,11 +62,6 @@ function Get-SrcMtime {
     $files += Get-Item -Path $APP_FILE
     return ($files | Measure-Object -Property LastWriteTime -Maximum).Maximum
 }
-
-# Open browser once (wait for Julia to boot)
-Start-Sleep -Seconds 5
-Write-Log -Source "BROWSER" -Evt "Opening" -Detail "Redirecting to $HOST_URL" -Type "OK"
-Start-Process $HOST_URL
 
 $restart_count = 0
 $last_mtime = Get-SrcMtime
@@ -117,6 +107,7 @@ try {
             catch {}
 
             Start-Sleep -Seconds 1
+            $env:DOECISORY_NO_BROWSER = "true"
             $julia_proc = Start-Julia
 
             Write-Log -Source "RELOAD" -Evt "COMPLETE" -Detail "Server restarted. Refresh (F5) to see changes." -Type "OK"

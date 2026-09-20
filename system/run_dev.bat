@@ -1,6 +1,4 @@
 @echo off
-TITLE DoECISORY [Developer Reviser Mode]
-COLOR 0B
 
 REM Set working directory to project root
 cd /d "%~dp0.."
