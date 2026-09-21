@@ -12,7 +12,9 @@ using DataFrames
 using Printf
 using Unitful
 using Statistics
-using Main.Sys_Fast
+using ..Sys_Fast
+
+const Main = parentmodule(@__MODULE__)
 
 export MOLE_ParseTable_DDEF, MOLE_QuickAudit_DDEF, 
     MOLE_CalcMass_DDEF, MOLE_ApproxEq_DDEF, 
@@ -196,11 +198,9 @@ Returns (Type, ScaleToSystemBase) where the base is mg for mass and fractions fo
 function MOLE_GetUnitType_DDEF(UnitStr::AbstractString)::Tuple{AbstractStoicUnit, Float64}
     u = lowercase(strip(UnitStr))
     
-    # Priority 1: High-Performance O(1) Centralised Lookup.
     static_lookup = get(MOLE_UnitMap_DDEC, u, nothing)
     !isnothing(static_lookup) && return static_lookup
 
-    # Priority 2: Gravimetric Scaling via Unitful.jl / Dimensional Analysis.
     try
         u_mod = u
         u_mod = replace(u_mod, " " => "*", "_" => "*")

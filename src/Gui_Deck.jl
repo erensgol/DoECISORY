@@ -8,17 +8,19 @@ module Gui_Deck
 # Module Tag:  DECK
 # ==============================================================================
 
-using Main.Dash
-using Main.DashBootstrapComponents
+using Dash
+using DashBootstrapComponents
 using Base64
 using DataFrames
-using Main.Sys_Fast
-using Main.Lib_Core
-using Main.Lib_Mole
-using Main.Gui_Base
+using ..Sys_Fast
+using ..Lib_Core
+using ..Lib_Mole
+using ..Gui_Base
 using Printf
 using JSON3
 using Dates
+
+const Main = parentmodule(@__MODULE__)
 
 export DECK_Layout_DDEF, DECK_RegisterCallbacks_DDEF
 
@@ -60,20 +62,7 @@ function DECK_SafeNumZero_DDEF(x)
     return isnan(v) ? 0.0 : v
 end
 
-"""
-    DECK_GetSafeKey_DDEF(d, k, def)
-Implementation of a robust key-access mechanism for polymorphic dictionary synchronisation.
-"""
-function DECK_GetSafeKey_DDEF(d, k, def)
-    isnothing(d) && return def
-    # Verification of primary string-based key existence.
-    v = get(d, string(k), nothing)
-    !isnothing(v) && return v
-    # Verification of secondary symbol-based key existence.
-    v = get(d, Symbol(k), nothing)
-    !isnothing(v) && return v
-    return def
-end
+const DECK_GetSafeKey_DDEF = Sys_Fast.FAST_GetSafe_DDEF
 
 """
     DECK_MapImportRow_DDEF(inputs::AbstractVector; override_roles::Bool=true) -> Vector{Dict{String,Any}}
@@ -603,6 +592,8 @@ end
 # SECTION 6: PROTOCOL ORCHESTRATION ENGINE
 # ------------------------------------------------------------------------------
 
+const DECK_ExtractDirections_DDEF = Sys_Fast.FAST_ExtractDirections_DDEF
+
 """
     DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method) -> (Success, Message)
 Orchestrates the generation and validation of an experimental protocol Excel document.
@@ -796,9 +787,30 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
             f_mw   = Sys_Fast.FAST_SafeNum_DDEF(get(f_row, "MW", 0.0))
         end
 
-        ConfigDict = Dict(
+        var_rows = [D["Rows"][i] for i in D["Idx_Var"]]
+        dir_map = (method == "DF14" && length(var_rows) == 3 && length(direction) >= 3) ?
+            Dict{String,Any}(string(get(var_rows[i], "Name", "")) => Int(direction[i]) for i in 1:3) : nothing
+
+        ConfigDict = Dict{String,Any}(
             "Ingredients" => D["Rows"],
-            "Global"      => Dict("Volume" => sv, "Conc" => sc, "Method" => method, "Direction" => direction, "ProjectName" => project, "FillerName" => f_name, "FillerMW" => f_mw, "DEfficiency" => d_eff),
+            "Global"      => Dict{String,Any}(
+                "Volume"       => sv,
+                "Conc"         => sc,
+                "Method"       => method,
+                "Direction"    => (method == "DF14" ? direction : nothing),
+                "ProjectName"  => project,
+                "FillerName"   => f_name,
+                "FillerMW"     => f_mw,
+                "DEfficiency"  => d_eff,
+                "PhaseHistory" => Dict{String,Any}(
+                    "Phase1" => Dict{String,Any}(
+                        "Method"       => method,
+                        "DirectionMap" => dir_map,
+                        "DEfficiency"  => d_eff,
+                        "N_Runs"       => N_Runs
+                    )
+                )
+            ),
             "Outputs"     => output_data,
         )
         
@@ -821,7 +833,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
 end
 
 # ==============================================================================
-# PART C: REACTIVE ARCHITECTURE
+# PART C: CALLBACKS
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -910,7 +922,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         return (l1s..., l2s..., l3s..., mins..., maxs..., mws..., unts...)
     end
 
-    # Unit 4: Forensic Indicators & Validations
+    # Unit 4: Factor indicators & Validations
     callback!(app,
         [Output("deck-dot1-$i",     "className") for i in 1:DECK_MaxRows_DDEC]...,
         [Output("deck-dot2-$i",     "className") for i in 1:DECK_MaxRows_DDEC]...,
@@ -950,7 +962,6 @@ function DECK_RegisterCallbacks_DDEF(app)
         return (d1_cls..., d2_cls..., unt_sts..., d1_tps..., d2_tps...)
     end
 
-    # Execution of the primary Application State Orchestration Engine.
     callback!(app,
         Output("deck-store-factors", "data"),
         Output("deck-table-in",      "data"),
@@ -966,6 +977,9 @@ function DECK_RegisterCallbacks_DDEF(app)
         Output("deck-store-stoch-settings", "data"),
         [Output("deck-out-name-$i",  "value") for i in 1:3]...,
         [Output("deck-out-unit-$i",  "value") for i in 1:3]...,
+        Output("deck-dir-x1",        "value"),
+        Output("deck-dir-x2",        "value"),
+        Output("deck-dir-x3",        "value"),
         
         Input("deck-btn-add-row",        "n_clicks"),
         Input("deck-btn-clear",          "n_clicks"),
@@ -1007,6 +1021,9 @@ function DECK_RegisterCallbacks_DDEF(app)
         State("deck-input-project",        "value"),
         State("deck-dd-phase",             "value"),
         State("deck-dd-method",            "value"),
+        State("deck-dir-x1",               "value"),
+        State("deck-dir-x2",               "value"),
+        State("deck-dir-x3",               "value"),
         prevent_initial_call=false
     ) do args...
         # Implementation of a global exception guard to maintain orchestration engine stability.
@@ -1056,7 +1073,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 end
 
                 if trig == ""
-                    return (ntuple(_ -> Dash.no_update(), 18)...,)
+                    return (ntuple(_ -> Dash.no_update(), 21)...,)
                 end
             else
                 trig = split(ctx.triggered[1].prop_id, ".")[1]
@@ -1067,10 +1084,10 @@ function DECK_RegisterCallbacks_DDEF(app)
             end
 
             # Orchestration of the standardised callback return protocol.
-            function DECK_Return_DDEF(store, table, ph_opts, vol, conc, proj, method, msg, dl, up_stat, ph_val, stoch, out_vals)
-                return (store, table, ph_opts, vol, conc, proj, method, msg, dl, up_stat, ph_val, stoch, out_vals...)
+            function DECK_Return_DDEF(store, table, ph_opts, vol, conc, proj, method, msg, dl, up_stat, ph_val, stoch, out_vals, dir_vals=(Dash.no_update(), Dash.no_update(), Dash.no_update()))
+                return (store, table, ph_opts, vol, conc, proj, method, msg, dl, up_stat, ph_val, stoch, out_vals..., dir_vals...)
             end
-            RET_NO = ntuple(_ -> Dash.no_update(), 18)
+            RET_NO = ntuple(_ -> Dash.no_update(), 21)
 
 # ------------------------------------------------------------------------------
 # SECTION 11: SYSTEM LEVEL HELPERS (POLYMORPHIC)
@@ -1087,6 +1104,13 @@ function DECK_RegisterCallbacks_DDEF(app)
             proj_v   = isnothing(args[idx_gl+17]) ? "DoECISORY" : string(args[idx_gl+17])
             phase_v  = isnothing(args[idx_gl+18]) ? "Phase1" : string(args[idx_gl+18])
             method_v = isnothing(args[idx_gl+19]) ? "BB15" : string(args[idx_gl+19])
+            dir_x1_v = length(args) >= idx_gl+20 ? something(args[idx_gl+20], -1) : -1
+            dir_x2_v = length(args) >= idx_gl+21 ? something(args[idx_gl+21], -1) : -1
+            dir_x3_v = length(args) >= idx_gl+22 ? something(args[idx_gl+22], -1) : -1
+            dx1 = dir_x1_v isa Number ? Int(dir_x1_v) : (tryparse(Int, string(dir_x1_v)) !== nothing ? parse(Int, string(dir_x1_v)) : -1)
+            dx2 = dir_x2_v isa Number ? Int(dir_x2_v) : (tryparse(Int, string(dir_x2_v)) !== nothing ? parse(Int, string(dir_x2_v)) : -1)
+            dx3 = dir_x3_v isa Number ? Int(dir_x3_v) : (tryparse(Int, string(dir_x3_v)) !== nothing ? parse(Int, string(dir_x3_v)) : -1)
+            dir_vec_v = [dx1, dx2, dx3]
             
             # Implementation of robust data-capture logic synchronising DOM states with the persistence store.
             # This synchronisation is critical for ensuring data integrity during reconfigurations.
@@ -1142,7 +1166,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             end
 
             if trig == "deck-prop-trigger-save"
-                isnothing(save_prop_trig) && return ntuple(_ -> Dash.no_update(), 18)
+                isnothing(save_prop_trig) && return ntuple(_ -> Dash.no_update(), 21)
                 
                 current_rows = DECK_SnapRows_DDEF()
 
@@ -1187,15 +1211,15 @@ function DECK_RegisterCallbacks_DDEF(app)
                     
                     count_val = isnothing(store_data) ? length(new_rows) : DECK_GetSafeKey_DDEF(store_data, "count", length(new_rows))
                     new_store = Dict{String,Any}("rows" => new_rows, "count" => count_val)
-                    return (new_store, ntuple(_ -> Dash.no_update(), 17)...)
+                    return (new_store, ntuple(_ -> Dash.no_update(), 20)...)
                 end
-                return ntuple(_ -> Dash.no_update(), 18)
+                return ntuple(_ -> Dash.no_update(), 21)
             end
 
             # Automated Unit Synchronisation Protocol for stoichiometric consistency.
             if trig == "deck-stoch-trigger-unit"
                 st_data = args[idx_gl+6] 
-                isnothing(st_data) && return ntuple(_ -> Dash.no_update(), 18)
+                isnothing(st_data) && return ntuple(_ -> Dash.no_update(), 21)
 
                 has_fill = get(st_data, "FillerName", "") != "" && DECK_SafeNumZero_DDEF(get(st_data, "FillerMW", 0.0)) > 0.0
 
@@ -1213,14 +1237,13 @@ function DECK_RegisterCallbacks_DDEF(app)
                         push!(new_rows, nr)
                     end
                     ns = Dict{String,Any}("rows" => new_rows, "count" => isnothing(store_data) ? length(new_rows) : DECK_GetSafeKey_DDEF(store_data, "count", length(new_rows)))
-                    return (ns, ntuple(_ -> Dash.no_update(), 17)...)
+                    return (ns, ntuple(_ -> Dash.no_update(), 20)...)
                 end
-                return ntuple(_ -> Dash.no_update(), 18)
+                return ntuple(_ -> Dash.no_update(), 21)
             end
 
             NO = Dash.no_update()
 
-            # Execution of the Row Deletion Protocol for experimental matrix maintenance.
             del_ids = ["deck-del-$i" for i in 1:DECK_MaxRows_DDEC]
             if trig in del_ids
                 rows = DECK_SnapRows_DDEF()
@@ -1231,7 +1254,6 @@ function DECK_RegisterCallbacks_DDEF(app)
                 nc = length(rows)
                 return DECK_Return_DDEF(Dict("rows" => rows, "count" => nc), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, fill(NO, 6))
 
-            # Execution of the Row Extension Protocol to accommodate additional experimental factors.
             elseif trig == "deck-btn-add-row"
                 rows = DECK_SnapRows_DDEF()
                 current_count = isnothing(store_data) ? length(rows) : get(store_data, "count", get(store_data, :count, length(rows)))
@@ -1251,7 +1273,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                 lbl = html_div([html_i(className="fas fa-trash-alt me-2"), "Canvas Cleared"],
                                className="badge p-2 w-100", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)", "fontSize" =>"0.85rem"))
                 empty_stoch = Dict("FillerName" => "", "FillerMW" => 0.0, "Volume" => 0.0, "Conc" => 0.0)
-                return DECK_Return_DDEF(Dict("rows" => rows, "count" => 6), rows, [Dict("label" => "Phase 1", "value" => "Phase1")], 0.0, 0.0, "", "BoxBehnken", lbl, NO, "No data source", "Phase1", empty_stoch, vcat(["", "", ""], ["-", "-", "-"]))
+                return DECK_Return_DDEF(Dict("rows" => rows, "count" => 6), rows, [Dict("label" => "Phase 1", "value" => "Phase1")], 0.0, 0.0, "", "BoxBehnken", lbl, NO, "No data source", "Phase1", empty_stoch, vcat(["", "", ""], ["-", "-", "-"]), (-1, -1, -1))
 
             # Import of high-fidelity user profiles via JSON deserialisation.
             elseif trig == "deck-upload-memo" && !isnothing(up_memo) && up_memo != ""
@@ -1288,7 +1310,8 @@ function DECK_RegisterCallbacks_DDEF(app)
                     loaded_stoch = Dict("FillerName" => string(get(g, "FillerName", "")), "FillerMW" => Float64(get(g, "FillerMW", 0.0)), "Volume" => Float64(vol_v), "Conc" => Float64(conc_v))
                     memo_outs = get(memo, "Outputs", [])
                     out_vals = vcat([i <= length(memo_outs) ? get(memo_outs[i], "Name", "") : "" for i in 1:3], [i <= length(memo_outs) ? get(memo_outs[i], "Unit", "-") : "-" for i in 1:3])
-                    return DECK_Return_DDEF(Dict("rows" => loaded_rows[1:DECK_MaxRows_DDEC], "count" => nc), loaded_rows[1:DECK_MaxRows_DDEC], NO, vol_v, conc_v, proj_v, method_v, lbl, NO, NO, NO, loaded_stoch, out_vals)
+                    dir_vals = DECK_ExtractDirections_DDEF(g, loaded_rows)
+                    return DECK_Return_DDEF(Dict("rows" => loaded_rows[1:DECK_MaxRows_DDEC], "count" => nc), loaded_rows[1:DECK_MaxRows_DDEC], NO, vol_v, conc_v, proj_v, method_v, lbl, NO, NO, NO, loaded_stoch, out_vals, dir_vals)
                 catch e
                     err_lbl = html_div("❌ Load Error: $e", className="badge w-100 p-2", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)"))
                     return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, err_lbl, NO, NO, NO, NO, fill(NO, 6))
@@ -1331,8 +1354,9 @@ function DECK_RegisterCallbacks_DDEF(app)
                 
                 memo_outs = get(memo, "Outputs", [])
                 out_vals = vcat([i <= length(memo_outs) ? get(memo_outs[i], "Name", "") : "" for i in 1:3], [i <= length(memo_outs) ? get(memo_outs[i], "Unit", "-") : "-" for i in 1:3])
+                dir_vals = DECK_ExtractDirections_DDEF(g, loaded_rows)
                 
-                return DECK_Return_DDEF(Dict("rows" => loaded_rows[1:DECK_MaxRows_DDEC], "count" => nc), loaded_rows[1:DECK_MaxRows_DDEC], [Dict("label" => "Phase 1", "value" => "Phase1")], vol_v, conc_v, proj_v, method_v, lbl, NO, "Ready", "Phase1", loaded_stoch, out_vals)
+                return DECK_Return_DDEF(Dict("rows" => loaded_rows[1:DECK_MaxRows_DDEC], "count" => nc), loaded_rows[1:DECK_MaxRows_DDEC], [Dict("label" => "Phase 1", "value" => "Phase1")], vol_v, conc_v, proj_v, method_v, lbl, NO, "Ready", "Phase1", loaded_stoch, out_vals, dir_vals)
             elseif trig == "deck-btn-save-memo"
                 try
                     stoch_store = args[idx_gl+6]
@@ -1342,6 +1366,18 @@ function DECK_RegisterCallbacks_DDEF(app)
                         g_dict["FillerName"] = string(get(stoch_store, "FillerName", get(stoch_store, :FillerName, "")))
                         g_dict["FillerMW"] = Sys_Fast.FAST_SafeNum_DDEF(get(stoch_store, "FillerMW", get(stoch_store, :FillerMW, 0.0)))
                     end
+
+                    g_dict["Direction"] = (method_v == "DF14" ? dir_vec_v : nothing)
+                    snap_rows = DECK_SnapRows_DDEF()
+                    var_rows = [snap_rows[i] for i in 1:min(3, length(snap_rows))]
+                    dir_map = (method_v == "DF14" && length(var_rows) >= 3 && length(dir_vec_v) >= 3) ?
+                        Dict{String,Any}(string(get(var_rows[i], "Name", "")) => dir_vec_v[i] for i in 1:3) : nothing
+                    g_dict["PhaseHistory"] = Dict{String,Any}(
+                        "Phase1" => Dict{String,Any}(
+                            "Method"       => method_v,
+                            "DirectionMap" => dir_map
+                        )
+                    )
 
                     out_names = collect(args[idx_gl+7:idx_gl+9])
                     out_units = collect(args[idx_gl+10:idx_gl+12])
@@ -1400,33 +1436,28 @@ function DECK_RegisterCallbacks_DDEF(app)
                 n_st = Dict{String,Any}("rows" => new_rs, "count" => isnothing(store_data) ? length(new_rs) : DECK_GetSafeKey_DDEF(store_data, "count", length(new_rs)))
                 return DECK_Return_DDEF(n_st, NO, NO, new_stoch["Volume"], new_stoch["Conc"], NO, NO, NO, NO, NO, NO, new_stoch, fill(NO, 6))
 
-            # Execution of the Unified Import Protocol for cross-platform session synchronisation.
             elseif trig == "deck-upload" && !isnothing(up_cont)
                 try
                     if up_cont == ""
                         rows = [DECK_GetDefaultRow_DDEF(i) for i in 1:5]
-                        # Persistence of state when no content is provided.
                         return DECK_Return_DDEF(Dict("rows" => rows, "count" => 5), rows, [Dict("label" => "Loading...", "value" => "NONE")], 0.0, 0.0, "DoECISORY", "BoxBehnken", NO, NO, "No data source", "NONE", NO, fill(NO, 6))
                     end
                     
-                    # Extraction of the project identifier from the transient filename.
                     extracted_proj = Sys_Fast.FAST_ExtractProjectFromFilename_DDEF(fname)
-                    # Default to the core project identifier if no match is extracted.
                     if extracted_proj != ""
                         proj_v = extracted_proj
                     end
 
-                    # Verification of the extension for JSON-based workspace support.
                     is_json = lowercase(splitext(fname)[2]) == ".json"
 
                     if is_json
-                        # Execution of the JSON workspace import protocol.
                         base64_data = split(up_cont, ",")[end]
                         json_str = String(base64decode(base64_data))
                         data = JSON3.read(json_str)
                         
                         ingreds = DECK_GetSafeKey_DDEF(data, "Ingredients", DECK_GetSafeKey_DDEF(data, "Inputs", []))
-                        mapped = DECK_MapImportRow_DDEF(ingreds; override_roles=false)
+                        filtered_ingreds = filter(itm -> string(get(itm, "Role", get(itm, :Role, ""))) != "Filler", ingreds)
+                        mapped = DECK_MapImportRow_DDEF(filtered_ingreds; override_roles=false)
                         real_count = 0
                         for (i, r) in enumerate(mapped)
                             if !isempty(strip(string(get(r, "Name", ""))))
@@ -1459,10 +1490,10 @@ function DECK_RegisterCallbacks_DDEF(app)
                             "Volume" => Float64(get(g, "Volume", 0.0)),
                             "Conc" => Float64(get(g, "Conc", 0.0))
                         )
+                        dir_vals = DECK_ExtractDirections_DDEF(g, filtered_ingreds)
                         return DECK_Return_DDEF(Dict("rows" => mapped[1:DECK_MaxRows_DDEC], "count" => nc), mapped[1:DECK_MaxRows_DDEC], ph_opts,
-                            get(g, "Volume", 0.0), get(g, "Conc", 0.0), proj_v, method_val, NO, NO, stat_msg, "Phase1", loaded_stoch, out_vals)
+                            get(g, "Volume", 0.0), get(g, "Conc", 0.0), proj_v, method_val, NO, NO, stat_msg, "Phase1", loaded_stoch, out_vals, dir_vals)
                     else
-                        # Execution of the Excel/Smart Vault protocol import protocol.
                         tmp = Sys_Fast.FAST_GetTransientPath_DDEF(up_cont)
                         if !isfile(tmp)
                              return DECK_Return_DDEF(NO, NO, NO, NO, NO, proj_v, NO, html_div("❌ Data session stale. Please re-upload.", className="badge w-100 p-2", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)")), NO, NO, NO, NO, fill(NO, 6))
@@ -1509,8 +1540,9 @@ function DECK_RegisterCallbacks_DDEF(app)
                                 "Conc" => Float64(get(g, "Conc", 0.0))
                             )
 
+                            dir_vals = DECK_ExtractDirections_DDEF(g, filtered_ingreds)
                             return DECK_Return_DDEF(Dict("rows" => mapped[1:DECK_MaxRows_DDEC], "count" => nc), mapped[1:DECK_MaxRows_DDEC], ph_opts,
-                                get(g, "Volume", 0.0), get(g, "Conc", 0.0), proj_v, method_val, NO, NO, stat_msg, "Phase1", loaded_stoch, out_vals)
+                                get(g, "Volume", 0.0), get(g, "Conc", 0.0), proj_v, method_val, NO, NO, stat_msg, "Phase1", loaded_stoch, out_vals, dir_vals)
                         end
                     end
                 catch e
@@ -1523,9 +1555,8 @@ function DECK_RegisterCallbacks_DDEF(app)
                 return DECK_Return_DDEF(NO, NO, [Dict("label" => "Loading...", "value" => "NONE")], NO, NO, NO, NO, NO, NO, "No data source", "NONE", NO, fill(NO, 6))
             end
 
-            return (ntuple(_ -> Dash.no_update(), 18)...,)
+            return (ntuple(_ -> Dash.no_update(), 21)...,)
 
-        # Execution of the fail-safe error handling protocol for analytical transparency.
         catch e
             bt = sprint(showerror, e, catch_backtrace())
             println("\e[31m[CRITICAL] DECK ORCHESTRATOR ERROR: $e\e[0m")
@@ -1537,9 +1568,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                     html_span("Design Orchestrator Error: $(first(string(e), 60))", className="fw-bold")
  ], className="badge w-100 p-2 shadow-sm", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)", "fontSize" =>"0.75rem"))
 
-            return (Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(),
-                Dash.no_update(), Dash.no_update(), err_msg, Dash.no_update(), Dash.no_update(),
-                Dash.no_update(), Dash.no_update(), ntuple(_ -> Dash.no_update(), 6)...)
+            return (ntuple(_ -> Dash.no_update(), 7)..., err_msg, ntuple(_ -> Dash.no_update(), 13)...)
         end
     end
 
@@ -1547,7 +1576,6 @@ function DECK_RegisterCallbacks_DDEF(app)
 # SECTION 12: STOICHIOMETRY & AUDIT CALLBACKS
 # ------------------------------------------------------------------------------
 
-    # Execution of the Design Audit Orchestration for stoichiometric and boundary verification.
     callback!(app,
         Output("deck-audit-output", "children"),
         Output("deck-modal-audit", "is_open"),
@@ -1698,7 +1726,6 @@ function DECK_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # Execution of the Phase Protocol Synthesis Orchestration.
     callback!(app,
         Output("deck-download-xlsx", "data"),
         Output("deck-run-output", "children"),
@@ -1798,7 +1825,6 @@ function DECK_RegisterCallbacks_DDEF(app)
                         is_rad = get(prow, "IsRadioactive", get(prow, :IsRadioactive, false))
                         hl_val = Float64(get(prow, "HalfLife", get(prow, :HalfLife, 0.0)))
                         hl_unit = string(get(prow, "HalfLifeUnit", get(prow, :HalfLifeUnit, "Hours")))
-                        # Architectural constraint: table rows are designated as fixed or variable factors only (non-filler).
                         is_fill = false
                     end
                 end
@@ -1856,7 +1882,6 @@ function DECK_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # Execution of the Input Properties Modal Orchestration for component-level refinement.
     callback!(app,
         Output("deck-modal-prop", "is_open"),
         Output("deck-prop-title", "children"),
@@ -1904,7 +1929,6 @@ function DECK_RegisterCallbacks_DDEF(app)
                     rad_state = get(prow, "IsRadioactive", get(prow, :IsRadioactive, false))
                     hl_state = Sys_Fast.FAST_SafeNum_DDEF(get(prow, "HalfLife", get(prow, :HalfLife, 0.0)))
                     hlu_state = string(get(prow, "HalfLifeUnit", get(prow, :HalfLifeUnit, "Hours")))
-                    # Design constraint: table rows are restricted from filler designation.
                     fill_state = false
                     cur_name = get(prow, "Name", get(prow, :Name, ""))
                     if cur_name != ""
@@ -1919,7 +1943,6 @@ function DECK_RegisterCallbacks_DDEF(app)
         return (ntuple(_ -> Dash.no_update(), 9)...,)
     end
 
-    # Execution of the Stoichiometric Configuration Modal Orchestration.
     callback!(app,
         Output("deck-modal-stoch-settings", "is_open"),
         Output("deck-stoch-filler-name", "value"),
@@ -1947,7 +1970,6 @@ function DECK_RegisterCallbacks_DDEF(app)
         trig = split(ctx.triggered[1].prop_id, ".")[1]
 
         if trig == "deck-btn-stoch-settings"
-            # Initialisation of the configuration modal with cached stoichiometric data.
             if !isnothing(store_data)
                 return true,
                 string(get(store_data, "FillerName", get(store_data, :FillerName, ""))),
@@ -1962,16 +1984,13 @@ function DECK_RegisterCallbacks_DDEF(app)
             return false, NO, NO, NO, NO
         end
 
-        # Automated population of stoichiometric parameters via standardised template.
         if trig == "deck-btn-template"
             return false, "DPPC", 734.05, 5.0, 20.0
         end
-        # Execution of the stoichiometric state reset protocol.
         if trig == "deck-btn-clear"
             return false, "", 0.0, 0.0, 0.0
         end
 
-        # Synchronisation of stoichiometric data via imported profiles (managed by the orchestrator).
         if trig in ("deck-upload-memo", "deck-upload")
             return false, NO, NO, NO, NO
         end
@@ -1987,7 +2006,6 @@ function DECK_RegisterCallbacks_DDEF(app)
 # SECTION 13: SCIENTIFIC AUDIT & MATRIX CALLBACKS
 # ------------------------------------------------------------------------------
 
-    # Execution of the Architectural Matrix Audit Orchestration for mathematical and chemical validation.
     callback!(app,
         Output("deck-sci-audit-output", "children"),
         Output("deck-modal-sci-audit", "is_open"),
@@ -2058,7 +2076,6 @@ function DECK_RegisterCallbacks_DDEF(app)
                 ))
             end
 
-            # Orchestration of the Virtual Filler Inclusion Protocol during matrix validation.
             processed_rows = filter(r -> get(r, "Role", get(r, :Role, "")) != "Filler", copy(rows))
             
             if !isnothing(stoch_settings)
@@ -2077,16 +2094,13 @@ function DECK_RegisterCallbacks_DDEF(app)
             num_vars = length(D["Idx_Var"])
             num_vars != 3 && return html_div("Protocol requires exactly 3 Variables. Detection: $num_vars", className="fw-bold", style=Dict("color" => "var(--colour-chr0-huered)")), true
 
-            # Generate virtual design for audit
             design_coded = Lib_Core.CORE_GenDesign_DDEF(method, 3, direction_vec)
             configs = [Dict("Levels" => [D["Rows"][i]["L1"], D["Rows"][i]["L2"], D["Rows"][i]["L3"]]) for i in D["Idx_Var"]]
             real_matrix = Lib_Core.CORE_MapLevels_DDEF(design_coded, configs)
  
-            # Analysis Segment 1: Assessment of mathematical design robustness (Efficiency).
             d_eff = Lib_Core.CORE_D_Efficiency_DDEF(design_coded)
             metrics = Lib_Core.CORE_CalcDesignMetrics_DDEF(design_coded)
  
-            # Analysis Segment 2: Assessment of stoichiometric feasibility across the design space.
             sv_raw_sci = Sys_Fast.FAST_SafeNum_DDEF(vol)
             sc_raw_sci = Sys_Fast.FAST_SafeNum_DDEF(conc)
             
@@ -2100,27 +2114,31 @@ function DECK_RegisterCallbacks_DDEF(app)
             sv_calc_sci = sv_raw_sci
             sc_calc_sci = sc_raw_sci
  
-            # Execution of the comprehensive mass inventory audit.
             valid_stoi, stoi_issues = Lib_Mole.MOLE_ValidateDesignFeasibility_DDEF(real_matrix, D["Rows"], sv_calc_sci, sc_calc_sci)
 
-            # Analysis Segment 3: Assessment of total mass inventory feasibility across the matrix.
             audit_res = Lib_Mole.MOLE_AuditBatch_DDEF(processed_rows, real_matrix, sv_calc_sci, sc_calc_sci)
             masses = audit_res["RunMasses"]
             min_mass = isempty(masses) ? 0.0 : minimum(masses)
             max_mass = isempty(masses) ? 0.0 : maximum(masses)
  
-            # Generation of the comprehensive design integrity report (UI).
             return html_div([
                 html_h5("DESIGN INTEGRITY REPORT", className="fw-bold mb-3", style=Dict("color" => "var(--colour-chr3-toncya)")),
 
                 # Efficiency
                 html_div([
-                    html_div("Mathematical Efficiency", className="small fw-bold mb-1", style=Dict("color" => "var(--colour-val3-darlow)")),
+                    html_div("Experimental Design Vitals", className="small fw-bold mb-1", style=Dict("color" => "var(--colour-val3-darlow)")),
                     dbc_row([
-                            dbc_col(Gui_Base.BASE_MiniVitals_DDEF("D-Efficiency", @sprintf("%.1f%%", d_eff * 100), d_eff > 0.6 ? "var(--colour-chr4-tongre)" : "var(--colour-chr5-hueyel)"), xs=6, md=3),
-                            dbc_col(Gui_Base.BASE_MiniVitals_DDEF("Condition #", @sprintf("%.1e", metrics["Condition"]), metrics["Condition"] < 1e4 ? "var(--colour-chr4-tongre)" : "var(--colour-chr0-huered)"), xs=6, md=3),
+                            let d_thresh = (occursin("BBD", uppercase(method)) || occursin("CCD", uppercase(method)) || occursin("BOX", uppercase(method))) ? 0.35 : 0.60
+                                dbc_col(Gui_Base.BASE_MiniVitals_DDEF("D-Efficiency", @sprintf("%.1f%%", d_eff * 100), d_eff >= d_thresh ? "var(--colour-chr4-tongre)" : "var(--colour-chr5-hueyel)"), xs=6, md=3)
+                            end,
                             dbc_col(Gui_Base.BASE_MiniVitals_DDEF("A-Efficiency", @sprintf("%.2f", metrics["A"]), "var(--colour-chr3-toncya)"), xs=6, md=3),
                             dbc_col(Gui_Base.BASE_MiniVitals_DDEF("G-Efficiency", @sprintf("%.2f", metrics["G"]), "var(--colour-chr3-toncya)"), xs=6, md=3),
+                            dbc_col(Gui_Base.BASE_MiniVitals_DDEF("I-Efficiency", @sprintf("%.2f", metrics["I"]), "var(--colour-chr3-toncya)"), xs=6, md=3),
+                        ], className="mb-2 g-2"),
+                    dbc_row([
+                            let (c_val, _, c_col) = Sys_Fast.FAST_FormatConditionNumber_DDEF(metrics["Condition"])
+                                dbc_col(Gui_Base.BASE_MiniVitals_DDEF("Matrix Condition Number (κ)", c_val, c_col), xs=12)
+                            end
                         ], className="mb-3 g-2")
                 ]),
 

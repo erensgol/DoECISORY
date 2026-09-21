@@ -12,7 +12,11 @@ using JSON3
 using DataFrames
 using PlotlyJS
 using Printf
-using Main.Sys_Fast
+using ..Sys_Fast
+using ..Lib_Core
+using ..Lib_Mole
+
+const Main = parentmodule(@__MODULE__)
 
 
 export FLOW_AskLeader_DDEF, FLOW_NextPhase_DDEF, FLOW_GetCandidates_DDEF,
@@ -196,7 +200,6 @@ function FLOW_CalcAdaptiveRange_DDEF(Val::Real, L_Old::Vector{Float64}, Zoom::Re
     rng      = L_Old[3] - L_Old[1]
     status   = FLOW_DetermineBoundaryStatus_DDEF(Val, L_Old[1], L_Old[3])
     
-    # Adaptive span determination: ZOOM if safe, MAINTAIN if at limit.
     new_rng = (status isa FLOW_BoundarySafe_DDES) ? rng * Zoom : rng
 
     shift_val = Shift * (new_rng * 0.5)
@@ -205,7 +208,6 @@ function FLOW_CalcAdaptiveRange_DDEF(Val::Real, L_Old::Vector{Float64}, Zoom::Re
     new_min = max(MinLimit, new_mid - new_rng / 2.0)
     new_max = new_min + new_rng
     
-    # Absolute physical limit clamping (Forensic consistency).
     org_max = L_Old[3] + rng * 0.5
     new_max = (org_max > 0.0) ? min(new_max, org_max) : new_max
 
@@ -217,12 +219,13 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    FLOW_BuildNextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor, Method, ShiftFactor) -> Dict
+    FLOW_BuildNextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor, Method, ShiftFactor; Direction, CustomConfig) -> Dict
 Generates the subsequent experimental phase by mapping adaptive ranges to a coded design matrix.
 """
 function FLOW_BuildNextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentPhase::Union{AbstractString,Nothing},
     SelectedLeaderID::Union{AbstractString,Nothing}="", ZoomFactor::Real=0.5, Method::AbstractString="TL09", ShiftFactor::Real=0.0;
-    Direction::Vector{Int}=[-1, -1, -1])::Dict{String,Any}
+    Direction::Union{Vector{Int}, Nothing}=[-1, -1, -1],
+    CustomConfig::Union{AbstractVector, Nothing}=nothing)::Dict{String,Any}
     
     (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict("Status" => "FAIL", "Message" => "Invalid master file path provided.")
     C   = Main.Sys_Fast.FAST_Data_DDEC
@@ -231,7 +234,11 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, Cur
     res = FLOW_NextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor, ShiftFactor)
     res["Status"] != "OK" && return res
 
-    NewConfig   = res["NewConfig"]
+    NewConfig = if !isnothing(CustomConfig) && !isempty(CustomConfig)
+        [Dict{String,Any}(string(k) => (v isa AbstractVector ? copy(v) : v) for (k,v) in pairs(c)) for c in CustomConfig]
+    else
+        res["NewConfig"]
+    end
     TargetPhase = res["TargetPhase"]
     Log("FLOW", "PHASE_BUILD", "Designing $TargetPhase search space from $CurrentPhase leader...", "WAIT")
 
@@ -239,7 +246,7 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, Cur
     vol        = Float64(get(GlobalData, "Volume", 5.0))
     conc       = Float64(get(GlobalData, "Concentration", 10.0))
 
-    FLOW_GetSafeKey_DDEF(o, k, d) = haskey(o, string(k)) ? o[string(k)] : (haskey(o, Symbol(k)) ? o[Symbol(k)] : d)
+    FLOW_GetSafeKey_DDEF(o, k, d) = Sys_Fast.FAST_GetSafe_DDEF(o, k, d)
 
     audit_rows = map(NewConfig) do c
         lvls = FLOW_GetSafeKey_DDEF(c, "Levels", [0.0, 0.0, 0.0])
@@ -254,7 +261,7 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, Cur
         )
     end
 
-    audit_ok, audit_report, _, t_mass, _ = Main.Lib_Mole.MOLE_QuickAudit_DDEF(audit_rows, vol, conc)
+    audit_ok, audit_report, audit_results, t_mass, _ = Main.Lib_Mole.MOLE_QuickAudit_DDEF(audit_rows, vol, conc)
     if !audit_ok && t_mass > 1e-4
         Log("FLOW", "CHEM_FAIL", "Proposed subspace violates stoichiometry!", "FAIL")
         return Dict("Status" => "FAIL", "Message" => "Stoichiometric invalidity in new search space.\n" * audit_report)
@@ -262,13 +269,25 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, Cur
         Log("FLOW", "CHEM_SKIP", "Stoichiometry not configured or zero mass. Proceeding...", "INFO")
     end
 
-    var_indices = findall(c -> get(c, "Role", "") == C.ROLE_VAR, NewConfig)
+    if !isempty(audit_results)
+        for c in NewConfig
+            if FLOW_GetSafeKey_DDEF(c, "Role", "") == C.ROLE_FILL
+                c_name = FLOW_GetSafeKey_DDEF(c, "Name", "")
+                m_idx = findfirst(r -> r.Component == c_name, eachrow(audit_results))
+                if !isnothing(m_idx)
+                    c["Levels"] = [0.0, audit_results[m_idx, :TARGET_MASS_mg], 0.0]
+                end
+            end
+        end
+    end
+
+    var_indices = findall(c -> FLOW_GetSafeKey_DDEF(c, "Role", "") == C.ROLE_VAR, NewConfig)
     length(var_indices) != 3 && return Dict("Status" => "FAIL", "Message" => "System requires 3 ingredients for phase transitions.")
 
     design_coded = Main.Lib_Core.CORE_GenDesign_DDEF(Method, 3, Direction)
     N_Runs       = size(design_coded, 1)
 
-    configs     = [Dict("Levels" => get(NewConfig[i], "Levels", [0.0, 0.0, 0.0])) for i in var_indices]
+    configs     = [Dict("Levels" => FLOW_GetSafeKey_DDEF(NewConfig[i], "Levels", [0.0, 0.0, 0.0])) for i in var_indices]
     real_matrix = Main.Lib_Core.CORE_MapLevels_DDEF(design_coded, configs)
 
     p_num = something(tryparse(Int, replace(TargetPhase, "Phase" => "")), 2)
@@ -280,7 +299,6 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, Cur
         C.COL_NOTES     => fill("", N_Runs)
     )
 
-    # Execution of the centralised stoichiometry audit engine (Lib_Mole integration).
     df_chem = Main.Lib_Mole.MOLE_ProcessDesign_DDEF(real_matrix, audit_rows, vol, conc)
 
     df = hcat(df_sys, df_chem)
@@ -304,11 +322,28 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, Cur
 
     g_info                   = get(current_config, "Global", Dict{String,Any}())
     g_info["Method"]         = Method
-    g_info["Direction"]      = Direction
+    g_info["Direction"]      = (Method == "DF14" ? Direction : nothing)
+
+    # PhaseHistory orchestration for scientific provenance and audit trail
+    ph_raw = get(g_info, "PhaseHistory", Dict{String,Any}())
+    ph_history = (ph_raw isa AbstractDict) ? Dict{String,Any}(string(k) => v for (k, v) in pairs(ph_raw)) : Dict{String,Any}()
+    var_names = [string(FLOW_GetSafeKey_DDEF(NewConfig[i], "Name", "")) for i in var_indices]
+
+    ph_entry = Dict{String,Any}(
+        "Method"       => Method,
+        "DirectionMap" => (Method == "DF14" && length(var_names) == 3 && !isnothing(Direction) && length(Direction) >= 3 ?
+                           Dict{String,Any}(var_names[i] => Int(Direction[i]) for i in 1:3) : nothing),
+        "LeaderID"     => string(SelectedLeaderID),
+        "ZoomFactor"   => Float64(ZoomFactor),
+        "ShiftFactor"  => Float64(ShiftFactor),
+        "N_Runs"       => N_Runs
+    )
+    ph_history[TargetPhase] = ph_entry
+    g_info["PhaseHistory"]  = ph_history
     current_config["Global"] = g_info
 
-    out_names = [string(get(o, "Name", "")) for o in get(res, "Outputs", []) if !isempty(get(o, "Name", ""))]
-    in_names  = [get(c, "Name", "") for c in NewConfig]
+    out_names = String[string(get(o, "Name", "")) for o in get(res, "Outputs", []) if !isempty(get(o, "Name", ""))]
+    in_names  = String[string(FLOW_GetSafeKey_DDEF(c, "Name", "")) for c in NewConfig]
 
     success = Main.Sys_Fast.FAST_InitialiseMaster_DDEF(MasterFile, in_names, out_names, df, current_config)
     !success && return Dict("Status" => "FAIL", "Message" => "Excel commit failed for $TargetPhase.")
@@ -419,7 +454,8 @@ end
 Visualises the adaptation of search space boundaries between sequential experimental phases.
 Standardised Coded Scale: Current boundaries are mapped to [-1, 1].
 """
-function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVector, LeaderVals::AbstractVector)
+function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVector, LeaderVals::AbstractVector;
+    Method::AbstractString="TL09", Direction::Vector{Int}=[-1, -1, -1])
     FD = Main.Sys_Fast.FAST_Data_DDEC
 
     vars = [(i, c) for (i, c) in enumerate(OldConfig) if get(c, "Role", "Variable") == FD.ROLE_VAR]
@@ -443,7 +479,6 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
 
         y_pos = n_vars - j + 1
 
-        # Formal mapping of selected leader coordinates across the adaptive space.
         Val = (j <= length(LeaderVals)) ? Float64(LeaderVals[j]) : L_Old[2]
         
         base_mid  = (L_Old[1] + L_Old[3]) / 2.0
@@ -483,6 +518,28 @@ function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::A
             hoverinfo="text",
             hovertext="Target Centre: $(round(L_New[2]; digits=2))"
         ))
+
+        if Method == "DF14"
+            dir_j = (j <= length(Direction)) ? Direction[j] : -1
+            tip_x = (dir_j == -1) ? n_new_min : n_new_max
+            tip_side = (dir_j == -1) ? "Lower (−1)" : "Upper (+1)"
+            v_name = j <= length(new_vars) ? get(new_vars[j], "Name", "Var$j") : "Var$j"
+            
+            push!(traces, scatter(;
+                x=[tip_x], y=[y_pos], mode="markers",
+                name="DF14 Axial Focus",
+                legendgroup="AxialFocus",
+                marker=attr(
+                    symbol="circle",
+                    size=13,
+                    color="#21918C",
+                    line=attr(color=FD.COLOUR_PURWHI, width=2)
+                ),
+                showlegend=(j == 1),
+                hoverinfo="text",
+                hovertext="$v_name Axial Star Focus: $tip_side"
+            ))
+        end
 
         y_ann = y_pos - 0.35
         push!(annotations, Dict(

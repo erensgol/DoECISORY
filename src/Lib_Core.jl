@@ -11,8 +11,10 @@ module Lib_Core
 using Random
 using LinearAlgebra
 using Printf
-using Main.Sys_Fast
+using ..Sys_Fast
 using BlackBoxOptim
+
+const Main = parentmodule(@__MODULE__)
 
 
 export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF,
@@ -133,7 +135,7 @@ end
 Generates a coded (-1, 0, 1) experimental design matrix for the specified method.
 Supports Box-Behnken (BB15), Taguchi (TL09), Central Composite (CD17), and Fractional D-Optimal (DF14).
 """
-function CORE_GenDesign_DDEF(Method::AbstractString, FactorCount::Integer=3, Direction::AbstractVector=[-1, -1, -1])
+function CORE_GenDesign_DDEF(Method::AbstractString, FactorCount::Integer=3; Direction::AbstractVector=[-1, -1, -1])
     Main.Sys_Fast.FAST_Log_DDEF("CORE", "DESIGN_GEN", "Generating matrix for $Method (Strict 3-Var Mode)", "WAIT")
     method_type = CORE_GetMethodType_DDEF(Method)
     design = CORE_GenerateMatrix_DDEF(method_type, FactorCount, Direction)
@@ -142,8 +144,8 @@ function CORE_GenDesign_DDEF(Method::AbstractString, FactorCount::Integer=3, Dir
     return design
 end
 
-CORE_GenDesign_DDEF(Method::AbstractString, FactorCount::Integer; Direction::AbstractVector=[-1, -1, -1]) = CORE_GenDesign_DDEF(Method, FactorCount, Direction)
-CORE_GenDesign_DDEF(Method::AbstractString; Direction::AbstractVector=[-1, -1, -1]) = CORE_GenDesign_DDEF(Method, 3, Direction)
+CORE_GenDesign_DDEF(Method::AbstractString, FactorCount::Integer, Direction::AbstractVector) = 
+    CORE_GenDesign_DDEF(Method, FactorCount; Direction=Direction)
 
 function CORE_GetMethodType_DDEF(m::AbstractString)::CORE_AbstractDesignMethod_DDET
     u = uppercase(strip(m))

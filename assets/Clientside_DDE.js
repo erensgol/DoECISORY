@@ -52,8 +52,9 @@ window.dash_clientside = Object.assign({}, window.dash_clientside, {
              try {
                  const graphs = JSON.parse(blob);
                  const count = graphs.length;
-                 const safe_i = Math.max(0, Math.min(idx, count - 1));
-                 const item = graphs[safe_i];
+                 if (count === 0) return [window.dash_clientside.no_update, "No Visualisation Data", "/ 0"];
+                 const safe_i = (idx === null || idx === undefined || isNaN(idx)) ? 0 : Math.max(0, Math.min(Number(idx), count - 1));
+                 const item = graphs[safe_i] || graphs[0] || {};
                  const fig = item.figure || {};
                  
                  console.log("[DOECISORY] Rendering Plot:", item.title, "| Index:", safe_i);

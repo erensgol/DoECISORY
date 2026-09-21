@@ -14,8 +14,10 @@ using Printf
 using Statistics
 using Distributions
 using DataFrames
-using Main.Sys_Fast
-using Main.Lib_Core
+using ..Sys_Fast
+using ..Lib_Core
+
+const Main = parentmodule(@__MODULE__)
 
 export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
     ARTS_RenderContour_DDEF, ARTS_RenderSlice_DDEF, ARTS_RenderTrend_DDEF,
@@ -529,10 +531,9 @@ function ARTS_PredictQuadratic_DDEF(X, Beta, buff_Xd)
     
     # Interactions: Optimised mapping for 3-factor system
     @inbounds @views begin
-        @. Xd[:, 5] = X[:, 1] * X[:, 2] # 1x2
-        @. Xd[:, 6] = X[:, 1] * X[:, 3] # 1x3
-        @. Xd[:, 7] = X[:, 2] * X[:, 3] # 2x3
-        # Squared Terms
+        @. Xd[:, 5] = X[:, 1] * X[:, 2]
+        @. Xd[:, 6] = X[:, 1] * X[:, 3]
+        @. Xd[:, 7] = X[:, 2] * X[:, 3]
         @. Xd[:, 8:10] = abs2(X)
     end
     
@@ -1012,8 +1013,9 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
     # ------------------------------------------------------------------------------
     # STAGED RENDERING ORCHESTRATOR (1-13 Scientific Order)
     # ------------------------------------------------------------------------------
-    # Implementation of a lossless, staged delivery architecture to reduce initial feedback latency.
-    Mode = get(Opts, "Mode", :Full) # Support for :Full, :Priority (1-5), :Deferred (6-13)
+    # Implementation of staged delivery to reduce initial feedback latency. 
+    # Support for :Full, :Priority (1-5), :Deferred (6-13)
+    Mode = get(Opts, "Mode", :Full) 
     
     # --- STAGE 1: PRIORITY GROUPS (1: Pareto, 2: Fit) ---
     if Mode == :Full || Mode == :Priority

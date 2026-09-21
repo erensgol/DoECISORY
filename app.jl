@@ -6,7 +6,7 @@
 # ==============================================================================
 
 # ==============================================================================
-# PART A: SYSTEM ARCHITECTURE & INITIALISATION
+# PART A: INITIALISATION
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -260,7 +260,7 @@ app.layout = html_div([
     ),
 
 # ------------------------------------------------------------------------------
-# SECTION 9: DIAGNOSTICS MODAL ARCHITECTURE
+# SECTION 9: DIAGNOSTICS MODAL
 # ------------------------------------------------------------------------------
 
     dbc_modal([
@@ -366,7 +366,6 @@ function APP_RoutePage_DDEF(pathname::AbstractString)
         nt::Int, tstyle::String, tmsg::String = Sys_Fast.FAST_GetThreadInfo_DDEF()
         
         return html_div([
-            # Visual Orchestration: High-Fidelity Statistical Modelling and Data Optimisation.
             dbc_container([
                 dbc_row(dbc_col([
                     html_h1("DoECISORY", 
@@ -751,9 +750,12 @@ try
         return true
     end
 
-    if !APP_IsHfSpaces_DDEC && get(ENV, "DOECISORY_NO_BROWSER", "false") != "true"
+    is_dev = get(ENV, "DOECISORY_DEV", "false") == "true"
+    should_open_browser = !APP_IsHfSpaces_DDEC && !is_dev && get(ENV, "DOECISORY_NO_BROWSER", "false") != "true"
+
+    if should_open_browser
         @async begin
-            sleep(0.6)
+            sleep(0.8)
             try
                 if Sys.iswindows()
                     run(`cmd /c start http://127.0.0.1:$(APP_Port_DDEC)`; wait=false)
@@ -777,7 +779,5 @@ catch e
     rethrow(e)
 end
 
-end # function APP_MainRun_DDEF
-
-# Start the application
+end
 APP_MainRun_DDEF()

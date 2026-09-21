@@ -8,9 +8,11 @@ module Gui_Base
 # Module Tag:  BASE
 # ==============================================================================
 
-using Main.Dash
-using Main.DashBootstrapComponents
-using Main.Sys_Fast
+using Dash
+using DashBootstrapComponents
+using ..Sys_Fast
+
+const Main = parentmodule(@__MODULE__)
 
 export BASE_StyleCell_DDEC, BASE_StyleInput_DDEC, BASE_StyleInputCentre_DDEC, 
        BASE_StyleHeader_DDEC, BASE_StyleDatatableCell_DDEC, BASE_StyleInlineHeader_DDEC, 
@@ -67,7 +69,6 @@ const BASE_StyleDatatableCell_DDEC = Dict(
     "border"          => "none",
     "borderBottom"    => "none",
     "fontFamily"      => "var(--font-sans)", 
-    # Execution of high-fidelity typography for cell data.
     "fontSize"        => "10px", 
     "padding"         => "6px 5px",
 )
@@ -595,7 +596,6 @@ function BASE_ScientificAuditUI_DDEF()
 
     is_passed = isempty(missing_mods) && isempty(broken_bridges) && has_metrics
  
-    # Execution of the string-conversion protocol for architectural compatibility with the Dash interface.
     stat_mod = isempty(missing_mods) ? "ALL LOADED" : "MISSING"
     stat_bridge = isempty(broken_bridges) ? "CONNECTED" : "BROKEN"
     stat_metrics = has_metrics ? "ACTIVE" : "MISSING"

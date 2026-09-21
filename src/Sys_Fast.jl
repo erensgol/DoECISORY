@@ -11,6 +11,7 @@ module Sys_Fast
 using Dates
 using Printf
 using XLSX
+using ZipFile
 using DataFrames
 using JSON3
 using Base64
@@ -30,10 +31,12 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
        FAST_RoundCols_DDEF!, FAST_GetCol_DDEF, FAST_CleanHeader_DDEF,
        FAST_InitialiseWorkforce_DDEF, FAST_CleanWorkforce_DDEF, FAST_Data_DDEC,
        FAST_SanitiseFilename_DDEF, FAST_LoadMemoFile_DDEF, FAST_ExtractDataID_DDEF,
-       FAST_ValidateSheetStructure_DDEF, FAST_FinaliseMasterWrite_DDEF, FAST_ActiveGroup_DDEC
+       FAST_ValidateSheetStructure_DDEF, FAST_FinaliseMasterWrite_DDEF, FAST_ActiveGroup_DDEC,
+       FAST_ApplyExcelStyle_DDEF, FAST_FormatConditionNumber_DDEF,
+       FAST_GetSafe_DDEF, FAST_ExtractDirections_DDEF
 
 # ==============================================================================
-# PART A: SYSTEM ARCHITECTURE & TRANSIENT WORKFORCE
+# PART A: TRANSIENT WORKFORCE
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -307,7 +310,6 @@ function FAST_ReadExcel_DDEF(FilePath::AbstractString, SheetName::AbstractString
     max_retries = 2
     retry_delay = 0.3
     
-    # Neural Retry Loop Protocol: Handling high-velocity disk contention.
     for attempt in 1:max_retries
         try
             final_df = XLSX.openxlsx(FilePath) do xf
@@ -361,28 +363,188 @@ function FAST_ValidateSheetStructure_DDEF(df::DataFrame, SheetName::String)::Boo
 end
 
 """
-    FAST_ApplyExcelStyle_DDEF(sheet, df::DataFrame)
-Premium Aesthetics Protocol: Calculates optimal column width based on content analysis
-and applies academic-standard formatting.
+    FAST_ApplyExcelStyle_DDEF(File::AbstractString, ValidPairs::Vector{Pair{String,DataFrame}})::Nothing
+Exact-Fit Aesthetics Protocol: Computes exact-fit column dimensions matching text width with natural
+OpenXML cell padding, then injects ECMA-376 OpenXML `<cols>` definitions into each worksheet XML.
 """
-function FAST_ApplyExcelStyle_DDEF(sheet, df::DataFrame)
-    for (i, col_name) in enumerate(names(df))
-        max_len = length(string(col_name))
-        for r in 1:min(5, nrow(df))
-            val_len = length(string(df[r, i]))
-            max_len = max(max_len, val_len)
+function FAST_ApplyExcelStyle_DDEF(File::AbstractString, ValidPairs::Vector{Pair{String,DataFrame}}=Pair{String,DataFrame}[])::Nothing
+    !isfile(File) && return nothing
+    
+    temp_file = File * ".tmp_fit.xlsx"
+    try
+        # 1. Compute exact-fit column dimensions per sheet
+        col_widths  = Dict{String, Vector{Float64}}()
+        sheet_order = String[]
+        calc_w      = s -> begin
+            str = string(s)
+            isempty(str) && return 0.0
+            sum(c -> c in ('M', 'W') ? 1.4 : 1.0, str; init=0.0)
+        end
+
+        if !isempty(ValidPairs)
+            for (sn, df) in ValidPairs
+                ncol(df) == 0 && continue
+                push!(sheet_order, sn)
+                widths = Float64[]
+                for (i, col_name) in enumerate(names(df))
+                    header_str = string(col_name)
+                    max_w = calc_w(header_str)
+                    col_vals = df[!, i]
+                    for v in col_vals
+                        if !ismissing(v) && !isnothing(v)
+                            cw = calc_w(v)
+                            if cw > max_w
+                                max_w = cw
+                            end
+                        end
+                    end
+                    # Strict uniform width: exactly text width + 1 character padding for all columns
+                    w = occursin("JSON", uppercase(header_str)) ? clamp(Float64(max_w + 1.0), 10.0, 60.0) : Float64(max_w + 1.0)
+                    push!(widths, round(w; digits=1))
+                end
+                col_widths[sn] = widths
+            end
+        else
+            # Fallback inspection: Read cells directly from XLSX workbook when no DataFrames are passed
+            try
+                XLSX.openxlsx(File) do xf
+                    for sn in XLSX.sheetnames(xf)
+                        push!(sheet_order, sn)
+                        try
+                            sh = xf[sn]
+                            mat = sh[:]
+                            nr, nc = size(mat)
+                            widths = Float64[]
+                            for c in 1:nc
+                                max_l = 0.0
+                                for r in 1:nr
+                                    val = mat[r, c]
+                                    if !ismissing(val) && !isnothing(val)
+                                        cw = calc_w(val)
+                                        if cw > max_l
+                                            max_l = cw
+                                        end
+                                    end
+                                end
+                                w = Float64(max_l + 1.0)
+                                push!(widths, round(w; digits=1))
+                            end
+                            if !isempty(widths)
+                                col_widths[sn] = widths
+                            end
+                        catch
+                        end
+                    end
+                end
+            catch
+            end
+        end
+
+        isempty(col_widths) && return nothing
+
+        zin = ZipFile.Reader(File)
+        
+        # Ingest archive entries preserving exact original order
+        entries = Tuple{String, Vector{UInt8}, UInt16}[]
+        wb_xml_str = ""
+        rels_xml_str = ""
+        for f in zin.files
+            b = read(f)
+            push!(entries, (f.name, b, f.method))
+            if f.name == "xl/workbook.xml"
+                wb_xml_str = String(copy(b))
+            elseif f.name == "xl/_rels/workbook.xml.rels"
+                rels_xml_str = String(copy(b))
+            end
+        end
+        close(zin)
+        
+        # Build mapping from worksheet filename to sheet name via workbook metadata
+        rel_to_name = Dict{String, String}()
+        if !isempty(wb_xml_str)
+            for m in eachmatch(r"<sheet\b[^>]*\bname=\"([^\"]+)\"[^>]*\br:id=\"([^\"]+)\"", wb_xml_str)
+                rel_to_name[m.captures[2]] = m.captures[1]
+            end
         end
         
-        try
-            if isdefined(XLSX, :set_column_width!)
-                Base.invokelatest(getfield(XLSX, :set_column_width!), sheet, i, max_len + 3)
-            elseif isdefined(XLSX, :set_width!)
-                Base.invokelatest(getfield(XLSX, :set_width!), sheet, i, max_len + 3)
+        file_to_sheet = Dict{String, String}()
+        if !isempty(rels_xml_str)
+            for m in eachmatch(r"<Relationship\b[^>]*\bId=\"([^\"]+)\"[^>]*\bTarget=\"([^\"]+)\"", rels_xml_str)
+                r_id = m.captures[1]
+                target = m.captures[2]
+                if haskey(rel_to_name, r_id)
+                    file_to_sheet[basename(target)] = rel_to_name[r_id]
+                end
             end
-        catch
         end
+        
+        # Re-pack archive with auto-fitted column tags
+        zout = ZipFile.Writer(temp_file)
+        for (name, bytes, method) in entries
+            f_out = ZipFile.addfile(zout, name; method=method)
+            m_sheet = match(r"^xl/worksheets/(sheet\d+\.xml)$", name)
+            
+            if m_sheet !== nothing
+                xml = String(copy(bytes))
+                sheet_filename = m_sheet.captures[1]
+                
+                # Resolve target sheet column widths
+                sheet_widths = Float64[]
+                if haskey(file_to_sheet, sheet_filename)
+                    sn = file_to_sheet[sheet_filename]
+                    if haskey(col_widths, sn)
+                        sheet_widths = col_widths[sn]
+                    end
+                end
+                
+                if isempty(sheet_widths)
+                    idx_match = match(r"sheet(\d+)\.xml", sheet_filename)
+                    if idx_match !== nothing
+                        idx = parse(Int, idx_match.captures[1])
+                        if 1 <= idx <= length(sheet_order)
+                            sn = sheet_order[idx]
+                            if haskey(col_widths, sn)
+                                sheet_widths = col_widths[sn]
+                            end
+                        end
+                    end
+                end
+                
+                if !isempty(sheet_widths)
+                    cols_buf = IOBuffer()
+                    print(cols_buf, "<cols>")
+                    for (i, w) in enumerate(sheet_widths)
+                        print(cols_buf, "<col min=\"", i, "\" max=\"", i, "\" width=\"", w, "\" customWidth=\"1\"/>")
+                    end
+                    print(cols_buf, "</cols>")
+                    cols_tag = String(take!(cols_buf))
+                    
+                    xml = replace(xml, r"<(?:\w+:)?cols\b[^>]*(?:\/>|>.*?<\/(?:\w+:)?cols>)"s => "")
+                    m_data = match(r"<((?:\w+:)?sheetData)[>\s]", xml)
+                    if m_data !== nothing
+                        pos = m_data.offset
+                        xml = xml[1:pos-1] * cols_tag * xml[pos:end]
+                    end
+                end
+                write(f_out, xml)
+            else
+                write(f_out, bytes)
+            end
+        end
+        close(zout)
+        mv(temp_file, File; force=true)
+    catch e
+        isfile(temp_file) && rm(temp_file; force=true)
+        FAST_Log_DDEF("FAST", "STYLE_WARN", "Excel auto-fit non-critical warning: $(e)", "WARN")
     end
+    return nothing
 end
+
+FAST_ApplyExcelStyle_DDEF(File::AbstractString, Updates::Dict{<:AbstractString,DataFrame}) = 
+    FAST_ApplyExcelStyle_DDEF(File, [k => v for (k, v) in Updates])
+
+# Backward compatibility bridge for legacy single-sheet signatures
+FAST_ApplyExcelStyle_DDEF(sheet, df::DataFrame) = nothing
 
 """
     FAST_SafeExcelWrite_DDEF(File, Updates) -> Nothing
@@ -419,6 +581,7 @@ function FAST_SafeExcelWrite_DDEF(File::AbstractString, Updates::Dict{<:Abstract
                 end
                 break
             catch e
+                GC.gc(false)
                 if attempt < max_retries
                     FAST_Log_DDEF("FAST", "IO_RETRY", "File locked ($attempt/$max_retries). Retrying in $(retry_delay)s...", "WARN")
                     sleep(retry_delay)
@@ -467,9 +630,15 @@ function FAST_SafeExcelWrite_DDEF(File::AbstractString, Updates::Dict{<:Abstract
                         for (sn, df) in valid_pairs
                             sheet = sn in XLSX.sheetnames(xf) ? xf[sn] : XLSX.addsheet!(xf, sn)
                             XLSX.writetable!(sheet, df)
-                            FAST_ApplyExcelStyle_DDEF(sheet, df)
                         end
                     end
+                end
+                
+                # Apply Academic Auto-Fit: Enforce optimal column dimensions
+                try
+                    FAST_ApplyExcelStyle_DDEF(File, valid_pairs)
+                catch e_style
+                    FAST_Log_DDEF("FAST", "STYLE_WARN", "Excel auto-fit non-critical warning: $(e_style)", "WARN")
                 end
                 
                 FAST_Log_DDEF("FAST", "IO_WRITE", "Updates synchronised: $(File)", "OK")
@@ -483,6 +652,7 @@ function FAST_SafeExcelWrite_DDEF(File::AbstractString, Updates::Dict{<:Abstract
                 
                 return nothing
             catch e
+                GC.gc(false)
                 if attempt < max_retries
                     FAST_Log_DDEF("FAST", "IO_RETRY", "Save blocked ($attempt/$max_retries). Retrying...", "WARN")
                     sleep(retry_delay)
@@ -551,7 +721,6 @@ FAST_SafeNum_DDEF(x::AbstractFloat) = Float64(x)
 FAST_SafeNum_DDEF(x::Integer) = Float64(x)
 FAST_SafeNum_DDEF(x::Bool) = x ? 1.0 : 0.0
 
-# Neural handling for scientific string inputs.
 function FAST_SafeNum_DDEF(x::AbstractString)::Float64
     s = strip(string(x))
     (isempty(s) || s == "-" || lowercase(s) == "nan") && return NaN
@@ -560,8 +729,30 @@ function FAST_SafeNum_DDEF(x::AbstractString)::Float64
     return something(res, NaN)
 end
 
-# Fallback for complex types or objects coerced to string.
 FAST_SafeNum_DDEF(x::Any) = FAST_SafeNum_DDEF(string(x))
+
+"""
+    FAST_FormatConditionNumber_DDEF(c::Real) -> Tuple{String, String, String}
+Scientific condition number formatter: Translates raw condition number (κ) into human-readable numeric scale,
+descriptive academic status label, and standard theme color token.
+"""
+function FAST_FormatConditionNumber_DDEF(c::Real)::Tuple{String, String, String}
+    if ismissing(c) || isnan(c)
+        return ("N/A", "Unknown", "var(--colour-val3-darlow)")
+    end
+    c_f = Float64(c)
+    if isinf(c_f) || c_f > 1e12
+        return ("Singular", "Ill-Conditioned Matrix", "var(--colour-chr0-huered)")
+    elseif c_f < 100.0
+        return (@sprintf("%.1f", c_f), "Ideal Orthogonality (κ < 100)", "var(--colour-chr4-tongre)")
+    elseif c_f < 1000.0
+        return (@sprintf("%.0f", c_f), "Well-Conditioned (κ < 1,000)", "var(--colour-chr4-tongre)")
+    elseif c_f < 10000.0
+        return (@sprintf("%.0f", c_f), "Moderate Collinearity (κ < 10,000)", "var(--colour-chr5-hueyel)")
+    else
+        return (@sprintf("%.1e", c_f), "Ill-Conditioned (κ ≥ 10,000)", "var(--colour-chr0-huered)")
+    end
+end
 
 """
     FAST_IsNumericInput_DDEF(v::Any) -> Bool
@@ -750,6 +941,18 @@ function FAST_InitialiseMaster_DDEF(File::String, InNames::Vector{String}, OutNa
             try
                 df_old = FAST_ReadExcel_DDEF(File, C.SHEET_DATA)
                 if !isempty(df_old)
+                    if (C.COL_PHASE in names(df_final_data)) && (C.COL_PHASE in names(df_old))
+                        target_phases = unique(skipmissing(df_final_data[!, C.COL_PHASE]))
+                        if !isempty(target_phases)
+                            old_statuses = (C.COL_STATUS in names(df_old)) ? collect(df_old[!, C.COL_STATUS]) : fill("", nrow(df_old))
+                            mask_keep = .!(in.(df_old[!, C.COL_PHASE], Ref(target_phases)) .& (coalesce.(old_statuses .== "Pending", false)))
+                            if any(.!mask_keep)
+                                FAST_Log_DDEF("FAST", "Init Master", "Replacing $(count(.!mask_keep)) existing pending run(s) for phase $(join(target_phases, ", ")).", "INFO")
+                                df_old = df_old[mask_keep, :]
+                            end
+                        end
+                    end
+
                     all_headers = unique(vcat(names(df_old), headers))
                     for h in setdiff(all_headers, names(df_old))
                         df_old[!, h] = fill(missing, nrow(df_old))
@@ -919,8 +1122,8 @@ function FAST_ReadToStore_DDEF(Path::String)::String
     end
 end
 
-# Scientific Configuration Cache (Transient memory buffer for Zero-IO Analysis)
-const FAST_ConfigCache_DDEC = Dict{String, Any}() # Path => (Timestamp, Dict)
+# Configuration cache
+const FAST_ConfigCache_DDEC = Dict{String, Any}()
 const FAST_ConfigCacheLock_DDEC = ReentrantLock()
 
 """
@@ -943,13 +1146,12 @@ FAST_ReadConfig_DDEF(::Nothing) = Dict{String,Any}()
 function FAST_ReadConfig_DDEF(File::AbstractString)::Dict{String,Any}
     isempty(File) && return Dict{String,Any}()
     
-    # 1. Scientific Cache Audit
     now_ts = time()
     cached = lock(FAST_ConfigCacheLock_DDEC) do
         if haskey(FAST_ConfigCache_DDEC, File)
             ts, cache_dict = FAST_ConfigCache_DDEC[File]
             if (now_ts - ts) < 120.0
-                return cache_dict
+                return deepcopy(cache_dict)
             end
         end
         return nothing
@@ -975,7 +1177,7 @@ function FAST_ReadConfig_DDEF(File::AbstractString)::Dict{String,Any}
         lock(FAST_ConfigCacheLock_DDEC) do
             FAST_ConfigCache_DDEC[File] = (now_ts, config)
         end
-        return config
+        return deepcopy(config)
     catch e
         FAST_Log_DDEF("FAST", "READ_CONFIG_FAIL", "Error reading config from $File: $e", "WARN")
         return Dict{String,Any}()
@@ -1017,6 +1219,84 @@ function FAST_UpdateConfig_DDEF(File::AbstractString, Updates::Dict)::Bool
 end
 
 # ------------------------------------------------------------------------------
+# SECTION 14B: INFORMATICS SYNCHRONISATION & DIRECTION DISPATCH
+# ------------------------------------------------------------------------------
+
+"""
+    FAST_GetSafe_DDEF(o, k, d=nothing)
+Safely extracts key `k` from dict or object regardless of whether key is String or Symbol.
+"""
+FAST_GetSafe_DDEF(o::AbstractDict, k, d=nothing) = begin
+    haskey(o, string(k)) ? o[string(k)] : (haskey(o, Symbol(k)) ? o[Symbol(k)] : d)
+end
+FAST_GetSafe_DDEF(::Any, ::Any, d=nothing) = d
+
+"""
+    FAST_DecodeDirections_DDEF(source, names) -> Tuple{Int,Int,Int}
+Decodes factor directions using multiple dispatch on the source container type.
+"""
+FAST_DecodeDirections_DDEF(dm::AbstractDict, names::AbstractVector) = (
+    Int(FAST_SafeNum_DDEF(get(dm, get(names, 1, ""), -1))),
+    Int(FAST_SafeNum_DDEF(get(dm, get(names, 2, ""), -1))),
+    Int(FAST_SafeNum_DDEF(get(dm, get(names, 3, ""), -1)))
+)
+
+FAST_DecodeDirections_DDEF(v::AbstractVector, ::AbstractVector) = (
+    length(v) >= 3 ? (
+        Int(FAST_SafeNum_DDEF(v[1])),
+        Int(FAST_SafeNum_DDEF(v[2])),
+        Int(FAST_SafeNum_DDEF(v[3]))
+    ) : (-1, -1, -1)
+)
+
+FAST_DecodeDirections_DDEF(::Any, ::AbstractVector) = (-1, -1, -1)
+
+FAST_GetDirectionMap_DDEF(node::AbstractDict) = get(node, "DirectionMap", nothing)
+FAST_GetDirectionMap_DDEF(::Any)              = nothing
+
+FAST_ExtractMap_DDEF(dm::AbstractDict) = isempty(dm) ? nothing : dm
+FAST_ExtractMap_DDEF(::Any)            = nothing
+
+"""
+    FAST_ResolveHistoryMap_DDEF(history) -> Union{AbstractDict, Nothing}
+Iteratively resolves the active direction map across phase records.
+"""
+function FAST_ResolveHistoryMap_DDEF(ph::AbstractDict)
+    for key in ("Phase1", "Phase2", "Phase3", "Phase4", "Phase5")
+        node = get(ph, key, nothing)
+        dm = FAST_ExtractMap_DDEF(FAST_GetDirectionMap_DDEF(node))
+        !isnothing(dm) && return dm
+    end
+    return nothing
+end
+FAST_ResolveHistoryMap_DDEF(::Any) = nothing
+
+"""
+    FAST_SelectSource_DDEF(history_source, global_source)
+Selects the priority direction container via type dispatch.
+"""
+FAST_SelectSource_DDEF(hist::AbstractDict, ::Any) = hist
+FAST_SelectSource_DDEF(::Any, glob)               = glob
+
+"""
+    FAST_ExtractDirections_DDEF(g, items) -> Tuple{Int,Int,Int}
+Extracts factor directions with backward compatibility across PhaseHistory and legacy vectors.
+Handles both full ingredient vectors (filtering for Variable) and pre-filtered variable configs.
+"""
+function FAST_ExtractDirections_DDEF(g::AbstractDict, items::AbstractVector)::Tuple{Int,Int,Int}
+    names = [
+        string(FAST_GetSafe_DDEF(c, "Name", "")) 
+        for c in items 
+        if string(FAST_GetSafe_DDEF(c, "Role", "Variable")) in ("Variable", "Var")
+    ]
+    hist_map = FAST_ResolveHistoryMap_DDEF(get(g, "PhaseHistory", nothing))
+    source   = FAST_SelectSource_DDEF(hist_map, get(g, "Direction", nothing))
+    return FAST_DecodeDirections_DDEF(source, names)
+end
+
+FAST_ExtractDirections_DDEF(::Any, ::Any) = (-1, -1, -1)
+
+# ------------------------------------------------------------------------------
 # SECTION 15: HARDWARE AUDIT & THREADING
 # ------------------------------------------------------------------------------
 
@@ -1026,7 +1306,6 @@ Audit check for CPU concurrency status. Returns (Count, Theme_Colour, Status_Mes
 """
 function FAST_GetThreadInfo_DDEF()::Tuple{Int,String,String}
     n::Int = Threads.nthreads()
-    # Provision of high-performance status telemetry for CPU concurrency.
     n > 1 ? (n, "var(--colour-chr4-tongre)", "$n Threads [OPTIMAL]") : (n, "var(--colour-chr5-hueyel)", "1 Thread [SUB-OPTIMAL]")
 end
 
@@ -1151,7 +1430,6 @@ end
 # SECTION 17: IN-MEMORY TRANSIENT CACHE
 # ------------------------------------------------------------------------------
 
-# Provision of a thread-safe in-memory cache for high-velocity DataFrame access.
 const FAST_CacheStore_DDEC = Dict{String,DataFrame}()
 const FAST_CacheLock_DDEC  = ReentrantLock()
 

@@ -1,0 +1,29 @@
+# Compiled sysimages and native binaries
+*.dll
+*.so
+*.dylib
+build/*.dll
+build/*.so
+build/*.dylib
+*_sysimg.*
+*_sysimage.*
+
+# Microsoft Excel temporary lock files
+~$*.xlsx
+*.xlsx.tmp
+
+# Julia coverage, memory profiling, and temporary logs
+*.log
+*.cov
+*.mem
+.julia/
+
+# System & IDE workspace directories
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Transient workforce directory
+DoECISORY_Workforce/

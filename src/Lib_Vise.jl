@@ -17,10 +17,12 @@ using Distributions
 using Printf
 using Dates
 using XLSX
-using Main.Sys_Fast
-using Main.Lib_Mole
-using Main.Lib_Core
-using Main.Sys_Flow
+using ..Sys_Fast
+using ..Lib_Mole
+using ..Lib_Core
+using ..Sys_Flow
+
+const Main = parentmodule(@__MODULE__)
 using HypothesisTests
 import HypothesisTests: pvalue
 
@@ -29,9 +31,9 @@ export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
     VISE_GetTermNames_DDEF, VISE_ClampIndex_DDEF,
     VISE_SelectBestModel_DDEF, VISE_CalcMetrics_DDEF,
     VISE_SensitivityAnalysis_DDEF, VISE_GenerateScientificReport_DDEF,
-    VISE_CalcVIF_DDEF, VISE_LackOfFit_DDEF, VISE_GenerateAnovaTable_DDEF,
-    VISE_PerformNormalityTest_DDEF, VISE_ExportToExcel_DDEF,
-    VISE_ExtractDecayModifiers_DDEF
+    VISE_FormatMarkdownTable_DDEF, VISE_CalcVIF_DDEF, VISE_LackOfFit_DDEF,
+    VISE_GenerateAnovaTable_DDEF, VISE_PerformNormalityTest_DDEF,
+    VISE_ExportToExcel_DDEF, VISE_ExtractDecayModifiers_DDEF
 
 struct VISE_RegressionResult_DDES
     Beta::Vector{Float64}
@@ -63,7 +65,7 @@ Base.Dict(r::VISE_RegressionResult_DDES) = Dict{String, Any}(
 )
 
 # ==============================================================================
-# PART A: MODELLING ARCHITECTURE & DESIGN EXPANSION
+# PART A: MODELLING & DESIGN EXPANSION
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -76,7 +78,8 @@ Generates human-readable names for regression terms (Factor Interactions and Pol
 """
 function VISE_GetTermNames_DDEF(InNames::AbstractVector{<:AbstractString}, ModelType::Any)
     m_type = Main.Lib_Core.CORE_GetModelType_DDEF(ModelType)
-    return VISE_GetTerms_DDEF(m_type, InNames)
+    actual_names = length(InNames) >= 3 ? InNames : ["X1", "X2", "X3"]
+    return VISE_GetTerms_DDEF(m_type, actual_names)
 end
 
 const VISE_FactorPairs_DDEC = ((1, 2), (1, 3), (2, 3))
@@ -579,82 +582,79 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_B
             Candidates[i, d] = pt[d]
         end
     end
-    RefType = isempty(Models) ? "quadratic" : get(Models[1], "ModelType", "quadratic")
-    X_Design = VISE_ExpandDesign_DDEF(Candidates, RefType)
     NumModels = length(Models)
     Predictions = zeros(Float64, NumPoints, NumModels)
     Active_Flags = falses(NumModels)
-    # BLAS Thread Isolation: Prevents nested threading deadlocks (Threads.@threads + BLAS)
-    # on Windows systems during high-concurrency grid searches.
+
     Main.Sys_Fast.FAST_Log_DDEF("VISE", "GRID_SEARCH", "Exploration Pulse [N=$NumPoints] - Dispatching $(NumModels) models...", "WAIT")
-    Scores = Vector{Float64}(undef, NumPoints)
-    
-    old_blas = LinearAlgebra.BLAS.get_num_threads()
-    LinearAlgebra.BLAS.set_num_threads(1)
-    try
-        # Pre-expand design matrices outside the thread loop to avoid garbage collection pressure
-        X_Linear = (RefType == "linear") ? X_Design : VISE_ExpandDesign_DDEF(Candidates, "linear")
-        X_Quadratic = (RefType == "quadratic") ? X_Design : VISE_ExpandDesign_DDEF(Candidates, "quadratic")
 
-        # 1. Parallel Regression Matrix Multiplication (Allocation-Free)
-        Threads.@threads for m in 1:NumModels
-            Mod = Models[m]
-            Mod["Status"] != "OK" && continue
-            m_type_str = lowercase(get(Mod, "ModelType", "quadratic"))
-            Beta = collect(Float64, Mod["Coefs"])
-            
-            X_eff = (m_type_str == "linear") ? X_Linear : X_Quadratic
-            mul!(view(Predictions, :, m), X_eff, Beta)
-            
-            Active_Flags[m] = true
+    # Pre-expand design matrices for Linear and Quadratic structures
+    X_Linear = VISE_ExpandDesign_DDEF(Candidates, "linear")
+    X_Quadratic = VISE_ExpandDesign_DDEF(Candidates, "quadratic")
+
+    # 1. Deterministic Matrix-Vector Multiplication (Pure Julia: Thread-safe, zero OpenBLAS lock risk)
+    for m in 1:NumModels
+        Mod = Models[m]
+        Mod["Status"] != "OK" && continue
+        m_type_str = lowercase(get(Mod, "ModelType", "quadratic"))
+        Beta = collect(Float64, Mod["Coefs"])
+        
+        X_eff = (m_type_str == "linear") ? X_Linear : X_Quadratic
+        p_cols = size(X_eff, 2)
+        @inbounds for i in 1:NumPoints
+            acc = 0.0
+            for j in 1:p_cols
+                acc += X_eff[i, j] * Beta[j]
+            end
+            Predictions[i, m] = acc
         end
-
-        # 2. Parallel Multi-Objective Desirability Scoring
-        active_idx = findall(Active_Flags)
-        Scores = Vector{Float64}(undef, NumPoints)
-        if isempty(active_idx)
-            fill!(Scores, 1.0)
-        else
-            sum_weights = 0.0
-            parsed_goals = Vector{Tuple}(undef, NumModels)
-            for m in 1:NumModels
-                gtup = Main.Lib_Core.CORE_ExtractGoal_DDEF(m <= length(Goals) ? Goals[m] : get(Models[m], "Goal", Dict()))
-                parsed_goals[m] = gtup
-                if m in active_idx; sum_weights += gtup[5] end
-            end
-            
-            pow = sum_weights > 0.0 ? (1.0 / sum_weights) : (length(active_idx) > 0 ? 1.0 / length(active_idx) : 1.0)
-
-            # Pre-compute grid-level decay lookup for consistency with BBO objective.
-            grid_decay_lookup = Dict{Int, Vector{Main.Lib_Core.CORE_DecayModifier_DDES}}()
-            for dm in DecayModifiers
-                for oi in dm.AffectedOutputs
-                    if oi >= 1 && oi <= NumModels
-                        push!(get!(grid_decay_lookup, oi, Main.Lib_Core.CORE_DecayModifier_DDES[]), dm)
-                    end
-                end
-            end
-            
-            Threads.@threads for i in 1:NumPoints
-                s = 1.0
-                @inbounds for m_idx in active_idx
-                    pred_val = Predictions[i, m_idx]
-                    # Decay-Coupled Correction: Penalise by e^(-lambda * t) for affected outputs.
-                    if haskey(grid_decay_lookup, m_idx)
-                        for dm in grid_decay_lookup[m_idx]
-                            pred_val = Main.Lib_Core.CORE_ApplyDecayPenalty_DDEF(pred_val, dm, view(Candidates, i, :))
-                        end
-                    end
-                    s *= Main.Lib_Core.CORE_CalcDesirability_DDEF(pred_val, parsed_goals[m_idx])
-                end
-                res_val = s^pow
-                @inbounds Scores[i] = (isnan(res_val) || isinf(res_val)) ? 0.0 : clamp(res_val, 0.0, 1.0)
-            end
-        end
-    finally
-        LinearAlgebra.BLAS.set_num_threads(old_blas)
+        
+        Active_Flags[m] = true
     end
 
+    # 2. Multi-Objective Desirability Scoring
+    active_idx = findall(Active_Flags)
+    Scores = Vector{Float64}(undef, NumPoints)
+    if isempty(active_idx)
+        fill!(Scores, 1.0)
+    else
+        sum_weights = 0.0
+        parsed_goals = Vector{Tuple}(undef, NumModels)
+        for m in 1:NumModels
+            gtup = Main.Lib_Core.CORE_ExtractGoal_DDEF(m <= length(Goals) ? Goals[m] : get(Models[m], "Goal", Dict()))
+            parsed_goals[m] = gtup
+            if m in active_idx; sum_weights += gtup[5] end
+        end
+        
+        pow = sum_weights > 0.0 ? (1.0 / sum_weights) : (length(active_idx) > 0 ? 1.0 / length(active_idx) : 1.0)
+
+        # Pre-compute grid-level decay lookup for consistency with BBO objective.
+        grid_decay_lookup = Dict{Int, Vector{Main.Lib_Core.CORE_DecayModifier_DDES}}()
+        for dm in DecayModifiers
+            for oi in dm.AffectedOutputs
+                if oi >= 1 && oi <= NumModels
+                    push!(get!(grid_decay_lookup, oi, Main.Lib_Core.CORE_DecayModifier_DDES[]), dm)
+                end
+            end
+        end
+        
+        @inbounds for i in 1:NumPoints
+            s = 1.0
+            for m_idx in active_idx
+                pred_val = Predictions[i, m_idx]
+                if haskey(grid_decay_lookup, m_idx)
+                    for dm in grid_decay_lookup[m_idx]
+                        pred_val = Main.Lib_Core.CORE_ApplyDecayPenalty_DDEF(pred_val, dm, view(Candidates, i, :))
+                    end
+                end
+                s *= Main.Lib_Core.CORE_CalcDesirability_DDEF(pred_val, parsed_goals[m_idx])
+            end
+            res_val = s^pow
+            Scores[i] = (isnan(res_val) || isinf(res_val)) ? 0.0 : clamp(res_val, 0.0, 1.0)
+        end
+    end
+
+    Main.Sys_Fast.FAST_Log_DDEF("VISE", "GRID_SEARCH", "Exploration Pulse completed successfully.", "OK")
     return Candidates, Predictions, Scores
 end
 
@@ -678,96 +678,528 @@ function VISE_SensitivityAnalysis_DDEF(Model::AbstractDict, X_Point::AbstractVec
     return total > 1e-15 ? gradients ./ total : fill(1.0/3.0, 3)
 end
 
+"""
+    VISE_FormatMarkdownTable_DDEF(headers::Vector{String}, aligns::Vector{Symbol}, rows::Vector{Vector{String}}) -> String
+Constructs a Markdown table with strictly uniform, character-perfect column alignment.
+Supported alignments: :left, :right, :center.
+"""
+function VISE_FormatMarkdownTable_DDEF(headers::Vector{String}, aligns::Vector{Symbol}, rows::Vector{Vector{String}})::String
+    n_cols = length(headers)
+    widths = [textwidth(headers[j]) for j in 1:n_cols]
+    for r in rows
+        for j in 1:min(n_cols, length(r))
+            widths[j] = max(widths[j], textwidth(r[j]))
+        end
+    end
+    widths = [max(w, 3) for w in widths]
+
+    io = IOBuffer()
+    
+    # 1. Header row
+    write(io, "|")
+    for j in 1:n_cols
+        w = widths[j]
+        h = headers[j]
+        h_str = aligns[j] == :right ? lpad(h, w) : (aligns[j] == :center ? lpad(rpad(h, w - (w - textwidth(h))÷2), w) : rpad(h, w))
+        write(io, " ", h_str, " |")
+    end
+    write(io, "\n")
+    
+    # 2. Divider row (:--- for left, ---: for right, :---: for center)
+    write(io, "|")
+    for j in 1:n_cols
+        w = widths[j]
+        div_str = if aligns[j] == :right
+            "-"^(w + 1) * ":"
+        elseif aligns[j] == :center
+            ":" * "-"^w * ":"
+        else
+            ":" * "-"^(w + 1)
+        end
+        write(io, div_str, "|")
+    end
+    write(io, "\n")
+    
+    # 3. Data rows
+    for r in rows
+        write(io, "|")
+        for j in 1:n_cols
+            val = (j <= length(r)) ? r[j] : ""
+            w = widths[j]
+            c_str = aligns[j] == :right ? lpad(val, w) : (aligns[j] == :center ? lpad(rpad(val, w - (w - textwidth(val))÷2), w) : rpad(val, w))
+            write(io, " ", c_str, " |")
+        end
+        write(io, "\n")
+    end
+    
+    return String(take!(io))
+end
+
 function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     io = IOBuffer()
-    write(io, "# DOECISORY ANALYTICAL REPORT (SCIENTIFIC COMPENDIUM)\n")
-    write(io, Printf.@sprintf("*Protocol Execution: %s | [ACADEMIC PRECISION MODE] *\n", Dates.format(now(), "yyyy-mm-dd HH:MM")))
+    
+    phase     = get(Res, "Phase", "Phase1")
+    n_samples = haskey(Res, "X_Clean") ? size(Res["X_Clean"], 1) : 0
+    n_factors = haskey(Res, "X_Clean") ? size(Res["X_Clean"], 2) : 0
+    n_outputs = haskey(Res, "Y_Clean") ? size(Res["Y_Clean"], 2) : 0
+
+    fmt_pos(s::AbstractString) = "<ins class=\"report-pos colourtx-c4tg\">$(replace(s, "<" => "&lt;"))</ins>"
+    fmt_neg(s::AbstractString) = "<del class=\"report-neg colourtx-c0hr\">$(replace(s, "<" => "&lt;"))</del>"
+
+    write(io, "# STATISTICAL ANALYSIS REPORT\n")
+    write(io, Printf.@sprintf("*Execution Date: %s | Experimental Phase: %s*\n", Dates.format(now(), "yyyy-mm-dd HH:MM"), phase))
+    write(io, Printf.@sprintf("*Sample Size (N): %d runs | Factors (k): %d | Responses (m): %d*\n\n", n_samples, n_factors, n_outputs))
     write(io, "---\n\n")
 
+    models = get(Res, "Models", Dict{String,Any}[])
+    is_quadratic = any(m -> lowercase(string(get(m, "ModelType", get(m, :ModelType, "")))) == "quadratic", models) || (n_samples > 12 && n_factors >= 2)
+
+    # --------------------------------------------------------------------------
+    # SECTION I: EXPERIMENTAL DESIGN VITALS
+    # --------------------------------------------------------------------------
     if haskey(Res, "Vitals") && !isnothing(Res["Vitals"])
         v = Res["Vitals"]
         write(io, "### I. Experimental Design Vitals\n")
-        write(io, "Rigorous mathematical audit of the underlying design matrix topology.\n\n")
+        write(io, "Assessment of information matrix conditioning, optimality criteria, and lack-of-fit.\n\n")
         
         d_val   = get(v, "D", 0.0)
+        a_val   = get(v, "A", 0.0)
+        g_val   = get(v, "G", 0.0)
+        i_val   = get(v, "I", 0.0)
         c_val   = get(v, "Condition", Inf)
+        vif_val = get(v, "MaxVIF", 1.0)
         lof_val = get(v, "LOF", 1.0)
 
-        @printf(io, "- **D-Efficiency**: %.2f%% (Goal: >60%% for industrial robustness)\n", d_val * 100)
-        @printf(io, "- **Condition Number**: %.2e (Goal: <1e4 for numerical stability)\n", c_val)
-        @printf(io, "- **Lack-of-Fit (P)**: %.4f ", lof_val)
-        
-        if lof_val < 0.05
-            write(io, "(`SIGNIFICANT` - Potential systematic bias or missing higher-order terms)\n")
-            write(io, "> [!CAUTION]\n> **Critical Lack-of-Fit**: The model fails to capture the underlying curvature. Optimisation based on this surface may be physically misleading.\n")
+        d_num = (!ismissing(d_val) && !isnan(d_val)) ? Float64(d_val) : 0.0
+        c_num = (!ismissing(c_val) && !isnan(c_val)) ? Float64(c_val) : Inf
+        v_num = (!ismissing(vif_val) && !isnan(vif_val)) ? Float64(vif_val) : 1.0
+
+        d_benchmark = is_quadratic ? "≥ 35.00% (RSM)" : "≥ 60.00%"
+        d_threshold = is_quadratic ? 0.35 : 0.60
+        d_eval = if is_quadratic
+            if d_num >= 0.45
+                fmt_pos("High efficiency")
+            elseif d_num >= 0.35
+                fmt_pos("Satisfactory efficiency")
+            else
+                fmt_neg("Marginal efficiency")
+            end
         else
-            write(io, "(`NON-SIGNIFICANT` - Model captures the underlying phenomenon accurately)\n")
-        end
-        write(io, "\n")
-    end
-
-    write(io, "### II. Response Surface Dimension Analysis\n")
-    out_names = get(Res, "DisplayOutNames", Res["OutNames"])
-    for (m_idx, name) in enumerate(out_names)
-        mod = Res["Models"][m_idx]
-        mod["Status"] != "OK" && continue
-
-        r2a  = get(mod, "R2_Adj", NaN)
-        q2   = get(mod, "Q2", NaN)
-        rmse = get(mod, "RMSE", 0.0)
-        aic  = get(mod, "AIC", NaN)
-
-        write(io, "#### Response: **$(name)**\n")
-        write(io, Printf.@sprintf("- **Fitness (Adj. R²)**: %.4f (Variance explained)\n", r2a))
-        write(io, Printf.@sprintf("- **Predictivity (Q²)**: %.4f (Leave-one-out cross-validation)\n", q2))
-        write(io, Printf.@sprintf("- **Standard Error (RMSE)**: %.4f\n", rmse))
-
-        quality = q2 > 0.85 ? "SUPERIOR" : q2 > 0.7 ? "ROBUST" : q2 > 0.4 ? "FORMATIVE" : "TENTATIVE"
-        write(io, "- **Inference Reliability**: `$quality` Profile. ")
-        
-        if q2 > 0.7
-            write(io, "The model exhibits strong extrapolative potential within the defined design space.\n")
-        else
-            write(io, "Exercise caution during phase transition; additional data points may be required for high-fidelity mapping.\n")
-        end
-
-        gap = r2a - q2
-        if gap > 0.20
-            msg = Printf.@sprintf("> [!WARNING]\n> **High Overfitting Risk**: A significant gap (%.2f) detected between fitness and predictivity. The model is likely capturing experimental noise rather than true physical trends.\n", gap)
-            write(io, msg)
-        elseif gap < 0.10 && r2a > 0.70
-            write(io, "> [!TIP]\n> **Excellent Model Stability**: The high alignment between R² and Q² suggests a highly reliable scientific model.\n")
-        end
-
-        sens = get(Res, "Sensitivities", [])
-        if !isempty(sens) && m_idx <= length(sens)
-            s_vec = sens[m_idx]
-            in_names = get(Res, "DisplayInNames", get(Res, "InNames", []))
-            if !isempty(s_vec) && length(s_vec) == length(in_names)
-                perm = sortperm(s_vec; rev=true)
-                write(io, Printf.@sprintf("- **Primary Driver**: `%s` (contributes %.1f%% to response variance).\n", in_names[perm[1]], s_vec[perm[1]]*100))
+            if d_num >= 0.60
+                fmt_pos("Adequate efficiency (D ≥ 60%)")
+            else
+                fmt_neg("Low efficiency (D < 60%)")
             end
         end
-        write(io, "\n")
-    end
 
-    if !isempty(get(Res, "BestPoint", []))
-        write(io, "### III. Global Optimum & Control Topology\n")
-        @printf(io, "- **Composite Desirability (D)**: %.4f\n", get(Res, "BestScore", 0.0))
+        c_eval = c_num < 100.0 ? fmt_pos("Well-conditioned (κ < 100)") : (c_num < 1000.0 ? "Moderate collinearity" : fmt_neg("Severe ill-conditioning (κ ≥ 1,000)"))
+        c_str  = isinf(c_num) ? "Inf" : (c_num >= 1e4 ? @sprintf("%.2e", c_num) : @sprintf("%.2f", c_num))
 
-        best_pt  = Res["BestPoint"]
-        in_names = get(Res, "InNames", [])
-        write(io, "- **Optimal Factor Settings**:\n")
-        for (i, val) in enumerate(best_pt)
-            @printf(io, "  - *%s*: %.4f\n", in_names[i], val)
+        v_eval = v_num == 1.0 ? fmt_pos("Orthogonal factors (VIF = 1.0)") : (v_num <= 5.0 ? fmt_pos("Low collinearity (VIF ≤ 5.0)") : fmt_neg("High collinearity (VIF > 5.0)"))
+
+        lof_str, lof_tag = if ismissing(lof_val) || isnan(lof_val)
+            "N/A", "Replicate runs absent"
+        else
+            ln = Float64(lof_val)
+            @sprintf("%.4f", ln), (ln >= 0.05 ? fmt_pos("Adequate fit (p ≥ 0.05)") : fmt_neg("Significant lack of fit (p < 0.05)"))
         end
-        write(io, "\n> [!NOTE]\n> Stability analysis suggests these coordinates reside within a high-confidence 'Optimal Zone' for experimental reproducibility.\n\n")
-    else
-        write(io, "### III. Global Optimum & Control Topology\n")
-        write(io, "> [!IMPORTANT]\n> **Global Optimisation in Progress**: Mathematical convergence in the background. Results will be visible in Pulse #2.\n\n")
+
+        vitals_headers = ["Metric / Criterion", "Value", "Benchmark Reference", "Statistical Evaluation"]
+        vitals_aligns  = [:left, :right, :left, :left]
+        vitals_rows    = Vector{String}[]
+
+        push!(vitals_rows, ["D-Efficiency", @sprintf("%.2f%%", d_num * 100), d_benchmark, d_eval])
+        if (!ismissing(a_val) && !isnan(a_val) && Float64(a_val) > 0.0)
+            push!(vitals_rows, ["A-Optimality", @sprintf("%.4f", Float64(a_val)), "tr((X'X)⁻¹) minim.", "Average parameter variance"])
+        end
+        if (!ismissing(g_val) && !isnan(g_val) && Float64(g_val) > 0.0)
+            push!(vitals_rows, ["G-Optimality", @sprintf("%.4f", Float64(g_val)), "max SPV minim.", "Maximum prediction variance"])
+        end
+        if (!ismissing(i_val) && !isnan(i_val) && Float64(i_val) > 0.0)
+            push!(vitals_rows, ["I-Optimality", @sprintf("%.4f", Float64(i_val)), "∫ SPV dX minim.", "Mean prediction variance"])
+        end
+        push!(vitals_rows, ["Condition Number (κ)", c_str, "< 100.00", c_eval])
+        push!(vitals_rows, ["Maximum Collinearity (VIF)", @sprintf("%.2f", v_num), "≤ 5.00", v_eval])
+        push!(vitals_rows, ["Lack-of-Fit (P-Value)", lof_str, "p ≥ 0.0500", lof_tag])
+
+        write(io, VISE_FormatMarkdownTable_DDEF(vitals_headers, vitals_aligns, vitals_rows))
+        write(io, "\n")
+
+        if is_quadratic
+            write(io, Printf.@sprintf("*Design Efficiency Note: For second-order response surface methodology (RSM) models with quadratic curvature and interaction terms, theoretical D-efficiency standardly ranges between 30%% and 50%% (Box-Behnken / Central Composite benchmarks). A D-efficiency of %.2f%% confirms a well-balanced experimental design for quadratic surface estimation.*\n\n", d_num * 100))
+        end
+
+        if c_num < 100.0 && v_num <= 5.0
+            write(io, "*Matrix Condition: The design matrix is well-conditioned (κ < 100) with low variance inflation (VIF ≤ 5.0), ensuring stable parameter estimation without collinearity inflation.*\n\n")
+        elseif c_num >= 1000.0 || v_num > 10.0
+            write(io, "*Matrix Condition: Severe multicollinearity or ill-conditioning detected in the design matrix (κ ≥ 1,000 or VIF > 10.0). Standard errors of regression coefficients may be substantially inflated.*\n\n")
+        else
+            write(io, "*Matrix Condition: Moderate collinearity present among design factors. Regression estimates remain computationally stable, though standard errors are slightly increased.*\n\n")
+        end
+        
+        if !ismissing(lof_val) && !isnan(lof_val)
+            if Float64(lof_val) < 0.05
+                write(io, "*Lack-of-Fit Interpretation: The test is statistically significant (p < 0.05). The variation unaccounted for by the model exceeds experimental pure error, indicating that the fitted model order is insufficient to capture response surface curvature or interactions. Higher-order polynomial terms or transformations are recommended.*\n\n")
+            else
+                write(io, "*Lack-of-Fit Interpretation: The test is non-significant (p ≥ 0.05). There is no statistical evidence of model inadequacy against pure experimental error, confirming that the response surface is adequately modelled.*\n\n")
+            end
+        else
+            write(io, "*Lack-of-Fit Interpretation: Replicate runs at identical factor coordinates were not conducted in this design. Consequently, pure experimental error cannot be separated from residual lack-of-fit error.*\n\n")
+        end
     end
 
-    write(io, "*Generated via DoECISORY $(Main.Sys_Fast.FAST_Data_DDEC.VERSION). Formatted in compliance with academic reporting standards.*\n")
+    # --------------------------------------------------------------------------
+    # SECTION II: MODEL SUMMARY & CROSS-VALIDATION
+    # --------------------------------------------------------------------------
+    out_names = get(Res, "DisplayOutNames", Res["OutNames"])
+    norms     = get(Res, "Normality", Dict[])
+    sens      = get(Res, "Sensitivities", [])
+    in_names  = get(Res, "DisplayInNames", get(Res, "InNames", []))
+
+    write(io, "### II. Model Summary & Cross-Validation\n")
+    write(io, "Summary of regression goodness-of-fit, leave-one-out cross-validation (LOOCV), and residual normality.\n\n")
+
+    summary_headers = ["Response Variable", "Model Order", "Adj. R²", "Q² (LOOCV)", "RMSE", "Model P-Val", "Normality (p)", "Predictive Validity"]
+    summary_aligns  = [:left, :left, :right, :right, :right, :right, :right, :left]
+    summary_rows    = Vector{String}[]
+
+    for (m_idx, name) in enumerate(out_names)
+        m_idx > length(models) && continue
+        mod = models[m_idx]
+        mod["Status"] != "OK" && continue
+
+        raw_mtype = get(mod, "ModelType", "linear")
+        m_type = uppercase(first(raw_mtype, 1)) * lowercase(raw_mtype[2:end])
+        r2a  = get(mod, "R2_Adj", NaN)
+        q2   = get(mod, "Q2", NaN)
+        rmse = get(mod, "RMSE", NaN)
+        pval = get(mod, "P_Value", NaN)
+        
+        norm_p = (m_idx <= length(norms) && haskey(norms[m_idx], "p") && !isnan(norms[m_idx]["p"])) ? norms[m_idx]["p"] : NaN
+        
+        quality = if ismissing(q2) || isnan(q2)
+            "N/A"
+        elseif q2 >= 0.70
+            fmt_pos("High (Q² ≥ 0.70)")
+        elseif q2 >= 0.50
+            fmt_pos("Moderate (Q² ≥ 0.50)")
+        elseif q2 >= 0.0
+            fmt_neg("Low (0 ≤ Q² < 0.50)")
+        else
+            fmt_neg("Overfitted (Q² < 0)")
+        end
+
+        r2a_s  = (!ismissing(r2a) && !isnan(r2a)) ? @sprintf("%.4f", Float64(r2a)) : "N/A"
+        q2_s   = (!ismissing(q2) && !isnan(q2))   ? @sprintf("%.4f", Float64(q2))  : "N/A"
+        rmse_s = (!ismissing(rmse) && !isnan(rmse)) ? @sprintf("%.4f", Float64(rmse)) : "N/A"
+        pval_s = (!ismissing(pval) && !isnan(pval)) ? (pval < 0.0001 ? "<0.0001" : @sprintf("%.4f", Float64(pval))) : "N/A"
+        norm_s = (!ismissing(norm_p) && !isnan(norm_p)) ? (norm_p < 0.0001 ? "<0.0001" : @sprintf("%.4f", Float64(norm_p))) : "N/A"
+
+        push!(summary_rows, [first(name, 24), m_type, r2a_s, q2_s, rmse_s, pval_s, norm_s, quality])
+    end
+
+    write(io, VISE_FormatMarkdownTable_DDEF(summary_headers, summary_aligns, summary_rows))
+    write(io, "\n")
+    
+    for (m_idx, name) in enumerate(out_names)
+        m_idx > length(models) && continue
+        mod = models[m_idx]
+        mod["Status"] != "OK" && continue
+        
+        pval = get(mod, "P_Value", NaN)
+        r2a  = get(mod, "R2_Adj", NaN)
+        q2   = get(mod, "Q2", NaN)
+        norm_p = (m_idx <= length(norms) && haskey(norms[m_idx], "p") && !isnan(norms[m_idx]["p"])) ? norms[m_idx]["p"] : NaN
+        
+        sig_str = if !isnan(pval)
+            pval < 0.05 ? "The regression model is statistically significant (p < 0.05)." : "The regression model is not statistically significant at α = 0.05 (p ≥ 0.05)."
+        else
+            ""
+        end
+        
+        gen_str = if !isnan(r2a) && !isnan(q2)
+            gap = r2a - q2
+            if q2 < 0.0
+                "Negative Q² indicates that the model has poor predictive generalisation."
+            elseif gap > 0.20
+                @sprintf("The gap between Adj. R² (%.3f) and Q² (%.3f) exceeds 0.20, indicating potential overfitting to training runs.", r2a, q2)
+            elseif q2 >= 0.50
+                @sprintf("Close agreement between Adj. R² (%.3f) and Q² (%.3f) confirms acceptable predictive generalisation.", r2a, q2)
+            else
+                @sprintf("Adj. R² is %.3f and Q² is %.3f, reflecting modest predictive power.", r2a, q2)
+            end
+        else
+            ""
+        end
+        
+        norm_str = if !isnan(norm_p)
+            norm_p >= 0.05 ? 
+                @sprintf("Residuals satisfy the normality assumption (Shapiro-Wilk p = %.4f ≥ 0.05), supporting the validity of standard parametric tests.", norm_p) :
+                @sprintf("Residuals depart from normality (Shapiro-Wilk p = %.4f < 0.05); inference should be interpreted with caution.", norm_p)
+        else
+            ""
+        end
+        
+        write(io, Printf.@sprintf("*%s Analysis: %s %s %s*\n\n", name, sig_str, gen_str, norm_str))
+    end
+
+    # --------------------------------------------------------------------------
+    # SECTION III: ANALYSIS OF VARIANCE (ANOVA)
+    # --------------------------------------------------------------------------
+    anova_tables = get(Res, "ANOVA", DataFrame[])
+    if !isempty(anova_tables)
+        write(io, "### III. Analysis of Variance (ANOVA)\n")
+        write(io, "Partitioning of total response sum of squares into regression model and residual components.\n\n")
+
+        anova_headers = ["Source of Variation", "df", "Sum of Squares", "Mean Square", "F-Statistic", "P-Value"]
+        anova_aligns  = [:left, :right, :right, :right, :right, :right]
+
+        for (m_idx, name) in enumerate(out_names)
+            m_idx > length(anova_tables) && continue
+            df_ano = anova_tables[m_idx]
+            isempty(df_ano) && continue
+
+            write(io, Printf.@sprintf("#### Response: %s\n", name))
+            
+            anova_rows = Vector{String}[]
+            for r in eachrow(df_ano)
+                src = string(r.Source)
+                df_i = string(r.df)
+                ss_i = (!ismissing(r.SS) && !isnan(r.SS)) ? @sprintf("%.4f", Float64(r.SS)) : "-"
+                ms_i = (!ismissing(r.MS) && !isnan(r.MS)) ? @sprintf("%.4f", Float64(r.MS)) : "-"
+                f_i  = (!ismissing(r.F) && !isnan(r.F))   ? @sprintf("%.2f", Float64(r.F))   : "-"
+                p_i  = (!ismissing(r.P) && !isnan(r.P))   ? (Float64(r.P) < 0.0001 ? "<0.0001" : @sprintf("%.4f", Float64(r.P))) : "-"
+
+                push!(anova_rows, [src, df_i, ss_i, ms_i, f_i, p_i])
+            end
+
+            write(io, VISE_FormatMarkdownTable_DDEF(anova_headers, anova_aligns, anova_rows))
+            write(io, "\n")
+            
+            idx_m = findfirst(==("Model"), df_ano.Source)
+            idx_l = findfirst(==("Lack of Fit"), df_ano.Source)
+            
+            ano_notes = String[]
+            if !isnothing(idx_m) && !isnan(df_ano.P[idx_m])
+                f_m, p_m = df_ano.F[idx_m], df_ano.P[idx_m]
+                if p_m < 0.05
+                    push!(ano_notes, @sprintf("The regression model explains a statistically significant portion of variance (F = %.2f, p = %.4f).", f_m, p_m))
+                else
+                    push!(ano_notes, @sprintf("The regression model does not explain variance above residual error at α = 0.05 (F = %.2f, p = %.4f).", f_m, p_m))
+                end
+            end
+            
+            if !isnothing(idx_l) && !isnan(df_ano.P[idx_l])
+                f_l, p_l = df_ano.F[idx_l], df_ano.P[idx_l]
+                if p_l >= 0.05
+                    push!(ano_notes, @sprintf("Lack-of-Fit is non-significant (F = %.2f, p = %.4f ≥ 0.05), indicating adequate model structure.", f_l, p_l))
+                else
+                    push!(ano_notes, @sprintf("Lack-of-Fit is statistically significant (F = %.2f, p = %.4f < 0.05), indicating model inadequacy or uncaptured curvature.", f_l, p_l))
+                end
+            end
+            
+            if !isempty(ano_notes)
+                write(io, "*ANOVA Interpretation: " * join(ano_notes, " ") * "*\n\n")
+            end
+        end
+    end
+
+    # --------------------------------------------------------------------------
+    # SECTION IV: REGRESSION MODEL COEFFICIENTS & COLLINEARITY
+    # --------------------------------------------------------------------------
+    write(io, "### IV. Regression Model Coefficients & Collinearity\n")
+    write(io, "Estimated regression coefficients (β), two-tailed p-values, and Variance Inflation Factors (VIF).\n\n")
+
+    coef_headers = ["Term / Predictor", "Coefficient (β)", "P-Value", "VIF", "Significance"]
+    coef_aligns  = [:left, :right, :right, :right, :left]
+
+    for (m_idx, name) in enumerate(out_names)
+        m_idx > length(models) && continue
+        mod = models[m_idx]
+        mod["Status"] != "OK" && continue
+
+        terms  = get(mod, "TermNames", String[])
+        coefs  = get(mod, "Coefs", Float64[])
+        pcoefs = get(mod, "P_Coefs", Float64[])
+        vifs   = get(mod, "VIFs", Float64[])
+
+        isempty(terms) && continue
+
+        write(io, Printf.@sprintf("#### Response: %s\n", name))
+
+        sig_terms = String[]
+        coef_rows = Vector{String}[]
+        for j in eachindex(terms)
+            t_name = terms[j]
+            c_val  = (j <= length(coefs)) ? coefs[j] : NaN
+            p_val  = (j <= length(pcoefs)) ? pcoefs[j] : NaN
+            v_val  = (j <= length(vifs)) ? ((j == 1) ? 1.0 : vifs[j]) : 1.0
+
+            c_str = (!isnan(c_val)) ? @sprintf("%.4f", c_val) : "N/A"
+            p_str = (!isnan(p_val)) ? (p_val < 0.0001 ? "<0.0001" : @sprintf("%.4f", p_val)) : "N/A"
+            v_str = (!isnan(v_val)) ? @sprintf("%.2f", v_val) : "N/A"
+            
+            sig = if !isnan(p_val)
+                if p_val < 0.001
+                    push!(sig_terms, t_name)
+                    fmt_pos("***")
+                elseif p_val < 0.01
+                    push!(sig_terms, t_name)
+                    fmt_pos("**")
+                elseif p_val < 0.05
+                    push!(sig_terms, t_name)
+                    fmt_pos("*")
+                else
+                    "ns"
+                end
+            else
+                ""
+            end
+
+            push!(coef_rows, [t_name, c_str, p_str, v_str, sig])
+        end
+
+        write(io, VISE_FormatMarkdownTable_DDEF(coef_headers, coef_aligns, coef_rows))
+        write(io, "\n")
+        
+        non_intercept_sig = filter(!=("(Intercept)"), sig_terms)
+        sig_msg = if isempty(non_intercept_sig)
+            "No factor terms reached statistical significance at α = 0.05."
+        else
+            "Statistically significant factors (p < 0.05): " * join(non_intercept_sig, ", ") * "."
+        end
+        
+        max_v = length(vifs) > 1 ? maximum(vifs[2:end]) : 1.0
+        vif_msg = if max_v <= 5.0
+            "Variance Inflation Factors (VIF ≤ 5.0) confirm negligible multicollinearity."
+        elseif max_v <= 10.0
+            @sprintf("Moderate collinearity detected (maximum VIF = %.2f); parameter variances are slightly inflated.", max_v)
+        else
+            @sprintf("Severe collinearity detected (maximum VIF = %.2f > 10.0); coefficient standard errors are inflated.", max_v)
+        end
+        
+        write(io, Printf.@sprintf("*Coefficient Interpretation: %s %s*\n\n", sig_msg, vif_msg))
+    end
+    write(io, "*Significance codes: *** p < 0.001, ** p < 0.01, * p < 0.05, ns: non-significant (p ≥ 0.05).*\n\n")
+
+    # --------------------------------------------------------------------------
+    # SECTION V: FACTOR SENSITIVITY & RELATIVE IMPORTANCE
+    # --------------------------------------------------------------------------
+    if !isempty(sens)
+        write(io, "### V. Factor Sensitivity & Relative Importance\n")
+        write(io, "Normalized sensitivity derivatives (|∂ŷ/∂Xᵢ|) indicating relative contribution to response variation.\n\n")
+
+        sens_headers = ["Factor Parameter", "Relative Sensitivity (%)", "Sensitivity Rank"]
+        sens_aligns  = [:left, :right, :left]
+
+        for (m_idx, name) in enumerate(out_names)
+            m_idx > length(sens) && continue
+            s_vec = sens[m_idx]
+            isempty(s_vec) && continue
+
+            if length(s_vec) == length(in_names)
+                write(io, Printf.@sprintf("#### Response: %s\n", name))
+                
+                sens_rows = Vector{String}[]
+                perm = sortperm(s_vec; rev=true)
+                for (rank, idx) in enumerate(perm)
+                    s_pct = @sprintf("%.2f%%", s_vec[idx] * 100)
+                    push!(sens_rows, [in_names[idx], s_pct, "Rank $rank"])
+                end
+
+                write(io, VISE_FormatMarkdownTable_DDEF(sens_headers, sens_aligns, sens_rows))
+                write(io, "\n")
+                
+                top_f = in_names[perm[1]]
+                top_pct = round(s_vec[perm[1]] * 100; digits=1)
+                write(io, Printf.@sprintf("*Sensitivity Interpretation: %s exerts the strongest relative influence (%.1f%%) on %s in the evaluated domain.*\n\n", top_f, top_pct, name))
+            end
+        end
+    end
+
+    # --------------------------------------------------------------------------
+    # SECTION VI: MULTI-RESPONSE NUMERICAL OPTIMIZATION
+    # --------------------------------------------------------------------------
+    best_pt = get(Res, "BestPoint", [])
+    if !isempty(best_pt)
+        bs = Float64(get(Res, "BestScore", 0.0))
+        warns = get(Res, "BoundaryWarnings", String[])
+        
+        write(io, "### VI. Multi-Response Numerical Optimization\n")
+        write(io, "Simultaneous optimization via Derringer-Suich desirability function maximization.\n\n")
+        @printf(io, "- **Overall Composite Desirability (D)**: `%.4f` (Scale: 0.0000 to 1.0000)\n\n", bs)
+
+        write(io, "#### Optimal Factor Operating Conditions\n")
+        opt_headers = ["Factor Parameter", "Optimal Setting (X*)", "Design Space Status"]
+        opt_aligns  = [:left, :right, :left]
+        opt_rows    = Vector{String}[]
+
+        for (i, val) in enumerate(best_pt)
+            fname = (i <= length(in_names)) ? in_names[i] : "Factor $i"
+            has_b_warn = any(w -> occursin(fname, w), warns)
+            b_status = has_b_warn ? fmt_neg("Boundary proximity") : fmt_pos("Interior design point")
+            push!(opt_rows, [fname, @sprintf("%.4f", val), b_status])
+        end
+
+        write(io, VISE_FormatMarkdownTable_DDEF(opt_headers, opt_aligns, opt_rows))
+        write(io, "\n")
+        
+        if !isempty(models)
+            write(io, "#### Predicted Response Values at Optimum\n")
+            pred_headers = ["Response Variable", "Target Criterion", "Predicted Value (ŷ)", "Individual Desirability (d)"]
+            pred_aligns  = [:left, :left, :right, :right]
+            pred_rows    = Vector{String}[]
+            
+            goals = get(Res, "Goals", [])
+            bp_mat = reshape(Float64.(best_pt), 1, length(best_pt))
+            
+            for (m_idx, name) in enumerate(out_names)
+                m_idx > length(models) && continue
+                mod = models[m_idx]
+                mod["Status"] != "OK" && continue
+                
+                y_opt = VISE_Predict_DDEF(mod, bp_mat)[1]
+                m_goal = (m_idx <= length(goals)) ? goals[m_idx] : get(mod, "Goal", Dict())
+                gtup = Main.Lib_Core.CORE_ExtractGoal_DDEF(m_goal)
+                d_i = Main.Lib_Core.CORE_CalcDesirability_DDEF(y_opt, gtup)
+                
+                g_type = string(get(m_goal, "Type", "Maximize"))
+                g_target = get(m_goal, "Target", NaN)
+                g_desc = if g_type == "Target" && !isnan(g_target)
+                    @sprintf("Target (= %.2f)", Float64(g_target))
+                else
+                    g_type
+                end
+                
+                push!(pred_rows, [first(name, 24), g_desc, @sprintf("%.4f", y_opt), @sprintf("%.4f", d_i)])
+            end
+
+            write(io, VISE_FormatMarkdownTable_DDEF(pred_headers, pred_aligns, pred_rows))
+            write(io, "\n")
+        end
+
+        d_interp = if bs >= 0.80
+            @sprintf("Composite desirability D = %.4f indicates excellent simultaneous attainment of response goals.", bs)
+        elseif bs >= 0.50
+            @sprintf("Composite desirability D = %.4f indicates acceptable satisfaction of competing response targets.", bs)
+        else
+            @sprintf("Composite desirability D = %.4f reflects significant compromise among conflicting response requirements.", bs)
+        end
+        
+        b_interp = if !isempty(warns)
+            "One or more optimal settings lie near the boundary of the experimental domain. Expanding the design space in future trials may yield further optimization gains."
+        else
+            "All optimal factor coordinates lie within the interior of the experimental design domain."
+        end
+        
+        write(io, Printf.@sprintf("*Optimization Summary: %s %s*\n\n", d_interp, b_interp))
+    else
+        write(io, "### VI. Multi-Response Numerical Optimization\n")
+        write(io, "*Numerical optimization not conducted or convergence incomplete.*\n\n")
+    end
+
+    write(io, "---\n")
+    write(io, "*Generated by DoECISORY $(Main.Sys_Fast.FAST_Data_DDEC.VERSION) | Design of Experiments & Response Surface Methodology*\n")
 
     return String(take!(io))
 end
@@ -783,11 +1215,9 @@ High-fidelity data loader that filters global experiment records for phase-speci
 function VISE_LoadPhaseData_DDEF(FilePath::String, Phase::String, C, Log)
     df = Main.Sys_Fast.FAST_ReadExcel_DDEF(FilePath, C.SHEET_DATA)
     isempty(df) && return DataFrame()
-    # Filter for Phase-Specific Records to ensure isolated logic
-    # Filter for Phase-Specific Records to ensure isolated logic
     if hasproperty(df, Symbol(C.COL_PHASE))
         df_p = filter(r -> string(r[C.COL_PHASE]) == Phase, df)
-        return isempty(df_p) ? df : df_p # Fallback to all if Phase-ID tagging is missing
+        return isempty(df_p) ? df : df_p
     end
     return df
 end
@@ -949,7 +1379,7 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
     end
     
     # Model Diagnostic Statistics (LOF, ANOVA, Normality, Vitals)
-    vitals = Dict("D" => 0.0, "Condition" => Inf, "MaxVIF" => 0.0, "LOF" => 1.0)
+    vitals = Dict("D" => 0.0, "A" => 0.0, "G" => 0.0, "I" => 0.0, "Condition" => Inf, "MaxVIF" => 0.0, "LOF" => 1.0)
     try
         best_m_idx = findfirst(m -> get(m, "ModelType", "") == "quadratic", models)
         isnothing(best_m_idx) && (best_m_idx = 1)
@@ -957,19 +1387,22 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
         
         X_Coded = Main.Lib_Core.CORE_CodeMatrix_DDEF(X_Clean)
         Xd_health = VISE_ExpandDesign_DDEF(X_Coded, m_type_str)
-        m_health = Main.Lib_Core.CORE_CalcDesignMetrics_DDEF(Xd_health)
+        m_health = Main.Lib_Core.CORE_CalcDesignMetrics_DDEF(X_Coded, m_type_str)
         
-        vitals["D"] = m_health["D"]
-        vitals["Condition"] = m_health["Condition"]
+        vitals["D"] = Float64(get(m_health, "D", 0.0))
+        vitals["A"] = Float64(get(m_health, "A", 0.0))
+        vitals["G"] = Float64(get(m_health, "G", 0.0))
+        vitals["I"] = Float64(get(m_health, "I", 0.0))
+        vitals["Condition"] = Float64(get(m_health, "Condition", Inf))
         vif_list = [maximum(get(m, "VIFs", [0.0])[2:end]) for m in models if haskey(m, "VIFs") && length(m["VIFs"]) > 1]
-        vitals["MaxVIF"] = isempty(vif_list) ? 1.0 : maximum(vif_list)
+        vitals["MaxVIF"] = isempty(vif_list) ? 1.0 : Float64(maximum(vif_list))
         
         if n_samples > size(Xd_health, 2) + 2
             _, p_lof = VISE_LackOfFit_DDEF(Xd_health, view(Y_Clean, :, 1))
-            vitals["LOF"] = p_lof
+            vitals["LOF"] = (ismissing(p_lof) || isnan(p_lof)) ? NaN : Float64(p_lof)
         end
     catch e
-        Log("VISE", "METRICS_WARN", "Design quality evaluation incomplete: $e", "WARN")
+        Log("VISE", "VITALS_WARN", "Design vitals evaluation incomplete: $e", "WARN")
     end
     
     opts_with_mode = copy(Opts)
@@ -1210,7 +1643,7 @@ function VISE_ExtractDecayModifiers_DDEF(in_n::AbstractVector{<:AbstractString},
         # Step 3: Determine which outputs are affected via ReverseMap.
         affected = Int[]
         for (out_name, out_data) in rev_dict
-            mapped_src = get(out_data, "Source", "None")
+            mapped_src = isa(out_data, AbstractDict) ? get(out_data, "Source", "None") : (out_data isa AbstractString ? string(out_data) : "None")
             if mapped_src == i_name
                 o_idx = findfirst(==(out_name), out_n)
                 !isnothing(o_idx) && push!(affected, o_idx)
@@ -1461,7 +1894,7 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::AbstractString)
         XLSX.openxlsx(FilePath, mode="w") do xf
             sheet_ov       = xf[1]
             XLSX.rename!(sheet_ov, "Summary")
-            sheet_ov["A1"] = "DoECISORY Scientific Intelligence Report"
+            sheet_ov["A1"] = "DoECISORY Analysis Report"
             sheet_ov["A2"] = "Generated: $(Dates.now())"
             sheet_ov["A3"] = "Project: $(get(Res, "Phase", "Unnamed Phase"))"
 
@@ -1531,6 +1964,7 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::AbstractString)
                 end
             end
         end
+        Main.Sys_Fast.FAST_ApplyExcelStyle_DDEF(FilePath)
         Main.Sys_Fast.FAST_Log_DDEF("VISE", "EXPORT", "Scientific Portfolio Generated with Legacy Fidelity.", "OK")
         return true
     catch e
@@ -1538,4 +1972,5 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::AbstractString)
         return false
     end
 end
-end # Module Lib_Vise
+
+end

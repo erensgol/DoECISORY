@@ -7,6 +7,7 @@ $SOURCE_DIR = Join-Path $PROJECT_DIR "src"
 $APP_FILE = Join-Path $PROJECT_DIR "app.jl"
 
 $env:DOECISORY_DEV = "true"
+$env:DOECISORY_NO_BROWSER = "true"
 
 $julia_proc = $null
 
@@ -19,12 +20,7 @@ function Write-Log {
     )
     $ts = Get-Date -Format "HH:mm:ss.fff"
     
-    # --------------------------------------------------------------------------
-    # DOECISORY AESTHETIC STANDARD (14:15 Alignment)
-    # [TS] Blue | Source Green (14) : Event TypeColor (15) Detail TypeColor
-    # --------------------------------------------------------------------------
-    
-    $fg = "Blue" # Default INFO
+    $fg = "Blue"
     if ($Type -eq "OK") { $fg = "Green" }
     elseif ($Type -eq "WARN") { $fg = "Yellow" }
     elseif ($Type -eq "FAIL") { $fg = "Red" }
@@ -46,7 +42,6 @@ function Start-Julia {
     if (Test-Path $SYSIMG_PATH) {
         $SYSIMG_FLAG = "--sysimage `"$SYSIMG_PATH`""
     }
-    # Use Start-Process with a single quoted path to handle spaces in directory names
     $script:julia_proc = Start-Process -FilePath "julia" `
         -ArgumentList "--depwarn=no $SYSIMG_FLAG --threads auto -O0 --project=`"$PROJECT_DIR`" `"$APP_FILE`"" `
         -RedirectStandardError "NUL" `
@@ -58,13 +53,17 @@ function Start-Julia {
 
 function Get-SrcMtime {
     $files = Get-ChildItem -Path $SOURCE_DIR -Filter "*.jl" -Recurse
-    # Also include the main app file
     $files += Get-Item -Path $APP_FILE
     return ($files | Measure-Object -Property LastWriteTime -Maximum).Maximum
 }
 
 $restart_count = 0
+$uptime_seconds = 0
 $last_mtime = Get-SrcMtime
+
+try {
+    Start-Process "http://127.0.0.1:8060"
+} catch {}
 
 try {
     $julia_proc = Start-Julia
@@ -82,12 +81,16 @@ try {
             Write-Log -Source "DOECISORY" -Evt "RESTART" -Detail "Process terminated. Restarting ($restart_count/3)..." -Type "WARN"
             Start-Sleep -Seconds 2
             $julia_proc = Start-Julia
+            $uptime_seconds = 0
             $last_mtime = Get-SrcMtime
             continue
         }
 
         # Julia is running; reset restart counter
-        $restart_count = 0
+        $uptime_seconds++
+        if ($uptime_seconds -gt 15) {
+            $restart_count = 0
+        }
 
         $current_mtime = Get-SrcMtime
         if ($current_mtime -gt $last_mtime) {

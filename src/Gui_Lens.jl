@@ -8,14 +8,17 @@ module Gui_Lens
 # Module Tag:  LENS
 # ==============================================================================
 
-using Main.Dash
-using Main.DashBootstrapComponents
+using Dash
+using DashBootstrapComponents
 using Dates
-using Main.Sys_Fast
-using Main.Sys_Flow
-using Main.Lib_Vise
-using Main.Lib_Arts
-using Main.Gui_Base
+using ..Sys_Fast
+using ..Sys_Flow
+using ..Lib_Vise
+using ..Lib_Arts
+using ..Lib_Mole
+using ..Gui_Base
+
+const Main = parentmodule(@__MODULE__)
 using DataFrames
 using Printf
 using PlotlyJS
@@ -31,6 +34,28 @@ export LENS_Layout_DDEF, LENS_RegisterCallbacks_DDEF
 # Single-writer (background thread) / single-reader (callback) guarantees safety.
 const LENS_BatchPayload_DDEC     = Ref{Any}(nothing)
 const LENS_LastPayloadTime_DDEC  = Ref{Float64}(0.0)
+
+const LENS_PosCells_DDEC = Set{String}([
+    "***", "**", "*",
+    "High efficiency", "Satisfactory efficiency", "Adequate efficiency (D ≥ 60%)",
+    "Well-conditioned (κ < 100)", "Orthogonal factors (VIF = 1.0)", "Low collinearity (VIF ≤ 5.0)",
+    "Adequate fit (p ≥ 0.05)", "High (Q² ≥ 0.70)", "Moderate (Q² ≥ 0.50)",
+    "Interior design point"
+])
+
+const LENS_NegCells_DDEC = Set{String}([
+    "Marginal efficiency", "Low efficiency (D < 60%)",
+    "Severe ill-conditioning (κ ≥ 1,000)", "High collinearity (VIF > 5.0)",
+    "Significant lack of fit (p < 0.05)", "Low (0 ≤ Q² < 0.50)", "Overfitted (Q² < 0)",
+    "Boundary proximity"
+])
+
+# ------------------------------------------------------------------------------
+# SECTION 0: SYSTEM BRIDGES & ALIASES
+# ------------------------------------------------------------------------------
+
+const LENS_GetSafe_DDEF           = Sys_Fast.FAST_GetSafe_DDEF
+const LENS_ExtractDirections_DDEF = Sys_Fast.FAST_ExtractDirections_DDEF
 
 # ==============================================================================
 # PART A: UI INFRASTRUCTURE & LAYOUT
@@ -184,6 +209,125 @@ function LENS_BuildSlotCard_DDEF(i::Int)
     ], className="border rounded p-2 mb-2", style=Dict("backgroundColor" => "var(--colour-val1-lighig)"), id="lens-slot-card-$i")
 end
 
+"""
+    LENS_ApplySlotCustomisation_DDEF!(conf::AbstractVector, slots::AbstractVector, leader_vals::AbstractVector)
+Applies scale or replacement transformations and boundary overrides to factor configurations.
+Deduplicates transition configuration across wizard preview and evolution execution.
+"""
+function LENS_ApplySlotCustomisation_DDEF!(conf::AbstractVector, slots::AbstractVector, leader_vals::AbstractVector)
+    fd = Main.Sys_Fast.FAST_Data_DDEC
+    vi = 0
+    for c in conf
+        get(c, "Role", "") != fd.ROLE_VAR && continue
+        vi += 1
+        vi > length(slots) && continue
+        sl = slots[vi]
+        mode = get(sl, "Mode", "KEEP")
+
+        if mode in ("SCALE", "REPLACE")
+            !isempty(get(sl, "NewName", "")) && (c["Name"] = string(sl["NewName"]))
+            !isempty(get(sl, "NewUnit", "")) && (c["Unit"] = string(sl["NewUnit"]))
+        end
+
+        if mode == "SCALE" && vi <= length(leader_vals)
+            α  = Float64(get(sl, "Alpha", 1.0))
+            β  = Float64(get(sl, "Beta",  0.0))
+            tv = Main.Sys_Flow.FLOW_BridgeTransform_DDEF(Float64(leader_vals[vi]), α, β)
+            lvls = get(c, "Levels", [0.0, 0.0, 0.0])
+            hr = abs(Float64(lvls[3]) - Float64(lvls[1])) * 0.5 * abs(α)
+            c["Levels"] = [round(tv - hr; digits=4), round(tv; digits=4), round(tv + hr; digits=4)]
+        elseif mode == "REPLACE"
+            c["Levels"] = [Float64(get(sl, "NewL1", 0.0)), Float64(get(sl, "NewL2", 0.0)), Float64(get(sl, "NewL3", 0.0))]
+        end
+
+        haskey(sl, "NewMin") && (c["Min"] = Float64(sl["NewMin"]))
+        haskey(sl, "NewMax") && (c["Max"] = Float64(sl["NewMax"]))
+    end
+end
+
+# ------------------------------------------------------------------------------
+# SECTION 1B: DIAGNOSTIC STYLING & FORMATTING DISPATCHERS
+# ------------------------------------------------------------------------------
+
+"""
+    _LENS_SafeFloat(v) -> Union{Float64, Nothing}
+Internal helper ensuring zero runtime MethodErrors when validating metric values.
+Safely handles `nothing`, `missing`, non-numeric types, and `NaN`.
+"""
+function _LENS_SafeFloat(v)::Union{Float64, Nothing}
+    (isnothing(v) || ismissing(v) || !(v isa Number) || isnan(v)) && return nothing
+    return Float64(v)
+end
+
+"""
+    LENS_EvalClass_DDEF(::Val{Symbol}, args...) -> String
+Centralised, idiomatic dispatch system for metric classification styling.
+Eliminates repetitive branching within UI table construction.
+"""
+LENS_EvalClass_DDEF(::Val{:d_eff}, v) = let f = _LENS_SafeFloat(v)
+    (isnothing(f) || f <= 0.0) ? "fw-bold colourtx-v5pb" : (f >= 0.35 ? "fw-bold colourtx-c4tg" : "fw-bold colourtx-c0hr")
+end
+
+LENS_EvalClass_DDEF(::Val{:vif}, v) = let f = _LENS_SafeFloat(v)
+    isnothing(f) ? "fw-bold colourtx-v5pb" : (f <= 5.0 ? "fw-bold colourtx-c4tg" : (f <= 10.0 ? "fw-bold colourtx-c5hy" : "fw-bold colourtx-c0hr"))
+end
+
+LENS_EvalClass_DDEF(::Val{:lof}, v) = let f = _LENS_SafeFloat(v)
+    isnothing(f) ? "fw-bold colourtx-v5pb" : (f >= 0.05 ? "fw-bold colourtx-c4tg" : "fw-bold colourtx-c0hr")
+end
+
+LENS_EvalClass_DDEF(::Val{:q2}, v) = let f = _LENS_SafeFloat(v)
+    isnothing(f) ? "" : (f < 0.0 ? "fw-bold colourtx-c0hr" : (f >= 0.50 ? "fw-bold colourtx-c4tg" : ""))
+end
+
+LENS_EvalClass_DDEF(::Val{:pval}, v) = let f = _LENS_SafeFloat(v)
+    isnothing(f) ? "" : (f < 0.05 ? "fw-bold colourtx-c4tg" : "fw-bold colourtx-c0hr")
+end
+
+LENS_EvalClass_DDEF(::Val{:coef_pval}, pv) = let f = _LENS_SafeFloat(pv)
+    (!isnothing(f) && f < 0.05) ? "fw-bold colourtx-c4tg" : ""
+end
+
+LENS_EvalClass_DDEF(::Val{:coef_vif}, j, vf) = let f = _LENS_SafeFloat(vf)
+    (j > 1 && !isnothing(f) && f > 5.0) ? "fw-bold colourtx-c0hr" : ""
+end
+
+LENS_EvalClass_DDEF(::Val{:sensitivity}, s) = let f = _LENS_SafeFloat(s)
+    (!isnothing(f) && f > 0.5) ? "fw-bold colourtx-v5pb" : "colourtx-v5pb"
+end
+
+function LENS_EvalClass_DDEF(::Val{:anova}, src::AbstractString, p)
+    f = _LENS_SafeFloat(p)
+    isnothing(f) && return ""
+    src == "Model" && return f < 0.05 ? "fw-bold colourtx-c4tg" : "fw-bold colourtx-c0hr"
+    src == "Lack of Fit" && return f < 0.05 ? "fw-bold colourtx-c0hr" : "fw-bold colourtx-c4tg"
+    return f < 0.05 ? "fw-bold" : ""
+end
+
+LENS_EvalClass_DDEF(sym::Symbol, args...) = LENS_EvalClass_DDEF(Val(sym), args...)
+
+"""
+    LENS_FormatMetric_DDEF(::Val{Symbol}, v) -> String
+Compact scientific number formatting dispatcher for table cells.
+"""
+LENS_FormatMetric_DDEF(::Val{:d_eff}, v) = let f = _LENS_SafeFloat(v)
+    (!isnothing(f) && f > 0.0) ? @sprintf("%.3f", f) : "-"
+end
+
+LENS_FormatMetric_DDEF(::Val{:eff}, v) = let f = _LENS_SafeFloat(v)
+    (!isnothing(f) && f > 0.0) ? @sprintf("%.2f", f) : "-"
+end
+
+LENS_FormatMetric_DDEF(::Val{:vif}, v) = let f = _LENS_SafeFloat(v)
+    !isnothing(f) ? @sprintf("%.2f", f) : "-"
+end
+
+LENS_FormatMetric_DDEF(::Val{:lof}, v) = let f = _LENS_SafeFloat(v)
+    !isnothing(f) ? @sprintf("%.3f", f) : "N/A"
+end
+
+LENS_FormatMetric_DDEF(sym::Symbol, v) = LENS_FormatMetric_DDEF(Val(sym), v)
+
 # ------------------------------------------------------------------------------
 # SECTION 2: INTERFACE LAYOUT
 # ------------------------------------------------------------------------------
@@ -310,6 +454,7 @@ function LENS_Layout_DDEF()
                 dcc_store(id="lens-signal-process",      data=Dict("ts" => 0, "success" => false)),
                 dcc_store(id="lens-store-diag-force",    data=0),
                 dcc_store(id="lens-store-slot-config",   data=Dict()),
+                dcc_store(id="lens-store-excluded-constants", data=String[]),
                 dcc_store(id="lens-store-graphs-blob",   data=""),
                 dcc_store(id="lens-store-batch-status",  data=Dict("next_pkg" => 0, "handle" => "", "expected" => 0)),
                 dcc_interval(id="lens-interval-batch", interval=2000, n_intervals=0, disabled=true),
@@ -321,9 +466,9 @@ function LENS_Layout_DDEF()
 # ------------------------------------------------------------------------------
 
         # Interface orchestration for system modal dialogues and user interactions.
-        BASE_Modal_DDEF("lens-modal-report", "DoECISORY Scientific Intelligence Report",
-            html_pre(id="lens-report-content", className="p-4 rounded small academic-report", style=Dict("whiteSpace" => "pre-wrap", "fontFamily" => "monospace", "maxHeight" => "600px", "overflowY" => "auto")),
-            dbc_button(["Download Report (TXT)"], id="lens-btn-download-txt", className="w-100 colourgl-c4tg"); size="lg"),
+        BASE_Modal_DDEF("lens-modal-report", "DoECISORY Scientific Analysis Report",
+            html_div(id="lens-report-content", children="", className="p-4 rounded academic-dossier", style=Dict("maxHeight" => "650px", "overflowY" => "auto")),
+            dbc_button(["Download Report (TXT)"], id="lens-btn-download-txt", className="w-100 colourgl-c4tg"); size="xl"),
         BASE_Modal_DDEF("lens-modal-wizard", [html_i(className="fas fa-layer-group me-2 colourtx-c1sm"), "Phase Evolution - Step 1/3"],
             [
                 html_div([
@@ -365,10 +510,12 @@ function LENS_Layout_DDEF()
         BASE_Modal_DDEF("lens-modal-preview", [html_i(className="fas fa-microscope me-2 colourtx-c4tg"), "Phase Evolution - Step 3/3"],
             [
                 dbc_alert([
-                    html_i(className="fas fa-info-circle me-2"),
-                    html_span("Notice: This wizard is strictly for configuring experimental search space matrix structure. ", className="fw-bold"),
-                    "To modify global system parameters (e.g. Half-Life, Constants, Volume), please click 'Export (XLSX)' on the main page and load the exported Vault directly into the design interface to use it as a shaping template."
-                ], className="small py-2 mb-3 border-0 shadow-sm colourbg-v1lw colourtx-v5pb", style=Dict("borderLeft" => "4px solid var(--colour-val3-darlow)")),
+                    html_i(className="fas fa-lightbulb me-2 colourtx-c1sm"),
+                    html_span("Design Protocol Guidance: ", className="fw-bold colourtx-v5pb"),
+                    "This wizard configures the active experimental search space. For comprehensive structural modifications (such as introducing new fixed constants, re-specifying stoichiometry, or adjusting global physical constants), you may load the exported Vault Excel file directly into the ",
+                    html_strong("Design"),
+                    " page to use it as a custom project template."
+                ], className="small py-2 mb-3 border-0 shadow-sm colourbg-v1lw colourtx-v5pb", style=Dict("borderLeft" => "4px solid #21918C")),
                 dbc_row([
                     dbc_col([
                         html_div([
@@ -385,12 +532,12 @@ function LENS_Layout_DDEF()
                                 html_div([
                                     dbc_row([
                                         dbc_col([
-                                            dbc_label("X₁ Direction", className="x-small mb-1 d-block fw-semibold"),
+                                            dbc_label("X₁ Direction", id="lens-prev-dir-lbl-1", className="x-small mb-1 d-block fw-semibold"),
                                             dcc_dropdown(
                                                 id="lens-prev-dir-x1",
                                                 options=[
-                                                    Dict("label" => "−1 (Min)", "value" => -1),
-                                                    Dict("label" => "+1 (Max)", "value" => 1),
+                                                    Dict("label" => "−1 (Lower)", "value" => -1),
+                                                    Dict("label" => "+1 (Upper)", "value" => 1),
                                                 ],
                                                 value=-1,
                                                 clearable=false,
@@ -398,12 +545,12 @@ function LENS_Layout_DDEF()
                                             ),
                                         ], xs=12, md=4, className="mb-2"),
                                         dbc_col([
-                                            dbc_label("X₂ Direction", className="x-small mb-1 d-block fw-semibold"),
+                                            dbc_label("X₂ Direction", id="lens-prev-dir-lbl-2", className="x-small mb-1 d-block fw-semibold"),
                                             dcc_dropdown(
                                                 id="lens-prev-dir-x2",
                                                 options=[
-                                                    Dict("label" => "−1 (Min)", "value" => -1),
-                                                    Dict("label" => "+1 (Max)", "value" => 1),
+                                                    Dict("label" => "−1 (Lower)", "value" => -1),
+                                                    Dict("label" => "+1 (Upper)", "value" => 1),
                                                 ],
                                                 value=-1,
                                                 clearable=false,
@@ -411,12 +558,12 @@ function LENS_Layout_DDEF()
                                             ),
                                         ], xs=12, md=4, className="mb-2"),
                                         dbc_col([
-                                            dbc_label("X₃ Direction", className="x-small mb-1 d-block fw-semibold"),
+                                            dbc_label("X₃ Direction", id="lens-prev-dir-lbl-3", className="x-small mb-1 d-block fw-semibold"),
                                             dcc_dropdown(
                                                 id="lens-prev-dir-x3",
                                                 options=[
-                                                    Dict("label" => "−1 (Min)", "value" => -1),
-                                                    Dict("label" => "+1 (Max)", "value" => 1),
+                                                    Dict("label" => "−1 (Lower)", "value" => -1),
+                                                    Dict("label" => "+1 (Upper)", "value" => 1),
                                                 ],
                                                 value=-1,
                                                 clearable=false,
@@ -424,6 +571,7 @@ function LENS_Layout_DDEF()
                                             ),
                                         ], xs=12, md=4, className="mb-2"),
                                     ], className="g-2"),
+                                    dbc_formtext("DF14 allocates one face-centered star run per factor. Select whether each factor focuses on its Lower (−1) or Upper (+1) boundary.", className="x-small colourtx-v3dl mt-1"),
                                 ], className="p-2 border rounded colourbg-v0pw mb-2", style=Dict("borderColor" => "var(--colour-val1-lighig)"))
                             ]),
                             html_hr(className="my-3"),
@@ -459,8 +607,13 @@ function LENS_Layout_DDEF()
                             dcc_graph(id="lens-graph-transition", config=Dict("displayModeBar" => false), style=Dict("height" => "250px"))
                         ], className="border-0 rounded p-3 mb-3 shadow-sm colourbg-v0pw"),
                         dbc_card([
-                            dbc_cardheader([html_i(className="fas fa-th-list me-2"), "Calculated Boundaries"], className="small fw-bold border-0", style=Dict("backgroundColor" => "transparent")),
-                            html_div(id="lens-container-preview-table", className="table-responsive p-2", style=Dict("maxHeight" => "200px", "overflowY" => "auto")),
+                            dbc_cardheader([
+                                html_div([
+                                    html_div([html_i(className="fas fa-th-list me-2"), "Calculated Boundaries"], className="small fw-bold"),
+                                    html_span("Phase Target Bounds", className="x-small text-muted")
+                                ], className="d-flex align-items-center justify-content-between w-100")
+                            ], className="small fw-bold border-0 py-2", style=Dict("backgroundColor" => "transparent")),
+                            html_div(id="lens-container-preview-table", className="table-responsive p-2", style=Dict("maxHeight" => "240px", "overflowY" => "auto")),
                         ], className="shadow-sm border-0"),
                     ], xs=12, md=7)
                 ]),
@@ -521,7 +674,7 @@ function LENS_Layout_DDEF()
 end
 
 # ==============================================================================
-# PART B: REACTIVE ARCHITECTURE & ANALYSIS
+# PART B: CALLBACKS & ANALYSIS
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
@@ -690,6 +843,8 @@ function LENS_RegisterCallbacks_DDEF(app)
             config = Sys_Fast.FAST_ReadConfig_DDEF(path)
             method = get(get(config, "Global", Dict()), "Method", "")
 
+            model_opts = []
+            model_val  = "Auto"
             if method == "TL09"
                 model_opts = [Dict("label" => "Linear", "value" => "Linear")]
                 model_val  = "Linear"
@@ -741,7 +896,6 @@ function LENS_RegisterCallbacks_DDEF(app)
                     goals_max[i]    = Float64(get(saved_g, "Max",    goals_max[i]))
                 end
             end
-            # Execution of the architectural audit for radioactivity parameters within the Smart Vault.
             has_radio_headers = any(c -> occursin("TIME_EXP_", string(c)) || occursin("TIME_MEAS_", string(c)), names(df))
             has_radio_config = false
             if haskey(config, "Ingredients")
@@ -778,7 +932,6 @@ function LENS_RegisterCallbacks_DDEF(app)
             return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "Sync Error: $(first(string(e), 120))"], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green",
                 nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "dataid" => ""), "d-none", proj_v)
         finally
-            # Execution of the high-priority transient resource cleanup protocol.
             !isempty(path) && try
                 rm(path; force=true)
             catch
@@ -989,13 +1142,19 @@ function LENS_RegisterCallbacks_DDEF(app)
                         res["X_Clean"], res["Models"], goals, config_b, phase_str, in_n, out_n, opts, C, Log
                     )
                     
-                    # 1. Write pre-BBO sheets (DATA + predictions)
-                    sheets = get(res, "_Hidden_Sheets", Dict())
-                    !isempty(sheets) && Sys_Fast.FAST_SafeExcelWrite_DDEF(path, sheets)
-                    
-                    # 2. Write Leaders sheet for Phase Evolution Wizard
+                    # 1. Unify pre-BBO sheets and Leaders sheet into a single atomic write transaction
+                    commit_sheets = Dict{String,DataFrame}()
+                    raw_hidden = get(res, "_Hidden_Sheets", Dict())
+                    if raw_hidden isa AbstractDict
+                        for (k, v) in raw_hidden
+                            commit_sheets[string(k)] = v
+                        end
+                    end
                     if !isempty(ldf)
-                        Sys_Fast.FAST_SafeExcelWrite_DDEF(path, Dict(C.PREFIX_LEADERS * phase_str => ldf))
+                        commit_sheets[C.PREFIX_LEADERS * phase_str] = ldf
+                    end
+                    if !isempty(commit_sheets)
+                        Sys_Fast.FAST_SafeExcelWrite_DDEF(path, commit_sheets)
                     end
                     
                     # 3. Build full result for report generation
@@ -1029,11 +1188,11 @@ function LENS_RegisterCallbacks_DDEF(app)
                     # 7. Re-read Excel as base64 for vault update (Leaders included!)
                     updated_vault_b64 = Sys_Fast.FAST_ReadToStore_DDEF(path)
                     
-                    # 8. Sanitise result bundle for store (remove heavy objects)
+                    # 8. Sanitise result bundle for store (remove heavy objects first)
+                    delete!(res_b, "Graphs")
+                    delete!(res_b, "_Hidden_Sheets")
                     final_bundle = Sys_Fast.FAST_SanitiseJson_DDEF(res_b)
-                    delete!(final_bundle, "Graphs")
-                    delete!(final_bundle, "_Hidden_Sheets")
-                    final_bundle["dataid"]  = updated_vault_b64
+                    final_bundle["dataid"] = updated_vault_b64
                     final_bundle["type"] = "SCIENCE_PULSE"
                     
                     # 9. Store payload for interval pickup (NO graphs, small payload)
@@ -1046,131 +1205,204 @@ function LENS_RegisterCallbacks_DDEF(app)
                     Log("LENS", "Batch_Async", "Background Portfolio Compiled [Total: $(length(full_graphs))]. Blob Packed.", "OK")
                 catch e
                     Sys_Fast.FAST_Log_DDEF("LENS", "Batch_Crash", "Background Task failed: $e", "FAIL")
+                finally
+                    !isempty(path) && try rm(path; force=true) catch end
                 end
             end
 
             summary_rows = [
                 html_tr([
-                    html_td(n, style=Dict("textAlign" => "center", "padding" => "6px"), className="fw-bold"),
-                    html_td(@sprintf("%.3f", res["R2_Adj"][i]), style=Dict("textAlign" => "center", "padding" => "6px")),
-                    html_td(@sprintf("%.3f", res["Q2"][i]), style=Dict("textAlign" => "center", "padding" => "6px")),
+                    html_td(n, style=Dict("padding" => "2px"), className="fw-bold"),
+                    html_td((i <= length(res["R2_Adj"]) && !ismissing(res["R2_Adj"][i]) && !isnan(res["R2_Adj"][i])) ? @sprintf("%.3f", Float64(res["R2_Adj"][i])) : "-", style=Dict("padding" => "2px")),
                     html_td(
-                        (haskey(res["Models"][i], "P_Value") && !isnan(res["Models"][i]["P_Value"])) ?
-                            @sprintf("%.5f", res["Models"][i]["P_Value"]) : "N/A", style=Dict("textAlign" => "center", "padding" => "6px")
-                        ),
-                ], style=Dict("borderBottom" => "1px solid var(--colour-val2-liglow)")) for (i, n) in enumerate(get(res, "DisplayOutNames", res["OutNames"]))
+                        (i <= length(res["Q2"]) && !ismissing(res["Q2"][i]) && !isnan(res["Q2"][i])) ? @sprintf("%.3f", Float64(res["Q2"][i])) : "-",
+                        className = LENS_EvalClass_DDEF(:q2, (i <= length(res["Q2"])) ? res["Q2"][i] : NaN),
+                        style=Dict("padding" => "2px")
+                    ),
+                    html_td(
+                        (i <= length(res["Models"]) && haskey(res["Models"][i], "P_Value") && !ismissing(res["Models"][i]["P_Value"]) && !isnan(res["Models"][i]["P_Value"])) ?
+                            @sprintf("%.5f", Float64(res["Models"][i]["P_Value"])) : "N/A",
+                        className = LENS_EvalClass_DDEF(:pval, (i <= length(res["Models"]) && haskey(res["Models"][i], "P_Value")) ? res["Models"][i]["P_Value"] : NaN),
+                        style=Dict("padding" => "2px")
+                    ),
+                ]) for (i, n) in enumerate(get(res, "DisplayOutNames", res["OutNames"]))
             ]
 
             summary = html_div([
-                html_table([
-                    html_thead(html_tr([
-                        html_th("Output", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px")),
-                        html_th("R² (Adj)", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px")),
-                        html_th("Q² (Pred)", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px")),
-                        html_th("P-Value", style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)", "padding" => "8px"))
-                    ])),
-                    html_tbody(summary_rows, style=Dict("textAlign" => "center", "borderBottom" => "2px solid var(--colour-val2-liglow)"))
-                ], className="table table-sm table-borderless caption-top mb-1 mx-auto", style=Dict("width" => "95%", "marginTop" => "5px")),
-
 # ------------------------------------------------------------------------------
-# SECTION 7: MODEL PERFORMANCE & DIAGNOSTICS
+# SECTION 7: EXPERIMENTAL DESIGN VITALS & MODEL PERFORMANCE
 # ------------------------------------------------------------------------------
-
-                (haskey(res, "Vitals") ? html_div([
-                    html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px dashed var(--colour-val1-lighig)", "margin" => "10px 0")),
+                (haskey(res, "Vitals") && !isnothing(res["Vitals"]) ? html_div([
+                    html_h6("EXPERIMENTAL DESIGN VITALS", className="fw-bold text-center mb-2 colourtx-c1sm", style=Dict("letterSpacing" => "1px")),
                     html_div([
+                        # Row 1: Design Optimality Efficiencies
                         html_div([
-                            html_span("D-Efficiency:", className="colourtx-v4dh"),
-                            html_span(@sprintf("%.3f", res["Vitals"]["D"]), className="fw-bold colourtx-v5pb"),
-                        ], className="me-4"),
-                        html_div([
-                            html_span("Max VIF:", className="colourtx-v4dh"),
-                            html_span(@sprintf("%.2f", res["Vitals"]["MaxVIF"]), className = res["Vitals"]["MaxVIF"] > 10 ? "fw-bold" : "fw-bold"),
-                        ], className="me-4"),
-                        html_div([
-                            html_span("Lack-of-Fit P:", className="colourtx-v4dh"),
-                            html_span(@sprintf("%.3f", res["Vitals"]["LOF"]), className = res["Vitals"]["LOF"] < 0.05 ? "fw-bold" : "fw-bold"),
-                        ], className="me-4"),
-                        html_div([
-                            html_span("Matrix Condition:", className="colourtx-v4dh"),
-                            html_span(@sprintf("%.1e", res["Vitals"]["Condition"]), className="fw-bold colourtx-v5pb"),
-                        ]),
-                    ], className="d-flex justify-content-center small py-1 rounded colourbg-v0pw")
+                            html_span([
+                                html_span("D-Efficiency: ", className="colourtx-v4dh"),
+                                html_span(
+                                    LENS_FormatMetric_DDEF(:d_eff, get(res["Vitals"], "D", NaN)),
+                                    className = LENS_EvalClass_DDEF(:d_eff, get(res["Vitals"], "D", NaN))
+                                )
+                            ], className="mx-2"),
+                            html_span("•", className="colourtx-v2mw"),
+                            html_span([
+                                html_span("A-Efficiency: ", className="colourtx-v4dh"),
+                                html_span(LENS_FormatMetric_DDEF(:eff, get(res["Vitals"], "A", NaN)), className="fw-bold colourtx-v5pb")
+                            ], className="mx-2"),
+                            html_span("•", className="colourtx-v2mw"),
+                            html_span([
+                                html_span("G-Efficiency: ", className="colourtx-v4dh"),
+                                html_span(LENS_FormatMetric_DDEF(:eff, get(res["Vitals"], "G", NaN)), className="fw-bold colourtx-v5pb")
+                            ], className="mx-2"),
+                            html_span("•", className="colourtx-v2mw"),
+                            html_span([
+                                html_span("I-Efficiency: ", className="colourtx-v4dh"),
+                                html_span(LENS_FormatMetric_DDEF(:eff, get(res["Vitals"], "I", NaN)), className="fw-bold colourtx-v5pb")
+                            ], className="mx-2"),
+                        ], className="d-flex justify-content-center align-items-center flex-wrap py-1"),
+                        # Row 2: Collinearity Diagnostics & LOF P-Value on Far Right
+                        let c_raw   = get(res["Vitals"], "Condition", NaN),
+                            (c_val, _, c_col) = Sys_Fast.FAST_FormatConditionNumber_DDEF(c_raw),
+                            max_vif = get(res["Vitals"], "MaxVIF", NaN),
+                            lof_val = get(res["Vitals"], "LOF", NaN)
+                            html_div([
+                                html_span([
+                                    html_span("Max VIF: ", className="colourtx-v4dh"),
+                                    html_span(
+                                        LENS_FormatMetric_DDEF(:vif, max_vif),
+                                        className = LENS_EvalClass_DDEF(:vif, max_vif)
+                                    )
+                                ], className="mx-3"),
+                                html_span("•", className="colourtx-v2mw"),
+                                html_span([
+                                    html_span("Matrix Condition (κ): ", className="colourtx-v4dh"),
+                                    html_span(c_val, className="fw-bold", style=Dict("color" => c_col))
+                                ], className="mx-3"),
+                                html_span("•", className="colourtx-v2mw"),
+                                html_span([
+                                    html_span("Lack-of-Fit P: ", className="colourtx-v4dh"),
+                                    html_span(
+                                        LENS_FormatMetric_DDEF(:lof, lof_val),
+                                        className = LENS_EvalClass_DDEF(:lof, lof_val)
+                                    )
+                                ], className="mx-3"),
+                            ], className="d-flex justify-content-center align-items-center flex-wrap py-1 border-top", style=Dict("borderColor" => "var(--colour-val1-lighig)"))
+                        end
+                    ], className="border rounded py-1 px-2 mb-3 colourbg-v0pw small"),
+                    html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px solid var(--colour-val1-lighig)", "margin" => "15px 0"))
                 ]) : html_div()),
 
+                html_h6("MODEL PERFORMANCE SUMMARY", className="fw-bold text-center mb-3 colourtx-c1sm", style=Dict("letterSpacing" => "1px")),
+                html_table([
+                    html_thead(html_tr([
+                        html_th("Output",   style=Dict("width" => "40%", "padding" => "2px")),
+                        html_th("R² (Adj)", style=Dict("width" => "20%", "padding" => "2px")),
+                        html_th("Q² (Pred)", style=Dict("width" => "20%", "padding" => "2px")),
+                        html_th("P-Value",  style=Dict("width" => "20%", "padding" => "2px"))
+                    ])),
+                    html_tbody(summary_rows)
+                ], className="table table-sm table-hover small mb-3 border", style=Dict("tableLayout" => "fixed", "width" => "100%")),
+
                 (haskey(res, "Sensitivities") && !isempty(res["Sensitivities"]) ? html_div([
-                    html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px dashed var(--colour-val1-lighig)", "margin" => "10px 0")),
-                    html_h6("Factor Sensitivity (at Optimum)", className="fw-bold small text-center mb-2 colourtx-c1sm"),
-                    html_table([
-                        html_thead(html_tr([
-                            html_th("Factor", style=Dict("textAlign" => "left", "padding" => "4px")),
-                            [html_th(out, style=Dict("textAlign" => "center", "padding" => "4px")) for out in get(res, "DisplayOutNames", res["OutNames"])]...
-                        ])),
-                        html_tbody([
-                            html_tr([
-                                html_td(get(res, "DisplayInNames", res["InNames"])[fi], className="fw-bold", style=Dict("padding" => "4px")),
-                                [html_td(@sprintf("%.1f%%", res["Sensitivities"][mi][fi] * 100), 
-                                    className = res["Sensitivities"][mi][fi] > 0.5 ? "colourtx-c0hr" : "colourtx-v5pb", 
-                                    style=Dict("textAlign" => "center", "padding" => "4px"))
-                                 for mi in 1:length(get(res, "DisplayOutNames", res["OutNames"]))]...
-                            ]) for fi in 1:length(get(res, "DisplayInNames", res["InNames"]))
-                        ])
-                    ], className="table table-sm table-borderless small mx-auto", style=Dict("width" => "90%"))
+                    html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px solid var(--colour-val1-lighig)", "margin" => "15px 0")),
+                    html_h6("FACTOR SENSITIVITY", className="fw-bold text-center mb-3 colourtx-c1sm", style=Dict("letterSpacing" => "1px")),
+                    let out_names = get(res, "DisplayOutNames", res["OutNames"]),
+                        n_out = max(1, length(out_names)),
+                        w_col = @sprintf("%.2f%%", 60.0 / n_out)
+                        html_table([
+                            html_thead(html_tr([
+                                html_th("Factor", style=Dict("width" => "40%", "padding" => "2px")),
+                                [html_th(out, style=Dict("width" => w_col, "padding" => "2px")) for out in out_names]...
+                            ])),
+                            html_tbody([
+                                html_tr([
+                                    html_td(get(res, "DisplayInNames", res["InNames"])[fi], className="fw-bold", style=Dict("padding" => "2px")),
+                                    [html_td(
+                                        let s = (mi <= length(res["Sensitivities"]) && fi <= length(res["Sensitivities"][mi])) ? res["Sensitivities"][mi][fi] : NaN
+                                            (!ismissing(s) && !isnan(s)) ? @sprintf("%.1f%%", Float64(s) * 100) : "-"
+                                        end, 
+                                        className = LENS_EvalClass_DDEF(:sensitivity, (mi <= length(res["Sensitivities"]) && fi <= length(res["Sensitivities"][mi])) ? res["Sensitivities"][mi][fi] : NaN), 
+                                        style=Dict("padding" => "2px"))
+                                     for mi in 1:length(out_names)]...
+                                ]) for fi in 1:length(get(res, "DisplayInNames", res["InNames"]))
+                            ])
+                        ], className="table table-sm table-hover small mb-3 border", style=Dict("tableLayout" => "fixed", "width" => "100%"))
+                    end
                 ]) : html_div()),
 
                 html_div([
                     html_hr(style=Dict("height" => "2px", "border" => "none", "borderTop" => "2px solid var(--colour-chr3-toncya)", "margin" => "15px 0")),
-                    html_h6("ACADEMIC DIAGNOSTICS", className="fw-bold text-center mb-3 colourtx-c1sm", style=Dict("letterSpacing" => "1px")),
+                    html_h6("MODEL DIAGNOSTICS", className="fw-bold text-center mb-3 colourtx-c1sm", style=Dict("letterSpacing" => "1px")),
                     [html_div([
                         html_div("Analysis of Variance (ANOVA): $out_name", className="small fw-bold mb-1 colourtx-v4dh"),
                         # ANOVA Table
-                        let df_ano = res["ANOVA"][i]
-                            html_table([
-                                html_thead(html_tr([
-                                    html_th("Source",  style=Dict("padding" => "2px")),
-                                    html_th("df",      style=Dict("padding" => "2px")),
-                                    html_th("MS",      style=Dict("padding" => "2px")),
-                                    html_th("F-Value", style=Dict("padding" => "2px")),
-                                    html_th("P-Value", style=Dict("padding" => "2px"))
-                                ])),
-                                html_tbody([
-                                    html_tr([
-                                        html_td(r.Source, style=Dict("padding" => "2px")), 
-                                        html_td(r.df,     style=Dict("padding" => "2px")), 
-                                        html_td(isnan(r.MS) ? "-" : @sprintf("%.4f", r.MS), style=Dict("padding" => "2px")), 
-                                        html_td(isnan(r.F)  ? "-" : @sprintf("%.2f", r.F),  style=Dict("padding" => "2px")), 
-                                        html_td(isnan(r.P)  ? "-" : @sprintf("%.4f", r.P),
-                                            className = (!isnan(r.P) && r.P < 0.05) ? "fw-bold" : "",
-                                            style=Dict("padding" => "2px"))
-                                    ]) for r in eachrow(df_ano)
-                                ])
-                            ], className="table table-sm table-hover small mb-3 border")
+                        let df_ano = (haskey(res, "ANOVA") && i <= length(res["ANOVA"])) ? res["ANOVA"][i] : DataFrame()
+                            if isempty(df_ano)
+                                html_div("ANOVA diagnostics not available.", className="small text-muted py-1")
+                            else
+                                html_table([
+                                    html_thead(html_tr([
+                                        html_th("Source",  style=Dict("width" => "30%", "padding" => "2px")),
+                                        html_th("df",      style=Dict("width" => "10%", "padding" => "2px")),
+                                        html_th("MS",      style=Dict("width" => "20%", "padding" => "2px")),
+                                        html_th("F-Value", style=Dict("width" => "20%", "padding" => "2px")),
+                                        html_th("P-Value", style=Dict("width" => "20%", "padding" => "2px"))
+                                    ])),
+                                    html_tbody([
+                                        html_tr([
+                                            html_td(string(r.Source), style=Dict("padding" => "2px")), 
+                                            html_td(string(r.df),     style=Dict("padding" => "2px")), 
+                                            html_td((ismissing(r.MS) || isnan(r.MS)) ? "-" : @sprintf("%.4f", Float64(r.MS)), style=Dict("padding" => "2px")), 
+                                            html_td((ismissing(r.F)  || isnan(r.F))  ? "-" : @sprintf("%.2f", Float64(r.F)),  style=Dict("padding" => "2px")), 
+                                            html_td((ismissing(r.P)  || isnan(r.P))  ? "-" : @sprintf("%.4f", Float64(r.P)),
+                                                className = LENS_EvalClass_DDEF(:anova, string(r.Source), r.P),
+                                                style=Dict("padding" => "2px"))
+                                        ]) for r in eachrow(df_ano)
+                                    ])
+                                ], className="table table-sm table-hover small mb-3 border", style=Dict("tableLayout" => "fixed", "width" => "100%"))
+                            end
                         end,
 
                         html_div("Term Significance (Coefficients): $out_name", className="small fw-bold mb-1 colourtx-v4dh"),
                         # Coefficients Table
-                        let m = res["Models"][i]
-                            html_table([
-                                html_thead(html_tr([
-                                    html_th("Term",    style=Dict("padding" => "2px")), 
-                                    html_th("Beta",    style=Dict("padding" => "2px")), 
-                                    html_th("P-Value", style=Dict("padding" => "2px")), 
-                                    html_th("VIF",     style=Dict("padding" => "2px"))
-                                ])),
-                                html_tbody([
-                                    html_tr([
-                                        html_td(m["TermNames"][j], style=Dict("padding" => "2px")), 
-                                        html_td(@sprintf("%.4f", m["Coefs"][j]), style=Dict("padding" => "2px")), 
-                                        html_td(isnan(m["P_Coefs"][j]) ? "N/A" : @sprintf("%.4f", m["P_Coefs"][j]),
-                                            className = (!isnan(m["P_Coefs"][j]) && m["P_Coefs"][j] < 0.05) ? "fw-bold" : "",
-                                            style=Dict("padding" => "2px")),
-                                        html_td(j == 1 ? "-" : @sprintf("%.2f", m["VIFs"][j]), style=Dict("padding" => "2px"))
-                                    ]) for j in 1:length(m["TermNames"])
-                                ])
-                            ], className="table table-sm table-hover small mb-4 border")
+                        let m = (haskey(res, "Models") && i <= length(res["Models"])) ? res["Models"][i] : Dict{String,Any}()
+                            if get(m, "Status", "") != "OK" || !haskey(m, "TermNames")
+                                html_div("Coefficients not available: $(get(m, "Error", "Model error"))", className="small text-muted py-1 mb-3")
+                            else
+                                t_names = get(m, "TermNames", String[])
+                                coefs   = get(m, "Coefs", Float64[])
+                                p_coefs = get(m, "P_Coefs", Float64[])
+                                vifs    = get(m, "VIFs", Float64[])
+                                html_table([
+                                    html_thead(html_tr([
+                                        html_th("Term",    style=Dict("width" => "40%", "padding" => "2px")), 
+                                        html_th("Beta",    style=Dict("width" => "20%", "padding" => "2px")), 
+                                        html_th("VIF",     style=Dict("width" => "20%", "padding" => "2px")), 
+                                        html_th("P-Value", style=Dict("width" => "20%", "padding" => "2px"))
+                                    ])),
+                                    html_tbody([
+                                        html_tr([
+                                            html_td(string(t_names[j]), style=Dict("padding" => "2px")), 
+                                            html_td((j <= length(coefs) && !ismissing(coefs[j]) && !isnan(coefs[j])) ? @sprintf("%.4f", Float64(coefs[j])) : "-", style=Dict("padding" => "2px")), 
+                                            html_td(
+                                                let vf = (j <= length(vifs)) ? vifs[j] : NaN
+                                                    (j == 1 || ismissing(vf) || isnan(vf)) ? "-" : @sprintf("%.2f", Float64(vf))
+                                                end,
+                                                className = LENS_EvalClass_DDEF(:coef_vif, j, (j <= length(vifs)) ? vifs[j] : NaN),
+                                                style=Dict("padding" => "2px")),
+                                            html_td(
+                                                let pv = (j <= length(p_coefs)) ? p_coefs[j] : NaN
+                                                    (ismissing(pv) || isnan(pv)) ? "N/A" : @sprintf("%.4f", Float64(pv))
+                                                end,
+                                                className = LENS_EvalClass_DDEF(:coef_pval, (j <= length(p_coefs)) ? p_coefs[j] : NaN),
+                                                style=Dict("padding" => "2px"))
+                                        ]) for j in 1:length(t_names)
+                                    ])
+                                ], className="table table-sm table-hover small mb-4 border", style=Dict("tableLayout" => "fixed", "width" => "100%"))
+                            end
                         end
                     ]) for (i, out_name) in enumerate(get(res, "DisplayOutNames", res["OutNames"]))]...
-                ], className="px-2 mt-3"),
+                ], className="mt-3"),
 
                 # Orchestration of architectural boundary warnings and spatial limit detections (AskLeader Integration).
                 let warnings = get(res, "BoundaryWarnings", String[])
@@ -1193,10 +1425,10 @@ function LENS_RegisterCallbacks_DDEF(app)
             rad_badge = (haskey(res, "RadioCorrection") && !isempty(res["RadioCorrection"])) ?
                         dbc_badge([html_i(className="fas fa-radiation me-1 colourtx-v5pb"), "Radio-Corrected"], className="ms-2 fw-bold colourgl-c4tg colourtx-v5pb") : ""
 
+            # Architectural Optimisation: Remove bulky objects before sanitisation to prevent lag.
+            delete!(res, "Graphs") 
+            delete!(res, "_Hidden_Sheets")
             final_res = Sys_Fast.FAST_SanitiseJson_DDEF(res)
-            # Architectural Optimisation: Remove bulky objects from persistent vault to prevent serialisation lag.
-            delete!(final_res, "Graphs") 
-            delete!(final_res, "_Hidden_Sheets")
 
             final_res["dataid"]  = updated_base64
             final_res["type"] = "SCIENCE_PULSE"
@@ -1204,7 +1436,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             t_total       = round(time() - t_start; digits=1)
             elapsed_badge = html_span(" ($(t_total)s)", className="colourtx-v3dl")
 
-            is_staged = true  # Always staged: Pkg 2 (BBO + Deferred) is coming via background thread.
+            is_staged = true
             
             return (
                 Dict("count" => length(pkg1_graphs), "ts" => time()), 
@@ -1216,7 +1448,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 leaders_html, 
                 rad_badge,
                 Dict("next_pkg" => 2, "handle" => "", "working" => false),
-                false,  # interval enabled
+                false,
                 pkg1_blob
             )
 
@@ -1226,10 +1458,12 @@ function LENS_RegisterCallbacks_DDEF(app)
         catch e
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "ANALYSIS_CRASH", bt, "FAIL")
-            return ntuple(_ -> nu, 11)
+            !isempty(path) && try rm(path; force=true) catch end
+            LENS_LastPayloadTime_DDEC[] = 0.0
+            LENS_BatchPayload_DDEC[] = nothing
+            err_msg = html_span(["❌ Analysis Error: ", first(string(e), 120)], className="fw-bold small colourtx-c0hr")
+            return (nu, nu, err_msg, nu, nu, nu, nu, nu, Dict("next_pkg" => 0, "handle" => "", "working" => false), true, nu)
         finally
-            # Execution of high-priority transient resource cleanup (mitigation of disk leakage).
-            Sys_Fast.FAST_CleanTransient_DDEF(path)
             # Mandatory release of the architectural lock to restore system concurrency.
             Sys_Fast.FAST_ReleaseLock_DDEF("VISE_ANALYSIS")
         end
@@ -1304,10 +1538,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 # ------------------------------------------------------------------------------
 # SECTION 10: GRAPH RENDERING & METADATA
 # ------------------------------------------------------------------------------
-# Architecture: Graphs are delivered as a sealed package (Stateless Blob). 
-# All data is held in lens-store-graphs-blob (String JSON).
-# update_index and render_graph run clientside for instant, private navigation.
- 
+
     callback!(ClientsideFunction("clientside", "update_index"), app,
         Output("lens-store-index", "data"),
         Output("lens-graph-input", "value"),
@@ -1365,33 +1596,18 @@ function LENS_RegisterCallbacks_DDEF(app)
         trig = BASE_GetTrigger_DDEF(callback_context())
         no_msg = Dash.no_update()
 
-        if trig == "lens-wiz-btn-cancel" || trig == "lens-lead-btn-cancel" || trig == "lens-prev-btn-cancel" || (trig == "lens-signal-process" && get(sig, "success", false))
-            return false, false, false, ""
-        end
+        (trig in ("lens-wiz-btn-cancel", "lens-lead-btn-cancel", "lens-prev-btn-cancel") || (trig == "lens-signal-process" && get(sig, "success", false))) && return false, false, false, ""
 
         if trig == "lens-btn-next-phase"
             has_analysis = !isnothing(results) && (results isa AbstractDict || results isa Dict) && get(results, "Status", "") == "OK"
-            if !has_analysis
-                return false, false, false, html_span([html_i(className="fas fa-info-circle me-1"), "Run the analysis first to identify leader candidates."], className="colourtx-c1sm fw-bold")
-            end
+            !has_analysis && return false, false, false, html_span([html_i(className="fas fa-info-circle me-1"), "Run the analysis first to identify leader candidates."], className="colourtx-c1sm fw-bold")
             return true, false, false, ""
         end
 
-        if trig == "lens-wiz-btn-next"
-            return false, true, false, no_msg
-        end
-
-        if trig == "lens-lead-btn-back"
-            return true, false, false, no_msg
-        end
-
-        if trig == "lens-lead-btn-confirm"
-            return false, false, true, no_msg
-        end
-
-        if trig == "lens-prev-btn-back"
-            return false, true, false, no_msg
-        end
+        trig == "lens-wiz-btn-next"    && return false, true, false, no_msg
+        trig == "lens-lead-btn-back"    && return true, false, false, no_msg
+        trig == "lens-lead-btn-confirm" && return false, false, true, no_msg
+        trig == "lens-prev-btn-back"    && return false, true, false, no_msg
 
         return Dash.no_update(), Dash.no_update(), Dash.no_update(), no_msg
     end
@@ -1400,6 +1616,181 @@ function LENS_RegisterCallbacks_DDEF(app)
 # SECTION 12: SCIENTIFIC REPORT & DOWNLOAD
 # ------------------------------------------------------------------------------
 
+"""
+    LENS_ParseInlineContent_DDEF(text::AbstractString; is_cell::Bool=false) -> Vector{Any}
+Parses inline scientific text, highlighting positive metrics in system green and negative metrics in system red.
+Cell-specific evaluations are strictly isolated to avoid polluting running academic prose.
+"""
+function LENS_ParseInlineContent_DDEF(text::AbstractString; is_cell::Bool=false)
+    clean = replace(text, "&lt;" => "<", "&gt;" => ">")
+    
+    # 1. Tag-based matching: <ins> or report-pos / colourtx-c4tg
+    m_pos = match(r"<(?:ins|span)[^>]*class=[\"'][^\"']*(?:report-pos|colourtx-c4tg)[^\"']*[\"'][^>]*>(.*?)</(?:ins|span)>", clean)
+    if isnothing(m_pos)
+        m_pos = match(r"<ins[^>]*>(.*?)</ins>", clean)
+    end
+    if !isnothing(m_pos)
+        inner = replace(m_pos.captures[1], r"<[^>]*>" => "")
+        pfx = clean[1:m_pos.offset-1]
+        sfx = clean[m_pos.offset + length(m_pos.match):end]
+        return Any[
+            LENS_ParseInlineContent_DDEF(pfx; is_cell=is_cell)...,
+            html_span(inner, className="colourtx-c4tg fw-bold", style=Dict("color" => "var(--colour-chr4-tongre)", "fontWeight" => "700")),
+            LENS_ParseInlineContent_DDEF(sfx; is_cell=is_cell)...
+        ]
+    end
+
+    # 2. Tag-based matching: <del> or report-neg / colourtx-c0hr
+    m_neg = match(r"<(?:del|span)[^>]*class=[\"'][^\"']*(?:report-neg|colourtx-c0hr)[^\"']*[\"'][^>]*>(.*?)</(?:del|span)>", clean)
+    if isnothing(m_neg)
+        m_neg = match(r"<del[^>]*>(.*?)</del>", clean)
+    end
+    if !isnothing(m_neg)
+        inner = replace(m_neg.captures[1], r"<[^>]*>" => "")
+        pfx = clean[1:m_neg.offset-1]
+        sfx = clean[m_neg.offset + length(m_neg.match):end]
+        return Any[
+            LENS_ParseInlineContent_DDEF(pfx; is_cell=is_cell)...,
+            html_span(inner, className="colourtx-c0hr fw-bold", style=Dict("color" => "var(--colour-chr0-huered)", "fontWeight" => "700")),
+            LENS_ParseInlineContent_DDEF(sfx; is_cell=is_cell)...
+        ]
+    end
+
+    # 3. Tag-based matching: generic <span>
+    m_span = match(r"<span[^>]*>(.*?)</span>", clean)
+    if !isnothing(m_span)
+        inner = replace(m_span.captures[1], r"<[^>]*>" => "")
+        pfx = clean[1:m_span.offset-1]
+        sfx = clean[m_span.offset + length(m_span.match):end]
+        return Any[
+            LENS_ParseInlineContent_DDEF(pfx; is_cell=is_cell)...,
+            inner,
+            LENS_ParseInlineContent_DDEF(sfx; is_cell=is_cell)...
+        ]
+    end
+
+    # 4. Markdown Bold: **...**
+    m_b = match(r"\*\*(.*?)\*\*", clean)
+    if !isnothing(m_b)
+        pfx = clean[1:m_b.offset-1]
+        inner = m_b.captures[1]
+        sfx = clean[m_b.offset + length(m_b.match):end]
+        return Any[
+            LENS_ParseInlineContent_DDEF(pfx; is_cell=is_cell)...,
+            html_strong(inner),
+            LENS_ParseInlineContent_DDEF(sfx; is_cell=is_cell)...
+        ]
+    end
+
+    # 5. Markdown Inline Code: `...`
+    m_c = match(r"`(.*?)`", clean)
+    if !isnothing(m_c)
+        pfx = clean[1:m_c.offset-1]
+        inner = m_c.captures[1]
+        sfx = clean[m_c.offset + length(m_c.match):end]
+        return Any[
+            LENS_ParseInlineContent_DDEF(pfx; is_cell=is_cell)...,
+            html_code(inner),
+            LENS_ParseInlineContent_DDEF(sfx; is_cell=is_cell)...
+        ]
+    end
+
+    # 6. Fallback Exact Matching for Diagnostic Table Cells ONLY
+    if is_cell
+        trim_c = strip(clean)
+        trim_c in LENS_PosCells_DDEC && return Any[html_span(trim_c, className="colourtx-c4tg fw-bold", style=Dict("color" => "var(--colour-chr4-tongre)", "fontWeight" => "700"))]
+        trim_c in LENS_NegCells_DDEC && return Any[html_span(trim_c, className="colourtx-c0hr fw-bold", style=Dict("color" => "var(--colour-chr0-huered)", "fontWeight" => "700"))]
+    end
+
+    return isempty(clean) ? Any[] : Any[clean]
+end
+
+"""
+    LENS_RenderAcademicReport_DDEF(report_raw::AbstractString) -> html_div
+Transforms a raw markdown statistical analysis report into styled Dash HTML components with visual evaluation accents.
+"""
+function LENS_RenderAcademicReport_DDEF(report_raw::AbstractString)
+    lines = split(report_raw, "\n")
+    components = Any[]
+    
+    i = 1
+    n_lines = length(lines)
+    while i <= n_lines
+        line = strip(lines[i])
+        
+        if isempty(line)
+            i += 1
+            continue
+        end
+        
+        # Table Processing
+        if startswith(line, "|") && endswith(line, "|")
+            table_lines = String[]
+            while i <= n_lines && startswith(strip(lines[i]), "|") && endswith(strip(lines[i]), "|")
+                push!(table_lines, strip(lines[i]))
+                i += 1
+            end
+            
+            if length(table_lines) >= 2
+                raw_headers = [strip(c) for c in split(table_lines[1], "|")[2:end-1]]
+                raw_divs = [strip(c) for c in split(table_lines[2], "|")[2:end-1]]
+                aligns = String[]
+                for d in raw_divs
+                    if startswith(d, ":") && endswith(d, ":")
+                        push!(aligns, "center")
+                    elseif endswith(d, ":")
+                        push!(aligns, "right")
+                    else
+                        push!(aligns, "left")
+                    end
+                end
+                
+                rows_comp = Any[]
+                for r_idx in 3:length(table_lines)
+                    raw_cells = [strip(c) for c in split(table_lines[r_idx], "|")[2:end-1]]
+                    tds = Any[]
+                    for (c_idx, cell) in enumerate(raw_cells)
+                        al = (c_idx <= length(aligns)) ? aligns[c_idx] : "left"
+                        push!(tds, html_td(LENS_ParseInlineContent_DDEF(cell; is_cell=true), style=Dict("textAlign" => al)))
+                    end
+                    push!(rows_comp, html_tr(tds))
+                end
+                
+                ths = [html_th(h, style=Dict("textAlign" => (j <= length(aligns) ? aligns[j] : "left"))) for (j, h) in enumerate(raw_headers)]
+                tbl = html_table([
+                    html_thead(html_tr(ths)),
+                    html_tbody(rows_comp)
+                ], className="table table-sm mb-3")
+                push!(components, tbl)
+            end
+            continue
+        end
+        
+        # Structural Headings
+        if startswith(line, "# ")
+            push!(components, html_h1(strip(line[3:end])))
+        elseif startswith(line, "### ")
+            push!(components, html_h3(strip(line[5:end])))
+        elseif startswith(line, "#### ")
+            push!(components, html_h4(strip(line[6:end])))
+        elseif line == "---"
+            push!(components, html_hr())
+        elseif startswith(line, "*") && endswith(line, "*") && length(line) >= 2
+            inner = strip(line[2:end-1])
+            push!(components, html_p(html_em(LENS_ParseInlineContent_DDEF(inner; is_cell=false)), className="mb-2"))
+        elseif startswith(line, "- ")
+            inner = strip(line[3:end])
+            push!(components, html_p([html_span("• ", className="fw-bold me-2"), LENS_ParseInlineContent_DDEF(inner; is_cell=false)...], className="mb-1 ps-3"))
+        else
+            push!(components, html_p(LENS_ParseInlineContent_DDEF(line; is_cell=false), className="mb-2"))
+        end
+        
+        i += 1
+    end
+    
+    return html_div(components, className="academic-dossier")
+end
+
     callback!(app,
         Output("lens-modal-report",   "is_open"),
         Output("lens-report-content", "children"),
@@ -1407,8 +1798,10 @@ function LENS_RegisterCallbacks_DDEF(app)
         State("lens-store-report",    "data"),
         prevent_initial_call=true
     ) do n, report
-        n > 0 && return true, report
-        return false, ""
+        if n > 0 && !isnothing(report) && !isempty(report)
+            return true, LENS_RenderAcademicReport_DDEF(report)
+        end
+        return false, html_div()
     end
 
     # Scientific report download in TXT format.
@@ -1430,8 +1823,10 @@ function LENS_RegisterCallbacks_DDEF(app)
         proj  = isnothing(project) ? "DoECISORY" : project
         ph    = isnothing(phase)   ? "Phase1" : phase
         fname = "DoECISORY_$(proj)_$(ph)_Scientific_Report.txt"
+        clean_txt = replace(report, r"<[^>]*>" => "")
+        clean_txt = replace(clean_txt, "&lt;" => "<", "&gt;" => ">")
 
-        return Dict("filename" => fname, "content" => report)
+        return Dict("filename" => fname, "content" => clean_txt)
     end
 
 # ------------------------------------------------------------------------------
@@ -1479,7 +1874,6 @@ function LENS_RegisterCallbacks_DDEF(app)
         isnothing(base64_file) && return [], []
 
         path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
-        # Execution of the configuration audit to ensure strict sequential ordering.
         C = Sys_Fast.FAST_Data_DDEC
         config_full = Sys_Fast.FAST_ReadConfig_DDEF(path)
         data = Sys_Flow.FLOW_GetCandidates_DDEF(path, src)
@@ -1487,14 +1881,12 @@ function LENS_RegisterCallbacks_DDEF(app)
 
         isempty(data) && return [], []
 
-        # Identify columns
         cols_to_show = String[]
 
         all_keys = collect(keys(data[1]))
         h_id_idx = findfirst(k -> occursin("ID", uppercase(string(k))), all_keys)
         !isnothing(h_id_idx) && push!(cols_to_show, string(all_keys[h_id_idx]))
  
-        # Integration of Variable components in strict Configuration sequence.
         ingredients = get(config_full, "Ingredients", [])
         for c in ingredients
             name = get(c, "Name", "")
@@ -1542,6 +1934,9 @@ function LENS_RegisterCallbacks_DDEF(app)
         [Output("lens-slot-name-$i",   "children") for i in 1:3]...,
         [Output("lens-slot-leader-$i", "children") for i in 1:3]...,
         [Output("lens-slot-mode-$i",   "value") for i in 1:3]...,
+        Output("lens-prev-dir-x1",     "value"),
+        Output("lens-prev-dir-x2",     "value"),
+        Output("lens-prev-dir-x3",     "value"),
         Input("lens-lead-btn-confirm",  "n_clicks"),
         Input("lens-prev-slider-zoom",  "value"),
         Input("lens-prev-slider-shift", "value"),
@@ -1573,7 +1968,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         slot_leaders = Any[nu, nu, nu]
         slot_modes   = Any[nu, nu, nu]
 
-        (isnothing(base64_file) || isnothing(sel_rows) || isempty(sel_rows)) && return Dict(), ret_z, ret_s, ret_m, slot_names..., slot_leaders..., slot_modes...
+        (isnothing(base64_file) || isnothing(sel_rows) || isempty(sel_rows)) && return Dict(), ret_z, ret_s, ret_m, slot_names..., slot_leaders..., slot_modes..., nu, nu, nu
 
         row_sel = cand_data[sel_rows[1]+1]
         sel_id = haskey(row_sel, "EXP_ID") ? string(row_sel["EXP_ID"]) :
@@ -1591,7 +1986,7 @@ function LENS_RegisterCallbacks_DDEF(app)
         else
             [Dict{String,Any}(string(k) => v for (k, v) in pairs(val)) for val in ingredients_raw]
         end
-        vars_config = filter(c -> get(c, "Role", "") == C.ROLE_VAR, ingredients)
+        vars_config = filter(c -> Sys_Fast.FAST_GetSafe_DDEF(c, "Role", "") == C.ROLE_VAR, ingredients)
 
         res = Sys_Flow.FLOW_NextPhase_DDEF(path, src, sel_id, Float64(z), Float64(s))
         Sys_Fast.FAST_CleanTransient_DDEF(path)
@@ -1602,7 +1997,13 @@ function LENS_RegisterCallbacks_DDEF(app)
         res["IsRadioCorrected"] = !isnothing(results) && haskey(results, "RadioCorrection") && !isempty(results["RadioCorrection"])
         res["RadioOpts"]        = get(config_full, "RadioOpts", Dict{String,Any}())
 
+        ret_dir1 = nu
+        ret_dir2 = nu
+        ret_dir3 = nu
         if is_reset
+            g_curr = get(config_full, "Global", Dict())
+            ret_dir1, ret_dir2, ret_dir3 = LENS_ExtractDirections_DDEF(g_curr, vars_config)
+
             leader_vals = get(res, "LeaderValues", Float64[])
             for j in 1:min(3, length(vars_config))
                 vname = get(vars_config[j], "Name", "Var $j")
@@ -1614,18 +2015,28 @@ function LENS_RegisterCallbacks_DDEF(app)
             end
         end
         
-        return res, ret_z, ret_s, ret_m, slot_names..., slot_leaders..., slot_modes...
+        return res, ret_z, ret_s, ret_m, slot_names..., slot_leaders..., slot_modes..., ret_dir1, ret_dir2, ret_dir3
     end
 
     callback!(app,
         Output("lens-container-preview-table", "children"),
         Output("lens-container-preview-audit", "children"),
         Output("lens-graph-transition", "figure"),
+        Output("lens-prev-dir-lbl-1", "children"),
+        Output("lens-prev-dir-lbl-2", "children"),
+        Output("lens-prev-dir-lbl-3", "children"),
         Input("lens-store-next-phase-proposal", "data"),
         Input("lens-store-slot-config", "data"),
+        Input("lens-store-excluded-constants", "data"),
+        Input("lens-prev-dir-x1", "value"),
+        Input("lens-prev-dir-x2", "value"),
+        Input("lens-prev-dir-x3", "value"),
+        Input("lens-prev-dd-method", "value"),
         prevent_initial_call=true
-    ) do res, slot_cfg
-        (isnothing(res) || isempty(res) || get(res, "Status", "") != "OK") && return html_div("No proposal available."), "", Dict()
+    ) do res, slot_cfg, excluded_raw, dir_x1, dir_x2, dir_x3, meth_val
+        (isnothing(res) || isempty(res) || get(res, "Status", "") != "OK") && return html_div("No proposal available."), "", Dict(), "X₁ Direction", "X₂ Direction", "X₃ Direction"
+
+        excluded = (isnothing(excluded_raw) || !(excluded_raw isa AbstractVector)) ? String[] : String[string(x) for x in excluded_raw]
 
         conf = res["NewConfig"]
 
@@ -1651,125 +2062,118 @@ function LENS_RegisterCallbacks_DDEF(app)
             end
         end
 
-        var_idx = 0
-        for c in display_conf
-            get(c, "Role", "") != fd.ROLE_VAR && continue
-            var_idx += 1
-            var_idx > length(slots) && continue
-            sl = slots[var_idx]
-            mode = get(sl, "Mode", "KEEP")
+        LENS_ApplySlotCustomisation_DDEF!(display_conf, slots, leader_vals)
 
-            if mode == "SCALE" || mode == "REPLACE"
-                if haskey(sl, "NewName") && !isempty(sl["NewName"])
-                    c["Name"] = string(sl["NewName"])
-                end
-                if haskey(sl, "NewUnit") && !isempty(sl["NewUnit"])
-                    c["Unit"] = string(sl["NewUnit"])
-                end
-            end
+        # Separate active components (excluding deleted constants) for stoichiometry audit & graph
+        active_conf = filter(c -> !(lowercase(strip(string(LENS_GetSafe_DDEF(c, "Role", "")))) in ("fixed", "fix") && string(LENS_GetSafe_DDEF(c, "Name", "")) in excluded), display_conf)
 
-            if mode == "SCALE" && var_idx <= length(leader_vals)
-                α  = Float64(get(sl, "Alpha", 1.0))
-                β  = Float64(get(sl, "Beta",  0.0))
-                tv = Sys_Flow.FLOW_BridgeTransform_DDEF(Float64(leader_vals[var_idx]), α, β)
-                old_lvls = get(c, "Levels", [0.0, 0.0, 0.0])
-                # old_lvls from new_conf already has Zoom applied via NextPhase. So we just scale it by Alpha.
-                half_range = abs(old_lvls[3] - old_lvls[1]) * 0.5 * abs(α)
-                c["Levels"] = [round(tv - half_range; digits=4), round(tv; digits=4), round(tv + half_range; digits=4)]
+        # Dynamic Direction Labels for X1, X2, X3
+        active_vars = filter(c -> get(c, "Role", "") == fd.ROLE_VAR, active_conf)
+        subscripts  = ("₁", "₂", "₃")
+        lbls = [k <= length(active_vars) ? "$(get(active_vars[k], "Name", "Var $k")) (X$(subscripts[k])) Direction" : "X$(subscripts[k]) Direction" for k in 1:3]
 
-            elseif mode == "REPLACE"
-                nl1 = Float64(get(sl, "NewL1", 0.0))
-                nl2 = Float64(get(sl, "NewL2", 0.0))
-                nl3 = Float64(get(sl, "NewL3", 0.0))
-                c["Levels"] = [nl1, nl2, nl3]
-            end
+        d_vec = [dx isa Number ? Int(dx) : something(tryparse(Int, string(something(dx, -1))), -1) for dx in (dir_x1, dir_x2, dir_x3)]
+        m_str = string(something(meth_val, "TL09"))
 
-            # Inject Absolute Physical Boundaries independent of Levels
-            if haskey(sl, "NewMin")
-                c["Min"] = Float64(sl["NewMin"])
-            end
-            if haskey(sl, "NewMax")
-                c["Max"] = Float64(sl["NewMax"])
-            end
-        end
-
-        audit_rows = map(display_conf) do c
-            lvls = get(c, "Levels", [0.0, 0.0, 0.0])
-            Dict(
-                "Name" => string(get(c, "Name", "Unknown")),
-                "Role" => string(get(c, "Role", "Fixed")),
-                "L1"   => Float64(lvls[1]), "L2" => Float64(lvls[2]), "L3" => Float64(lvls[3]),
-                "MW"   => Float64(get(c, "MW", 0.0)),
-                "Unit" => string(get(c, "Unit", "-"))
-            )
-        end
+        audit_rows = [Dict(
+            "Name" => string(get(c, "Name", "Unknown")),
+            "Role" => string(get(c, "Role", "Fixed")),
+            "L1"   => Float64(get(c, "Levels", [0.0, 0.0, 0.0])[1]),
+            "L2"   => Float64(get(c, "Levels", [0.0, 0.0, 0.0])[2]),
+            "L3"   => Float64(get(c, "Levels", [0.0, 0.0, 0.0])[3]),
+            "MW"   => Float64(get(c, "MW", 0.0)),
+            "Unit" => string(get(c, "Unit", "-"))
+        ) for c in active_conf]
 
         audit_ok, audit_report, audit_results, _, _ = Main.Lib_Mole.MOLE_QuickAudit_DDEF(audit_rows, vol, conc)
 
         if !isempty(audit_results)
-            for c in display_conf
-                if get(c, "Role", "") == fd.ROLE_FILL
-                    c_name = get(c, "Name", "")
-                    m_idx = findfirst(r -> r.Component == c_name, eachrow(audit_results))
-                    if !isnothing(m_idx)
-                        c["Levels"] = [0.0, audit_results[m_idx, :TARGET_MASS_mg], 0.0]
-                    end
-                end
+            for c in active_conf
+                get(c, "Role", "") != fd.ROLE_FILL && continue
+                m_idx = findfirst(==(get(c, "Name", "")), audit_results.Component)
+                !isnothing(m_idx) && (c["Levels"] = [0.0, audit_results[m_idx, :TARGET_MASS_mg], 0.0])
             end
         end
 
-        fig = Sys_Flow.FLOW_RenderPhaseTransition_DDEF(old_conf, display_conf, leader_vals)
+        fig = Sys_Flow.FLOW_RenderPhaseTransition_DDEF(old_conf, active_conf, leader_vals; Method=m_str, Direction=d_vec)
 
         var_slot_idx = 0
+        fix_idx = 0
         rows = []
         for c in display_conf
             role = get(c, "Role", "Variable")
             lvls = get(c, "Levels", [0.0, 0.0, 0.0])
-            slot_mode = ""
-            if role == fd.ROLE_VAR
-                var_slot_idx += 1
-                slot_mode = var_slot_idx <= length(slots) ? get(slots[var_slot_idx], "Mode", "KEEP") : "KEEP"
-            end
+            c_name = string(LENS_GetSafe_DDEF(c, "Name", "???"))
+            is_fixed = lowercase(strip(string(role))) in ("fixed", "fix")
+            is_excluded = is_fixed && (c_name in excluded)
 
-            mode_badge = if slot_mode == "SCALE"
-                html_span(" S", className="badge ms-1 colourbg-c3tc colourtx-v5pb", style=Dict("fontSize" => "8px"))
-            elseif slot_mode == "REPLACE"
-                html_span(" R", className="badge ms-1 colourbg-c3tc colourtx-v5pb", style=Dict("fontSize" => "8px"))
-            else
-                ""
-            end
+            slot_mode = role == fd.ROLE_VAR ? (var_slot_idx += 1; var_slot_idx <= length(slots) ? get(slots[var_slot_idx], "Mode", "KEEP") : "KEEP") : ""
+            mode_badge = slot_mode in ("SCALE", "REPLACE") ? html_span(slot_mode == "SCALE" ? " S" : " R", className="badge ms-1 colourbg-c3tc colourtx-v5pb", style=Dict("fontSize" => "8px")) : ""
 
-            disp_name = get(c, "Name", "???")
-            
-            # Apply Radio Correction Alias to Phase Preview
+            disp_name = c_name
             r_opts = get(res, "RadioOpts", Dict{String,Any}())
             if get(r_opts, "Apply", false)
-                f_dict = get(r_opts, "Forward", Dict{String,Any}())
-                if haskey(f_dict, disp_name)
-                    alias = get(f_dict[disp_name], "Name", "")
-                    !isempty(alias) && (disp_name = alias)
-                end
+                alias = get(get(r_opts, "Forward", Dict{String,Any}()), disp_name, Dict{String,Any}())
+                !isempty(get(alias, "Name", "")) && (disp_name = alias["Name"])
             end
 
             disp_unit = get(c, "Unit", "")
             final_name = (isempty(disp_unit) || disp_unit == "-") ? disp_name : "$disp_name $disp_unit"
 
-            push!(rows, html_tr([
-                html_td([final_name, mode_badge]),
-                html_td(role, className = role == fd.ROLE_VAR ? "colourtx-c1sm" : "colourtx-v5pb",
-                    style=Dict("fontWeight" => role == fd.ROLE_VAR ? "bold" : "normal")),
-                html_td(round(lvls[1], digits=3)),
-                html_td(html_b(round(lvls[2], digits=3)), className="colourbg-v0pw"),
-                html_td(round(lvls[3], digits=3))
-            ]))
+            l1_s = string(round(lvls[1]; digits=3))
+            l2_s = string(round(lvls[2]; digits=3))
+            l3_s = string(round(lvls[3]; digits=3))
+
+            btn_cell = ""
+            if is_fixed
+                fix_idx += 1
+                btn_id = "lens-const-del-$fix_idx"
+                btn_icon = is_excluded ? "fas fa-undo colourtx-c1sm" : "fas fa-trash-alt colourtx-c0hr"
+                btn_title = is_excluded ? "Restore $c_name to phase" : "Exclude $c_name from Phase"
+                btn_cell = dbc_button(
+                    html_i(className=btn_icon, style=Dict("fontSize" => "11px")),
+                    id=btn_id, color="link", size="sm", className="p-0 border-0 text-decoration-none shadow-none",
+                    style=Dict("width" => "22px", "height" => "22px", "display" => "inline-flex", "alignItems" => "center", "justifyContent" => "center", "cursor" => "pointer"),
+                    title=btn_title
+                )
+            end
+
+            if is_excluded
+                push!(rows, html_tr([
+                    html_td([html_s(final_name), html_span(" (Excluded)", className="badge bg-secondary ms-1", style=Dict("fontSize" => "8px"))], className="text-muted opacity-75"),
+                    html_td(html_s(role), className="text-muted opacity-75"),
+                    html_td(html_s(l1_s), className="text-muted opacity-75"),
+                    html_td(html_s(l2_s), className="colourbg-v0pw text-muted opacity-75"),
+                    html_td(html_s(l3_s), className="text-muted opacity-75"),
+                    html_td(btn_cell, className="text-center")
+                ], className="table-light"))
+            else
+                role_cls = role == fd.ROLE_VAR ? "colourtx-c1sm fw-bold" : "colourtx-v5pb"
+                push!(rows, html_tr([
+                    html_td([final_name, mode_badge]),
+                    html_td(role, className=role_cls),
+                    html_td(l1_s),
+                    html_td(html_b(l2_s), className="colourbg-v0pw"),
+                    html_td(l3_s),
+                    html_td(btn_cell, className="text-center")
+                ]))
+            end
         end
 
         tbl = html_table([
             html_thead(html_tr([
-                html_th("Ingredient"), html_th("Role"), html_th("Min"), html_th("Centre"), html_th("Max")
+                html_th("Ingredient"), html_th("Role"), html_th("Min"), html_th("Centre"), html_th("Max"),
+                html_th("Action", className="text-center", style=Dict("width" => "55px"))
             ])),
             html_tbody(rows)
         ], className="table table-sm table-hover align-middle small")
+
+        # Dummy hidden buttons for any unused indices up to 5, ensuring Dash never lacks Input targets
+        dummy_buttons = html_div([
+            dbc_button(id="lens-const-del-$k", style=Dict("display" => "none")) for k in (fix_idx+1):5
+        ], style=Dict("display" => "none"))
+
+        tbl_component = html_div([tbl, dummy_buttons])
 
         audit_html = if audit_ok
             dbc_alert([
@@ -1793,7 +2197,42 @@ function LENS_RegisterCallbacks_DDEF(app)
             ], className="d-flex align-items-center")
         ], className="mt-3 border-0 shadow colourgl-c5hy colourtx-v5pb") : html_div()
 
-        return tbl, [audit_html, radio_warn], fig
+        return tbl_component, [audit_html, radio_warn], fig, lbls[1], lbls[2], lbls[3]
+    end
+
+    callback!(app,
+        Output("lens-store-excluded-constants", "data"),
+        Input("lens-store-next-phase-proposal", "data"),
+        [Input("lens-const-del-$i", "n_clicks") for i in 1:5]...,
+        State("lens-store-excluded-constants", "data"),
+        State("lens-store-next-phase-proposal", "data"),
+        prevent_initial_call=true
+    ) do prop_data, c1, c2, c3, c4, c5, cur_excluded, prop_state
+        trig = BASE_GetTrigger_DDEF(callback_context())
+        prop = (!isnothing(prop_state) && (haskey(prop_state, "NewConfig") || haskey(prop_state, :NewConfig))) ? prop_state : 
+               (!isnothing(prop_data) && (haskey(prop_data, "NewConfig") || haskey(prop_data, :NewConfig)) ? prop_data : Dict{String,Any}())
+        if trig == "lens-store-next-phase-proposal" || isempty(prop)
+            return String[]
+        end
+
+        excluded = (isnothing(cur_excluded) || !(cur_excluded isa AbstractVector)) ? String[] : String[string(x) for x in cur_excluded]
+
+        for i in 1:5
+            if trig == "lens-const-del-$i"
+                conf = LENS_GetSafe_DDEF(prop, "NewConfig", [])
+                fixed_items = [c for c in conf if lowercase(strip(string(LENS_GetSafe_DDEF(c, "Role", "")))) in ("fixed", "fix")]
+                if i <= length(fixed_items)
+                    c_name = string(LENS_GetSafe_DDEF(fixed_items[i], "Name", ""))
+                    if c_name in excluded
+                        filter!(x -> x != c_name, excluded)
+                    else
+                        push!(excluded, c_name)
+                    end
+                end
+                break
+            end
+        end
+        return unique(excluded)
     end
 
     callback!(app,
@@ -1810,8 +2249,9 @@ function LENS_RegisterCallbacks_DDEF(app)
         State("lens-prev-dir-x1",      "value"),
         State("lens-prev-dir-x2",      "value"),
         State("lens-prev-dir-x3",      "value"),
+        State("lens-store-excluded-constants", "data"),
         prevent_initial_call=true
-    ) do n_commit, proposal, sel_rows, cand_data, src, base64_file, proj_v, slot_cfg, dir_x1, dir_x2, dir_x3
+    ) do n_commit, proposal, sel_rows, cand_data, src, base64_file, proj_v, slot_cfg, dir_x1, dir_x2, dir_x3, excluded_raw
         (isnothing(n_commit) || n_commit == 0 || isnothing(proposal) || get(proposal, "Status", "") != "OK") && return Dash.no_update()
         (isnothing(sel_rows) || isempty(sel_rows)) && return Dash.no_update()
 
@@ -1825,77 +2265,38 @@ function LENS_RegisterCallbacks_DDEF(app)
         shift = get(proposal, "SelectedShift", 0.0)
         meth  = get(proposal, "SelectedMethod", "TL09")
 
-        dir_x1_raw = something(dir_x1, -1)
-        dir_x2_raw = something(dir_x2, -1)
-        dir_x3_raw = something(dir_x3, -1)
-        dx1 = dir_x1_raw isa Number ? Int(dir_x1_raw) : parse(Int, string(dir_x1_raw))
-        dx2 = dir_x2_raw isa Number ? Int(dir_x2_raw) : parse(Int, string(dir_x2_raw))
-        dx3 = dir_x3_raw isa Number ? Int(dir_x3_raw) : parse(Int, string(dir_x3_raw))
-        direction_vec = [dx1, dx2, dx3]
+        safe_dir(x) = x isa Number ? Int(x) : something(tryparse(Int, string(something(x, -1))), -1)
+        direction_vec = [safe_dir(dir_x1), safe_dir(dir_x2), safe_dir(dir_x3)]
+
+        excluded = (isnothing(excluded_raw) || !(excluded_raw isa AbstractVector)) ? String[] : String[string(x) for x in excluded_raw]
+
+        slots = Dict{String,Any}[]
+        if !isnothing(slot_cfg) && (slot_cfg isa AbstractDict || slot_cfg isa Dict) && haskey(slot_cfg, "Slots")
+            raw = slot_cfg["Slots"]
+            if raw isa AbstractVector
+                slots = [(s isa AbstractDict || s isa Dict) ? Dict{String,Any}(string(k) => v for (k,v) in pairs(s)) : Dict{String,Any}() for s in raw]
+            end
+        end
+
+        has_custom = any(get(s, "Mode", "KEEP") != "KEEP" || haskey(s, "NewMin") || haskey(s, "NewMax") for s in slots) || !isempty(excluded)
+
+        custom_conf = nothing
+        if haskey(proposal, "NewConfig")
+            base_new_conf = proposal["NewConfig"]
+            custom_conf = [Dict{String,Any}(string(k) => (v isa AbstractVector ? copy(v) : v) for (k,v) in pairs(c)) for c in base_new_conf]
+            leader_vals = get(proposal, "LeaderValues", Float64[])
+            LENS_ApplySlotCustomisation_DDEF!(custom_conf, slots, leader_vals)
+            filter!(c -> !(lowercase(strip(string(LENS_GetSafe_DDEF(c, "Role", "")))) in ("fixed", "fix") && string(LENS_GetSafe_DDEF(c, "Name", "")) in excluded), custom_conf)
+        end
 
         path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
-        res  = Sys_Flow.FLOW_BuildNextPhase_DDEF(path, src, sel_id, Float64(zoom), meth, Float64(shift); Direction=direction_vec)
+        res  = Sys_Flow.FLOW_BuildNextPhase_DDEF(
+            path, src, sel_id, Float64(zoom), meth, Float64(shift);
+            Direction=direction_vec,
+            CustomConfig=has_custom ? custom_conf : nothing
+        )
 
         if res["Status"] == "OK"
-            slots = Dict{String,Any}[]
-            if !isnothing(slot_cfg) && (slot_cfg isa AbstractDict || slot_cfg isa Dict) && haskey(slot_cfg, "Slots")
-                raw = slot_cfg["Slots"]
-                if raw isa AbstractVector
-                    slots = [(s isa AbstractDict || s isa Dict) ? Dict{String,Any}(string(k) => v for (k,v) in pairs(s)) : Dict{String,Any}() for s in raw]
-                end
-            end
-
-            has_custom = any(get(s, "Mode", "KEEP") != "KEEP" for s in slots)
-            if has_custom
-                leader_vals = get(proposal, "LeaderValues", Float64[])
-                config = Sys_Fast.FAST_ReadConfig_DDEF(path)
-                ingreds = get(config, "Ingredients", [])
-                fd = Sys_Fast.FAST_Data_DDEC
-
-                vi = 0
-                for c in ingreds
-                    c_dict = (c isa AbstractDict || c isa Dict) ? Dict{String,Any}(string(k) => v for (k,v) in pairs(c)) : c
-                    get(c_dict, "Role", "") != fd.ROLE_VAR && continue
-                    vi += 1
-                    vi > length(slots) && continue
-                    sl = slots[vi]
-                    mode = get(sl, "Mode", "KEEP")
-
-                    if mode == "SCALE" || mode == "REPLACE"
-                        if haskey(sl, "NewName") && !isempty(sl["NewName"])
-                            c_dict["Name"] = string(sl["NewName"])
-                        end
-                        if haskey(sl, "NewUnit") && !isempty(sl["NewUnit"])
-                            c_dict["Unit"] = string(sl["NewUnit"])
-                        end
-                    end
-
-                    if mode == "SCALE" && vi <= length(leader_vals)
-                        α  = Float64(get(sl, "Alpha", 1.0))
-                        β  = Float64(get(sl, "Beta",  0.0))
-                        tv = Sys_Flow.FLOW_BridgeTransform_DDEF(Float64(leader_vals[vi]), α, β)
-                        old_lvls = get(c_dict, "Levels", [0.0, 0.0, 0.0])
-                        hr = abs(Float64(old_lvls[3]) - Float64(old_lvls[1])) * 0.5 * abs(α)
-                        c_dict["Levels"] = [round(tv - hr; digits=4), round(tv; digits=4), round(tv + hr; digits=4)]
-
-                    elseif mode == "REPLACE"
-                        nl1 = Float64(get(sl, "NewL1", 0.0))
-                        nl2 = Float64(get(sl, "NewL2", 0.0))
-                        nl3 = Float64(get(sl, "NewL3", 0.0))
-                        c_dict["Levels"] = [nl1, nl2, nl3]
-                    end
-
-                    if haskey(sl, "NewMin")
-                        c_dict["Min"] = Float64(sl["NewMin"])
-                    end
-                    if haskey(sl, "NewMax")
-                        c_dict["Max"] = Float64(sl["NewMax"])
-                    end
-                end
-
-                Sys_Fast.FAST_UpdateConfig_DDEF(path, Dict("Ingredients" => ingreds))
-                Sys_Flow.FLOW_BuildNextPhase_DDEF(path, src, sel_id, Float64(zoom), meth, Float64(shift))
-            end
 
             new_vault = Sys_Fast.FAST_ReadToStore_DDEF(path)
             _, bytes = Sys_Fast.FAST_PrepareDownload_DDEF(path)
@@ -1927,7 +2328,6 @@ function LENS_RegisterCallbacks_DDEF(app)
         State("lens-store-graphs-blob", "data"),
         prevent_initial_call=true
     ) do n, proj_v, phase_v, blob_st
-        # Architecture: Re-inflates the stateless blob on the server only during export request.
         (isnothing(n) || n == 0 || isnothing(blob_st) || isempty(blob_st)) &&
             return Dash.no_update(), Dash.no_update()
 
@@ -1950,10 +2350,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 safe_title = Sys_Fast.FAST_SanitiseFilename_DDEF(title)
                 filepath   = joinpath(export_dir, "$(safe_title).png")
 
-                # Reconstruct Plot Object from JSON-deserialized dicts.
                 fig_dict = g["figure"]
-                
-                # Apply standard academic styling for export high-fidelity.
                 layout_dict = deepcopy(fig_dict["layout"])
                 layout_dict["width"]  = 640
                 layout_dict["height"] = 800
@@ -1990,7 +2387,6 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # Scientific data export in XLSX format.
     callback!(app,
         Output("lens-download-analysis",     "data"),
         Output("lens-export-excel-status", "children"),
@@ -2008,7 +2404,6 @@ function LENS_RegisterCallbacks_DDEF(app)
         try
             path = Sys_Fast.FAST_GetTransientPath_DDEF(mv)
  
-            # Execution of the high-fidelity Excel export protocol initiated via Lib_Vise.
             success = Lib_Vise.VISE_ExportToExcel_DDEF(res, path)
 
             if success
@@ -2030,13 +2425,12 @@ function LENS_RegisterCallbacks_DDEF(app)
             Sys_Fast.FAST_Log_DDEF("LENS", "EXCEL_EXPORT_FAIL", string(e), "FAIL")
             return Dash.no_update(), html_span([html_i(className="fas fa-times-circle me-1"), "Export Error: $e"], className="small colourtx-c0hr")
         finally
-            # Execution of high-priority transient resource cleanup.
             Sys_Fast.FAST_CleanTransient_DDEF(path)
         end
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 15: RADIOACTIVITY CORRECTION ARCHITECTURE
+# SECTION 15: RADIOACTIVITY CORRECTION
 # ------------------------------------------------------------------------------
 
     # 1. Open/Close Modal
@@ -2150,7 +2544,6 @@ function LENS_RegisterCallbacks_DDEF(app)
         out_div_classes = fill("d-none", 6); out_lbls = fill("", 6)
         out_src_vals = fill("None", 6); out_names = fill("", 6); out_units = fill("", 6)
 
-        # Execution of Positive Selection Algorithmic Protocol (Whitelist)
         rad_outputs = filter(o -> get(o, "IsRadioactive", false) == true || LENS_IsRadioactiveTarget_DDEF(get(o, "Name", ""), get(o, "Unit", "")), outputs)
 
         for (idx, o) in enumerate(rad_outputs[1:min(length(rad_outputs), 6)])
@@ -2428,48 +2821,26 @@ function LENS_RegisterCallbacks_DDEF(app)
             r_l3s = [rl3a, rl3b, rl3c]
 
             if mode == "SCALE"
-                slot["NewName"]  = isnothing(snames[i]) ? "" : string(snames[i])
-                
-                has_min = has_num(smins[i])
-                has_max = has_num(smaxs[i])
-                if has_min
-                    slot["NewMin"] = Sys_Fast.FAST_SafeNum_DDEF(smins[i])
-                end
-                if has_max
-                    slot["NewMax"] = Sys_Fast.FAST_SafeNum_DDEF(smaxs[i])
+                slot["NewName"] = isnothing(snames[i]) ? "" : string(snames[i])
+                has_num(smins[i]) && (slot["NewMin"] = Sys_Fast.FAST_SafeNum_DDEF(smins[i]))
+                has_num(smaxs[i]) && (slot["NewMax"] = Sys_Fast.FAST_SafeNum_DDEF(smaxs[i]))
+                if i <= length(leader_vals)
+                    tv = Sys_Flow.FLOW_BridgeTransform_DDEF(leader_vals[i], α, β)
+                    slot["TransformedVal"] = tv
+                    transformed_displays[i] = string(round(tv; digits=3))
                 end
             elseif mode == "REPLACE"
-                slot["NewName"]  = isnothing(rnames[i]) ? "" : string(rnames[i])
-                slot["NewUnit"]  = isnothing(runits[i]) ? "" : string(runits[i])
-                
-                # Experimental Levels - use 0.0 as safe default if input is missing or invalid
+                slot["NewName"] = isnothing(rnames[i]) ? "" : string(rnames[i])
+                slot["NewUnit"] = isnothing(runits[i]) ? "" : string(runits[i])
                 v1 = Sys_Fast.FAST_SafeNum_DDEF(r_l1s[i])
                 v2 = Sys_Fast.FAST_SafeNum_DDEF(r_l2s[i])
                 v3 = Sys_Fast.FAST_SafeNum_DDEF(r_l3s[i])
-                
                 slot["NewL1"] = isnan(v1) ? 0.0 : v1
                 slot["NewL2"] = isnan(v2) ? 0.0 : v2
                 slot["NewL3"] = isnan(v3) ? 0.0 : v3
-
-                # Physical Absolute Bounds
-                has_min = has_num(rmins[i])
-                has_max = has_num(rmaxs[i])
-                if has_min
-                    slot["NewMin"] = Sys_Fast.FAST_SafeNum_DDEF(rmins[i])
-                end
-                if has_max
-                    slot["NewMax"] = Sys_Fast.FAST_SafeNum_DDEF(rmaxs[i])
-                end
-            end
-
-            if mode == "SCALE" && i <= length(leader_vals)
-                tv = Sys_Flow.FLOW_BridgeTransform_DDEF(leader_vals[i], α, β)
-                slot["TransformedVal"] = tv
-                transformed_displays[i] = string(round(tv; digits=3))
-            elseif mode == "REPLACE"
-                # Signal active replacement centre to UI
-                target_val = Float64(get(slot, "NewL2", 0.0))
-                transformed_displays[i] = string(round(target_val; digits=3))
+                has_num(rmins[i]) && (slot["NewMin"] = Sys_Fast.FAST_SafeNum_DDEF(rmins[i]))
+                has_num(rmaxs[i]) && (slot["NewMax"] = Sys_Fast.FAST_SafeNum_DDEF(rmaxs[i]))
+                transformed_displays[i] = string(round(Float64(slot["NewL2"]); digits=3))
             end
 
             push!(slots, slot)
