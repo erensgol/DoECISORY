@@ -16,20 +16,21 @@ short_description: DoE with Computational Interactive SeqOpt for Response Yield
 [![Julia Version](https://img.shields.io/badge/Julia-1.10%2B-9558B2?style=flat&logo=julia)](https://julialang.org)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Spaces-Live_Demo-yellow)](https://erensgol-doecisory.hf.space)
+[![ORCID](https://img.shields.io/badge/ORCID-0009--0000--4491--7759-A6CE39?style=flat&logo=orcid&logoColor=white)](https://orcid.org/0009-0000-4491-7759)
 [![Platform](https://img.shields.io/badge/Platform-Windows_%7C_Linux_%7C_macOS-lightgrey)]()
 
-**DoECISORY** is a Julia package and interactive web application for Design of Experiments (DoE), statistical modeling, and multi-objective optimization. Developed at **Hacettepe University, Department of Radiopharmacy**, it can be used either as a standalone Julia library (in scripts or Jupyter Notebooks) or through its browser interface.
+**DoECISORY** is a Julia package and interactive web application for Design of Experiments (DoE), statistical modeling, and multi-objective optimization. Designed for advanced formulation science and scientific research, it can be used either as a standalone Julia library (in scripts or Jupyter Notebooks) or through its browser interface.
 
 ---
 
 ## Capabilities
 
-* **Design Generation**: Box-Behnken (BB15), Central Composite (CD17), Taguchi (TL09), and Fractional D-Optimal (DF14).
-* **Optimality Metrics**: Calculation of D-, A-, G-, and I-efficiency metrics, as well as matrix condition numbers.
-* **Regression & Model Selection**: Ordinary Least Squares (OLS) regression (linear and quadratic), evaluated via AIC, adjusted $R^2$, and PRESS $Q^2$.
-* **Stoichiometry & Decay Correction**: Formulation mass balance, unit validation, and radioisotope radioactive decay adjustments (F-18, Ga-68, Lu-177, Ac-225).
-* **Optimization**: Multi-response Derringer-Suich desirability functions solved via BlackBoxOptim.
-* **Outputs**: Formatted multi-sheet Excel reports (`.xlsx`) and Plotly response surface plots.
+* **Experimental Designs**: Box-Behnken, Central Composite, Taguchi, and Fractional D-Optimal matrices.
+* **Optimality Metrics**: Evaluation of D-, A-, G-, and I-efficiencies and matrix condition numbers.
+* **Statistical Modelling**: Linear and quadratic OLS regression with AIC, adjusted $R^2$, and ANOVA diagnostics.
+* **Formulation & Decay**: Mass balance validation, physical unit checks, and radioactive decay corrections.
+* **Multi-Objective Optimisation**: Derringer-Suich desirability profiling via global metaheuristic algorithms.
+* **Scientific Reporting**: Multi-sheet Excel workbooks (`.xlsx`) and interactive Plotly response surfaces.
 
 ---
 
@@ -81,7 +82,7 @@ run_app()
 
 #### Online (Hugging Face Spaces)
 The web interface is deployed and accessible at:  
-👉 **[https://erensgol-doecisory.hf.space](https://erensgol-doecisory.hf.space)**
+**[https://erensgol-doecisory.hf.space](https://erensgol-doecisory.hf.space)**
 
 #### Running Locally
 To run the web app on your own machine:
@@ -137,10 +138,21 @@ This project is licensed under the **GNU Affero General Public License v3.0 (AGP
 
 ---
 
-## Author & Academic Affiliation
+## Citation
+
+* **Author**: Pharmacist Eren Selim GÖL
+* **ORCID**: [0009-0000-4491-7759](https://orcid.org/0009-0000-4491-7759)
+
+Please cite this work if you use **DoECISORY** in your research, thesis, academic publications, or industrial workflows.
+
+The primary peer-reviewed scientific research article describing the methodology, algorithm design, and validation is currently in preparation.
+
+> *Note: This section will be updated with the official journal publication, volume, and DOI as soon as the manuscript is published.*
+
+---
+
+## Author & Contact
 
 **Pharmacist Eren Selim GÖL**  
-*Lead Software Architect & Julia Developer*  
-Hacettepe University, Faculty of Pharmacy, Department of Radiopharmacy  
-Ankara, Türkiye  
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-blue?style=flat&logo=linkedin)](https://www.linkedin.com/in/erensgol)
+Lead Software Architect & Developer<br>
+[linkedin.com/in/erensgol](https://www.linkedin.com/in/erensgol)

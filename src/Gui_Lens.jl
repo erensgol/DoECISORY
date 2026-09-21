@@ -1079,7 +1079,6 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
 
         # Implementation of a race-condition lock to preserve system state integrity.
-        # Implementation of a race-condition lock to preserve system state integrity.
         if !Sys_Fast.FAST_AcquireLock_DDEF("VISE_ANALYSIS", "User triggered Analysis via lens-btn-run")
             Sys_Fast.FAST_Log_DDEF("LENS", "LOCK_REJECT", "Analysis Busy. Request Debounced.", "WARN")
             return nu, nu, html_span("⚠ Analysis in progress. Please wait.", className="fw-bold colourtx-c1sm"), nu, nu, nu, nu, nu, nu, true, nu
