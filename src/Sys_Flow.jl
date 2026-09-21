@@ -5,6 +5,9 @@ module Sys_Flow
 # ==============================================================================
 # Description: Experimental phase management, transition logic, and state 
 #              synchronisation bus.
+# Framework:   Inter-Phase Knowledge Transfer (IPKT = ACTA + ASTM)
+#              - ACTA: Adaptive Contraction & Translation Algorithm (intra-space)
+#              - ASTM: Affine Space Transformation Model (cross-system)
 # Module Tag:  FLOW
 # ==============================================================================
 
@@ -19,10 +22,10 @@ using ..Lib_Mole
 const Main = parentmodule(@__MODULE__)
 
 
-export FLOW_AskLeader_DDEF, FLOW_NextPhase_DDEF, FLOW_GetCandidates_DDEF,
-    FLOW_BuildNextPhase_DDEF, FLOW_CalcNextRange_DDEF, FLOW_WriteLeaders_DDEF,
-    FLOW_CalcAdaptiveRange_DDEF, FLOW_RenderPhaseTransition_DDEF,
-    FLOW_BridgeTransform_DDEF, FLOW_BridgeValidate_DDEF
+export FLOW_AskLeader_DDEF, FLOW_BuildIPKT_DDEF, FLOW_GetCandidates_DDEF,
+    FLOW_CommitIPKT_DDEF, FLOW_ApplyACTA_DDEF, FLOW_WriteLeaders_DDEF,
+    FLOW_CalcACTA_DDEF, FLOW_RenderIPKT_DDEF,
+    FLOW_ApplyASTM_DDEF, FLOW_ValidateASTM_DDEF
 
 # ==============================================================================
 # PART A: TYPE DEFINITIONS & CONSTANTS & TRANSITION
@@ -42,9 +45,9 @@ struct FLOW_BoundaryUpper_DDES <: AbstractFLOW_BoundaryStatus end
 Centralised map for translating boundary traits into user alerts and system flags.
 """
 const FLOW_BoundaryAlertMap_DDEC = Dict{DataType, Tuple{Bool, String}}(
-    FLOW_BoundarySafe_DDES  => (true,  "Optimal candidate point near centre. Suggest zooming in for finer scan."),
-    FLOW_BoundaryLower_DDES => (false, "Optimal candidate point near LOWER boundary limit. Consider shifting search range downward."),
-    FLOW_BoundaryUpper_DDES => (false, "Optimal candidate point near UPPER boundary limit. Consider shifting search range upward.")
+    FLOW_BoundarySafe_DDES  => (true,  "Optimal candidate point near centre. Suggest contracting search range for finer scan."),
+    FLOW_BoundaryLower_DDES => (false, "Optimal candidate point near LOWER boundary limit. Consider translating search range downward."),
+    FLOW_BoundaryUpper_DDES => (false, "Optimal candidate point near UPPER boundary limit. Consider translating search range upward.")
 )
 
 """
@@ -52,9 +55,9 @@ const FLOW_BoundaryAlertMap_DDEC = Dict{DataType, Tuple{Bool, String}}(
 Standardised action identifiers for search space adaptation telemetry.
 """
 const FLOW_ActionTagMap_DDEC = Dict{DataType, String}(
-    FLOW_BoundarySafe_DDES  => "ZOOM",
-    FLOW_BoundaryLower_DDES => "SHIFT (AUTO)",
-    FLOW_BoundaryUpper_DDES => "SHIFT (AUTO)"
+    FLOW_BoundarySafe_DDES  => "CONTRACTION",
+    FLOW_BoundaryLower_DDES => "TRANSLATION (AUTO)",
+    FLOW_BoundaryUpper_DDES => "TRANSLATION (AUTO)"
 )
 
 # ------------------------------------------------------------------------------
@@ -83,11 +86,11 @@ function FLOW_AskLeader_DDEF(LeaderVal::Real, CurrentRange::Vector{Float64})
 end
 
 """
-    FLOW_NextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor, ShiftFactor) -> Dict
-Orchestrates the transition to the subsequent experimental phase based on leader performance.
+    FLOW_BuildIPKT_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ContractionFactor, TranslationFactor) -> Dict
+Orchestrates the IPKT transition pipeline by generating the baseline search space via ACTA (Adaptive Contraction & Translation Algorithm).
 """
-function FLOW_NextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentPhase::Union{AbstractString,Nothing},
-    SelectedLeaderID::Union{AbstractString,Nothing}="", ZoomFactor::Real=0.5, ShiftFactor::Real=0.0)::Dict{String,Any}
+function FLOW_BuildIPKT_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentPhase::Union{AbstractString,Nothing},
+    SelectedLeaderID::Union{AbstractString,Nothing}="", ContractionFactor::Real=0.5, TranslationFactor::Real=0.0)::Dict{String,Any}
     
     (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict("Status" => "FAIL", "Message" => "Invalid master file path provided.")
     (isnothing(CurrentPhase) || isempty(CurrentPhase)) && return Dict("Status" => "FAIL", "Message" => "Current phase not specified.")
@@ -151,7 +154,7 @@ function FLOW_NextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentP
         !ok && push!(alerts, "[Var $(j)]: " * msg)
     end
 
-    NewConfig = FLOW_CalcNextRange_DDEF(Leader, ZoomFactor, ShiftFactor)
+    NewConfig = FLOW_ApplyACTA_DDEF(Leader, ContractionFactor, TranslationFactor)
 
     p_num        = tryparse(Int, replace(CurrentPhase, "Phase" => ""))
     target_phase = "Phase$(isnothing(p_num) ? 2 : p_num + 1)"
@@ -193,17 +196,17 @@ function FLOW_GetCandidates_DDEF(MasterFile::Union{AbstractString,Nothing}, Curr
 end
 
 """
-    FLOW_CalcAdaptiveRange_DDEF(Val, L_Old, Zoom, Shift, [MinLimit]) -> Vector{Float64}
-Internal helper for search space adaptation logic. Enforces MinLimit boundary clamping.
+    FLOW_CalcACTA_DDEF(Val, L_Old, Contraction, Translation, [MinLimit]) -> Vector{Float64}
+Internal helper for ACTA search space adaptation logic. Enforces MinLimit boundary clamping.
 """
-function FLOW_CalcAdaptiveRange_DDEF(Val::Real, L_Old::Vector{Float64}, Zoom::Real, Shift::Real, MinLimit::Real=0.0)::Vector{Float64}
+function FLOW_CalcACTA_DDEF(Val::Real, L_Old::Vector{Float64}, Contraction::Real, Translation::Real, MinLimit::Real=0.0)::Vector{Float64}
     rng      = L_Old[3] - L_Old[1]
     status   = FLOW_DetermineBoundaryStatus_DDEF(Val, L_Old[1], L_Old[3])
     
-    new_rng = (status isa FLOW_BoundarySafe_DDES) ? rng * Zoom : rng
+    new_rng = (status isa FLOW_BoundarySafe_DDES) ? rng * Contraction : rng
 
-    shift_val = Shift * (new_rng * 0.5)
-    new_mid   = Val + shift_val
+    trans_val = Translation * (new_rng * 0.5)
+    new_mid   = Val + trans_val
 
     new_min = max(MinLimit, new_mid - new_rng / 2.0)
     new_max = new_min + new_rng
@@ -219,11 +222,11 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    FLOW_BuildNextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor, Method, ShiftFactor; Direction, CustomConfig) -> Dict
-Generates the subsequent experimental phase by mapping adaptive ranges to a coded design matrix.
+    FLOW_CommitIPKT_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ContractionFactor, Method, TranslationFactor; Direction, CustomConfig) -> Dict
+Commits the complete IPKT synthesis (ACTA baseline adapted with any custom ASTM factor transformations) into a coded design matrix and Vault workbook.
 """
-function FLOW_BuildNextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentPhase::Union{AbstractString,Nothing},
-    SelectedLeaderID::Union{AbstractString,Nothing}="", ZoomFactor::Real=0.5, Method::AbstractString="TL09", ShiftFactor::Real=0.0;
+function FLOW_CommitIPKT_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentPhase::Union{AbstractString,Nothing},
+    SelectedLeaderID::Union{AbstractString,Nothing}="", ContractionFactor::Real=0.5, Method::AbstractString="TL09", TranslationFactor::Real=0.0;
     Direction::Union{Vector{Int}, Nothing}=[-1, -1, -1],
     CustomConfig::Union{AbstractVector, Nothing}=nothing)::Dict{String,Any}
     
@@ -231,7 +234,7 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, Cur
     C   = Main.Sys_Fast.FAST_Data_DDEC
     Log = Main.Sys_Fast.FAST_Log_DDEF
 
-    res = FLOW_NextPhase_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ZoomFactor, ShiftFactor)
+    res = FLOW_BuildIPKT_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ContractionFactor, TranslationFactor)
     res["Status"] != "OK" && return res
 
     NewConfig = if !isnothing(CustomConfig) && !isempty(CustomConfig)
@@ -333,10 +336,10 @@ function FLOW_BuildNextPhase_DDEF(MasterFile::Union{AbstractString,Nothing}, Cur
         "Method"       => Method,
         "DirectionMap" => (Method == "DF14" && length(var_names) == 3 && !isnothing(Direction) && length(Direction) >= 3 ?
                            Dict{String,Any}(var_names[i] => Int(Direction[i]) for i in 1:3) : nothing),
-        "LeaderID"     => string(SelectedLeaderID),
-        "ZoomFactor"   => Float64(ZoomFactor),
-        "ShiftFactor"  => Float64(ShiftFactor),
-        "N_Runs"       => N_Runs
+        "LeaderID"          => string(SelectedLeaderID),
+        "ContractionFactor" => Float64(ContractionFactor),
+        "TranslationFactor" => Float64(TranslationFactor),
+        "N_Runs"            => N_Runs
     )
     ph_history[TargetPhase] = ph_entry
     g_info["PhaseHistory"]  = ph_history
@@ -361,15 +364,15 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    FLOW_CalcNextRange_DDEF(LeaderInfo, ZoomFactor, ShiftFactor) -> Vector{Dict}
-Calculates the adaptive search space for the subsequent phase using Zoom (compression) or Shift (translation).
+    FLOW_ApplyACTA_DDEF(LeaderInfo, ContractionFactor, TranslationFactor) -> Vector{Dict}
+Calculates the adaptive search space for the subsequent phase using Contraction or Translation.
 """
-function FLOW_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5, ShiftFactor::Float64=0.0)
+function FLOW_ApplyACTA_DDEF(LeaderInfo::Dict, ContractionFactor::Float64=0.5, TranslationFactor::Float64=0.0)
     C       = Main.Sys_Fast.FAST_Data_DDEC
     NewConf = deepcopy(LeaderInfo["OldConfig"])
     SelVals = LeaderInfo["Vals"]
 
-    Main.Sys_Fast.FAST_Log_DDEF("FLOW", "SEARCH_SPACE", "Calculating adaptive design update (Z=$(ZoomFactor), S=$(ShiftFactor))...", "WAIT")
+    Main.Sys_Fast.FAST_Log_DDEF("FLOW", "SEARCH_SPACE", "Calculating ACTA design update (C=$(ContractionFactor), T=$(TranslationFactor))...", "WAIT")
 
     vars     = [(i, conf) for (i, conf) in enumerate(NewConf) if get(conf, "Role", "Variable") == C.ROLE_VAR]
     n_update = min(length(vars), length(SelVals))
@@ -380,10 +383,10 @@ function FLOW_CalcNextRange_DDEF(LeaderInfo::Dict, ZoomFactor::Float64=0.5, Shif
         Val     = SelVals[j]
         min_lim = Float64(get(conf, "Min", 0.0))
 
-        conf["Levels"] = FLOW_CalcAdaptiveRange_DDEF(Val, L_Old, ZoomFactor, ShiftFactor, min_lim)
+        conf["Levels"] = FLOW_CalcACTA_DDEF(Val, L_Old, ContractionFactor, TranslationFactor, min_lim)
 
         status = FLOW_DetermineBoundaryStatus_DDEF(Val, L_Old[1], L_Old[3])
-        action = (abs(ShiftFactor) > 0.05) ? "SHIFT (MANUAL)" : get(FLOW_ActionTagMap_DDEC, typeof(status), "UPDATE")
+        action = (abs(TranslationFactor) > 0.05) ? "TRANSLATION (MANUAL)" : get(FLOW_ActionTagMap_DDEC, typeof(status), "UPDATE")
         
         Main.Sys_Fast.FAST_Log_DDEF("FLOW", action, "Var $i -> $(action)", "LIST")
     end
@@ -413,22 +416,22 @@ function FLOW_WriteLeaders_DDEF(File::Union{AbstractString,Nothing}, Phase::Unio
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 4: CROSS-PROJECT BRIDGE TRANSFORMS
+# SECTION 4: CROSS-PROJECT ASTM TRANSFORMS
 # ------------------------------------------------------------------------------
 
 """
-    FLOW_BridgeTransform_DDEF(Val, Alpha, Beta) -> Float64
-Applies an affine transformation to transfer a leader value across experimental systems.
+    FLOW_ApplyASTM_DDEF(Val, Alpha, Beta) -> Float64
+Applies ASTM (Affine Space Transformation Model: y = Alpha * Val + Beta) to transfer a leader value across experimental systems.
 """
-function FLOW_BridgeTransform_DDEF(Val::Real, Alpha::Real, Beta::Real)::Float64
+function FLOW_ApplyASTM_DDEF(Val::Real, Alpha::Real, Beta::Real)::Float64
     return Float64(Alpha * Val + Beta)
 end
 
 """
-    FLOW_BridgeValidate_DDEF(Val, MinLimit, MaxLimit) -> (Valid, ClampedVal, Warning)
-Enforces physical laboratory constraints on a transformed value.
+    FLOW_ValidateASTM_DDEF(Val, MinLimit, MaxLimit) -> (Valid, ClampedVal, Warning)
+Enforces physical laboratory constraints on an ASTM-transformed value.
 """
-function FLOW_BridgeValidate_DDEF(Val::Real, MinLimit::Real, MaxLimit::Real)::Tuple{Bool,Float64,String}
+function FLOW_ValidateASTM_DDEF(Val::Real, MinLimit::Real, MaxLimit::Real)::Tuple{Bool,Float64,String}
     min_f = MinLimit
     max_f = MaxLimit
 
@@ -450,11 +453,11 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    FLOW_RenderPhaseTransition_DDEF(OldConfig, NewConfig, LeaderVals) -> Dict
-Visualises the adaptation of search space boundaries between sequential experimental phases.
+    FLOW_RenderIPKT_DDEF(OldConfig, NewConfig, LeaderVals) -> Dict
+Visualises the IPKT adaptation of search space boundaries between sequential experimental phases.
 Standardised Coded Scale: Current boundaries are mapped to [-1, 1].
 """
-function FLOW_RenderPhaseTransition_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVector, LeaderVals::AbstractVector;
+function FLOW_RenderIPKT_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVector, LeaderVals::AbstractVector;
     Method::AbstractString="TL09", Direction::Vector{Int}=[-1, -1, -1])
     FD = Main.Sys_Fast.FAST_Data_DDEC
 

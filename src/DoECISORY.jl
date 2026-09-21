@@ -74,10 +74,10 @@ export MOLE_ParseTable_DDEF, MOLE_QuickAudit_DDEF, MOLE_CalcMass_DDEF,
        MOLE_ConvertTimeToMinutes_DDEF
 
 export Sys_Flow
-export FLOW_AskLeader_DDEF, FLOW_NextPhase_DDEF, FLOW_GetCandidates_DDEF,
-       FLOW_BuildNextPhase_DDEF, FLOW_CalcNextRange_DDEF, FLOW_WriteLeaders_DDEF,
-       FLOW_CalcAdaptiveRange_DDEF, FLOW_RenderPhaseTransition_DDEF,
-       FLOW_BridgeTransform_DDEF, FLOW_BridgeValidate_DDEF
+export FLOW_AskLeader_DDEF, FLOW_BuildIPKT_DDEF, FLOW_GetCandidates_DDEF,
+       FLOW_CommitIPKT_DDEF, FLOW_ApplyACTA_DDEF, FLOW_WriteLeaders_DDEF,
+       FLOW_CalcACTA_DDEF, FLOW_RenderIPKT_DDEF,
+       FLOW_ApplyASTM_DDEF, FLOW_ValidateASTM_DDEF
 
 export Lib_Vise
 export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,

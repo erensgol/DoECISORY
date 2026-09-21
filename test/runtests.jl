@@ -41,7 +41,7 @@ const TRACKER = Dict{String, GroupTracker}(
     "G2" => GroupTracker("[G2] Lib_Core Optimal Matrices, D-A-G-I & Desirability", 0, 0, 0),
     "G3" => GroupTracker("[G3] Lib_Mole Stoichiometry, Mass Invariance & Decay", 0, 0, 0),
     "G4" => GroupTracker("[G4] Lib_Vise Statistical Modeling, OLS & Tournament", 0, 0, 0),
-    "G5" => GroupTracker("[G5] Sys_Flow ACTA Transitions & Search-Space Evolution", 0, 0, 0),
+    "G5" => GroupTracker("[G5] Sys_Flow ACTA & IPKT Framework", 0, 0, 0),
     "G6" => GroupTracker("[G6] Presentation, UI State & E2E Pipeline", 0, 0, 0)
 )
 
@@ -619,12 +619,12 @@ const SUITE_START_TIME = time()
     # GROUP 5: Sys_Flow ACTA Transitions & Search-Space Evolution (16 Tests)
     # ==========================================================================
     Sys_Fast.FAST_ActiveGroup_DDEC[] = "G5"
-    @testset "Group 5: Sys_Flow ACTA Transitions & Search-Space Evolution" begin
-        # 69: Coordinate bridge transform
-        @track G5 Sys_Flow.FLOW_BridgeTransform_DDEF(10.0, 1.5, 5.0) == 20.0 && Sys_Flow.FLOW_BridgeTransform_DDEF(0.0, 1.5, 5.0) == 5.0
+    @testset "Group 5: Sys_Flow ACTA & IPKT Framework" begin
+        # 69: Affine Space Transformation Model (ASTM) coordinate mapping
+        @track G5 Sys_Flow.FLOW_ApplyASTM_DDEF(10.0, 1.5, 5.0) == 20.0 && Sys_Flow.FLOW_ApplyASTM_DDEF(0.0, 1.5, 5.0) == 5.0
 
         # 70: Boundary constraint validation and clamping
-        let (ok_b, val_b, _) = Sys_Flow.FLOW_BridgeValidate_DDEF(95.0, 0.0, 90.0)
+        let (ok_b, val_b, _) = Sys_Flow.FLOW_ValidateASTM_DDEF(95.0, 0.0, 90.0)
             @track G5 ok_b == false && val_b == 90.0
         end
 
@@ -638,17 +638,17 @@ const SUITE_START_TIME = time()
         # 72: Leader run proximity evaluation
         @track G5 Sys_Flow.FLOW_AskLeader_DDEF(50.0, [0.0, 50.0, 100.0])[1] == true && Sys_Flow.FLOW_AskLeader_DDEF(1.0, [0.0, 50.0, 100.0])[1] == false
 
-        # 73: Adaptive range zoom, shift, and clamping
-        let z_rng = Sys_Flow.FLOW_CalcAdaptiveRange_DDEF(50.0, [0.0, 50.0, 100.0], 0.5, 0.0, 0.0),
-            s_rng = Sys_Flow.FLOW_CalcAdaptiveRange_DDEF(98.0, [0.0, 50.0, 100.0], 1.0, 0.2, 0.0),
-            c_rng = Sys_Flow.FLOW_CalcAdaptiveRange_DDEF(2.0, [0.0, 50.0, 100.0], 1.0, 0.2, 0.0)
+        # 73: Adaptive range contraction, translation, and clamping (ACTA)
+        let z_rng = Sys_Flow.FLOW_CalcACTA_DDEF(50.0, [0.0, 50.0, 100.0], 0.5, 0.0, 0.0),
+            s_rng = Sys_Flow.FLOW_CalcACTA_DDEF(98.0, [0.0, 50.0, 100.0], 1.0, 0.2, 0.0),
+            c_rng = Sys_Flow.FLOW_CalcACTA_DDEF(2.0, [0.0, 50.0, 100.0], 1.0, 0.2, 0.0)
             @track G5 (z_rng[3] - z_rng[1]) == 50.0 && s_rng[2] > 98.0 && c_rng[1] >= 0.0
         end
 
-        # 74: Multi-variable simultaneous boundary adaptation
-        let r1 = Sys_Flow.FLOW_CalcAdaptiveRange_DDEF(50.0, [0.0, 50.0, 100.0], 0.5, 0.0, 0.0),
-            r2 = Sys_Flow.FLOW_CalcAdaptiveRange_DDEF(9.5, [0.0, 5.0, 10.0], 0.8, 0.1, 0.0),
-            r3 = Sys_Flow.FLOW_CalcAdaptiveRange_DDEF(105.0, [100.0, 200.0, 300.0], 0.6, 0.1, 0.0)
+        # 74: Multi-variable simultaneous boundary adaptation (ACTA)
+        let r1 = Sys_Flow.FLOW_CalcACTA_DDEF(50.0, [0.0, 50.0, 100.0], 0.5, 0.0, 0.0),
+            r2 = Sys_Flow.FLOW_CalcACTA_DDEF(9.5, [0.0, 5.0, 10.0], 0.8, 0.1, 0.0),
+            r3 = Sys_Flow.FLOW_CalcACTA_DDEF(105.0, [100.0, 200.0, 300.0], 0.6, 0.1, 0.0)
             @track G5 (r1[3] - r1[1]) == 50.0 && r2[2] > 9.5 && r3[1] >= 0.0
         end
 
@@ -683,13 +683,13 @@ const SUITE_START_TIME = time()
                 "Global" => Dict("Volume" => 10.0, "Concentration" => 1.0)
             ))])
             Sys_Fast.FAST_SafeExcelWrite_DDEF(temp_lead_file, Dict(C_flow.SHEET_CONFIG => df_cfg_flow, C_flow.PREFIX_LEADERS * "Phase1" => df_leads))
-            next_phase_res = Sys_Flow.FLOW_NextPhase_DDEF(temp_lead_file, "Phase1", "RUN_02", 0.5, 0.0)
+            next_phase_res = Sys_Flow.FLOW_BuildIPKT_DDEF(temp_lead_file, "Phase1", "RUN_02", 0.5, 0.0)
             @track G5 next_phase_res["Status"] == "OK" && next_phase_res["TargetPhase"] == "Phase2"
         end
 
         # 77: Next phase range contraction verification
         let temp_lead_file = joinpath(Sys_Fast.FAST_TempRoot_DDEC, "DOECISORY_TEMP_LEADERS.xlsx")
-            next_phase_res = Sys_Flow.FLOW_NextPhase_DDEF(temp_lead_file, "Phase1", "RUN_02", 0.5, 0.0)
+            next_phase_res = Sys_Flow.FLOW_BuildIPKT_DDEF(temp_lead_file, "Phase1", "RUN_02", 0.5, 0.0)
             old_span1 = next_phase_res["OldConfig"][1]["Levels"][3] - next_phase_res["OldConfig"][1]["Levels"][1]
             new_span1 = next_phase_res["NewConfig"][1]["Levels"][3] - next_phase_res["NewConfig"][1]["Levels"][1]
             @track G5 isapprox(new_span1, old_span1 * 0.5; atol=1e-3) && next_phase_res["LeaderScore"] == 0.94
@@ -697,22 +697,22 @@ const SUITE_START_TIME = time()
 
         # 78: Phase transition fallback on non-existent leader or missing file
         let temp_lead_file = joinpath(Sys_Fast.FAST_TempRoot_DDEC, "DOECISORY_TEMP_LEADERS.xlsx"),
-            bad_lead_res = Sys_Flow.FLOW_NextPhase_DDEF(temp_lead_file, "Phase1", "NON_EXISTENT_LEADER", 0.5, 0.0),
-            nil_file_res = Sys_Flow.FLOW_NextPhase_DDEF(nothing, "Phase1", "RUN_01", 0.5, 0.0)
+            bad_lead_res = Sys_Flow.FLOW_BuildIPKT_DDEF(temp_lead_file, "Phase1", "NON_EXISTENT_LEADER", 0.5, 0.0),
+            nil_file_res = Sys_Flow.FLOW_BuildIPKT_DDEF(nothing, "Phase1", "RUN_01", 0.5, 0.0)
             Sys_Fast.FAST_CleanTransient_DDEF(temp_lead_file)
             @track G5 bad_lead_res["Status"] == "OK" && bad_lead_res["LeaderScore"] == 0.94 && nil_file_res["Status"] == "FAIL"
         end
 
-        # 79: Phase transition visualisation data construction
+        # 79: Phase transition visualisation data construction (IPKT)
         let old_conf_m = [Dict("Name" => "Temp", "Role" => Sys_Fast.FAST_Data_DDEC.ROLE_VAR, "Levels" => [20.0, 50.0, 80.0])],
             new_conf_m = [Dict("Name" => "Temp", "Role" => Sys_Fast.FAST_Data_DDEC.ROLE_VAR, "Levels" => [35.0, 50.0, 65.0])],
-            rend_trans = Sys_Flow.FLOW_RenderPhaseTransition_DDEF(old_conf_m, new_conf_m, [50.0])
+            rend_trans = Sys_Flow.FLOW_RenderIPKT_DDEF(old_conf_m, new_conf_m, [50.0])
             @track G5 haskey(rend_trans, "data") && haskey(rend_trans, "layout")
         end
 
-        # 80: Configuration parameter inheritance across phases
+        # 80: Configuration parameter inheritance across phases (ACTA)
         let conf_sample = [Dict("Name" => "Precursor", "Role" => Sys_Fast.FAST_Data_DDEC.ROLE_VAR, "Levels" => [10.0, 20.0, 30.0], "MW" => 1435.0, "Unit" => "mg")],
-            next_conf = Sys_Flow.FLOW_CalcNextRange_DDEF(Dict("OldConfig" => conf_sample, "Vals" => [20.0]), 0.5, 0.0)
+            next_conf = Sys_Flow.FLOW_ApplyACTA_DDEF(Dict("OldConfig" => conf_sample, "Vals" => [20.0]), 0.5, 0.0)
             @track G5 next_conf[1]["Name"] == "Precursor" && next_conf[1]["MW"] == 1435.0 && next_conf[1]["Unit"] == "mg"
         end
 
@@ -744,17 +744,17 @@ const SUITE_START_TIME = time()
                 Sys_Fast.FAST_Data_DDEC.SHEET_CONFIG => df_cfg,
                 Sys_Fast.FAST_Data_DDEC.PREFIX_LEADERS * "Phase1" => df_lead
             ))
-            res_build = Sys_Flow.FLOW_BuildNextPhase_DDEF(t_build, "Phase1", "EXP_P1_02", 0.5, "TL09", 0.0)
+            res_build = Sys_Flow.FLOW_CommitIPKT_DDEF(t_build, "Phase1", "EXP_P1_02", 0.5, "TL09", 0.0)
             Sys_Fast.FAST_CleanTransient_DDEF(t_build)
             @track G5 res_build["Status"] == "OK" && res_build["TargetPhase"] == "Phase2"
         end
 
         # 83: Boundary alert map and action telemetry tags
-        @track G5 Sys_Flow.FLOW_ActionTagMap_DDEC[Sys_Flow.FLOW_BoundarySafe_DDES] == "ZOOM" && Sys_Flow.FLOW_ActionTagMap_DDEC[Sys_Flow.FLOW_BoundaryLower_DDES] == "SHIFT (AUTO)" && occursin("LOWER", Sys_Flow.FLOW_BoundaryAlertMap_DDEC[Sys_Flow.FLOW_BoundaryLower_DDES][2])
+        @track G5 Sys_Flow.FLOW_ActionTagMap_DDEC[Sys_Flow.FLOW_BoundarySafe_DDES] == "CONTRACTION" && Sys_Flow.FLOW_ActionTagMap_DDEC[Sys_Flow.FLOW_BoundaryLower_DDES] == "TRANSLATION (AUTO)" && occursin("LOWER", Sys_Flow.FLOW_BoundaryAlertMap_DDEC[Sys_Flow.FLOW_BoundaryLower_DDES][2])
 
-        # 84: Coordinate bridge lower and upper boundary constraint enforcement
-        let (ok_lo, val_lo, _) = Sys_Flow.FLOW_BridgeValidate_DDEF(-10.0, 0.0, 100.0),
-            (ok_hi, val_hi, _) = Sys_Flow.FLOW_BridgeValidate_DDEF(150.0, 0.0, 100.0)
+        # 84: Affine Space Transformation Model (ASTM) boundary constraint enforcement
+        let (ok_lo, val_lo, _) = Sys_Flow.FLOW_ValidateASTM_DDEF(-10.0, 0.0, 100.0),
+            (ok_hi, val_hi, _) = Sys_Flow.FLOW_ValidateASTM_DDEF(150.0, 0.0, 100.0)
             @track G5 !ok_lo && val_lo == 0.0 && !ok_hi && val_hi == 100.0
         end
     end
@@ -907,7 +907,7 @@ const SUITE_START_TIME = time()
             e2e_bounds = [-1.0 1.0; -1.0 1.0; -1.0 1.0]
             
             (e2e_best_x, e2e_best_s) = Lib_Core.CORE_OptimiseDesirability_DDEF([e2e_mod], [e2e_goal], e2e_bounds; MaxTime=0.2, DecayModifiers=e2e_decay)
-            e2e_next_range = Sys_Flow.FLOW_CalcAdaptiveRange_DDEF(e2e_best_x[1], [-1.0, 0.0, 1.0], 0.5, 0.0, 0.0)
+            e2e_next_range = Sys_Flow.FLOW_CalcACTA_DDEF(e2e_best_x[1], [-1.0, 0.0, 1.0], 0.5, 0.0, 0.0)
             Sys_Fast.FAST_CleanTransient_DDEF(e2e_temp)
 
             @track G6 (e2e_mod["R2"] > 0.95 && e2e_best_s > 0.0 && length(e2e_best_x) == 3 && length(e2e_next_range) == 3 && !isfile(e2e_temp))

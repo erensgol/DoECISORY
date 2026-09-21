@@ -158,8 +158,8 @@ function LENS_BuildSlotCard_DDEF(i::Int)
         dbc_radioitems(
             id="lens-slot-mode-$i",
             options=[
-                Dict("label" => " Keep", "value" => "KEEP"),
-                Dict("label" => " Scale", "value" => "SCALE"),
+                Dict("label" => " Keep (ACTA)", "value" => "KEEP"),
+                Dict("label" => " Scale (ASTM)", "value" => "SCALE"),
                 Dict("label" => " Replace", "value" => "REPLACE"),
             ],
             value="KEEP",
@@ -181,7 +181,7 @@ function LENS_BuildSlotCard_DDEF(i::Int)
                     dbc_input(id="lens-slot-beta-$i", type="number", value=0.0, step="any", size="sm", className="form-control-sm"),
                 ], width=4),
                 dbc_col([
-                    dbc_label("Transformed", className="x-small mb-0 colourtx-v3dl"),
+                    dbc_label("ASTM Transformed", className="x-small mb-0 colourtx-v3dl"),
                     html_div("-", id="lens-slot-transformed-$i", className="small fw-bold colourtx-c1sm mt-1"),
                 ], width=4),
             ], className="g-1 mb-1"),
@@ -232,7 +232,7 @@ function LENS_ApplySlotCustomisation_DDEF!(conf::AbstractVector, slots::Abstract
         if mode == "SCALE" && vi <= length(leader_vals)
             α  = Float64(get(sl, "Alpha", 1.0))
             β  = Float64(get(sl, "Beta",  0.0))
-            tv = Main.Sys_Flow.FLOW_BridgeTransform_DDEF(Float64(leader_vals[vi]), α, β)
+            tv = Main.Sys_Flow.FLOW_ApplyASTM_DDEF(Float64(leader_vals[vi]), α, β)
             lvls = get(c, "Levels", [0.0, 0.0, 0.0])
             hr = abs(Float64(lvls[3]) - Float64(lvls[1])) * 0.5 * abs(α)
             c["Levels"] = [round(tv - hr; digits=4), round(tv; digits=4), round(tv + hr; digits=4)]
@@ -469,7 +469,7 @@ function LENS_Layout_DDEF()
         BASE_Modal_DDEF("lens-modal-report", "DoECISORY Scientific Analysis Report",
             html_div(id="lens-report-content", children="", className="p-4 rounded academic-dossier", style=Dict("maxHeight" => "650px", "overflowY" => "auto")),
             dbc_button(["Download Report (TXT)"], id="lens-btn-download-txt", className="w-100 colourgl-c4tg"); size="xl"),
-        BASE_Modal_DDEF("lens-modal-wizard", [html_i(className="fas fa-layer-group me-2 colourtx-c1sm"), "Phase Evolution - Step 1/3"],
+        BASE_Modal_DDEF("lens-modal-wizard", [html_i(className="fas fa-layer-group me-2 colourtx-c1sm"), "Inter-Phase Knowledge Transfer (IPKT) — Step 1/3: Target Phase"],
             [
                 html_div([
                     html_p("Define the experimental horizon for the next phase sequence.", className="small mb-4 colourtx-v3dl"),
@@ -490,7 +490,7 @@ function LENS_Layout_DDEF()
                 dbc_button(["Next: Select Leader ", html_i(className="fas fa-chevron-right ms-2")], id="lens-wiz-btn-next", className="colourgl-c4tg"),
             ], className="d-flex justify-content-end"); size="lg", close_button=false, backdrop="static", keyboard=false),
 
-        BASE_Modal_DDEF("lens-modal-leader", [html_i(className="fas fa-magic me-2 colourtx-c1sm"), "Phase Evolution - Step 2/3"],
+        BASE_Modal_DDEF("lens-modal-leader", [html_i(className="fas fa-magic me-2 colourtx-c1sm"), "Inter-Phase Knowledge Transfer (IPKT) — Step 2/3: Leader Selection"],
             dbc_row(dbc_col([
                 dbc_alert([
                     html_i(className="fas fa-info-circle me-2"),
@@ -507,7 +507,7 @@ function LENS_Layout_DDEF()
                 dbc_col(dbc_button(["Next: Adjust Design ", html_i(className="fas fa-chevron-right ms-2")], id="lens-lead-btn-confirm", className="w-100 colourgl-c1sm pulse-purple", disabled=true, size="sm"), xs=12, md=6),
             ], className="w-100 g-2"); size="xl", close_button=false, backdrop="static", keyboard=false),
 
-        BASE_Modal_DDEF("lens-modal-preview", [html_i(className="fas fa-microscope me-2 colourtx-c4tg"), "Phase Evolution - Step 3/3"],
+        BASE_Modal_DDEF("lens-modal-preview", [html_i(className="fas fa-microscope me-2 colourtx-c4tg"), "Inter-Phase Knowledge Transfer (IPKT) — Step 3/3: Design Space Configuration"],
             [
                 dbc_alert([
                     html_i(className="fas fa-lightbulb me-2 colourtx-c1sm"),
@@ -575,11 +575,11 @@ function LENS_Layout_DDEF()
                                 ], className="p-2 border rounded colourbg-v0pw mb-2", style=Dict("borderColor" => "var(--colour-val1-lighig)"))
                             ]),
                             html_hr(className="my-3"),
-                            dbc_label("Global Zoom", className="small mb-1 d-flex justify-content-between", children=[
+                            dbc_label("Global Contraction", className="small mb-1 d-flex justify-content-between", children=[
                                 html_span("Wide (1.0)", className="colourtx-v5pb"),
                                 html_span("Fine (0.1)", className="colourtx-v5pb")
                             ]),
-                            html_div(dcc_slider(id="lens-prev-slider-zoom",
+                            html_div(dcc_slider(id="lens-prev-slider-contraction",
                                 min=1, max=5, step=nothing, value=3,
                                 updatemode="drag",
                                 marks=Dict(
@@ -590,7 +590,7 @@ function LENS_Layout_DDEF()
                                     5 => Dict("label" => "0.1",  "style" => Dict("fontSize" => "10px"))
                                 )),
                                 className="px-2 mb-2"),
-                            html_div(id="lens-prev-slider-shift", style=Dict("display" => "none")),
+                            html_div(id="lens-prev-slider-translation", style=Dict("display" => "none")),
                         ], className="p-3 border-0 rounded shadow-sm colourbg-v0pw mb-3"),
 
                         html_div([
@@ -603,7 +603,7 @@ function LENS_Layout_DDEF()
 
                     dbc_col([
                         html_div([
-                            html_h6("Transition Visualisation", className="x-small fw-bold text-uppercase mb-2 colourtx-v3dl"),
+                            html_h6("IPKT Visualisation", className="x-small fw-bold text-uppercase mb-2 colourtx-v3dl"),
                             dcc_graph(id="lens-graph-transition", config=Dict("displayModeBar" => false), style=Dict("height" => "250px"))
                         ], className="border-0 rounded p-3 mb-3 shadow-sm colourbg-v0pw"),
                         dbc_card([
@@ -1927,8 +1927,8 @@ end
 
     callback!(app,
         Output("lens-store-next-phase-proposal", "data"),
-        Output("lens-prev-slider-zoom",  "value"),
-        Output("lens-prev-slider-shift", "value"),
+        Output("lens-prev-slider-contraction",  "value"),
+        Output("lens-prev-slider-translation", "value"),
         Output("lens-prev-dd-method",    "value"),
         [Output("lens-slot-name-$i",   "children") for i in 1:3]...,
         [Output("lens-slot-leader-$i", "children") for i in 1:3]...,
@@ -1937,8 +1937,8 @@ end
         Output("lens-prev-dir-x2",     "value"),
         Output("lens-prev-dir-x3",     "value"),
         Input("lens-lead-btn-confirm",  "n_clicks"),
-        Input("lens-prev-slider-zoom",  "value"),
-        Input("lens-prev-slider-shift", "value"),
+        Input("lens-prev-slider-contraction",  "value"),
+        Input("lens-prev-slider-translation", "value"),
         Input("lens-prev-dd-method",    "value"),
         State("lens-wiz-dd-source",     "value"),
         State("lens-table-candidates",  "selected_rows"),
@@ -1946,16 +1946,16 @@ end
         State("store-master-vault",     "data"),
         State("lens-store-results",     "data"),
         prevent_initial_call=true
-    ) do n_prev, zoom_p, shift_p, meth_p, src, sel_rows, cand_data, base64_file, results
+    ) do n_prev, contraction_p, translation_p, meth_p, src, sel_rows, cand_data, base64_file, results
         trig = BASE_GetTrigger_DDEF(callback_context())
 
-        zoom_map = Float64[1.0, 0.75, 0.5, 0.25, 0.1]
-        z_idx = isnothing(zoom_p) ? 3 : clamp(round(Int, zoom_p), 1, 5)
+        contraction_map = Float64[1.0, 0.75, 0.5, 0.25, 0.1]
+        z_idx = isnothing(contraction_p) ? 3 : clamp(round(Int, contraction_p), 1, 5)
 
         is_reset = (trig == "lens-lead-btn-confirm")
         
-        z = is_reset ? 0.5 : zoom_map[z_idx]
-        s = is_reset ? 0.0 : Float64(isnothing(shift_p) ? 0.0 : shift_p)
+        z = is_reset ? 0.5 : contraction_map[z_idx]
+        s = is_reset ? 0.0 : Float64(isnothing(translation_p) ? 0.0 : translation_p)
         m = is_reset ? "TL09" : meth_p
         
         ret_z = is_reset ? 3 : Dash.no_update()
@@ -1987,11 +1987,11 @@ end
         end
         vars_config = filter(c -> Sys_Fast.FAST_GetSafe_DDEF(c, "Role", "") == C.ROLE_VAR, ingredients)
 
-        res = Sys_Flow.FLOW_NextPhase_DDEF(path, src, sel_id, Float64(z), Float64(s))
+        res = Sys_Flow.FLOW_BuildIPKT_DDEF(path, src, sel_id, Float64(z), Float64(s))
         Sys_Fast.FAST_CleanTransient_DDEF(path)
 
-        res["SelectedZoom"]   = z
-        res["SelectedShift"]  = s
+        res["SelectedContraction"] = z
+        res["SelectedTranslation"] = s
         res["SelectedMethod"] = m
         res["IsRadioCorrected"] = !isnothing(results) && haskey(results, "RadioCorrection") && !isempty(results["RadioCorrection"])
         res["RadioOpts"]        = get(config_full, "RadioOpts", Dict{String,Any}())
@@ -2045,7 +2045,7 @@ end
         header_info = get(res, "Global", Dict())
         vol         = Float64(get(header_info, "Volume", 5.0))
         conc        = Float64(get(header_info, "Concentration", 10.0))
-        zoom_f      = get(res, "SelectedZoom", 0.5)
+        contraction_f = get(res, "SelectedContraction", 0.5)
 
         fd = Sys_Fast.FAST_Data_DDEC
 
@@ -2094,7 +2094,7 @@ end
             end
         end
 
-        fig = Sys_Flow.FLOW_RenderPhaseTransition_DDEF(old_conf, active_conf, leader_vals; Method=m_str, Direction=d_vec)
+        fig = Sys_Flow.FLOW_RenderIPKT_DDEF(old_conf, active_conf, leader_vals; Method=m_str, Direction=d_vec)
 
         var_slot_idx = 0
         fix_idx = 0
@@ -2107,7 +2107,7 @@ end
             is_excluded = is_fixed && (c_name in excluded)
 
             slot_mode = role == fd.ROLE_VAR ? (var_slot_idx += 1; var_slot_idx <= length(slots) ? get(slots[var_slot_idx], "Mode", "KEEP") : "KEEP") : ""
-            mode_badge = slot_mode in ("SCALE", "REPLACE") ? html_span(slot_mode == "SCALE" ? " S" : " R", className="badge ms-1 colourbg-c3tc colourtx-v5pb", style=Dict("fontSize" => "8px")) : ""
+            mode_badge = slot_mode in ("SCALE", "REPLACE") ? html_span(slot_mode == "SCALE" ? " ASTM" : " R", className="badge ms-1 colourbg-c3tc colourtx-v5pb", style=Dict("fontSize" => "8px")) : ""
 
             disp_name = c_name
             r_opts = get(res, "RadioOpts", Dict{String,Any}())
@@ -2260,9 +2260,9 @@ end
                  haskey(row_sel, :EXP_ID)  ? string(row_sel[:EXP_ID]) :
                  haskey(row_sel, :ID)      ? string(row_sel[:ID]) : ""
 
-        zoom  = get(proposal, "SelectedZoom", 0.5)
-        shift = get(proposal, "SelectedShift", 0.0)
-        meth  = get(proposal, "SelectedMethod", "TL09")
+        contraction = get(proposal, "SelectedContraction", 0.5)
+        translation = get(proposal, "SelectedTranslation", 0.0)
+        meth        = get(proposal, "SelectedMethod", "TL09")
 
         safe_dir(x) = x isa Number ? Int(x) : something(tryparse(Int, string(something(x, -1))), -1)
         direction_vec = [safe_dir(dir_x1), safe_dir(dir_x2), safe_dir(dir_x3)]
@@ -2289,8 +2289,8 @@ end
         end
 
         path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
-        res  = Sys_Flow.FLOW_BuildNextPhase_DDEF(
-            path, src, sel_id, Float64(zoom), meth, Float64(shift);
+        res  = Sys_Flow.FLOW_CommitIPKT_DDEF(
+            path, src, sel_id, Float64(contraction), meth, Float64(translation);
             Direction=direction_vec,
             CustomConfig=has_custom ? custom_conf : nothing
         )
@@ -2824,7 +2824,7 @@ end
                 has_num(smins[i]) && (slot["NewMin"] = Sys_Fast.FAST_SafeNum_DDEF(smins[i]))
                 has_num(smaxs[i]) && (slot["NewMax"] = Sys_Fast.FAST_SafeNum_DDEF(smaxs[i]))
                 if i <= length(leader_vals)
-                    tv = Sys_Flow.FLOW_BridgeTransform_DDEF(leader_vals[i], α, β)
+                    tv = Sys_Flow.FLOW_ApplyASTM_DDEF(leader_vals[i], α, β)
                     slot["TransformedVal"] = tv
                     transformed_displays[i] = string(round(tv; digits=3))
                 end

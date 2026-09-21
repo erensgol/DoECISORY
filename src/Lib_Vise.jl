@@ -911,13 +911,13 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         q2   = get(mod, "Q2", NaN)
         norm_p = (m_idx <= length(norms) && haskey(norms[m_idx], "p") && !isnan(norms[m_idx]["p"])) ? norms[m_idx]["p"] : NaN
         
-        sig_str = if !isnan(pval)
+        sig_str = if !ismissing(pval) && !isnan(pval)
             pval < 0.05 ? "The regression model is statistically significant (p < 0.05)." : "The regression model is not statistically significant at α = 0.05 (p ≥ 0.05)."
         else
             ""
         end
         
-        gen_str = if !isnan(r2a) && !isnan(q2)
+        gen_str = if !ismissing(r2a) && !isnan(r2a) && !ismissing(q2) && !isnan(q2)
             gap = r2a - q2
             if q2 < 0.0
                 "Negative Q² indicates that the model has poor predictive generalisation."
@@ -932,7 +932,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
             ""
         end
         
-        norm_str = if !isnan(norm_p)
+        norm_str = if !ismissing(norm_p) && !isnan(norm_p)
             norm_p >= 0.05 ? 
                 @sprintf("Residuals satisfy the normality assumption (Shapiro-Wilk p = %.4f ≥ 0.05), supporting the validity of standard parametric tests.", norm_p) :
                 @sprintf("Residuals depart from normality (Shapiro-Wilk p = %.4f < 0.05); inference should be interpreted with caution.", norm_p)
