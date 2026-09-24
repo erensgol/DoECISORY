@@ -22,8 +22,16 @@ export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF,
     CORE_OptimiseDesirability_DDEF, CORE_ValidateDesign_DDEF,
     CORE_D_Efficiency_DDEF, CORE_CalcDesignMetrics_DDEF, CORE_CodeMatrix_DDEF,
     CORE_CalcDesirability_DDEF, CORE_ExtractGoal_DDEF, CORE_GetModelType_DDEF,
-    CORE_ModifierDCYP_DDES, CORE_ApplyDCYP_DDEF,
-    CORE_MethodBB15_DDES, CORE_MethodTL09_DDES, CORE_MethodCD17_DDES, CORE_MethodDF14_DDES
+    CORE_ModifierDCYP_DDES, CORE_ApplyDCYP_DDEF, CORE_MethodBB15_DDES, 
+    CORE_MethodTL09_DDES, CORE_MethodCD17_DDES, CORE_MethodDF14_DDES
+
+# ==============================================================================
+# PART A: DESIGN MATRIX & COORDINATE GENERATION
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 1: DESIGN METHOD & MODEL DISPATCHERS
+# ------------------------------------------------------------------------------
 
 abstract type CORE_AbstractDesignMethod_DDET end
 struct CORE_MethodBB15_DDES <: CORE_AbstractDesignMethod_DDET end
@@ -50,12 +58,8 @@ const CORE_ModelMap_DDEC = Dict{String, CORE_AbstractModelType_DDET}(
 
 export CORE_AbstractModelType_DDET, CORE_ModelLinear_DDES, CORE_ModelQuadratic_DDES
 
-# ==============================================================================
-# PART A: DESIGN MATRIX & COORDINATE GENERATION
-# ==============================================================================
-
 # ------------------------------------------------------------------------------
-# SECTION 1: CONSTANTS - Pre-allocated design matrices
+# SECTION 2: CONSTANTS - PRE-ALLOCATED DESIGN MATRICES
 # ------------------------------------------------------------------------------
 
 const CORE_Tl09Design_DDEC = Int8[
@@ -167,7 +171,7 @@ CORE_GenerateMatrix_DDEF(::CORE_MethodDF14_DDES, fc::Integer, dir::AbstractVecto
 
 
 # ------------------------------------------------------------------------------
-# SECTION 2: COORDINATE MAPPING (Coded -> Physical)
+# SECTION 3: COORDINATE MAPPING (CODED -> PHYSICAL)
 # ------------------------------------------------------------------------------
 
 """
@@ -461,7 +465,7 @@ function CORE_ExtractLeader_DDEF(FilePath::AbstractString, PhaseCode::AbstractSt
 
     cols      = names(df)
     col_score = findfirst(c -> occursin("SCORE", uppercase(strip(string(c)))), cols)
-    col_id    = findfirst(c -> occursin("ID", uppercase(strip(string(c)))), cols)
+    col_id    = findfirst(c -> uppercase(strip(string(c))) in ("ID", "EXP_ID"), cols)
 
     isnothing(col_score) && return Dict{String,Any}()
 

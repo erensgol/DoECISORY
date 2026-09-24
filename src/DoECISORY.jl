@@ -7,6 +7,10 @@ module DoECISORY
 #              public APIs, and provides the application launcher.
 # ==============================================================================
 
+# ==============================================================================
+# PART A: SUBMODULE COMPONENT INTEGRATION & PUBLIC API
+# ==============================================================================
+
 # ------------------------------------------------------------------------------
 # SECTION 1: SUBMODULE COMPONENT INTEGRATION
 # ------------------------------------------------------------------------------
@@ -39,7 +43,7 @@ include("Gui_Lens.jl")
 using .Gui_Lens
 
 # ------------------------------------------------------------------------------
-# Exports
+# SECTION 2: PUBLIC INTERFACE EXPORTS
 # ------------------------------------------------------------------------------
 
 export Sys_Fast
@@ -53,7 +57,7 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF, FAST_Constants_DDES,
        FAST_CacheRead_DDEF, FAST_CacheWrite_DDEF, FAST_CacheEvict_DDEF,
        FAST_VaultWrite_DDEF, FAST_VaultRead_DDEF, FAST_GetComputeThreads_DDEF,
        FAST_SafeExcelWrite_DDEF, FAST_CleanTransient_DDEF, FAST_FormatDuration_DDEF,
-       FAST_SortColumns_DDEF
+       FAST_SortColumns_DDEF, FAST_DisplayHeader_DDEF
 
 export Lib_Core
 export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF, CORE_ExtractLeader_DDEF,
@@ -86,7 +90,7 @@ export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
        VISE_CalcMetrics_DDEF, VISE_SensitivityAnalysis_DDEF,
        VISE_GenerateScientificReport_DDEF, VISE_CalcVIF_DDEF, VISE_LackOfFit_DDEF,
        VISE_ExportToExcel_DDEF, VISE_ExtractDCYP_DDEF, VISE_ApplyForwReveDecay_DDEF,
-       VISE_WidenColumnFloat_DDEF!
+       VISE_WidenColumnFloat_DDEF!, VISE_InsertColAfter_DDEF!
 
 export Lib_Arts
 export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
@@ -117,8 +121,12 @@ export BASE_StyleCell_DDEC, BASE_StyleInput_DDEC, BASE_StyleInputCentre_DDEC,
        DECK_Layout_DDEF, DECK_RegisterCallbacks_DDEF,
        LENS_Layout_DDEF, LENS_RegisterCallbacks_DDEF
 
+# ==============================================================================
+# PART B: APPLICATION RUNTIME LAUNCHER
+# ==============================================================================
+
 # ------------------------------------------------------------------------------
-# Application Launcher
+# SECTION 3: APPLICATION RUNTIME LAUNCHER
 # ------------------------------------------------------------------------------
 
 export APP_Launch_DDEF, run_app

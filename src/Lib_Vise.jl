@@ -33,9 +33,16 @@ export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
     VISE_SensitivityAnalysis_DDEF, VISE_GenerateScientificReport_DDEF,
     VISE_FormatMarkdownTable_DDEF, VISE_CalcVIF_DDEF, VISE_LackOfFit_DDEF,
     VISE_GenerateAnovaTable_DDEF, VISE_PerformNormalityTest_DDEF,
-    VISE_ApplyForwReveDecay_DDEF,
-    VISE_ResolveName_DDEF,
-    VISE_WidenColumnFloat_DDEF!
+    VISE_ApplyForwReveDecay_DDEF, VISE_ResolveName_DDEF,
+    VISE_WidenColumnFloat_DDEF!, VISE_InsertColAfter_DDEF!
+
+# ==============================================================================
+# PART A: MODELLING & DESIGN EXPANSION
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 1: REGRESSION DATA STRUCTURES & TERM GENERATOR
+# ------------------------------------------------------------------------------
 
 struct VISE_RegressionResult_DDES
     Beta::Vector{Float64}
@@ -66,13 +73,6 @@ Base.Dict(r::VISE_RegressionResult_DDES) = Dict{String, Any}(
     "Condition" => r.Condition, "ModelType" => r.ModelType, "N_Samples" => r.N_Samples, "Status" => r.Status
 )
 
-# ==============================================================================
-# PART A: MODELLING & DESIGN EXPANSION
-# ==============================================================================
-
-# ------------------------------------------------------------------------------
-# SECTION 1: REGRESSION TERM GENERATOR
-# ------------------------------------------------------------------------------
 
 """
     VISE_GetTermNames_DDEF(InNames, ModelType) -> Vector{String}
@@ -744,9 +744,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     models = get(Res, "Models", Dict{String,Any}[])
     is_quadratic = any(m -> lowercase(string(get(m, "ModelType", get(m, :ModelType, "")))) == "quadratic", models) || (n_samples > 12 && n_factors >= 2)
 
-    # --------------------------------------------------------------------------
-    # SECTION I: EXPERIMENTAL DESIGN VITALS
-    # --------------------------------------------------------------------------
+    # --- Report Stage I: Experimental Design Vitals ---
     if haskey(Res, "Vitals") && !isnothing(Res["Vitals"])
         v = Res["Vitals"]
         write(io, "### I. Experimental Design Vitals\n")
@@ -838,9 +836,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         end
     end
 
-    # --------------------------------------------------------------------------
-    # SECTION II: MODEL SUMMARY & CROSS-VALIDATION
-    # --------------------------------------------------------------------------
+    # --- Report Stage II: Model Summary & Cross-Validation ---
     out_names = get(Res, "DisplayOutNames", Res["OutNames"])
     norms     = get(Res, "Normality", Dict[])
     sens      = get(Res, "Sensitivities", [])
@@ -933,9 +929,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         write(io, Printf.@sprintf("*%s Analysis: %s %s %s*\n\n", name, sig_str, gen_str, norm_str))
     end
 
-    # --------------------------------------------------------------------------
-    # SECTION III: ANALYSIS OF VARIANCE (ANOVA)
-    # --------------------------------------------------------------------------
+    # --- Report Stage III: Analysis of Variance (ANOVA) ---
     anova_tables = get(Res, "ANOVA", DataFrame[])
     if !isempty(anova_tables)
         write(io, "### III. Analysis of Variance (ANOVA)\n")
@@ -994,9 +988,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         end
     end
 
-    # --------------------------------------------------------------------------
-    # SECTION IV: REGRESSION MODEL COEFFICIENTS & COLLINEARITY
-    # --------------------------------------------------------------------------
+    # --- Report Stage IV: Regression Model Coefficients & Collinearity ---
     write(io, "### IV. Regression Model Coefficients & Collinearity\n")
     write(io, "Estimated regression coefficients (β), two-tailed p-values, and Variance Inflation Factors (VIF).\n\n")
 
@@ -1072,9 +1064,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     end
     write(io, "*Significance codes: *** p < 0.001, ** p < 0.01, * p < 0.05, ns: non-significant (p ≥ 0.05).*\n\n")
 
-    # --------------------------------------------------------------------------
-    # SECTION V: FACTOR SENSITIVITY & RELATIVE IMPORTANCE
-    # --------------------------------------------------------------------------
+    # --- Report Stage V: Factor Sensitivity & Relative Importance ---
     if !isempty(sens)
         write(io, "### V. Factor Sensitivity & Relative Importance\n")
         write(io, "Normalized sensitivity derivatives (|∂ŷ/∂Xᵢ|) indicating relative contribution to response variation.\n\n")
@@ -1107,9 +1097,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         end
     end
 
-    # --------------------------------------------------------------------------
-    # SECTION VI: MULTI-RESPONSE NUMERICAL OPTIMIZATION
-    # --------------------------------------------------------------------------
+    # --- Report Stage VI: Multi-Response Numerical Optimization ---
     best_pt = get(Res, "BestPoint", [])
     if !isempty(best_pt)
         bs = Float64(get(Res, "BestScore", 0.0))
@@ -1188,9 +1176,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         write(io, "*Numerical optimization not conducted or convergence incomplete.*\n\n")
     end
 
-    # --------------------------------------------------------------------------
-    # SECTION VII: RADIOCHEMICAL DECAY CORRECTIONS
-    # --------------------------------------------------------------------------
+    # --- Report Stage VII: Radiochemical Decay Corrections ---
     if haskey(Res, "RadioCorrection") && !isempty(Res["RadioCorrection"])
         write(io, "### VII. Radiochemical Decay Corrections\n")
         write(io, "Physical decay corrections and yield adjustments performed in accordance with radioactive decay laws.\n\n")
@@ -1220,6 +1206,10 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     return String(take!(io))
 end
 
+# ==============================================================================
+# PART E: SYSTEM ORCHESTRATION & EXECUTION GATEWAY
+# ==============================================================================
+
 # ------------------------------------------------------------------------------
 # SECTION 12: PHASE DATA LOADER & INGESTION
 # ------------------------------------------------------------------------------
@@ -1232,7 +1222,8 @@ function VISE_LoadPhaseData_DDEF(FilePath::String, Phase::String, C, Log)
     df = Main.Sys_Fast.FAST_ReadExcel_DDEF(FilePath, C.SHEET_DATA)
     isempty(df) && return DataFrame()
     if hasproperty(df, Symbol(C.COL_PHASE))
-        df_p = filter(r -> string(r[C.COL_PHASE]) == Phase, df)
+        clean_target = replace(strip(Phase), " " => "")
+        df_p = filter(r -> replace(strip(string(r[C.COL_PHASE])), " " => "") == clean_target, df)
         return isempty(df_p) ? df : df_p
     end
     return df
@@ -1297,7 +1288,8 @@ function VISE_Execute_DDEF(DataFile::AbstractString, Phase::AbstractString, Goal
     try
         df_full = Main.Sys_Fast.FAST_ReadExcel_DDEF(DataFile, C.SHEET_DATA)
         if !isempty(df_full) && hasproperty(df_full, Symbol(C.COL_PHASE))
-            mask_other = coalesce.(string.(df_full[!, C.COL_PHASE]) .!= Phase, false)
+            clean_target = replace(strip(Phase), " " => "")
+            mask_other = coalesce.(replace.(strip.(string.(df_full[!, C.COL_PHASE])), " " => "") .!= clean_target, false)
             if any(mask_other) && haskey(sheets_to_commit, C.SHEET_DATA)
                 df_up = sheets_to_commit[C.SHEET_DATA]
                 for col in names(df_up)
@@ -1480,9 +1472,21 @@ end
 # ------------------------------------------------------------------------------
 
 function VISE_IngestMatrices_DDEF(df::DataFrame, config::AbstractDict, C, Log)
-    # Strict lookup via System Constants (VARIA_, RESULT_)
-    in_cols = filter(n -> startswith(uppercase(strip(string(n))), C.PRE_INPUT), names(df))
-    out_cols = filter(n -> startswith(uppercase(strip(string(n))), C.PRE_RESULT), names(df))
+    # Phase-specific isolation: Ingest only columns that have active numeric data in this phase
+    in_cols = filter(names(df)) do n
+        startswith(uppercase(strip(string(n))), C.PRE_INPUT) &&
+        any(x -> !ismissing(x) && !isnan(Main.Sys_Fast.FAST_SafeNum_DDEF(x)), df[!, n])
+    end
+    out_cols = filter(names(df)) do n
+        startswith(uppercase(strip(string(n))), C.PRE_RESULT) &&
+        any(x -> !ismissing(x) && !isnan(Main.Sys_Fast.FAST_SafeNum_DDEF(x)), df[!, n])
+    end
+    
+    # Architectural Guard: DoECISORY strictly operates on 3 factor dimensions per phase
+    if length(in_cols) > 3
+        Log("VISE", "INGEST_WARN", "Expected 3 factor columns for Phase analysis, found $(length(in_cols)): $(join(in_cols, ", ")). Selecting first 3.", "WARN")
+        in_cols = in_cols[1:3]
+    end
     
     nr = nrow(df)
     in_len, out_len = length(in_cols), length(out_cols)
@@ -1494,17 +1498,25 @@ function VISE_IngestMatrices_DDEF(df::DataFrame, config::AbstractDict, C, Log)
     for (ci, c) in enumerate(in_cols) X[:, ci] .= Main.Sys_Fast.FAST_SafeNum_DDEF.(df[!, c]) end
     for (ci, c) in enumerate(out_cols) Y[:, ci] .= Main.Sys_Fast.FAST_SafeNum_DDEF.(df[!, c]) end
     
-    mask = vec(all(!isnan, Y[:, 1:max(1, out_len)]; dims=2))
+    mask = out_len > 0 ? vec(all(!isnan, Y[:, 1:out_len]; dims=2)) : fill(false, nr)
     xc, yc = X[mask, 1:in_len], Y[mask, 1:out_len]   
     
     # Strict Type Enforcement: Ensure names are Vector{String} to avoid MethodError in TrainEnsemble
     in_names = String[VISE_ResolveName_DDEF(string(n), C.PRE_INPUT, get(config, "Ingredients", []), C) for n in in_cols]
     out_names = String[VISE_ResolveName_DDEF(string(n), C.PRE_RESULT, get(config, "Outputs", []), C) for n in out_cols]
     
-    # Final Matrix Emergency Fallback: If no columns were found (Warmup/Migration Safety)
+    # Final Matrix Emergency Fallback: If no valid rows or columns were found
     if isempty(xc) || size(xc, 2) == 0
-        Log("VISE", "INGEST_FAIL", "Matrix Extraction Failure: No valid columns matched prefix $(C.PRE_INPUT).", "FAIL")
-        return zeros(min(1, nr), 3), zeros(min(1, nr), 1), ["X1", "X2", "X3"], ["Y1"], [false]
+        if isempty(in_cols)
+            Log("VISE", "INGEST_FAIL", "Matrix Extraction Failure: No valid columns matched prefix $(C.PRE_INPUT) with numeric data.", "FAIL")
+            return zeros(0, 3), zeros(0, 1), ["X1", "X2", "X3"], ["Y1"], fill(false, nr)
+        elseif isempty(out_cols)
+            Log("VISE", "INGEST_INFO", "No experimental response data found in $(C.PRE_RESULT) columns for this phase.", "INFO")
+            return zeros(0, in_len), zeros(0, 1), in_names, ["Y1"], fill(false, nr)
+        else
+            Log("VISE", "INGEST_WARN", "No rows with complete response data found (mask empty).", "WARN")
+            return zeros(0, in_len), zeros(0, out_len), in_names, out_names, fill(false, nr)
+        end
     end
     
     return xc, yc, in_names, out_names, mask
@@ -1512,13 +1524,18 @@ end
 
 """
     VISE_ResolveName_DDEF(ColumnName, Prefix, ConfigList, C) -> String
-Resolves the canonical variable name from column headers using configuration metadata with safe fallback.
+Resolves the canonical variable or response name from column headers using configuration metadata with safe fallback.
+Handles underscore vs space differences, casing, and attached unit suffixes (e.g. `_` or `_%`).
 """
 function VISE_ResolveName_DDEF(ColumnName::AbstractString, Prefix::AbstractString, ConfigList, C)::String
     raw_col = strip(string(ColumnName))
+    isempty(raw_col) && return ""
     raw_up  = uppercase(raw_col)
 
+    norm_tok(s) = uppercase(replace(replace(strip(string(s)), "_" => " "), r"\s+" => " "))
+
     if !isempty(ConfigList)
+        # 1. Exact match against expected headers from configuration
         for item in ConfigList
             nm = strip(string(Main.Sys_Fast.FAST_GetSafe_DDEF(item, "Name", "")))
             isempty(nm) && continue
@@ -1537,6 +1554,35 @@ function VISE_ResolveName_DDEF(ColumnName::AbstractString, Prefix::AbstractStrin
             end
         end
 
+        # 2. Normalized comparison (handling space vs underscore and units)
+        col_clean = replace(raw_col, Regex("(?i)^" * Prefix) => "")
+        col_norm  = norm_tok(col_clean)
+
+        for item in ConfigList
+            nm = strip(string(Main.Sys_Fast.FAST_GetSafe_DDEF(item, "Name", "")))
+            isempty(nm) && continue
+            nm_norm = norm_tok(nm)
+
+            # Direct normalized match
+            if col_norm == nm_norm
+                return nm
+            end
+
+            # Match with unit suffix stripped (e.g. "KOLLOIDAL ORAN %" vs "KOLLOIDAL ORAN")
+            u = strip(string(Main.Sys_Fast.FAST_GetSafe_DDEF(item, "Unit", "")))
+            if !isempty(u) && u != "-"
+                if col_norm == norm_tok(nm * " " * u) || col_norm == norm_tok(nm * "_" * u)
+                    return nm
+                end
+            end
+
+            # Prefix-based match if unit or trailing token is appended
+            if startswith(col_norm, nm_norm) && (length(col_norm) == length(nm_norm) || col_norm[length(nm_norm)+1] in (' ', '_', '%'))
+                return nm
+            end
+        end
+
+        # 3. Direct name check
         for item in ConfigList
             nm = strip(string(Main.Sys_Fast.FAST_GetSafe_DDEF(item, "Name", "")))
             isempty(nm) && continue
@@ -1549,7 +1595,8 @@ function VISE_ResolveName_DDEF(ColumnName::AbstractString, Prefix::AbstractStrin
     end
 
     clean = Main.Sys_Fast.FAST_CleanHeader_DDEF(raw_col)
-    return replace(clean, Regex("(?i)^" * Prefix) => "")
+    clean_no_pfx = replace(clean, Regex("(?i)^" * Prefix) => "")
+    return clean_no_pfx
 end
 
 """
@@ -1569,12 +1616,32 @@ function VISE_WidenColumnFloat_DDEF!(df::DataFrame, col_sym::Symbol)::Symbol
 end
 
 """
+    VISE_InsertColAfter_DDEF!(df::DataFrame, new_col::String, ref_col::String) -> DataFrame
+Safely positions `new_col` immediately to the right of `ref_col` in `df` without altering other columns.
+"""
+function VISE_InsertColAfter_DDEF!(df::DataFrame, new_col::String, ref_col::String)::DataFrame
+    col_names = string.(names(df))
+    new_col == ref_col && return df
+    ref_idx = findlast(==(ref_col), col_names)
+    isnothing(ref_idx) && return df
+
+    filter!(c -> c != new_col, col_names)
+    ref_idx = findlast(==(ref_col), col_names)
+    isnothing(ref_idx) && return df
+
+    insert!(col_names, ref_idx + 1, new_col)
+    select!(df, Symbol.(col_names))
+    return df
+end
+
+"""
     VISE_ApplyForwReveDecay_DDEF(X, Y, InNames, OutNames, DataFrame, Config, Opts, Constants, Log; mask) -> Vector{Dict}
 Executes forward and reverse radioactive decay corrections across experimental data matrices:
 1. Forward Phase (Precursor Inputs): Decays precursor amounts from preparation to synthesis time (Reverse=false).
    Always populates `ACTUAL_<Isotope>` columns in `DataFrame` based on physical decay laws regardless of UI toggles.
-2. Reverse Phase (Product Outputs): Decay-corrects measured product activity back to formulation time (Reverse=true)
-   and computes percentage radiochemical yield against precursor or clamps ratiometric percentage assays when enabled.
+2. Reverse Phase (Product Outputs): Pure reverse radioactive decay correction restoring delayed measured product activity
+   back to End of Synthesis (EOS, Reverse=true). Populates `ACTUAL_<OutputName>` immediately to the right of the precursor
+   `ACTUAL_` column without altering raw experimental records (`RESULT_`).
 All physical radioactive decay factors are calculated via `Lib_Mole.MOLE_CalcRadioDecay_DDEF`.
 """
 function VISE_ApplyForwReveDecay_DDEF(X, Y, in_n, out_n, df, config, opts, C, Log; mask=trues(nrow(df)))
@@ -1614,6 +1681,10 @@ function VISE_ApplyForwReveDecay_DDEF(X, Y, in_n, out_n, df, config, opts, C, Lo
             p_names = string.(names(df))
             act_match = findfirst(c -> startswith(c, "ACTUAL_") && occursin(v_name, c), p_names)
             !isnothing(act_match) && (col_actual = p_names[act_match])
+        end
+        if isempty(col_actual)
+            v_u = string(get(ing, "Unit", ""))
+            col_actual = (isempty(v_u) || v_u == "-") ? ("ACTUAL_" * v_name) : ("ACTUAL_" * v_name * "_" * v_u)
         end
 
         # Locate nominal precursor column
@@ -1668,7 +1739,7 @@ function VISE_ApplyForwReveDecay_DDEF(X, Y, in_n, out_n, df, config, opts, C, Lo
         end
     end
 
-    # Fallback header scan: Populate any remaining empty ACTUAL_ columns
+    # Fallback header scan: Populate any remaining empty input ACTUAL_ columns
     for col in names(df)
         col_str = string(col)
         !startswith(col_str, "ACTUAL_") && continue
@@ -1705,79 +1776,113 @@ function VISE_ApplyForwReveDecay_DDEF(X, Y, in_n, out_n, df, config, opts, C, Lo
     end
 
     # --------------------------------------------------------------------------
-    # Phase 2: Reverse Decay & Yield Transformation (Outputs)
+    # Phase 2: Pure Reverse Decay & Activity EOS Restoration (Outputs)
+    # Always populates ACTUAL_<OutputName> immediately right of input ACTUAL_
     # --------------------------------------------------------------------------
-    if apply_radio
-        for (out_name, out_data) in rev_dict
-            mapped_in_name = get(out_data, "Source", "None")
-            (mapped_in_name == "None" || isempty(mapped_in_name)) && continue
-            o_idx = findfirst(==(out_name), out_n)
-            isnothing(o_idx) && continue
-
-            idx = findfirst(i -> get(i, "Name", "") == mapped_in_name, ingreds)
-            isnothing(idx) && continue
-            ing = ingreds[idx]
-
-            hl_raw  = Float64(Main.Sys_Fast.FAST_SafeNum_DDEF(get(ing, "HalfLife", 0.0)))
-            hl_unit = string(get(ing, "HalfLifeUnit", "Hours"))
-            hl_min  = Main.Lib_Mole.MOLE_ConvertTimeToMinutes_DDEF(hl_raw, hl_unit)
-            hl_min <= 0.0 && continue
-
-            col_meas = Main.Sys_Fast.FAST_GetCol_DDEF(df, "TIME_REVE_MINS_" * mapped_in_name)
-            isempty(col_meas) && (col_meas = Main.Sys_Fast.FAST_GetCol_DDEF(df, "TIME_REVE_MINS_" * out_name))
-
-            col_exp  = Main.Sys_Fast.FAST_GetCol_DDEF(df, "TIME_FORW_MINS_" * mapped_in_name)
-
-            outputs_cfg = get(config, "Outputs", [])
-            o_cfg_idx = findfirst(o -> get(o, "Name", "") == out_name, outputs_cfg)
-            out_unit = !isnothing(o_cfg_idx) ? string(get(outputs_cfg[o_cfg_idx], "Unit", "")) : ""
-            is_percent = occursin("%", out_unit) || occursin("%", out_name) ||
-                         occursin(Regex("(?i)(yield|rcy|purity|ratio|oran|kararlılık|verim)"), out_name)
-
-            dfs = Float64[]
-            for (i, r_idx) in enumerate(idx_m)
-                t_meas = isempty(col_meas) ? 0.0 : Main.Sys_Fast.FAST_SafeNum_DDEF(df[r_idx, col_meas])
-                t_exp  = isempty(col_exp)  ? 0.0 : Main.Sys_Fast.FAST_SafeNum_DDEF(df[r_idx, col_exp])
-
-                df_row = Main.Lib_Mole.MOLE_CalcRadioDecay_DDEF(1.0, hl_raw, hl_unit, t_meas; Reverse=true)
-                A_out_corr = Main.Lib_Mole.MOLE_CalcRadioDecay_DDEF(Y[i, o_idx], hl_raw, hl_unit, t_meas; Reverse=true)
-
-                if is_percent
-                    # Ratiometric assay: isotope physical decay cancels out between species
-                    Y[i, o_idx] = clamp(Y[i, o_idx], 0.0, 100.0)
-                else
-                    # Absolute radioactivity count/activity: convert to yield against precursor
-                    v_idx = findfirst(==(mapped_in_name), in_n)
-                    if !isnothing(v_idx)
-                        A_in_corr = X[i, v_idx]
-                        yield_val = (A_in_corr > 0.0) ? (A_out_corr / A_in_corr) * 100.0 : 0.0
-                        Y[i, o_idx] = clamp(yield_val, 0.0, 100.0)
-                    else
-                        c_fixed = Main.Sys_Fast.FAST_GetCol_DDEF(df, C.PRE_FIXED * mapped_in_name)
-                        c_fixed = isempty(c_fixed) ? Main.Sys_Fast.FAST_GetCol_DDEF(df, C.PRE_FILL * mapped_in_name) : c_fixed
-
-                        if !isempty(c_fixed)
-                            val_raw = Main.Sys_Fast.FAST_SafeNum_DDEF(df[r_idx, c_fixed])
-                            A_in_corr = Main.Lib_Mole.MOLE_CalcRadioDecay_DDEF(val_raw, hl_raw, hl_unit, t_exp; Reverse=false)
-                            yield_val = (A_in_corr > 0.0) ? (A_out_corr / A_in_corr) * 100.0 : 0.0
-                            Y[i, o_idx] = clamp(yield_val, 0.0, 100.0)
-                        else
-                            Y[i, o_idx] = A_out_corr
-                        end
-                    end
+    effective_rev = copy(rev_dict)
+    if isempty(effective_rev)
+        outputs_cfg = get(config, "Outputs", [])
+        rad_inputs = filter(i -> (get(i, "IsRadioactive", false) in (true, 1, "true", "TRUE")) ||
+                                 Sys_Fast.FAST_SafeNum_DDEF(get(i, "HalfLife", 0.0)) > 0, ingreds)
+        default_iso_name = !isempty(rad_inputs) ? string(get(first(rad_inputs), "Name", "")) : ""
+        if !isempty(default_iso_name)
+            for o in outputs_cfg
+                o_name = string(get(o, "Name", ""))
+                o_unit = string(get(o, "Unit", ""))
+                if (get(o, "IsRadioactive", false) in (true, 1, "true", "TRUE")) ||
+                   occursin(r"\b(mbq|mci|ci|gbq|kbq|bq|cpm|cps|dpm|dps)\b", lowercase(o_unit))
+                    effective_rev[o_name] = Dict(
+                        "Source" => default_iso_name,
+                        "Name"   => "$o_name (EOS)",
+                        "Unit"   => o_unit
+                    )
                 end
-                push!(dfs, df_row)
+            end
+        end
+    end
+
+    for (out_name, out_data) in effective_rev
+        out_data isa AbstractDict || continue
+        mapped_in_name = get(out_data, "Source", "None")
+        (mapped_in_name == "None" || isempty(mapped_in_name)) && continue
+        o_idx = findfirst(==(out_name), out_n)
+        isnothing(o_idx) && continue
+
+        idx = findfirst(i -> get(i, "Name", "") == mapped_in_name, ingreds)
+        isnothing(idx) && continue
+        ing = ingreds[idx]
+
+        hl_raw  = Float64(Main.Sys_Fast.FAST_SafeNum_DDEF(get(ing, "HalfLife", 0.0)))
+        hl_unit = string(get(ing, "HalfLifeUnit", "Hours"))
+        hl_min  = Main.Lib_Mole.MOLE_ConvertTimeToMinutes_DDEF(hl_raw, hl_unit)
+        hl_min <= 0.0 && continue
+
+        # Measurement latency column: TIME_REVE_MINS_<Source> or TIME_REVE_MINS_<Output>
+        col_meas = Main.Sys_Fast.FAST_GetCol_DDEF(df, "TIME_REVE_MINS_" * mapped_in_name)
+        isempty(col_meas) && (col_meas = Main.Sys_Fast.FAST_GetCol_DDEF(df, "TIME_REVE_MINS_" * out_name))
+
+        # Raw experimental result column: RESULT_<Output> (strictly preserved)
+        col_res = Main.Sys_Fast.FAST_GetCol_DDEF(df, C.PRE_RESULT * out_name)
+        if isempty(col_res)
+            p_names = string.(names(df))
+            m_res = findfirst(c -> startswith(c, C.PRE_RESULT) && occursin(out_name, c), p_names)
+            !isnothing(m_res) && (col_res = p_names[m_res])
+        end
+
+        # Resolve output ACTUAL column header: ACTUAL_<OutputName>
+        outputs_cfg = get(config, "Outputs", [])
+        o_cfg_idx = findfirst(o -> get(o, "Name", "") == out_name, outputs_cfg)
+        out_unit = !isnothing(o_cfg_idx) ? string(get(outputs_cfg[o_cfg_idx], "Unit", "")) : ""
+        disp_unit = get(out_data, "Unit", out_unit)
+
+        col_act_out = Main.Sys_Fast.FAST_GetCol_DDEF(df, "ACTUAL_" * out_name)
+        if isempty(col_act_out)
+            col_act_out = (isempty(disp_unit) || disp_unit == "-") ? ("ACTUAL_" * out_name) : ("ACTUAL_" * out_name * "_" * disp_unit)
+        end
+
+        VISE_WidenColumnFloat_DDEF!(df, Symbol(col_act_out))
+
+        # Reorder df columns: Place ACTUAL_<OutputName> immediately to the right of input ACTUAL_ column
+        in_act_cols = filter(c -> startswith(string(c), "ACTUAL_") && string(c) != col_act_out, names(df))
+        if !isempty(in_act_cols)
+            ref_col = string(last(in_act_cols))
+            VISE_InsertColAfter_DDEF!(df, col_act_out, ref_col)
+        end
+
+        dfs = Float64[]
+        for (i, r_idx) in enumerate(idx_m)
+            t_meas = isempty(col_meas) ? 0.0 : Main.Sys_Fast.FAST_SafeNum_DDEF(df[r_idx, col_meas])
+            val_raw = !isempty(col_res) ? Main.Sys_Fast.FAST_SafeNum_DDEF(df[r_idx, col_res]) :
+                      (i <= size(Y, 1) && o_idx <= size(Y, 2) ? Float64(Y[i, o_idx]) : 0.0)
+
+            df_row = (hl_min > 0.0 && t_meas > 0.0) ?
+                     Main.Lib_Mole.MOLE_CalcRadioDecay_DDEF(1.0, hl_raw, hl_unit, t_meas; Reverse=true) : 1.0
+
+            # Pure Reverse Decay: Restore delayed measurement to End of Synthesis (EOS)
+            A_out_corr = (hl_min > 0.0 && t_meas > 0.0 && val_raw > 0.0) ?
+                         Main.Lib_Mole.MOLE_CalcRadioDecay_DDEF(val_raw, hl_raw, hl_unit, t_meas; Reverse=true) :
+                         val_raw
+
+            if A_out_corr > 0.0
+                df[r_idx, Symbol(col_act_out)] = round(A_out_corr; digits=4)
             end
 
-            r_opts_out = get(rev_dict, out_name, Dict())
-            disp_name = get(r_opts_out, "Name", "")
+            # When radio correction is applied, update Y directly with EOS activity
+            if apply_radio && A_out_corr > 0.0
+                Y[i, o_idx] = A_out_corr
+            end
+            push!(dfs, df_row)
+        end
+
+        if apply_radio
+            disp_name = get(out_data, "Name", "")
             disp_name = isempty(disp_name) ? out_name : disp_name
 
             push!(audit, Dict(
                 "Name"        => disp_name,
                 "HalfLife"    => hl_raw,
                 "Unit"        => hl_unit,
-                "Type"        => is_percent ? "REVE (Ratiometric %)" : "REVE & Yield ($mapped_in_name)",
+                "Type"        => "REVE (EOS Activity)",
                 "AvgDeltaT"   => isempty(col_meas) ? 0.0 : mean(Main.Sys_Fast.FAST_SafeNum_DDEF.(df[idx_m, col_meas])),
                 "AvgDF"       => isempty(dfs) ? 1.0 : mean(dfs),
                 "IsCorrected" => true
@@ -1929,7 +2034,7 @@ function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n,
     cand_x_list = [c[1] for c in selected_top]
     cand_y_list = [c[2] for c in selected_top]
     cand_sc_list = [c[3] for c in selected_top]
-    cand_tags = String[@sprintf("TOP-%02d", k) for k in 1:length(selected_top)]
+    cand_tags = String[c[4] ? @sprintf("TOP-%02d*", k) : @sprintf("TOP-%02d", k) for (k, c) in enumerate(selected_top)]
     
     bench_score = cand_sc_list[1]
     score_limit = bench_score * 0.90
@@ -1975,13 +2080,44 @@ function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n,
         end
     end
 
+    # 6. Global Score Ranking & Duplicate Point Clustering
+    if !isempty(cand_sc_list)
+        sort_perm    = sortperm(cand_sc_list; rev=true, alg=Base.Sort.MergeSort)
+        cand_x_list  = cand_x_list[sort_perm]
+        cand_y_list  = cand_y_list[sort_perm]
+        cand_sc_list = cand_sc_list[sort_perm]
+        cand_tags    = cand_tags[sort_perm]
+
+        n_cands = length(cand_x_list)
+        cluster_ids = zeros(Int, n_cands)
+        next_cid = 1
+        for i in 1:n_cands
+            cluster_ids[i] != 0 && continue
+            matches = [j for j in 1:n_cands if all(abs.(cand_x_list[i] .- cand_x_list[j]) .< 1e-4)]
+            if length(matches) > 1
+                for m_idx in matches
+                    cluster_ids[m_idx] = next_cid
+                end
+                next_cid += 1
+            end
+        end
+
+        digits_sup = Dict('0'=>'⁰', '1'=>'¹', '2'=>'²', '3'=>'³', '4'=>'⁴', '5'=>'⁵', '6'=>'⁶', '7'=>'⁷', '8'=>'⁸', '9'=>'⁹')
+        for i in 1:n_cands
+            if cluster_ids[i] > 0
+                sup_str = join([get(digits_sup, d, d) for d in string(cluster_ids[i])])
+                cand_tags[i] = cand_tags[i] * sup_str
+            end
+        end
+    end
+
     final_XT = reduce(vcat, [reshape(v, 1, :) for v in cand_x_list])
     final_YP = reduce(vcat, [reshape(v, 1, :) for v in cand_y_list])
     final_SC = cand_sc_list
 
     ldf = VISE_PrepareLeadersDF_DDEF(final_XT, final_YP, final_SC, cand_tags, in_n, out_n, phase, C)
 
-    # 6. Stoichiometric Safety Audit
+    # 7. Stoichiometric Safety Audit
     ingreds = get(config, "Ingredients", [])
     if !isempty(ingreds)
         g_cfg = get(config, "Global", Dict())
@@ -1996,7 +2132,7 @@ function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n,
         end
     end
 
-    # 7. Boundary Warnings
+    # 8. Boundary Warnings
     warns = String[]
     if !isempty(bp)
         for i in 1:min(3, length(bp))

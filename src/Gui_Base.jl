@@ -241,6 +241,10 @@ function BASE_ConvertThemePlotlyWhite!_DDEF(fig_dict)
     return fig_dict
 end
 
+# ------------------------------------------------------------------------------
+# SECTION 4: ATOMIC WIDGETS & INPUT CONTROLS
+# ------------------------------------------------------------------------------
+
 """
     BASE_MiniVitals_DDEF(label, value, color) -> Card
 Displays a compact quantitative metric for real-time system monitoring.
@@ -376,7 +380,7 @@ function BASE_Upload_DDEF(id::String, label::String, icon::String; multiple=fals
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 4: UI BUILDERS (DECK & LENS)
+# SECTION 5: UI BUILDERS (DECK & LENS)
 # ------------------------------------------------------------------------------
 
 """
@@ -511,7 +515,7 @@ end
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 5: SYSTEM AUDIT UI (HARDWARE MONITOR)
+# SECTION 6: SYSTEM AUDIT UI (HARDWARE MONITOR)
 # ------------------------------------------------------------------------------
 
 """
@@ -570,7 +574,7 @@ function BASE_SystemAuditUI_DDEF()
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 6: SCIENTIFIC INTEGRITY CERTIFICATE
+# SECTION 7: SCIENTIFIC INTEGRITY CERTIFICATE
 # ------------------------------------------------------------------------------
 
 """
@@ -621,7 +625,7 @@ function BASE_ScientificAuditUI_DDEF()
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 7: NOMENCLATURE VALIDATION BUS
+# SECTION 8: NOMENCLATURE VALIDATION BUS
 # ------------------------------------------------------------------------------
 
 """

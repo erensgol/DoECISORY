@@ -29,11 +29,11 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
        FAST_GetComputeThreads_DDEF, FAST_SafeExcelWrite_DDEF, FAST_CleanTransient_DDEF,
        FAST_FormatDuration_DDEF, FAST_ValidateDataFrame_DDEF, FAST_GetSystemQuote_DDEF,
        FAST_RoundCols_DDEF!, FAST_GetCol_DDEF, FAST_CleanHeader_DDEF,
-       FAST_InitialiseWorkforce_DDEF, FAST_CleanWorkforce_DDEF, FAST_Data_DDEC,
-       FAST_SanitiseFilename_DDEF, FAST_LoadMemoFile_DDEF, FAST_ExtractDataID_DDEF,
-       FAST_ValidateSheetStructure_DDEF, FAST_FinaliseMasterWrite_DDEF, FAST_ActiveGroup_DDEC,
-       FAST_ApplyExcelStyle_DDEF, FAST_FormatConditionNumber_DDEF,
-       FAST_SortColumns_DDEF
+       FAST_DisplayHeader_DDEF, FAST_InitialiseWorkforce_DDEF,
+       FAST_CleanWorkforce_DDEF, FAST_Data_DDEC, FAST_SanitiseFilename_DDEF,
+       FAST_LoadMemoFile_DDEF, FAST_ExtractDataID_DDEF, FAST_ValidateSheetStructure_DDEF, 
+       FAST_FinaliseMasterWrite_DDEF, FAST_ActiveGroup_DDEC, FAST_ApplyExcelStyle_DDEF, 
+       FAST_FormatConditionNumber_DDEF, FAST_SortColumns_DDEF
 
 # ==============================================================================
 # PART A: TRANSIENT WORKFORCE
@@ -377,7 +377,7 @@ function FAST_ApplyExcelStyle_DDEF(File::AbstractString, ValidPairs::Vector{Pair
     
     temp_file = File * ".tmp_fit.xlsx"
     try
-        # 1. Compute exact-fit column dimensions per sheet
+        # Compute exact-fit column dimensions per sheet
         col_widths  = Dict{String, Vector{Float64}}()
         sheet_order = String[]
         calc_w      = s -> begin
@@ -1241,7 +1241,7 @@ function FAST_UpdateConfig_DDEF(File::AbstractString, Updates::Dict)::Bool
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 14B: INFORMATICS SYNCHRONISATION & DIRECTION DISPATCH
+# SECTION 15: INFORMATICS SYNCHRONISATION & DIRECTION DISPATCH
 # ------------------------------------------------------------------------------
 
 """
@@ -1319,7 +1319,7 @@ end
 FAST_ExtractDirections_DDEF(::Any, ::Any) = (-1, -1, -1)
 
 # ------------------------------------------------------------------------------
-# SECTION 15: HARDWARE AUDIT & THREADING
+# SECTION 16: HARDWARE AUDIT & THREADING
 # ------------------------------------------------------------------------------
 
 """
@@ -1352,7 +1352,7 @@ function FAST_LoadMemoFile_DDEF(FilePath::AbstractString)::Dict{String,Any}
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 16: RACE CONDITION LOCK
+# SECTION 17: RACE CONDITION LOCK
 # ------------------------------------------------------------------------------
 
 # Global atomic lock pool — keyed by operation name
@@ -1449,7 +1449,7 @@ function FAST_ForceReleaseAll_DDEF()
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 17: IN-MEMORY TRANSIENT CACHE
+# SECTION 18: IN-MEMORY TRANSIENT CACHE
 # ------------------------------------------------------------------------------
 
 const FAST_CacheStore_DDEC = Dict{String,DataFrame}()
@@ -1492,7 +1492,7 @@ function FAST_CacheEvict_DDEF()
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 18: BINARY VAULT (SERVER-SIDE BLOB STORAGE)
+# SECTION 19: BINARY VAULT (SERVER-SIDE BLOB STORAGE)
 # ------------------------------------------------------------------------------
 
 # Repository for large-scale binary objects (Excel archives) designed to preserve application performance.
@@ -1522,7 +1522,7 @@ function FAST_VaultRead_DDEF(key::String)::Union{Vector{UInt8}, Nothing}
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 19: COMPUTE RESOURCES & SYSTEM DIAGNOSTICS
+# SECTION 20: COMPUTE RESOURCES & SYSTEM DIAGNOSTICS
 # ------------------------------------------------------------------------------
 
 """
@@ -1595,27 +1595,37 @@ Identifies the formalised column name in a DataFrame matching the target criteri
 """
 function FAST_GetCol_DDEF(df::DataFrame, Target::String)::String
     isempty(df) && return ""
-    
-    # Interservice Normalisation: Ensure Target is compared with underscored variants
-    # matching the internal standard set by FAST_NormaliseCols_DDEF!.
-    t_norm = replace(uppercase(strip(Target)), " " => "_")
-    
+    isempty(strip(Target)) && return ""
+
+    norm_col(s) = uppercase(replace(replace(strip(string(s)), " " => "_"), r"_+" => "_"))
+    t_norm = norm_col(Target)
+
+    # 1. Exact normalized match (spaces vs underscores, case-insensitive)
     for n in names(df)
         n_str = string(n)
-        n_up = uppercase(strip(n_str))
-        if n_up == t_norm
+        if norm_col(n_str) == t_norm
             return n_str
         end
     end
-    
+
+    # 2. Match with unit or suffix attached (e.g. TARGET_unit or TARGET_%)
     for n in names(df)
         n_str = string(n)
-        n_up = uppercase(strip(n_str))
-        if startswith(n_up, t_norm * "_")
+        n_norm = norm_col(n_str)
+        if startswith(n_norm, t_norm * "_")
             return n_str
         end
     end
-    
+
+    # 3. Flexible prefix match (e.g. TARGET (%))
+    for n in names(df)
+        n_str = string(n)
+        n_norm = norm_col(n_str)
+        if startswith(n_norm, t_norm) && (length(n_norm) == length(t_norm) || n_norm[length(t_norm)+1] in ('_', ' ', '(', '%'))
+            return n_str
+        end
+    end
+
     return ""
 end
 
@@ -1636,8 +1646,21 @@ function FAST_CleanHeader_DDEF(Header::AbstractString)
     return h
 end
 
+"""
+    FAST_DisplayHeader_DDEF(Header::AbstractString) -> String
+Standardises column headers for human presentation in the UI:
+Strips internal system prefixes (VARIA_, RESULT_, PRED_, ACTUAL_, etc.) and converts underscores to spaces.
+Never presents internal prefixes or raw underscores in the user interface.
+"""
+function FAST_DisplayHeader_DDEF(Header::AbstractString)::String
+    h = strip(string(Header))
+    isempty(h) && return ""
+    clean = FAST_CleanHeader_DDEF(h)
+    return replace(clean, "_" => " ")
+end
+
 # ------------------------------------------------------------------------------
-# SECTION 17: STRUCTURAL COLUMN ORDERING & KINETIC DECAY ORCHESTRATION
+# SECTION 21: STRUCTURAL COLUMN ORDERING & KINETIC DECAY ORCHESTRATION
 # ------------------------------------------------------------------------------
 
 """
@@ -1657,7 +1680,8 @@ function FAST_SortColumns_DDEF(cols::Vector{String})::Vector{String}
     b_res    = String[]
     b_pred   = String[]
     b_score  = String[]
-    b_radio  = String[]
+    b_act    = String[]
+    b_time   = String[]
     b_other  = String[]
 
     sys_order = [C.COL_EXP_ID, C.COL_PHASE, C.COL_STATUS, C.COL_NOTES, C.COL_RUN_ORDER]
@@ -1680,13 +1704,16 @@ function FAST_SortColumns_DDEF(cols::Vector{String})::Vector{String}
             push!(b_pred, col)
         elseif col == C.COL_SCORE || c_up == "SCORE"
             push!(b_score, col)
+        elseif startswith(col, "ACTUAL_")
+            push!(b_act, col)
         elseif startswith(col, "TIME_FORW_MINS_") || startswith(col, "TIME_DCYP_MINS_") ||
-               startswith(col, "TIME_REVE_MINS_") || startswith(col, "ACTUAL_")
-            push!(b_radio, col)
+               startswith(col, "TIME_REVE_MINS_")
+            push!(b_time, col)
         else
             push!(b_other, col)
         end
     end
+    b_radio = vcat(b_act, b_time)
 
     sorted_sys = String[]
     for s in sys_order

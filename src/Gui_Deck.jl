@@ -609,9 +609,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
     
     try
 
-        # ------------------------------------------------------------------------------
-        # SECTION 7: DATA PRE-PROCESSING & VALIDATION
-        # ------------------------------------------------------------------------------
+        # --- Stage 1: Data Pre-Processing & Validation ---
 
         raw_rows       = BASE_SafeRows_DDEF(in_data)
         processed_rows = filter(r -> get(r, "Role", get(r, :Role, "")) != "Filler", raw_rows)
@@ -826,9 +824,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
             "Outputs"     => output_data,
         )
         
-        # ------------------------------------------------------------------------------
-        # SECTION 8: EXPORT & PERSISTENCE SERVICES
-        # ------------------------------------------------------------------------------
+        # --- Stage 2: Export & Persistence Services ---
 
         success = Sys_Fast.FAST_InitialiseMaster_DDEF(path,
             [string(get(r, "Name", "")) for r in BASE_SafeRows_DDEF(in_data)],
@@ -849,7 +845,7 @@ end
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 9: CALLBACK REGISTRY GATEWAY
+# SECTION 7: CALLBACK REGISTRY GATEWAY
 # ------------------------------------------------------------------------------
 
 """
@@ -866,7 +862,7 @@ function DECK_RegisterCallbacks_DDEF(app)
     Lib_Mole_AB   = Main.Lib_Mole.MOLE_AuditBatch_DDEF
     
 # ------------------------------------------------------------------------------
-# SECTION 10: INTERFACE & STATE CALLBACKS
+# SECTION 8: INTERFACE & STATE CALLBACKS
 # ------------------------------------------------------------------------------
 
     # Visibility Orchestration of DF14 Direction Selection Panel
@@ -1102,7 +1098,7 @@ function DECK_RegisterCallbacks_DDEF(app)
             RET_NO = ntuple(_ -> Dash.no_update(), 21)
 
 # ------------------------------------------------------------------------------
-# SECTION 11: SYSTEM LEVEL HELPERS (POLYMORPHIC)
+# SECTION 9: SYSTEM LEVEL HELPERS (POLYMORPHIC)
 # ------------------------------------------------------------------------------
 
             # DECK_GetSafeKey_DDEF is defined at the module level
@@ -1585,7 +1581,7 @@ function DECK_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 12: STOICHIOMETRY & AUDIT CALLBACKS
+# SECTION 10: STOICHIOMETRY & AUDIT CALLBACKS
 # ------------------------------------------------------------------------------
 
     callback!(app,
@@ -2015,7 +2011,7 @@ function DECK_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 13: SCIENTIFIC AUDIT & MATRIX CALLBACKS
+# SECTION 11: SCIENTIFIC AUDIT & MATRIX CALLBACKS
 # ------------------------------------------------------------------------------
 
     callback!(app,
@@ -2190,7 +2186,7 @@ function DECK_RegisterCallbacks_DDEF(app)
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 14: DYNAMIC UI COMPONENT REFRESH
+# SECTION 12: DYNAMIC UI COMPONENT REFRESH
 # ------------------------------------------------------------------------------
 
     # Automated refresh of the Stoichiometric Component Inventory display.

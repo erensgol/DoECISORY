@@ -30,6 +30,14 @@ using JSON3
 
 export LENS_Layout_DDEF, LENS_RegisterCallbacks_DDEF
 
+# ==============================================================================
+# PART A: UI LAYOUT & COMPONENTS
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# SECTION 1: SYSTEM CONSTANTS
+# ------------------------------------------------------------------------------
+
 # Infrastructure: Thread-safe in-memory payload bridges for deferred batch rendering.
 # Single-writer (background thread) / single-reader (callback) guarantees safety.
 const LENS_BatchPayload_DDEC     = Ref{Any}(nothing)
@@ -50,19 +58,12 @@ const LENS_NegCells_DDEC = Set{String}([
     "Boundary proximity"
 ])
 
-# ------------------------------------------------------------------------------
-# SECTION 0: SYSTEM BRIDGES & ALIASES
-# ------------------------------------------------------------------------------
-
+# System bridges and aliases
 const LENS_GetSafe_DDEF           = Sys_Fast.FAST_GetSafe_DDEF
 const LENS_ExtractDirections_DDEF = Sys_Fast.FAST_ExtractDirections_DDEF
 
-# ==============================================================================
-# PART A: UI INFRASTRUCTURE & LAYOUT
-# ==============================================================================
-
 # ------------------------------------------------------------------------------
-# SECTION 1: PHASE EVOLUTION SLOT BUILDER
+# SECTION 2: PHASE EVOLUTION SLOT BUILDER
 # ------------------------------------------------------------------------------
 
 """
@@ -255,7 +256,7 @@ function LENS_ApplySlotCustomisation_DDEF!(conf::AbstractVector, slots::Abstract
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 1B: DIAGNOSTIC STYLING & FORMATTING DISPATCHERS
+# SECTION 3: DIAGNOSTIC STYLING & FORMATTING DISPATCHERS
 # ------------------------------------------------------------------------------
 
 """
@@ -338,7 +339,7 @@ end
 LENS_FormatMetric_DDEF(sym::Symbol, v) = LENS_FormatMetric_DDEF(Val(sym), v)
 
 # ------------------------------------------------------------------------------
-# SECTION 2: INTERFACE LAYOUT
+# SECTION 4: PRIMARY INTERFACE LAYOUT
 # ------------------------------------------------------------------------------
 
 """
@@ -471,7 +472,7 @@ function LENS_Layout_DDEF()
         ], className="g-3"),
 
 # ------------------------------------------------------------------------------
-# SECTION 3: SYSTEM MODALS & DIALOGUES
+# SECTION 5: MODAL WINDOWS & DIALOGUES
 # ------------------------------------------------------------------------------
 
         # Interface orchestration for system modal dialogues and user interactions.
@@ -641,74 +642,172 @@ function LENS_Layout_DDEF()
                 dbc_col(dbc_button([html_i(className="fas fa-check-circle me-2"), "Commit to Project Vault"], id="lens-prev-btn-commit", className="w-100 colourgl-c4tg", size="sm"), xs=12, md=6),
             ], className="w-100 g-2"); size="xl", close_button=false, backdrop="static", keyboard=false),
 
-        BASE_Modal_DDEF("lens-modal-radio-config", [html_i(className="fas fa-radiation-alt me-2 colourtx-c1sm"), "Radioactivity Decay Correction Suite"],
+        BASE_Modal_DDEF("lens-modal-radio-config", [html_i(className="fas fa-radiation-alt me-2 colourtx-c4tg"), "Radioactivity Decay Correction Suite"],
             [
-                dbc_alert([
-                    html_strong("RADIOCHEMICAL CORRECTION SUITE: "),
-                    "1) Forward Decay updates precursor activity at synthesis time and records actual activity in the ACTUAL_ column. ",
-                    "2) Reaction Penalty (DCYP) balances chemical conversion with physical decay by penalising composite desirability D over reaction incubation time. ",
-                    "3) Reverse Decay corrects absolute activity measurements (mCi, MBq, CPM) back to synthesis end. Percentage assays (ITLC / HPLC) cancel physical decay ratiometrically and are preserved."
-                ], color="danger", className="small py-2 mb-3 fw-bold"),
+                # 1. Chronological Stepper Banner (Unified Green Viridis Theme)
+                html_div([
+                    dbc_row([
+                        dbc_col(
+                            html_div([
+                                html_div([
+                                    dbc_badge("Step 1", className="me-2 colourgl-c4tg colourtx-v5pb fw-bold"),
+                                    html_span("Pre-Synthesis (Inputs)", className="fw-bold small colourtx-v5pb")
+                                ], className="d-flex align-items-center mb-1"),
+                                html_div("Precursor delay adjustment (Forward Decay)", className="x-small colourtx-v4dh")
+                            ], className="p-2 rounded bg-light border-start border-3 border-success h-100"),
+                            md=4, xs=12
+                        ),
+                        dbc_col(
+                            html_div([
+                                html_div([
+                                    dbc_badge("Step 2", className="me-2 colourgl-c4tg colourtx-v5pb fw-bold"),
+                                    html_span("In-Reaction (Process)", className="fw-bold small colourtx-v5pb")
+                                ], className="d-flex align-items-center mb-1"),
+                                html_div("Desirability penalty vs. time (DCYP)", className="x-small colourtx-v4dh")
+                            ], className="p-2 rounded bg-light border-start border-3 border-success h-100"),
+                            md=4, xs=12
+                        ),
+                        dbc_col(
+                            html_div([
+                                html_div([
+                                    dbc_badge("Step 3", className="me-2 colourgl-c4tg colourtx-v5pb fw-bold"),
+                                    html_span("Post-Synthesis (Outputs)", className="fw-bold small colourtx-v5pb")
+                                ], className="d-flex align-items-center mb-1"),
+                                html_div("EOS activity restoration (Reverse Decay)", className="x-small colourtx-v4dh")
+                            ], className="p-2 rounded bg-light border-start border-3 border-success h-100"),
+                            md=4, xs=12
+                        ),
+                    ], className="g-2 mb-3")
+                ]),
+
+                # 2. Unified 3-Column 3x3 Card Layout
                 dbc_row([
-                    dbc_col([
-                        html_h6("1. Forward Decay (Precursors)", className="small fw-bold colourtx-v4dh border-bottom pb-1"),
-                        html_p("Adjust precursor activity from calibration to synthesis start time:", className="x-small colourtx-v3dl mb-2"),
-                        dcc_dropdown(id="lens-radio-dd-inputs", options=[], multi=true, placeholder="Select precursor...", className="small mb-3"),
-                        
-                        html_div(children=[
-                            html_div(id="lens-radio-in-div-$i", className="mb-2 d-none", children=[
-                                html_span(id="lens-radio-in-lbl-$i", className="small fw-bold d-block colourtx-v5pb"),
-                                dbc_row([
-                                    dbc_col(dbc_input(id="lens-radio-in-name-$i", placeholder="Display Alias", type="text", size="sm", className="form-control-sm"), width=8),
-                                    dbc_col(dbc_input(id="lens-radio-in-unit-$i", placeholder="Unit", type="text", size="sm", className="form-control-sm"), width=4)
-                                ], className="g-1")
-                            ]) for i in 1:6
-                        ])
-                    ], md=4),
-                    dbc_col([
-                        html_h6("2. Reaction Penalty (DCYP)", className="small fw-bold colourtx-v4dh border-bottom pb-1"),
-                        html_p("Penalise composite desirability D by e^(-lambda*t) over reaction time:", className="x-small colourtx-v3dl mb-2"),
-                        dcc_dropdown(id="lens-radio-dcyp-mode", options=[
-                            Dict("label" => "Enabled (Active Penalty)", "value" => "ON"),
-                            Dict("label" => "Disabled (Pure Chemical)", "value" => "OFF")
-                        ], value="ON", clearable=false, className="small mb-2"),
-                        html_p("Decay constant isotope source:", className="x-small colourtx-v3dl mb-1"),
-                        dcc_dropdown(id="lens-radio-dcyp-iso", options=[Dict("label" => "Auto-Detect from Project", "value" => "Auto")], value="Auto", clearable=false, className="small mb-2"),
-                        html_div(id="lens-radio-dcyp-info", className="small p-2 rounded bg-light border colourtx-v5pb",
-                            children="Penalises composite desirability score D directly across all virtual candidates and actual experimental runs.")
-                    ], md=4),
-                    dbc_col([
-                        html_h6("3. Reverse Decay & Yield (Outputs)", className="small fw-bold colourtx-v4dh border-bottom pb-1"),
-                        html_p("Correct absolute activity counts (MBq, mCi, CPM) back to synthesis end:", className="x-small colourtx-v3dl mb-2"),
-                        
-                        html_div(children=[
-                            html_div(id="lens-radio-out-div-$i", className="mb-3 d-none", children=[
-                                html_span(id="lens-radio-out-lbl-$i", className="small fw-bold d-block colourtx-v5pb"),
-                                dcc_dropdown(id="lens-radio-out-dd-$i", options=[Dict("label" => "None", "value" => "None")], value="None", clearable=false, className="small mb-1"),
-                                dbc_row([
-                                    dbc_col(dbc_input(id="lens-radio-out-name-$i", placeholder="Corrected Result Display Alias", type="text", size="sm", className="form-control-sm"), width=8),
-                                    dbc_col(dbc_input(id="lens-radio-out-unit-$i", placeholder="Measurement Unit", type="text", size="sm", className="form-control-sm"), width=4)
-                                ], id="lens-radio-out-alias-div-$i", className="g-1 d-none")
-                            ]) for i in 1:6
-                        ])
-                    ], md=4)
-                ])
+                    # --- Column 1: Forward Decay ---
+                    dbc_col(
+                        html_div(className="card border shadow-sm p-3 h-100 bg-white", children=[
+                            html_div([
+                                html_i(className="fas fa-hourglass-start me-2 colourtx-c4tg"),
+                                html_strong("1. Forward Decay (Inputs)", className="colourtx-v5pb small")
+                            ], className="d-flex align-items-center mb-2 pb-1 border-bottom"),
+                            html_div([
+                                html_div([html_strong("Context: ", className="colourtx-v5pb"), "Physical decay loss incurred between precursor calibration and synthesis initiation."], className="x-small colourtx-v4dh mb-1"),
+                                html_div([html_strong("Indication: ", className="colourtx-c4tg"), "Use when precursor incubation delay occurred to update baseline synthesis activity."], className="x-small colourtx-v5pb fw-semibold")
+                            ], className="p-2 mb-3 rounded bg-light border"),
+                            
+                            html_label("Status:", className="x-small fw-bold colourtx-v4dh mb-1"),
+                            dcc_dropdown(id="lens-radio-forw-mode", options=[
+                                Dict("label" => "Enabled", "value" => "ON"),
+                                Dict("label" => "Disabled", "value" => "OFF")
+                            ], value="ON", clearable=false, className="small mb-2"),
+
+                            html_label("Decay Constant Isotope Source:", className="x-small fw-bold colourtx-v4dh mb-1"),
+                            dcc_dropdown(id="lens-radio-forw-iso", options=[], value=nothing, clearable=false, className="small mb-2"),
+
+                            html_label("Radioactive Precursor Target:", className="x-small fw-bold colourtx-v4dh mb-1"),
+                            dcc_dropdown(id="lens-radio-dd-inputs", options=[], value=nothing, clearable=false, className="small mb-2"),
+                            
+                            dbc_row([
+                                dbc_col([
+                                    html_label("Actual Alias", className="x-small text-muted mb-0 d-block"),
+                                    dbc_input(id="lens-radio-in-name-1", placeholder="e.g. Decayed Precursor", type="text", size="sm", className="form-control-sm")
+                                ], width=8),
+                                dbc_col([
+                                    html_label("Unit", className="x-small text-muted mb-0 d-block"),
+                                    dbc_input(id="lens-radio-in-unit-1", placeholder="e.g. MBq", type="text", size="sm", className="form-control-sm")
+                                ], width=4)
+                            ], className="g-1 mt-1")
+                        ]),
+                        md=4
+                    ),
+
+                    # --- Column 2: Reaction Penalty (DCYP) ---
+                    dbc_col(
+                        html_div(className="card border shadow-sm p-3 h-100 bg-white", children=[
+                            html_div([
+                                html_i(className="fas fa-balance-scale me-2 colourtx-c4tg"),
+                                html_strong("2. Reaction Penalty (DCYP)", className="colourtx-v5pb small")
+                            ], className="d-flex align-items-center mb-2 pb-1 border-bottom"),
+                            html_div([
+                                html_div([html_strong("Context: ", className="colourtx-v5pb"), "Progressive physical isotope decay during reaction incubation despite enhanced chemical conversion."], className="x-small colourtx-v4dh mb-1"),
+                                html_div([html_strong("Indication: ", className="colourtx-c4tg"), "Use to penalise incubation time and identify the optimal trade-off between chemical yield and physical loss."], className="x-small colourtx-v5pb fw-semibold")
+                            ], className="p-2 mb-3 rounded bg-light border"),
+                            
+                            html_label("Status:", className="x-small fw-bold colourtx-v4dh mb-1"),
+                            dcc_dropdown(id="lens-radio-dcyp-mode", options=[
+                                Dict("label" => "Enabled", "value" => "ON"),
+                                Dict("label" => "Disabled", "value" => "OFF")
+                            ], value="ON", clearable=false, className="small mb-2"),
+
+                            html_label("Decay Constant Isotope Source:", className="x-small fw-bold colourtx-v4dh mb-1"),
+                            dcc_dropdown(id="lens-radio-dcyp-iso", options=[], value=nothing, clearable=false, className="small mb-2"),
+
+                            html_label("Reaction Time Factor:", className="x-small fw-bold colourtx-v4dh mb-1"),
+                            dcc_dropdown(id="lens-radio-dcyp-factor", options=[], value=nothing, clearable=false, className="small mb-2"),
+
+                            html_div(id="lens-radio-dcyp-info", className="x-small p-2 rounded bg-light border colourtx-v4dh mt-2",
+                                children="Penalises composite desirability score D directly across all virtual candidates and actual experimental runs by e^(-lambda*t). Does not alter raw experimental data.")
+                        ]),
+                        md=4
+                    ),
+
+                    # --- Column 3: Reverse Decay (Outputs) ---
+                    dbc_col(
+                        html_div(className="card border shadow-sm p-3 h-100 bg-white", children=[
+                            html_div([
+                                html_i(className="fas fa-undo-alt me-2 colourtx-c4tg"),
+                                html_strong("3. Reverse Decay (Outputs)", className="colourtx-v5pb small")
+                            ], className="d-flex align-items-center mb-2 pb-1 border-bottom"),
+                            html_div([
+                                html_div([html_strong("Context: ", className="colourtx-v5pb"), "Post-synthesis measurement latency leading to uncorrected physical radioactivity loss."], className="x-small colourtx-v4dh mb-1"),
+                                html_div([html_strong("Indication: ", className="colourtx-c4tg"), "Use to restore delayed absolute activity counts (MBq, mCi) back to End of Synthesis (EOS)."], className="x-small colourtx-v5pb fw-semibold")
+                            ], className="p-2 mb-3 rounded bg-light border"),
+                            
+                            html_label("Status:", className="x-small fw-bold colourtx-v4dh mb-1"),
+                            dcc_dropdown(id="lens-radio-reve-mode", options=[
+                                Dict("label" => "Enabled", "value" => "ON"),
+                                Dict("label" => "Disabled", "value" => "OFF")
+                            ], value="ON", clearable=false, className="small mb-2"),
+
+                            html_label("Decay Constant Isotope Source:", className="x-small fw-bold colourtx-v4dh mb-1"),
+                            dcc_dropdown(id="lens-radio-reve-iso", options=[], value=nothing, clearable=false, className="small mb-2"),
+
+                            html_label("Activity Output Target:", className="x-small fw-bold colourtx-v4dh mb-1"),
+                            dcc_dropdown(id="lens-radio-reve-out-sel", options=[], value=nothing, clearable=false, className="small mb-2"),
+                            
+                            dbc_row([
+                                dbc_col([
+                                    html_label("Actual Alias", className="x-small text-muted mb-0 d-block"),
+                                    dbc_input(id="lens-radio-out-name-1", placeholder="e.g. Activity (EOS)", type="text", size="sm", className="form-control-sm")
+                                ], width=8),
+                                dbc_col([
+                                    html_label("Unit", className="x-small text-muted mb-0 d-block"),
+                                    dbc_input(id="lens-radio-out-unit-1", placeholder="e.g. MBq", type="text", size="sm", className="form-control-sm")
+                                ], width=4)
+                            ], className="g-1 mt-1")
+                        ]),
+                        md=4
+                    )
+                ], className="g-3")
             ],
             html_div([
+                html_div([
+                    html_i(className="fas fa-shield-alt text-success me-2"),
+                    html_span("Raw experimental records (INPUT_ & RESULT_) are strictly preserved; corrected values populate ACTUAL_ columns.", className="x-small colourtx-v4dh fw-semibold")
+                ], className="d-flex align-items-center me-auto"),
                 dbc_button("Cancel", id="lens-radio-btn-cancel", outline=false, className="me-2 colourgl-c0hr", size="sm"),
                 dbc_button(["Apply and Save ", html_i(className="fas fa-check ms-2")], id="lens-radio-btn-apply", className="colourgl-c4tg", size="sm"),
-            ], className="d-flex justify-content-end"); size="xl", close_button=false, backdrop="static", keyboard=false),
+            ], className="d-flex justify-content-between align-items-center w-100 mt-2"); size="xl", close_button=false, backdrop="static", keyboard=false),
 
         dcc_store(id="lens-store-next-phase-proposal", data=Dict()),
     ], fluid=true, className="px-4 py-3")
 end
 
 # ==============================================================================
-# PART B: CALLBACKS & ANALYSIS
+# PART B: CALLBACKS
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 4: CALLBACK REGISTRY GATEWAY
+# SECTION 6: CALLBACK REGISTRY GATEWAY
 # ------------------------------------------------------------------------------
 
 """
@@ -719,7 +818,7 @@ function LENS_RegisterCallbacks_DDEF(app)
     C = Sys_Fast.FAST_Data_DDEC
 
 # ------------------------------------------------------------------------------
-# SECTION 5: UPLOAD & SYNC PIPELINES
+# SECTION 7: UPLOAD & SYNC PIPELINES
 # ------------------------------------------------------------------------------
 
     # Visibility Orchestration of Phase Transition DF14 Direction Selection Panel
@@ -866,7 +965,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                     end
                 end
                 mn, mx = isempty(vals) ? (0.0, 0.0) : extrema(vals)
-                goals_name[i]   = Lib_Vise.VISE_ResolveName_DDEF(c, C.PRE_RESULT, outputs_cfg, C)
+                goals_name[i]   = Sys_Fast.FAST_DisplayHeader_DDEF(Lib_Vise.VISE_ResolveName_DDEF(c, C.PRE_RESULT, outputs_cfg, C))
                 goals_type[i]   = "Nominal"
                 goals_min[i]    = round(mn; digits=2)
                 goals_max[i]    = round(mx; digits=2)
@@ -912,13 +1011,14 @@ function LENS_RegisterCallbacks_DDEF(app)
             end
 
             saved_goals = get(config, "LensGoals", [])
+            norm_g(s) = uppercase(replace(replace(strip(string(s)), "_" => " "), r"\s+" => " "))
             for (i, name) in enumerate(goals_name)
-                g_idx = findfirst(g -> Sys_Fast.FAST_GetSafe_DDEF(g, "Name", "") == name, saved_goals)
+                g_idx = findfirst(g -> norm_g(Sys_Fast.FAST_GetSafe_DDEF(g, "Name", "")) == norm_g(name), saved_goals)
                 if isnothing(g_idx)
-                    g_idx = findfirst(g -> Sys_Fast.FAST_GetSafe_DDEF(g, "Name", "") == orig_goals_name[i], saved_goals)
+                    g_idx = findfirst(g -> norm_g(Sys_Fast.FAST_GetSafe_DDEF(g, "Name", "")) == norm_g(orig_goals_name[i]), saved_goals)
                 end
                 if isnothing(g_idx) && i <= length(out_cols)
-                    g_idx = findfirst(g -> Sys_Fast.FAST_GetSafe_DDEF(g, "Name", "") == replace(out_cols[i], C.PRE_RESULT => ""), saved_goals)
+                    g_idx = findfirst(g -> norm_g(Sys_Fast.FAST_GetSafe_DDEF(g, "Name", "")) == norm_g(replace(out_cols[i], C.PRE_RESULT => "")), saved_goals)
                 end
                 
                 if !isnothing(g_idx)
@@ -973,12 +1073,8 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
     end
 
-# ==============================================================================
-# PART C: ANALYSIS ENGINE & RESULTS
-# ==============================================================================
-
 # ------------------------------------------------------------------------------
-# SECTION 6: STATISTICAL ANALYSIS ENGINE
+# SECTION 8: STATISTICAL ANALYSIS ENGINE
 # ------------------------------------------------------------------------------
 
     callback!(app,
@@ -1050,8 +1146,12 @@ function LENS_RegisterCallbacks_DDEF(app)
                 graph_meta  = g_count > 0 ? Dict("count" => g_count, "ts" => time()) : nu
                 graph_blob  = get(payload, "graph_blob",   nu)
                 
+                t_dur = get(payload, "t_total", nothing)
+                dur_badge = isnothing(t_dur) ? "" : html_span(" ($(t_dur)s)", className="colourtx-v3dl")
+                final_status = html_span(["✅ Analysis Complete", dur_badge], className="fw-bold small colourtx-c4tg")
+                
                 # Deliver: We keep the interval enabled to allow retries until st_next == 0 is received.
-                return (graph_meta, nu, nu, res_report, res_bundle, vault_b64, res_leaders, res_badge, Dict("next_pkg" => 0, "handle" => "", "working" => false), false, graph_blob)
+                return (graph_meta, nu, final_status, res_report, res_bundle, vault_b64, res_leaders, res_badge, Dict("next_pkg" => 0, "handle" => "", "working" => false), false, graph_blob)
             end
             
             # Scenario C: No Payload - Polling or Timeout phase.
@@ -1199,7 +1299,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                         Sys_Fast.FAST_SafeExcelWrite_DDEF(path, commit_sheets)
                     end
                     
-                    # 3. Build full result for report generation
+                    # 2. Build full result for report generation
                     res_b = copy(res)
                     res_b["BestPoint"] = bp
                     res_b["BestScore"] = bs
@@ -1208,13 +1308,13 @@ function LENS_RegisterCallbacks_DDEF(app)
                     
                     rep_b = Lib_Vise.VISE_GenerateScientificReport_DDEF(res_b)
                     
-                    # 4. Build Leaders HTML
+                    # 3. Build Leaders HTML
                     ld_html = LENS_BuildLeadersHTML_DDEF(ldf, res_b)
 
                     rad_b = (haskey(res_b, "RadioCorrection") && !isempty(res_b["RadioCorrection"])) ?
                             dbc_badge([html_i(className="fas fa-radiation me-1 colourtx-v5pb"), "Radio-Corrected"], className="ms-2 fw-bold colourgl-c4tg colourtx-v5pb") : ""
 
-                    # 5. Render deferred graphs (64 units)
+                    # 4. Render deferred graphs (64 units)
                     def_opts = copy(opts)
                     def_opts["Mode"] = :Deferred
                     def_raw = Main.Lib_Arts.ARTS_Render_DDEF(
@@ -1223,26 +1323,28 @@ function LENS_RegisterCallbacks_DDEF(app)
                     )
                     pkg_graphs = [Dict{String,Any}("figure" => Dict{String,Any}("data" => g["Plot"].data, "layout" => g["Plot"].layout, "config" => g["Plot"].config), "title" => string(g["Title"])) for g in def_raw]
                     
-                    # 6. Build Collective Portfolio: Priority + Deferred
+                    # 5. Build Collective Portfolio: Priority + Deferred
                     full_graphs = vcat(pkg1_copy, pkg_graphs)
                     full_blob   = JSON3.write(full_graphs)
                     
-                    # 7. Re-read Excel as base64 for vault update (Leaders included!)
+                    # 6. Re-read Excel as base64 for vault update (Leaders included!)
                     updated_vault_b64 = Sys_Fast.FAST_ReadToStore_DDEF(path)
                     
-                    # 8. Sanitise result bundle for store (remove heavy objects first)
+                    # 7. Sanitise result bundle for store (remove heavy objects first)
                     delete!(res_b, "Graphs")
                     delete!(res_b, "_Hidden_Sheets")
                     final_bundle = Sys_Fast.FAST_SanitiseJson_DDEF(res_b)
                     final_bundle["dataid"] = updated_vault_b64
                     final_bundle["type"] = "SCIENCE_PULSE"
                     
-                    # 9. Store payload for interval pickup (NO graphs, small payload)
+                    t_bg_total = round(time() - t_start; digits=1)
+                    # 8. Store payload for interval pickup (NO graphs, small payload)
                     LENS_BatchPayload_DDEC[] = Dict{String,Any}(
                         "opt_results" => Dict{String,Any}("Report" => rep_b, "Bundle" => final_bundle, "Leaders" => ld_html, "Badge" => rad_b),
                         "vault_b64"   => updated_vault_b64,
                         "graph_count" => length(full_graphs),
-                        "graph_blob"  => full_blob
+                        "graph_blob"  => full_blob,
+                        "t_total"     => t_bg_total
                     )
                     Log("LENS", "Batch_Async", "Background Portfolio Compiled [Total: $(length(full_graphs))]. Blob Packed.", "OK")
                 catch e
@@ -1271,9 +1373,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             ]
 
             summary = html_div([
-# ------------------------------------------------------------------------------
-# SECTION 7: EXPERIMENTAL DESIGN VITALS & MODEL PERFORMANCE
-# ------------------------------------------------------------------------------
+                # --- Experimental Design Vitals & Performance Display ---
                 (haskey(res, "Vitals") && !isnothing(res["Vitals"]) ? html_div([
                     html_h6("EXPERIMENTAL DESIGN VITALS", className="fw-bold text-center mb-2 colourtx-c1sm", style=Dict("letterSpacing" => "1px")),
                     html_div([
@@ -1424,7 +1524,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                                     ])),
                                     html_tbody([
                                         html_tr([
-                                            html_td(string(t_names[j]), style=Dict("padding" => "2px")), 
+                                            html_td(string(t_name), style=Dict("padding" => "2px")), 
                                             html_td((j <= length(coefs) && !ismissing(coefs[j]) && !isnan(coefs[j])) ? @sprintf("%.4f", Float64(coefs[j])) : "-", style=Dict("padding" => "2px")), 
                                             html_td(
                                                 let vf = (j <= length(vifs)) ? vifs[j] : NaN
@@ -1438,7 +1538,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                                                 end,
                                                 className = LENS_EvalClass_DDEF(:coef_pval, (j <= length(p_coefs)) ? p_coefs[j] : NaN),
                                                 style=Dict("padding" => "2px"))
-                                        ]) for j in 1:length(t_names)
+                                        ]) for (j, t_name) in enumerate(t_names)
                                     ])
                                 ], className="table table-sm table-hover small mb-4 border", style=Dict("tableLayout" => "fixed", "width" => "100%"))
                             end
@@ -1474,16 +1574,13 @@ function LENS_RegisterCallbacks_DDEF(app)
 
             final_res["dataid"]  = updated_base64
             final_res["type"] = "SCIENCE_PULSE"
-            # Final Architectural Sync: Capture total duration AFTER all post-processing.
-            t_total       = round(time() - t_start; digits=1)
-            elapsed_badge = html_span(" ($(t_total)s)", className="colourtx-v3dl")
-
             is_staged = true
+            interim_status = html_span("🔄 Analysing Data...", className="fw-bold small colourtx-c1sm")
             
             return (
                 Dict("count" => length(pkg1_graphs), "ts" => time()), 
                 summary, 
-                html_span(["✅ Analysis Complete", elapsed_badge], className="fw-bold small colourtx-c4tg"), 
+                interim_status, 
                 sci_report, 
                 final_res, 
                 updated_base64, 
@@ -1494,8 +1591,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 pkg1_blob
             )
 
-        # ------------------------------------------------------------------------------
-        # SECTION 8: ANALYSIS ERROR GUARD & CLEANUP
+        # --- Error Guard: Failure State Recovery & Concurrency Cleanup ---
 
         catch e
             bt = sprint(showerror, e, catch_backtrace())
@@ -1788,8 +1884,8 @@ function LENS_RenderAcademicReport_DDEF(report_raw::AbstractString)
                 end
                 
                 rows_comp = Any[]
-                for r_idx in 3:length(table_lines)
-                    raw_cells = [strip(c) for c in split(table_lines[r_idx], "|")[2:end-1]]
+                for r_line in table_lines[3:end]
+                    raw_cells = [strip(c) for c in split(r_line, "|")[2:end-1]]
                     tds = Any[]
                     for (c_idx, cell) in enumerate(raw_cells)
                         al = (c_idx <= length(aligns)) ? aligns[c_idx] : "left"
@@ -1926,40 +2022,53 @@ end
         cols_to_show = String[]
 
         all_keys = collect(keys(data[1]))
-        h_id_idx = findfirst(k -> occursin("ID", uppercase(string(k))), all_keys)
+        norm_cmp(s) = uppercase(replace(replace(strip(string(s)), "_" => " "), r"\s+" => " "))
+
+        # 1. Exact match for ID column (never match substrings like KOLLOIDAL)
+        h_id_idx = findfirst(k -> uppercase(strip(string(k))) in ("ID", uppercase(C.COL_EXP_ID), "EXP_ID"), all_keys)
         !isnothing(h_id_idx) && push!(cols_to_show, string(all_keys[h_id_idx]))
  
+        # 2. Input variables in configuration sequence
         ingredients = get(config_full, "Ingredients", [])
         for c in ingredients
             name = get(c, "Name", "")
             if get(c, "Role", "") == C.ROLE_VAR
-                v_key = "$(C.PRE_INPUT)$name"
-                if any(k -> string(k) == v_key, all_keys)
-                    push!(cols_to_show, v_key)
-                elseif any(k -> string(k) == name, all_keys)
-                    push!(cols_to_show, name)
+                n_norm = norm_cmp(name)
+                v_match = findfirst(all_keys) do k
+                    k_str = string(k)
+                    clean_k = norm_cmp(Sys_Fast.FAST_CleanHeader_DDEF(k_str))
+                    return clean_k == n_norm || (startswith(clean_k, n_norm) && (startswith(uppercase(k_str), uppercase(C.PRE_INPUT)) || startswith(uppercase(k_str), "INPUT_")))
+                end
+                if !isnothing(v_match)
+                    push!(cols_to_show, string(all_keys[v_match]))
                 end
             end
         end
  
-        # Integration of Prediction parameters in strict Configuration sequence.
+        # 3. Output Predictions in strict Configuration sequence (PRED_ only, never RESULT_)
         outputs = get(config_full, "Outputs", [])
         for o in outputs
             name = get(o, "Name", "")
-            p_key = "$(C.PRE_PRED)$name"
-            if any(k -> string(k) == p_key, all_keys)
-                push!(cols_to_show, p_key)
-            elseif any(k -> string(k) == name, all_keys)
-                push!(cols_to_show, name)
+            o_norm = norm_cmp(name)
+            p_match = findfirst(all_keys) do k
+                k_str = string(k)
+                !startswith(uppercase(k_str), uppercase(C.PRE_PRED)) && return false
+                clean_k = norm_cmp(Sys_Fast.FAST_CleanHeader_DDEF(k_str))
+                return clean_k == o_norm || startswith(clean_k, o_norm)
+            end
+            if !isnothing(p_match)
+                push!(cols_to_show, string(all_keys[p_match]))
             end
         end
 
-        h_score_idx = findfirst(k -> uppercase(string(k)) == "SCORE", all_keys)
+        # 4. Score column
+        h_score_idx = findfirst(k -> uppercase(strip(string(k))) == "SCORE", all_keys)
         !isnothing(h_score_idx) && push!(cols_to_show, string(all_keys[h_score_idx]))
 
-        columns = [Dict{String,Any}("name" => replace(c, r"^(VARIA_|PRED_)" => ""), "id" => c) for c in cols_to_show]
+        # Format column names for UI display: never display internal prefixes or raw underscores
+        columns = [Dict{String,Any}("name" => Sys_Fast.FAST_DisplayHeader_DDEF(c), "id" => c) for c in cols_to_show]
         for col in columns
-            if col["id"] == "Score" || col["id"] == "SCORE"
+            if uppercase(strip(string(col["id"]))) in ("SCORE", C.COL_SCORE)
                 col["type"]   = "numeric"
                 col["format"] = Dict("specifier" => ".4f")
             end
@@ -2112,7 +2221,15 @@ end
         # Dynamic Direction Labels for X1, X2, X3
         active_vars = filter(c -> get(c, "Role", "") == fd.ROLE_VAR, active_conf)
         subscripts  = ("₁", "₂", "₃")
-        lbls = [k <= length(active_vars) ? "$(get(active_vars[k], "Name", "Var $k")) (X$(subscripts[k])) Direction" : "X$(subscripts[k]) Direction" for k in 1:3]
+        lbls = [
+            if k <= length(active_vars)
+                var_n = string(get(active_vars[k], "Name", "Var $k"))
+                [html_span("X$(subscripts[k]) Direction"), html_br(), html_span(var_n, className="colourtx-v4dh")]
+            else
+                [html_span("X$(subscripts[k]) Direction")]
+            end
+            for k in 1:3
+        ]
 
         d_vec = [dx isa Number ? Int(dx) : something(tryparse(Int, string(something(dx, -1))), -1) for dx in (dir_x1, dir_x2, dir_x3)]
         m_str = string(something(meth_val, "TL09"))
@@ -2259,8 +2376,12 @@ end
 
         excluded = (isnothing(cur_excluded) || !(cur_excluded isa AbstractVector)) ? String[] : String[string(x) for x in cur_excluded]
 
+        clicks = [c1, c2, c3, c4, c5]
         for i in 1:5
             if trig == "lens-const-del-$i"
+                n_click = clicks[i]
+                (isnothing(n_click) || n_click <= 0) && continue
+
                 conf = LENS_GetSafe_DDEF(prop, "NewConfig", [])
                 fixed_items = [c for c in conf if lowercase(strip(string(LENS_GetSafe_DDEF(c, "Role", "")))) in ("fixed", "fix")]
                 if i <= length(fixed_items)
@@ -2506,40 +2627,168 @@ end
         return Dash.no_update()
     end
 
-    # 2. Populate Modal Options from Smart Vault Data
-    # Unit 1: Radioactivity - Forward Configuration (Inputs) & DCYP Reaction Penalty
+    # --------------------------------------------------------------------------
+    # Helper: Detect primary absolute radiochemical activity output (MBq, mCi)
+    # Excludes percentage yield / RCY to avoid improper reverse decay division
+    # --------------------------------------------------------------------------
+    function LENS_DetectAbsoluteActivityOutput_DDEF(outputs)
+        for o in outputs
+            u = lowercase(strip(string(get(o, "Unit", ""))))
+            if occursin(r"\b(mbq|mci|ci|gbq|kbq|bq|cpm|cps|dpm|dps)\b", u)
+                return string(get(o, "Name", ""))
+            end
+        end
+        for o in outputs
+            n = lowercase(strip(string(get(o, "Name", ""))))
+            u = lowercase(strip(string(get(o, "Unit", ""))))
+            if (occursin(r"\b(mbq|mci|ci|gbq|kbq|bq)\b", n) || (occursin(r"\b(activity|eos)\b", n) && !occursin(r"yield|rcy|%|percent", n) && !occursin(r"%|percent", u)))
+                return string(get(o, "Name", ""))
+            end
+        end
+        for o in outputs
+            if get(o, "IsRadioactive", false) in (true, 1, "true", "TRUE")
+                return string(get(o, "Name", ""))
+            end
+        end
+        return ""
+    end
+
+    # 2. Populate Unified 3x3 Radioactivity Modal from Smart Vault Data
     callback!(app,
-        Output("lens-radio-dd-inputs", "options"),
-        Output("lens-radio-dd-inputs", "value"),
-        Output("lens-radio-dcyp-mode", "value"),
-        Output("lens-radio-dcyp-iso",  "options"),
-        Output("lens-radio-dcyp-iso",  "value"),
-        [Output("lens-radio-in-name-$i", "value") for i in 1:6]...,
-        [Output("lens-radio-in-unit-$i", "value") for i in 1:6]...,
-        Input("lens-modal-radio-config", "is_open"),
-        State("store-master-vault", "data"),
+        Output("lens-radio-forw-mode",    "value"),
+        Output("lens-radio-forw-iso",     "options"),
+        Output("lens-radio-forw-iso",     "value"),
+        Output("lens-radio-dd-inputs",    "options"),
+        Output("lens-radio-dd-inputs",    "value"),
+        Output("lens-radio-in-name-1",    "value"),
+        Output("lens-radio-in-unit-1",    "value"),
+
+        Output("lens-radio-dcyp-mode",    "value"),
+        Output("lens-radio-dcyp-iso",     "options"),
+        Output("lens-radio-dcyp-iso",     "value"),
+        Output("lens-radio-dcyp-factor",  "options"),
+        Output("lens-radio-dcyp-factor",  "value"),
+
+        Output("lens-radio-reve-mode",    "value"),
+        Output("lens-radio-reve-iso",     "options"),
+        Output("lens-radio-reve-iso",     "value"),
+        Output("lens-radio-reve-out-sel", "options"),
+        Output("lens-radio-reve-out-sel", "value"),
+        Output("lens-radio-out-name-1",   "value"),
+        Output("lens-radio-out-unit-1",   "value"),
+        Input("lens-modal-radio-config",  "is_open"),
+        State("store-master-vault",       "data"),
         prevent_initial_call=true
     ) do is_open, active_data
-        default_iso_opts = [Dict("label" => "Auto-Detect from Project", "value" => "Auto")]
-        (!is_open || isnothing(active_data) || active_data == "") && return [], [], "ON", default_iso_opts, "Auto", fill("", 6)..., fill("", 6)...
-        
+        empty_opts = [Dict("label" => "Loading...", "value" => "None")]
+        (!is_open || isnothing(active_data) || active_data == "") && return (
+            "ON", empty_opts, "None", empty_opts, "None", "", "",
+            "ON", empty_opts, "None", empty_opts, "None",
+            "ON", empty_opts, "None", empty_opts, "None", "", ""
+        )
+
         active_cont = active_data isa String ? active_data : get(active_data, "content", "")
-        (isnothing(active_cont) || active_cont == "") && return [], [], "ON", default_iso_opts, "Auto", fill("", 6)..., fill("", 6)...
+        (isnothing(active_cont) || active_cont == "") && return (
+            "ON", empty_opts, "None", empty_opts, "None", "", "",
+            "ON", empty_opts, "None", empty_opts, "None",
+            "ON", empty_opts, "None", empty_opts, "None", "", ""
+        )
 
         path   = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
         config = Sys_Fast.FAST_ReadConfig_DDEF(path)
         Sys_Fast.FAST_CleanTransient_DDEF(path)
 
         ingreds = get(config, "Ingredients", [])
-        rad_inputs = filter(i -> get(i, "IsRadioactive", false) == true || Sys_Fast.FAST_SafeNum_DDEF(get(i, "HalfLife", 0.0)) > 0, ingreds)
-        in_options = [Dict("label" => get(i, "Name", ""), "value" => get(i, "Name", "")) for i in rad_inputs]
-        
-        radio_opts = get(config, "RadioOpts", Dict{String,Any}())
-        fwd_dict = get(radio_opts, "FORW", Dict{String,Any}())
-        fwd_keys = collect(keys(fwd_dict))
+        outputs = get(config, "Outputs", [])
 
-        # DCYP configuration extraction
-        dcyp_cfg = get(radio_opts, "DCYP", Dict())
+        # Build Isotope Options (prioritising radioactive precursors)
+        rad_inputs = filter(i -> (get(i, "IsRadioactive", false) in (true, 1, "true", "TRUE")) ||
+                                 Sys_Fast.FAST_SafeNum_DDEF(get(i, "HalfLife", 0.0)) > 0, ingreds)
+        iso_pool = !isempty(rad_inputs) ? rad_inputs : ingreds
+        iso_options = Dict{String,String}[]
+        for ing in iso_pool
+            ing_n = string(get(ing, "Name", ""))
+            isempty(ing_n) && continue
+            hl_raw = Sys_Fast.FAST_SafeNum_DDEF(get(ing, "HalfLife", 0.0))
+            hl_u = string(get(ing, "HalfLifeUnit", "min"))
+            lbl_str = hl_raw > 0.0 ? "$ing_n (t½ = $hl_raw $hl_u)" : ing_n
+            push!(iso_options, Dict("label" => lbl_str, "value" => ing_n))
+        end
+        if isempty(iso_options)
+            push!(iso_options, Dict("label" => "None Available", "value" => "None"))
+        end
+        detected_iso = !isempty(rad_inputs) ? string(get(first(rad_inputs), "Name", "")) :
+                       (!isempty(ingreds) ? string(get(first(ingreds), "Name", "")) : "None")
+
+        # Build Precursor Target Options (Column 1)
+        in_options = [Dict("label" => string(get(i, "Name", "")), "value" => string(get(i, "Name", "")))
+                      for i in ingreds if !isempty(string(get(i, "Name", "")))]
+        if isempty(in_options)
+            push!(in_options, Dict("label" => "None Available", "value" => "None"))
+        end
+        detected_precursor = (detected_iso != "None" && any(opt -> opt["value"] == detected_iso, in_options)) ?
+                             detected_iso : (!isempty(in_options) ? in_options[1]["value"] : "None")
+
+        # Build Reaction Time Factor Options (Column 2)
+        factor_options = Dict{String,String}[]
+        detected_factor = ""
+        for ing in ingreds
+            ing_n = string(get(ing, "Name", ""))
+            isempty(ing_n) && continue
+            ing_u = string(get(ing, "Unit", ""))
+            u_str = isempty(ing_u) ? "" : " ($ing_u)"
+            push!(factor_options, Dict("label" => "$ing_n$u_str", "value" => ing_n))
+            if isempty(detected_factor) && occursin(r"(?i)\b(time|min|minute|duration|hour|sec)\b", ing_n * " " * ing_u)
+                detected_factor = ing_n
+            end
+        end
+        if isempty(factor_options)
+            push!(factor_options, Dict("label" => "None Available", "value" => "None"))
+        end
+        if isempty(detected_factor)
+            detected_factor = !isempty(factor_options) ? factor_options[1]["value"] : "None"
+        end
+
+        # Build Activity Output Options (Column 3)
+        out_options = Dict{String,String}[
+            Dict("label" => "None", "value" => "None")
+        ]
+        for o in outputs
+            out_n = string(get(o, "Name", ""))
+            isempty(out_n) && continue
+            out_u = string(get(o, "Unit", ""))
+            u_str = isempty(out_u) ? "" : " ($out_u)"
+            push!(out_options, Dict("label" => "$out_n$u_str", "value" => out_n))
+        end
+        detected_output = LENS_DetectAbsoluteActivityOutput_DDEF(outputs)
+        if isempty(detected_output)
+            detected_output = "None"
+        end
+
+        # Existing Saved Configurations Extraction
+        radio_opts = get(config, "RadioOpts", Dict{String,Any}())
+        fwd_dict   = get(radio_opts, "FORW", Dict{String,Any}())
+        dcyp_cfg   = get(radio_opts, "DCYP", Dict{String,Any}())
+        rev_dict   = get(radio_opts, "REVE", Dict{String,Any}())
+
+        # Col 1: Forward Decay
+        forw_saved_target = ""
+        for (k, v) in fwd_dict
+            if v isa AbstractDict && any(opt -> opt["value"] == k, in_options)
+                forw_saved_target = k
+                break
+            end
+        end
+        forw_target = !isempty(forw_saved_target) ? forw_saved_target : detected_precursor
+        forw_iso = !isempty(forw_saved_target) ? get(fwd_dict[forw_saved_target], "Isotope", detected_iso) : detected_iso
+        if forw_iso in ("Auto", "None", "") || !any(o -> o["value"] == forw_iso, iso_options)
+            forw_iso = detected_iso
+        end
+        forw_alias = !isempty(forw_saved_target) ? get(fwd_dict[forw_saved_target], "Name", "") : ""
+        forw_unit  = !isempty(forw_saved_target) ? get(fwd_dict[forw_saved_target], "Unit", "") : ""
+        forw_mode  = (get(fwd_dict, "Enabled", true) in (false, 0, "OFF", "false")) ? "OFF" : "ON"
+
+        # Col 2: Reaction Penalty (DCYP)
         dcyp_mode = if dcyp_cfg isa AbstractDict
             get(dcyp_cfg, "Enabled", true) ? "ON" : "OFF"
         elseif dcyp_cfg isa AbstractString
@@ -2549,181 +2798,79 @@ end
         else
             "ON"
         end
+        dcyp_iso_saved = dcyp_cfg isa AbstractDict ? get(dcyp_cfg, "Isotope", detected_iso) : detected_iso
+        dcyp_iso = (dcyp_iso_saved in ("Auto", "None", "") || !any(o -> o["value"] == dcyp_iso_saved, iso_options)) ? detected_iso : dcyp_iso_saved
+        dcyp_factor_saved = dcyp_cfg isa AbstractDict ? get(dcyp_cfg, "Factor", detected_factor) : detected_factor
+        dcyp_factor = (dcyp_factor_saved in ("Auto", "None", "") || !any(o -> o["value"] == dcyp_factor_saved, factor_options)) ? detected_factor : dcyp_factor_saved
 
-        dcyp_iso_val = dcyp_cfg isa AbstractDict ? get(dcyp_cfg, "Isotope", "Auto") : "Auto"
-        iso_options = [Dict("label" => "Auto-Detect from Project", "value" => "Auto")]
-        for ing in rad_inputs
-            ing_n = get(ing, "Name", "")
-            !isempty(ing_n) && push!(iso_options, Dict("label" => ing_n, "value" => ing_n))
-        end
-
-        in_names = fill("", 6); in_units = fill("", 6)
-        for (idx, k) in enumerate(fwd_keys[1:min(length(fwd_keys), 6)])
-            in_names[idx] = get(fwd_dict[k], "Name", "")
-            in_units[idx] = get(fwd_dict[k], "Unit", "")
-        end
-        return in_options, fwd_keys, dcyp_mode, iso_options, dcyp_iso_val, in_names..., in_units...
-    end
-
-    function LENS_IsRadioactiveTarget_DDEF(name::String, unit::String)
-        u = lowercase(strip(unit))
-        n = lowercase(strip(name))
-        
-        # Selection of outputs explicitly bearing absolute radiochemical measurement units.
-        if occursin(r"\b(mci|mbq|ci|gbq|kbq|bq|cpm|cps|dpm|dps)\b|radioactivity|radio-activity", u)
-            return true
-        end
-        
-        # Fallback extrapolation for percentage-based yields mapping directly to isotope conversion efficiency.
-        if occursin(r"\b(mci|mbq|ci|gbq|kbq|bq|cpm|cps|dpm|dps)\b|radioactivity|radio-activity|yield|rcy|rad\b|decay", n)
-            return true
-        end
-        
-        return false
-    end
-
-    # Unit 2: Radioactivity - Reverse Mapping (Outputs)
-    callback!(app,
-        [Output("lens-radio-out-dd-$i", "options") for i in 1:6]...,
-        [Output("lens-radio-out-div-$i", "className") for i in 1:6]...,
-        [Output("lens-radio-out-lbl-$i", "children") for i in 1:6]...,
-        [Output("lens-radio-out-dd-$i", "value") for i in 1:6]...,
-        [Output("lens-radio-out-name-$i", "value") for i in 1:6]...,
-        [Output("lens-radio-out-unit-$i", "value") for i in 1:6]...,
-        Input("lens-modal-radio-config", "is_open"),
-        State("store-master-vault", "data"),
-        prevent_initial_call=true
-    ) do is_open, active_data
-        (!is_open || isnothing(active_data) || active_data == "") && return fill([Dict("label"=>"None", "value"=>"None")], 6)..., fill("d-none", 6)..., fill("", 6)..., fill("None", 6)..., fill("", 6)..., fill("", 6)...
-        
-        active_cont = active_data isa String ? active_data : get(active_data, "content", "")
-        (isnothing(active_cont) || active_cont == "") && return fill([Dict("label"=>"None", "value"=>"None")], 6)..., fill("d-none", 6)..., fill("", 6)..., fill("None", 6)..., fill("", 6)..., fill("", 6)...
-
-        path   = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
-        config = Sys_Fast.FAST_ReadConfig_DDEF(path)
-        Sys_Fast.FAST_CleanTransient_DDEF(path)
-
-        ingreds = get(config, "Ingredients", [])
-        outputs = get(config, "Outputs", [])
-        
-        rad_inputs = filter(i -> get(i, "IsRadioactive", false) == true || Sys_Fast.FAST_SafeNum_DDEF(get(i, "HalfLife", 0.0)) > 0, ingreds)
-        in_options = [Dict("label" => get(i, "Name", ""), "value" => get(i, "Name", "")) for i in rad_inputs]
-        
-        out_options = [Dict("label" => "None", "value" => "None")]
-        append!(out_options, in_options)
-
-        radio_opts = get(config, "RadioOpts", Dict{String,Any}())
-        rev_dict = get(radio_opts, "REVE", Dict{String,Any}())
-        
-        out_div_classes = fill("d-none", 6); out_lbls = fill("", 6)
-        out_src_vals = fill("None", 6); out_names = fill("", 6); out_units = fill("", 6)
-
-        rad_outputs = filter(o -> get(o, "IsRadioactive", false) == true || LENS_IsRadioactiveTarget_DDEF(get(o, "Name", ""), get(o, "Unit", "")), outputs)
-
-        for (idx, o) in enumerate(rad_outputs[1:min(length(rad_outputs), 6)])
-            out_name = get(o, "Name", "")
-            out_div_classes[idx] = "mb-3 d-block"; out_lbls[idx] = out_name
-            if haskey(rev_dict, out_name)
-                mapping = rev_dict[out_name]
-                out_src_vals[idx] = get(mapping, "Source", "None")
-                out_names[idx]    = get(mapping, "Name", "")
-                out_units[idx]    = get(mapping, "Unit", "")
+        # Col 3: Reverse Decay (Outputs)
+        reve_saved_target = ""
+        for (k, v) in rev_dict
+            if v isa AbstractDict && any(opt -> opt["value"] == k, out_options)
+                reve_saved_target = k
+                break
             end
         end
-        return fill(out_options, 6)..., out_div_classes..., out_lbls..., out_src_vals..., out_names..., out_units...
+        reve_target = !isempty(reve_saved_target) ? reve_saved_target : detected_output
+        reve_iso = !isempty(reve_saved_target) ? get(rev_dict[reve_saved_target], "Source", detected_iso) : detected_iso
+        if reve_iso in ("Auto", "None", "") || !any(o -> o["value"] == reve_iso, iso_options)
+            reve_iso = detected_iso
+        end
+        reve_alias = !isempty(reve_saved_target) ? get(rev_dict[reve_saved_target], "Name", "") : ""
+        reve_unit  = !isempty(reve_saved_target) ? get(rev_dict[reve_saved_target], "Unit", "") : ""
+        reve_default_mode = (reve_target == "None" || isempty(reve_target)) ? "OFF" : "ON"
+        reve_mode  = (get(rev_dict, "Enabled", reve_default_mode == "ON") in (false, 0, "OFF", "false")) ? "OFF" : "ON"
+
+        return (
+            forw_mode, iso_options, forw_iso, in_options, forw_target, forw_alias, forw_unit,
+            dcyp_mode, iso_options, dcyp_iso, factor_options, dcyp_factor,
+            reve_mode, iso_options, reve_iso, out_options, reve_target, reve_alias, reve_unit
+        )
     end
 
-    # 2.5 Dynamic Input Row Visibility Toggle & Intelligent Suggestions
+    # 3. Contextual Placeholder for Forward Decay Precursor
     callback!(app,
-        [Output("lens-radio-in-div-$i", "className") for i in 1:6]...,
-        [Output("lens-radio-in-lbl-$i", "children") for i in 1:6]...,
-        [Output("lens-radio-in-name-$i", "placeholder") for i in 1:6]...,
-        [Output("lens-radio-in-unit-$i", "placeholder") for i in 1:6]...,
+        Output("lens-radio-in-name-1", "placeholder"),
         Input("lens-radio-dd-inputs", "value"),
         prevent_initial_call=true
-    ) do sel_vals
-        vals = isnothing(sel_vals) ? String[] : (sel_vals isa String ? [sel_vals] : convert(Vector{String}, sel_vals))
-        cls = fill("d-none", 6)
-        lbl = fill("", 6)
-        ph_names = fill("Corrected Display Alias", 6)
-        ph_units = fill("Measurement Unit", 6)
-        
-        for (i, v) in enumerate(vals[1:min(length(vals), 6)])
-            cls[i] = "mb-2 d-block"
-            lbl[i] = v
-            
-            # Active Contextual Placeholder Generation for Inputs (Forward Decay)
-            if !isnothing(v) && v != ""
-                ph_names[i] = "e.g. Decayed $v"
-                ph_units[i] = "e.g. MBq"
-            end
-        end
-        return tuple(cls..., lbl..., ph_names..., ph_units...)
+    ) do sel_in
+        (!isnothing(sel_in) && sel_in != "" && sel_in != "None") ? "e.g. Decayed $sel_in" : "e.g. Decayed Precursor"
     end
 
-    # 2.8 Dynamic Output Row Visibility Toggle & Intelligent Suggestions
+    # 4. Contextual Placeholder for Reverse Decay Output
     callback!(app,
-        [Output("lens-radio-out-alias-div-$i", "className") for i in 1:6]...,
-        [Output("lens-radio-out-name-$i", "placeholder") for i in 1:6]...,
-        [Output("lens-radio-out-unit-$i", "placeholder") for i in 1:6]...,
-        [Input("lens-radio-out-dd-$i", "value") for i in 1:6]...,
-        [State("lens-radio-out-lbl-$i", "children") for i in 1:6]...,
+        Output("lens-radio-out-name-1", "placeholder"),
+        Input("lens-radio-reve-out-sel", "value"),
         prevent_initial_call=true
-    ) do sel_args...
-        sel_vals = sel_args[1:6]
-        lbl_vals = sel_args[7:12]
-        
-        cls = fill("g-1 d-none", 6)
-        ph_names = fill("Corrected Result Display Alias", 6)
-        ph_units = fill("Measurement Unit", 6)
-        
-        for i in 1:6
-            v = sel_vals[i]
-            if !isnothing(v) && v != "None" && v != ""
-                cls[i] = "g-1 mt-1 d-flex"
-                
-                # Active Contextual Placeholder Generation
-                cur_lbl = lbl_vals[i]
-                if !isnothing(cur_lbl) && cur_lbl != ""
-                    clean_lbl = strip(replace(cur_lbl, r"(?i)yield|rcy|\(mbq\)|\(mci\)|\(ci\)|\(gbq\)|\(kbq\)|\(bq\)|\(cpm\)|\(cps\)|\(%|%\)|%" => ""))
-                    if isempty(clean_lbl)
-                        clean_lbl = "Activity"
-                    end
-                    ph_names[i] = "e.g. $clean_lbl Yield"
-                    ph_units[i] = "e.g. %"
-                end
-            end
-        end
-        return tuple(cls..., ph_names..., ph_units...)
+    ) do sel_out
+        (!isnothing(sel_out) && sel_out != "" && sel_out != "None") ? "e.g. $sel_out (EOS)" : "e.g. Activity (EOS)"
     end
 
-    # 3. Apply Configuration & Master Vault Sync
+    # 5. Apply Configuration & Master Vault Sync
     callback!(app,
         Output("sync-lens-content",        "data"),
-        Input("lens-radio-btn-apply", "n_clicks"),
-        Input("lens-upload-data",     "contents"),
-        State("lens-upload-data",     "filename"),
-        State("store-master-vault",   "data"),
-        State("lens-radio-dd-inputs", "value"),
-        State("lens-radio-dcyp-mode", "value"),
-        State("lens-radio-dcyp-iso",  "value"),
-        [State("lens-radio-in-lbl-$i", "children") for i in 1:6]...,
-        [State("lens-radio-in-name-$i", "value") for i in 1:6]...,
-        [State("lens-radio-in-unit-$i", "value") for i in 1:6]...,
-        [State("lens-radio-out-lbl-$i", "children") for i in 1:6]...,
-        [State("lens-radio-out-dd-$i", "value") for i in 1:6]...,
-        [State("lens-radio-out-name-$i", "value") for i in 1:6]...,
-        [State("lens-radio-out-unit-$i", "value") for i in 1:6]...,
+        Input("lens-radio-btn-apply",     "n_clicks"),
+        Input("lens-upload-data",         "contents"),
+        State("lens-upload-data",         "filename"),
+        State("store-master-vault",       "data"),
+        State("lens-radio-forw-mode",     "value"),
+        State("lens-radio-forw-iso",      "value"),
+        State("lens-radio-dd-inputs",     "value"),
+        State("lens-radio-in-name-1",     "value"),
+        State("lens-radio-in-unit-1",     "value"),
+        State("lens-radio-dcyp-mode",     "value"),
+        State("lens-radio-dcyp-iso",      "value"),
+        State("lens-radio-dcyp-factor",   "value"),
+        State("lens-radio-reve-mode",     "value"),
+        State("lens-radio-reve-iso",      "value"),
+        State("lens-radio-reve-out-sel",  "value"),
+        State("lens-radio-out-name-1",    "value"),
+        State("lens-radio-out-unit-1",    "value"),
         prevent_initial_call=true
-    ) do apply_clicks, upload_cont, upload_fname, active_cont, fwd_inputs, 
-         dcyp_mode, dcyp_iso,
-         il1, il2, il3, il4, il5, il6,
-         in1, in2, in3, in4, in5, in6,
-         iu1, iu2, iu3, iu4, iu5, iu6,
-         ol1, ol2, ol3, ol4, ol5, ol6,
-         od1, od2, od3, od4, od5, od6,
-         on1, on2, on3, on4, on5, on6,
-         ou1, ou2, ou3, ou4, ou5, ou6
+    ) do apply_clicks, upload_cont, upload_fname, active_cont,
+         forw_mode, forw_iso, forw_target, forw_alias, forw_unit,
+         dcyp_mode, dcyp_iso, dcyp_factor,
+         reve_mode, reve_iso, reve_target, reve_alias, reve_unit
 
         trig = BASE_GetTrigger_DDEF(callback_context())
         
@@ -2736,51 +2883,44 @@ end
             (isnothing(apply_clicks) || apply_clicks == 0) && return Dash.no_update()
             (isnothing(active_cont) || active_cont == "") && return Dash.no_update()
 
-            # Robust handle extraction for scientific configuration updates.
             handle = active_cont isa String ? active_cont : get(active_cont, "content", "")
             (isnothing(handle) || handle == "") && return Dash.no_update()
 
-            in_lbls  = [il1, il2, il3, il4, il5, il6]
-            in_names = [in1, in2, in3, in4, in5, in6]
-            in_units = [iu1, iu2, iu3, iu4, iu5, iu6]
-            
-            out_lbls  = [ol1, ol2, ol3, ol4, ol5, ol6]
-            out_srcs  = [od1, od2, od3, od4, od5, od6]
-            out_names = [on1, on2, on3, on4, on5, on6]
-            out_units = [ou1, ou2, ou3, ou4, ou5, ou6]
-
-            fwd_arr = isnothing(fwd_inputs) ? String[] : (fwd_inputs isa String ? [fwd_inputs] : convert(Vector{String}, fwd_inputs))
+            # Forward Decay Dictionary
+            forw_enabled = (forw_mode == "ON") && !isnothing(forw_target) && forw_target != "None" && forw_target != ""
             fwd_dict = Dict{String, Any}()
-            
-            for fwd in fwd_arr
-                idx = findfirst(==(fwd), in_lbls)
-                if !isnothing(idx)
-                    fwd_dict[fwd] = Dict(
-                        "Name" => isnothing(in_names[idx]) ? "" : in_names[idx], 
-                        "Unit" => isnothing(in_units[idx]) ? "" : in_units[idx]
-                    )
-                end
+            if forw_enabled
+                alias_name = (isnothing(forw_alias) || isempty(strip(forw_alias))) ? "Decayed $forw_target" : strip(forw_alias)
+                alias_unit = isnothing(forw_unit) ? "" : strip(forw_unit)
+                fwd_dict[forw_target] = Dict(
+                    "Name"    => alias_name,
+                    "Unit"    => alias_unit,
+                    "Isotope" => isnothing(forw_iso) ? forw_target : forw_iso
+                )
             end
 
-            rev_dict = Dict{String, Any}()
-            for i in 1:6
-                lbl = out_lbls[i]
-                src = out_srcs[i]
-                if !isnothing(lbl) && lbl != "" && !isnothing(src) && src != "None"
-                    rev_dict[lbl] = Dict(
-                        "Source" => src, 
-                        "Name"   => isnothing(out_names[i]) ? "" : out_names[i], 
-                        "Unit"   => isnothing(out_units[i]) ? "" : out_units[i]
-                    )
-                end
-            end
-
+            # DCYP Dictionary
+            dcyp_enabled = (dcyp_mode == "ON")
             dcyp_dict = Dict(
-                "Enabled" => (dcyp_mode == "ON"),
+                "Enabled" => dcyp_enabled,
+                "Factor"  => isnothing(dcyp_factor) ? "Auto" : string(dcyp_factor),
                 "Isotope" => isnothing(dcyp_iso) ? "Auto" : string(dcyp_iso)
             )
 
-            apply_flag = !isempty(fwd_dict) || !isempty(rev_dict) || (dcyp_mode == "ON")
+            # Reverse Decay Dictionary
+            reve_enabled = (reve_mode == "ON") && !isnothing(reve_target) && reve_target != "None" && reve_target != ""
+            rev_dict = Dict{String, Any}()
+            if reve_enabled
+                alias_name = (isnothing(reve_alias) || isempty(strip(reve_alias))) ? "$reve_target (EOS)" : strip(reve_alias)
+                alias_unit = isnothing(reve_unit) ? "" : strip(reve_unit)
+                rev_dict[reve_target] = Dict(
+                    "Source"  => isnothing(reve_iso) ? "None" : reve_iso,
+                    "Name"    => alias_name,
+                    "Unit"    => alias_unit
+                )
+            end
+
+            apply_flag = forw_enabled || dcyp_enabled || reve_enabled
             new_radio_opts = Dict(
                 "Apply" => apply_flag,
                 "FORW"  => fwd_dict,
@@ -2788,7 +2928,7 @@ end
                 "REVE"  => rev_dict
             )
 
-            path   = Sys_Fast.FAST_GetTransientPath_DDEF(handle)
+            path = Sys_Fast.FAST_GetTransientPath_DDEF(handle)
             Sys_Fast.FAST_UpdateConfig_DDEF(path, Dict("RadioOpts" => new_radio_opts))
             new_vault = Sys_Fast.FAST_ReadToStore_DDEF(path)
             Sys_Fast.FAST_CleanTransient_DDEF(path)

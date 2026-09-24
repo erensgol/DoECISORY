@@ -986,6 +986,10 @@ end
 # PART E: SYSTEM DISPATCH & ORCHESTRATION
 # ==============================================================================
 
+# ------------------------------------------------------------------------------
+# SECTION 19: PARALLEL VISUAL DISPATCH ORCHESTRATOR
+# ------------------------------------------------------------------------------
+
 """
     ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, Leaders_DF, Sens, Residuals) -> Vector{Dict}
 """

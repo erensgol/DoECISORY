@@ -529,74 +529,96 @@ a:hover {
     display: block;
 }
 
-/* React-Select (DCC Dropdown) */
-.Select-input input { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; color: var(--colour-val5-purbla) !important; }
-.Select-control { background-color: var(--colour-val0-purwhi) !important; border: 1px solid var(--colour-val1-lighig) !important; border-radius: var(--rad-sm) !important; color: var(--colour-val5-purbla) !important; min-height: 28px !important; box-shadow: none !important; cursor: pointer !important; }
-.Select.is-focused > .Select-control { border-color: var(--colour-val4-darhig) !important; box-shadow: 0 0 0 1px var(--colour-val3-darlow) !important; }
-.Select-value-label { color: var(--colour-val5-purbla) !important; font-size: 0.9rem !important; }
-.Select-placeholder { color: var(--colour-val3-darlow) !important; font-size: 0.9rem !important; }
-.Select-arrow { border-color: var(--colour-val4-darhig) transparent transparent !important; }
-.Select-arrow-zone:hover > .Select-arrow { border-top-color: var(--colour-val5-purbla) !important; }
+/* React-Select (DCC Dropdown) - Unified Compact & Robust Typography */
+.Select-input input { 
+    background: transparent !important; 
+    border: none !important; 
+    box-shadow: none !important; 
+    padding: 0 !important; 
+    color: var(--colour-val5-purbla) !important; 
+    font-size: 0.78rem !important; 
+}
+.Select-control { 
+    background-color: var(--colour-val0-purwhi) !important; 
+    border: 1px solid var(--colour-val1-lighig) !important; 
+    border-radius: var(--rad-sm) !important; 
+    color: var(--colour-val5-purbla) !important; 
+    min-height: 28px !important; 
+    height: 28px !important;
+    box-shadow: none !important; 
+    cursor: pointer !important; 
+}
+.Select.is-focused > .Select-control { 
+    border-color: var(--colour-val4-darhig) !important; 
+    box-shadow: 0 0 0 1px var(--colour-val3-darlow) !important; 
+}
+.Select-value {
+    line-height: 26px !important;
+}
+.Select-value-label { 
+    color: var(--colour-val5-purbla) !important; 
+    font-size: 0.78rem !important; 
+    line-height: 26px !important;
+}
+.Select-placeholder { 
+    color: var(--colour-val3-darlow) !important; 
+    font-size: 0.78rem !important; 
+    line-height: 26px !important;
+}
+.Select-arrow { 
+    border-color: var(--colour-val4-darhig) transparent transparent !important; 
+}
+.Select-arrow-zone:hover > .Select-arrow { 
+    border-top-color: var(--colour-val5-purbla) !important; 
+}
 
 .Select-menu-outer {
     background-color: var(--colour-val0-purwhi) !important;
     border: 1px solid var(--colour-val3-darlow) !important;
     border-radius: var(--rad-sm) !important;
     box-shadow: 0 10px 25px -5px var(--colour-val4-darhig) !important;
-    z-index: 99999 !important;
+    z-index: 999999 !important;
     margin-top: 4px !important;
+    min-width: 100% !important;
+    width: max-content !important;
+    max-width: 360px !important;
 }
 
-.dash-table-container .Select-menu-outer { width: 140px !important; }
+.Select-menu {
+    max-height: 220px !important;
+    overflow-y: auto !important;
+}
+
+.dash-table-container .Select-menu-outer { 
+    width: 140px !important; 
+    min-width: 140px !important; 
+}
 
 .Select-option {
     background-color: var(--colour-val0-purwhi) !important;
     color: var(--colour-val4-darhig) !important;
-    padding: 10px 12px !important;
-    font-size: 0.9rem !important;
+    padding: 6px 10px !important;
+    font-size: 0.78rem !important;
+    line-height: 1.3 !important;
     cursor: pointer !important;
     white-space: nowrap !important;
 }
 
-.Select-option.is-focused, .Select-option:hover { background-color: var(--colour-val2-liglow) !important; color: var(--colour-val5-purbla) !important; border-left: 2px solid var(--colour-val4-darhig); }
-.Select-option.is-selected { background-color: var(--colour-val2-liglow) !important; color: var(--colour-val4-darhig) !important; }
+.Select-option.is-focused, .Select-option:hover { 
+    background-color: var(--colour-val2-liglow) !important; 
+    color: var(--colour-val5-purbla) !important; 
+    border-left: 2px solid var(--colour-val4-darhig); 
+}
+.Select-option.is-selected { 
+    background-color: var(--colour-val2-liglow) !important; 
+    color: var(--colour-val4-darhig) !important; 
+}
 .Select-clear-zone { color: var(--colour-val3-darlow) !important; }
 .Select-clear-zone:hover { color: var(--colour-chr0-huered) !important; }
-.Select-noresults { background-color: var(--colour-val0-purwhi) !important; color: var(--colour-val3-darlow) !important; }
-
-/* Targeted compact font sizing for specific dense dropdowns */
-.dd-method-compact .Select-value-label,
-.dd-method-compact .Select-placeholder,
-.dd-method-compact .Select-input input,
-#deck-dd-method .Select-value-label,
-#deck-dd-method .Select-placeholder,
-#deck-dd-method .Select-input input,
-#lens-prev-dd-method .Select-value-label,
-#lens-prev-dd-method .Select-placeholder,
-#lens-prev-dd-method .Select-input input {
-    font-size: 0.76rem !important;
-    line-height: 1.3 !important;
-}
-
-.dd-method-compact .Select-option,
-#deck-dd-method .Select-option,
-#lens-prev-dd-method .Select-option {
-    font-size: 0.74rem !important;
-    padding: 6px 10px !important;
-    line-height: 1.3 !important;
-    white-space: nowrap !important;
-}
-
-.dd-method-compact .Select-menu-outer,
-#deck-dd-method .Select-menu-outer,
-#lens-prev-dd-method .Select-menu-outer,
-.dd-method-compact .Select-menu,
-#deck-dd-method .Select-menu,
-#lens-prev-dd-method .Select-menu {
-    min-width: 100% !important;
-    width: max-content !important;
-    max-width: 340px !important;
-    z-index: 999999 !important;
+.Select-noresults { 
+    background-color: var(--colour-val0-purwhi) !important; 
+    color: var(--colour-val3-darlow) !important; 
+    font-size: 0.78rem !important; 
 }
 
 /* --- 7. BUTTONS --- */

@@ -21,8 +21,8 @@ export MOLE_ParseTable_DDEF, MOLE_QuickAudit_DDEF,
     MOLE_ValidatePhysicalUnit_DDEF, MOLE_AuditMatrix_DDEF, 
     MOLE_AuditBatch_DDEF, MOLE_ValidateDesignFeasibility_DDEF, 
     MOLE_CalcRadioDecay_DDEF, MOLE_ProcessDesign_DDEF, 
-    MOLE_GetPercentageEquivalent_DDEF,
-    MOLE_IsTimeUnit_DDEF, MOLE_ConvertTimeToMinutes_DDEF
+    MOLE_GetPercentageEquivalent_DDEF, MOLE_IsTimeUnit_DDEF, 
+    MOLE_ConvertTimeToMinutes_DDEF
 
 # ==============================================================================
 # PART A: CHEMICAL DATA STRUCTURES & MODELS

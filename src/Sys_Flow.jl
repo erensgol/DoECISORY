@@ -31,6 +31,10 @@ export FLOW_AskLeader_DDEF, FLOW_BuildIPKT_DDEF, FLOW_GetCandidates_DDEF,
 # PART A: TYPE DEFINITIONS & CONSTANTS & TRANSITION
 # ==============================================================================
 
+# ------------------------------------------------------------------------------
+# SECTION 1: TRAIT HIERARCHY & BOUNDARY CONSTANTS
+# ------------------------------------------------------------------------------
+
 """
     AbstractFLOW_BoundaryStatus (DDET)
 Trait hierarchy for classifying leader proximity to search space edges.
@@ -61,7 +65,7 @@ const FLOW_ActionTagMap_DDEC = Dict{DataType, String}(
 )
 
 # ------------------------------------------------------------------------------
-# SECTION 1: PROCESS FLOW LOGIC
+# SECTION 2: PROCESS FLOW LOGIC
 # ------------------------------------------------------------------------------
 
 """
@@ -192,7 +196,7 @@ function FLOW_GetCandidates_DDEF(MasterFile::Union{AbstractString,Nothing}, Curr
         d
     end
 
-    return sort!(candidates; by=x -> x["Score"], rev=true)
+    return sort!(candidates; by=x -> x["Score"], rev=true, alg=Base.Sort.MergeSort)
 end
 
 """
@@ -218,7 +222,7 @@ function FLOW_CalcACTA_DDEF(Val::Real, L_Old::Vector{Float64}, Contraction::Real
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 2: EXCEL-CENTRIC PHASE TRANSITION
+# SECTION 3: EXCEL-CENTRIC PHASE TRANSITION
 # ------------------------------------------------------------------------------
 
 """
@@ -398,7 +402,7 @@ end
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 3: ADAPTIVE SEARCH SPACE
+# SECTION 4: ADAPTIVE SEARCH SPACE
 # ------------------------------------------------------------------------------
 
 """
@@ -454,7 +458,7 @@ function FLOW_WriteLeaders_DDEF(File::Union{AbstractString,Nothing}, Phase::Unio
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 4: CROSS-PROJECT ASTM TRANSFORMS
+# SECTION 5: CROSS-PROJECT ASTM TRANSFORMS
 # ------------------------------------------------------------------------------
 
 """
@@ -487,7 +491,7 @@ function FLOW_ValidateASTM_DDEF(Val::Real, MinLimit::Real, MaxLimit::Real)::Tupl
 end
 
 # ------------------------------------------------------------------------------
-# SECTION 5: PHASE TRANSITION VISUALISATION
+# SECTION 6: PHASE TRANSITION VISUALISATION
 # ------------------------------------------------------------------------------
 
 """
