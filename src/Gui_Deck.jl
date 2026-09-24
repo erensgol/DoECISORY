@@ -635,17 +635,14 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
         num_vars != 3 && return (false, "Requires exactly 3 Variable ingredients (Found: $num_vars).")
         num_fills > 1 && return (false, "Maximum 1 Filler allowed (Found: $num_fills).")
         
-        all_names = String[]
-        for (i, r) in enumerate(D["Rows"])
-            n = strip(string(get(r, "Name", "")))
-            if isempty(n)
-                return (false, "Systematic Error: A valid name must be defined for row $i.")
-            end
-            if n in all_names
-                return (false, "Systematic Error: Name '$n' is used more than once. All names must be unique.")
-            end
-            push!(all_names, n)
+        all_names = [get(r, "Name", "") for r in D["Rows"]]
+        valid_in, in_err = BASE_ValidateUniqueNames_DDEF(all_names, "Ingredient")
+        if !valid_in
+            return (false, in_err)
+        end
 
+        for (i, r) in enumerate(D["Rows"])
+            n    = strip(string(get(r, "Name", "")))
             unit = string(get(r, "Unit", ""))
             mw   = Float64(get(r, "MW", 0.0))
             if mw > 0.0 && !isempty(unit) && unit != "-" && unit != "%M" && unit != "MR"
@@ -693,16 +690,10 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
         if length(output_data) != 3
             return (false, "Systematic Error: Exactly 3 Responses (Outputs) must be defined.")
         end
-        all_out_names = String[]
-        for (i, r) in enumerate(output_data)
-            n = strip(string(get(r, "Name", "")))
-            if isempty(n)
-                return (false, "Systematic Error: Name for row $i in the Response Metrics table cannot be empty. All 3 outputs must be named.")
-            end
-            if n in all_out_names
-                return (false, "Systematic Error: Response names must be unique. '$n' is repeated.")
-            end
-            push!(all_out_names, n)
+        all_out_names = [get(r, "Name", "") for r in output_data]
+        valid_out, out_err = BASE_ValidateUniqueNames_DDEF(all_out_names, "Response")
+        if !valid_out
+            return (false, out_err)
         end
 
         design_coded = Lib_Core.CORE_GenDesign_DDEF(method, num_vars, direction)
@@ -773,9 +764,30 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
         for r in D["Rows"]
             if get(r, "IsRadioactive", false)
                 rn = string(get(r, "Name", ""))
+                ru = string(get(r, "Unit", "mCi"))
                 if !isempty(rn)
-                    df[!, "TIME_EXP_MINS_" * rn]  = fill(0.0, N_Runs)
-                    df[!, "TIME_MEAS_MINS_" * rn] = fill(0.0, N_Runs)
+                    df[!, "TIME_FORW_MINS_" * rn] = fill(0.0, N_Runs)
+                    
+                    dcyp_vals = fill(0.0, N_Runs)
+                    for vi in D["Idx_Var"]
+                        v_r = D["Rows"][vi]
+                        v_u = string(get(v_r, "Unit", ""))
+                        v_n = string(get(v_r, "Name", ""))
+                        if Main.Lib_Mole.MOLE_IsTimeUnit_DDEF(v_u) || occursin(r"(?i)min|time|süre", v_n)
+                            col_cand  = C.PRE_INPUT * v_n * "_" * v_u
+                            col_cand2 = C.PRE_INPUT * v_n
+                            target_c  = hasproperty(df, Symbol(col_cand)) ? Symbol(col_cand) : (hasproperty(df, Symbol(col_cand2)) ? Symbol(col_cand2) : nothing)
+                            if !isnothing(target_c)
+                                dcyp_vals = Float64.(df[!, target_c])
+                                break
+                            end
+                        end
+                    end
+                    df[!, "TIME_DCYP_MINS_" * rn] = dcyp_vals
+                    df[!, "TIME_REVE_MINS_" * rn] = fill(0.0, N_Runs)
+
+                    act_header = (isempty(ru) || ru == "-") ? "ACTUAL_" * rn : "ACTUAL_" * rn * "_" * ru
+                    df[!, act_header] = fill(missing, N_Runs)
                 end
             end
         end

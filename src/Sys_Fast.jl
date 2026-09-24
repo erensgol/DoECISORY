@@ -33,7 +33,7 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
        FAST_SanitiseFilename_DDEF, FAST_LoadMemoFile_DDEF, FAST_ExtractDataID_DDEF,
        FAST_ValidateSheetStructure_DDEF, FAST_FinaliseMasterWrite_DDEF, FAST_ActiveGroup_DDEC,
        FAST_ApplyExcelStyle_DDEF, FAST_FormatConditionNumber_DDEF,
-       FAST_GetSafe_DDEF, FAST_ExtractDirections_DDEF
+       FAST_SortColumns_DDEF
 
 # ==============================================================================
 # PART A: TRANSIENT WORKFORCE
@@ -65,12 +65,17 @@ Base.@kwdef struct FAST_Constants_DDES
     SHEET_DATA::String     = "DATA"
     SHEET_CONFIG::String   = "CONFIG"
     PRE_INPUT::String      = "VARIA_"
+    PRE_VAR::String        = "VARIA_"
     PRE_FIXED::String      = "FIXED_"
     PRE_FILL::String       = "FILL_"
     PRE_MASS::String       = "MASS_"
     PRE_RESULT::String     = "RESULT_"
     PRE_PRED::String       = "PRED_"
     PRE_CHRO::String       = "CHRO_"
+    PRE_ACTUAL::String     = "ACTUAL_"
+    PRE_TIME_FORW::String  = "TIME_FORW_MINS_"
+    PRE_TIME_DCYP::String  = "TIME_DCYP_MINS_"
+    PRE_TIME_REVE::String  = "TIME_REVE_MINS_"
     PREFIX_LEADERS::String = "Leaders_"
     COL_EXP_ID::String     = "EXP_ID"
     COL_PHASE::String      = "PHASE"
@@ -620,19 +625,8 @@ function FAST_SafeExcelWrite_DDEF(File::AbstractString, Updates::Dict{<:Abstract
                 # Windows-Specific: Initial delay to ensure previous handles are released.
                 sleep(0.3) 
                 
-                # Critical Stability Logic: Fresh workbook vs Incremental Update.
-                if !isfile(File) || filesize(File) == 0
-                    # Standard multi-sheet write via one-shot API (most stable for creation)
-                    XLSX.writetable(File, valid_pairs...; overwrite=true)
-                else
-                    # Incremental update via handle session
-                    XLSX.openxlsx(File, mode="rw") do xf
-                        for (sn, df) in valid_pairs
-                            sheet = sn in XLSX.sheetnames(xf) ? xf[sn] : XLSX.addsheet!(xf, sn)
-                            XLSX.writetable!(sheet, df)
-                        end
-                    end
-                end
+                # Standard atomic multi-sheet write via one-shot API (most stable for creation & update)
+                XLSX.writetable(File, valid_pairs...; overwrite=true)
                 
                 # Apply Academic Auto-Fit: Enforce optimal column dimensions
                 try
@@ -895,7 +889,8 @@ function FAST_InitialiseMaster_DDEF(File::String, InNames::Vector{String}, OutNa
         C = FAST_Data_DDEC
         FAST_Log_DDEF("FAST", "Init Master", "Syncing with DesignData: $File", "WAIT")
 
-        # 1. Build Comprehensive Headers
+        # 1. Normalise input data columns and build comprehensive headers
+        FAST_NormaliseCols_DDEF!(DesignData)
         headers = [C.COL_EXP_ID, C.COL_PHASE, C.COL_STATUS, C.COL_NOTES]
         data_cols = names(DesignData)
         
@@ -906,10 +901,11 @@ function FAST_InitialiseMaster_DDEF(File::String, InNames::Vector{String}, OutNa
         end
 
         for name in InNames
+            n_clean = replace(strip(string(name)), " " => "_")
             for pfx in (C.PRE_INPUT, C.PRE_FIXED, C.PRE_FILL)
-                target_pfx = pfx * name
+                target_pfx = pfx * n_clean
                 for col in data_cols
-                    if startswith(col, target_pfx) && col ∉ headers
+                    if (startswith(col, target_pfx) || startswith(col, pfx * name)) && col ∉ headers
                         push!(headers, col)
                     end
                 end
@@ -917,15 +913,34 @@ function FAST_InitialiseMaster_DDEF(File::String, InNames::Vector{String}, OutNa
         end
 
         for n in OutNames
-            push!(headers, C.PRE_RESULT * n)
+            n_clean = replace(strip(string(n)), " " => "_")
+            res_matches = filter(c -> startswith(c, C.PRE_RESULT * n_clean), data_cols)
+            if !isempty(res_matches)
+                for rm in res_matches
+                    rm ∉ headers && push!(headers, rm)
+                end
+            else
+                col_res = C.PRE_RESULT * n_clean
+                col_res ∉ headers && push!(headers, col_res)
+            end
         end
         for n in OutNames
-            push!(headers, C.PRE_PRED * n)
+            n_clean = replace(strip(string(n)), " " => "_")
+            pred_matches = filter(c -> startswith(c, C.PRE_PRED * n_clean), data_cols)
+            if !isempty(pred_matches)
+                for pm in pred_matches
+                    pm ∉ headers && push!(headers, pm)
+                end
+            else
+                col_pred = C.PRE_PRED * n_clean
+                col_pred ∉ headers && push!(headers, col_pred)
+            end
         end
-        push!(headers, C.COL_SCORE)
+        C.COL_SCORE ∉ headers && push!(headers, C.COL_SCORE)
 
         for col in data_cols
-            if (startswith(col, "TIME_EXP_MINS_") || startswith(col, "TIME_MEAS_MINS_")) && col ∉ headers
+            if (startswith(col, "TIME_FORW_MINS_") || startswith(col, "TIME_DCYP_MINS_") ||
+                startswith(col, "TIME_REVE_MINS_") || startswith(col, "ACTUAL_")) && col ∉ headers
                 push!(headers, col)
             end
         end
@@ -953,7 +968,7 @@ function FAST_InitialiseMaster_DDEF(File::String, InNames::Vector{String}, OutNa
                         end
                     end
 
-                    all_headers = unique(vcat(names(df_old), headers))
+                    all_headers = FAST_SortColumns_DDEF(unique(vcat(names(df_old), headers)))
                     for h in setdiff(all_headers, names(df_old))
                         df_old[!, h] = fill(missing, nrow(df_old))
                     end
@@ -965,8 +980,11 @@ function FAST_InitialiseMaster_DDEF(File::String, InNames::Vector{String}, OutNa
             catch e
                 FAST_Log_DDEF("FAST", "Merge Warning", "Structural merge failed: $e", "WARN")
             end
+        else
+            all_headers = FAST_SortColumns_DDEF(headers)
+            df_final_data = df_final_data[:, all_headers]
         end
-
+ 
         FAST_FinaliseMasterWrite_DDEF(File, df_final_data, Config)
         return true
     catch e
@@ -983,16 +1001,20 @@ function FAST_InitialiseMaster_DDEF(File::String, InNames::Vector{String}, OutNa
 
         headers = [C.COL_EXP_ID, C.COL_PHASE, C.COL_STATUS, C.COL_NOTES]
         for n in InNames
-            push!(headers, C.PRE_MASS * n * "_mg")
-            push!(headers, C.PRE_INPUT * n)
+            col_mass = C.PRE_MASS * n * "_mg"
+            col_mass ∉ headers && push!(headers, col_mass)
+            col_in = C.PRE_INPUT * n
+            col_in ∉ headers && push!(headers, col_in)
         end
         for n in OutNames
-            push!(headers, C.PRE_RESULT * n)
+            col_res = C.PRE_RESULT * n
+            col_res ∉ headers && push!(headers, col_res)
         end
         for n in OutNames
-            push!(headers, C.PRE_PRED * n)
+            col_pred = C.PRE_PRED * n
+            col_pred ∉ headers && push!(headers, col_pred)
         end
-        push!(headers, C.COL_SCORE)
+        C.COL_SCORE ∉ headers && push!(headers, C.COL_SCORE)
 
         df_final_data = DataFrame([h => [] for h in headers]...)
         
@@ -1037,7 +1059,7 @@ FAST_InitialiseMaster_DDEF(::Nothing, args...) = false
 Generates a standardised, timestamped protocol filename according to the DDE specification.
 Template: DDE_[Proj]_[Phase]_[Tag]_[Timestamp].[Ext]
 """
-function FAST_GenerateSmartName_DDEF(Project::String, Phase::String, Tag::String, Ext::String="xlsx")::String
+function FAST_GenerateSmartName_DDEF(Project::AbstractString, Phase::AbstractString, Tag::AbstractString, Ext::AbstractString="xlsx")::String
     p_raw    = strip(Project)
     p_clean  = (isempty(p_raw) || lowercase(p_raw) == "doecisory") ? "DoECISORY" : FAST_SanitiseFilename_DDEF(p_raw)
     ph_clean = replace(Phase, "Phase" => "P")
@@ -1047,11 +1069,11 @@ function FAST_GenerateSmartName_DDEF(Project::String, Phase::String, Tag::String
 end
 
 """
-    FAST_ExtractProjectFromFilename_DDEF(Filename::String) -> String
+    FAST_ExtractProjectFromFilename_DDEF(Filename::AbstractString) -> String
 Extracts the project name from a DoECISORY standard filename.
 Returns empty string if the pattern doesn't match.
 """
-function FAST_ExtractProjectFromFilename_DDEF(Filename::String)::String
+function FAST_ExtractProjectFromFilename_DDEF(Filename::AbstractString)::String
     # Formulation of the extraction pattern: DDE_ProjectName_Phase_Tag_TS.ext.
     m = match(r"^DDE_(.*?)_P\d+_", Filename)
     !isnothing(m) && return string(m.captures[1])
@@ -1598,30 +1620,84 @@ function FAST_GetCol_DDEF(df::DataFrame, Target::String)::String
 end
 
 """
-    FAST_CleanHeader_DDEF(Header::String) -> String
-Standardises column headers through the removal of internal prefixes and dimensional unit metadata.
+    FAST_CleanHeader_DDEF(Header::AbstractString) -> String
+Standardises column headers through the removal of internal system prefixes.
 """
 function FAST_CleanHeader_DDEF(Header::AbstractString)
     h = strip(string(Header))
     isempty(h) && return ""
-    idx = findlast('_', h)
-    isnothing(idx) && return h
     C = FAST_Data_DDEC
-    matched_prefix = false
-    for pfx in (C.PRE_INPUT, C.PRE_FIXED, C.PRE_FILL, C.PRE_MASS, C.PRE_RESULT, C.PRE_PRED)
+    prefixes = (C.PRE_INPUT, C.PRE_FIXED, C.PRE_FILL, C.PRE_MASS, C.PRE_RESULT, C.PRE_PRED, C.PRE_CHRO, C.PRE_ACTUAL, C.PRE_TIME_FORW, C.PRE_TIME_REVE, C.PRE_TIME_DCYP, "INPUT_")
+    for pfx in prefixes
         if startswith(uppercase(h), uppercase(pfx))
-            matched_prefix = true
-            break
-        end
-    end
-    if matched_prefix
-        underscores = findall('_', h)
-        if length(underscores) >= 2
-            last_u = underscores[end]
-            return h[1:prevind(h, last_u)]
+            return string(strip(h[nextind(h, length(pfx)):end]))
         end
     end
     return h
+end
+
+# ------------------------------------------------------------------------------
+# SECTION 17: STRUCTURAL COLUMN ORDERING & KINETIC DECAY ORCHESTRATION
+# ------------------------------------------------------------------------------
+
+"""
+    FAST_SortColumns_DDEF(cols::Vector{String}) -> Vector{String}
+Arranges dataset column headers according to standard DoECISORY scientific taxonomy:
+System -> Mass -> Variables -> Fixed -> Fill -> Results -> Predictions -> Score -> Radioactivity -> Others.
+"""
+function FAST_SortColumns_DDEF(cols::Vector{String})::Vector{String}
+    isempty(cols) && return cols
+    C = FAST_Data_DDEC
+
+    b_sys    = String[]
+    b_mass   = String[]
+    b_var    = String[]
+    b_fix    = String[]
+    b_fill   = String[]
+    b_res    = String[]
+    b_pred   = String[]
+    b_score  = String[]
+    b_radio  = String[]
+    b_other  = String[]
+
+    sys_order = [C.COL_EXP_ID, C.COL_PHASE, C.COL_STATUS, C.COL_NOTES, C.COL_RUN_ORDER]
+
+    for col in cols
+        c_up = uppercase(strip(col))
+        if col in sys_order || c_up in uppercase.(sys_order)
+            push!(b_sys, col)
+        elseif startswith(col, C.PRE_MASS)
+            push!(b_mass, col)
+        elseif startswith(col, C.PRE_INPUT)
+            push!(b_var, col)
+        elseif startswith(col, C.PRE_FIXED)
+            push!(b_fix, col)
+        elseif startswith(col, C.PRE_FILL)
+            push!(b_fill, col)
+        elseif startswith(col, C.PRE_RESULT)
+            push!(b_res, col)
+        elseif startswith(col, C.PRE_PRED)
+            push!(b_pred, col)
+        elseif col == C.COL_SCORE || c_up == "SCORE"
+            push!(b_score, col)
+        elseif startswith(col, "TIME_FORW_MINS_") || startswith(col, "TIME_DCYP_MINS_") ||
+               startswith(col, "TIME_REVE_MINS_") || startswith(col, "ACTUAL_")
+            push!(b_radio, col)
+        else
+            push!(b_other, col)
+        end
+    end
+
+    sorted_sys = String[]
+    for s in sys_order
+        idx = findfirst(c -> uppercase(strip(c)) == uppercase(strip(s)), b_sys)
+        !isnothing(idx) && push!(sorted_sys, b_sys[idx])
+    end
+    for c in b_sys
+        c ∉ sorted_sys && push!(sorted_sys, c)
+    end
+
+    return vcat(sorted_sys, b_mass, b_var, b_fix, b_fill, b_res, b_pred, b_score, b_radio, b_other)
 end
 
 end

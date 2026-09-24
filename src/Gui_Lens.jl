@@ -194,7 +194,7 @@ function LENS_BuildSlotCard_DDEF(i::Int)
         html_div(id="lens-slot-replace-div-$i", [
             dbc_row([
                 dbc_col(dbc_input(id="lens-slot-replace-name-$i", type="text", placeholder="New Variable Name", size="sm", className="form-control-sm mb-1"), width=6),
-                dbc_col(dbc_input(id="lens-slot-replace-unit-$i", type="text", placeholder="New Unit", size="sm", className="form-control-sm mb-1"), width=6),
+                dbc_col(dbc_input(id="lens-slot-replace-unit-$i", type="text", placeholder="New Unit (e.g. -, mCi)", size="sm", className="form-control-sm mb-1"), width=6),
             ], className="g-1"),
             dbc_row([
                 dbc_col(dbc_input(id="lens-slot-replace-l1-$i", type="number", placeholder="Lower", step="any", size="sm", className="form-control-sm mb-1"), width=4),
@@ -202,8 +202,8 @@ function LENS_BuildSlotCard_DDEF(i::Int)
                 dbc_col(dbc_input(id="lens-slot-replace-l3-$i", type="number", placeholder="Upper", step="any", size="sm", className="form-control-sm mb-1"), width=4),
             ], className="g-1"),
             dbc_row([
-                dbc_col(dbc_input(id="lens-slot-replace-min-$i", type="number", placeholder="Min Limit", step="any", size="sm", className="form-control-sm"), width=6),
-                dbc_col(dbc_input(id="lens-slot-replace-max-$i", type="number", placeholder="Max Limit", step="any", size="sm", className="form-control-sm"), width=6),
+                dbc_col(dbc_input(id="lens-slot-replace-min-$i", type="number", placeholder="Min Limit", step="any", size="sm", className="form-control-sm mb-1"), width=6),
+                dbc_col(dbc_input(id="lens-slot-replace-max-$i", type="number", placeholder="Max Limit", step="any", size="sm", className="form-control-sm mb-1"), width=6),
             ], className="g-1"),
         ], style=Dict("display" => "none")),
     ], className="border rounded p-2 mb-2", style=Dict("backgroundColor" => "var(--colour-val1-lighig)"), id="lens-slot-card-$i")
@@ -224,7 +224,16 @@ function LENS_ApplySlotCustomisation_DDEF!(conf::AbstractVector, slots::Abstract
         sl = slots[vi]
         mode = get(sl, "Mode", "KEEP")
 
-        if mode in ("SCALE", "REPLACE")
+        if mode == "REPLACE"
+            !isempty(get(sl, "NewName", "")) && (c["Name"] = string(sl["NewName"]))
+            new_u = string(get(sl, "NewUnit", ""))
+            c["Unit"] = (isempty(new_u) || new_u == "-") ? "" : new_u
+            if get(c, "IsRadioactive", false) == true || Sys_Fast.FAST_SafeNum_DDEF(get(c, "HalfLife", 0.0)) > 0.0
+                c["IsRadioactive"] = false
+                c["HalfLife"] = 0.0
+                c["HalfLifeUnit"] = "Hours"
+            end
+        elseif mode == "SCALE"
             !isempty(get(sl, "NewName", "")) && (c["Name"] = string(sl["NewName"]))
             !isempty(get(sl, "NewUnit", "")) && (c["Unit"] = string(sl["NewUnit"]))
         end
@@ -510,16 +519,23 @@ function LENS_Layout_DDEF()
         BASE_Modal_DDEF("lens-modal-preview", [html_i(className="fas fa-microscope me-2 colourtx-c4tg"), "Inter-Phase Knowledge Transfer (IPKT) — Step 3/3: Design Space Configuration"],
             [
                 dbc_alert([
-                    html_i(className="fas fa-lightbulb me-2 colourtx-c1sm"),
-                    html_span("Design Protocol Guidance: ", className="fw-bold colourtx-v5pb"),
-                    "This wizard configures the active experimental search space. For comprehensive structural modifications (such as introducing new fixed constants, re-specifying stoichiometry, or adjusting global physical constants), you may load the exported Vault Excel file directly into the ",
-                    html_strong("Design"),
-                    " page to use it as a custom project template."
-                ], className="small py-2 mb-3 border-0 shadow-sm colourbg-v1lw colourtx-v5pb", style=Dict("borderLeft" => "4px solid #21918C")),
+                    html_div([
+                        html_i(className="fas fa-exclamation-triangle fa-lg me-2 text-danger"),
+                        html_span("INTER-PHASE TRANSITION NOTICE", className="fw-bold text-danger text-uppercase")
+                    ], className="d-flex align-items-center mb-1"),
+                    html_p([
+                        "This wizard is strictly dedicated to configuring the 3-factor search space and generating the next phase matrix. ",
+                        "For full radiochemical configurations, new isotope definitions, half-life parameters, stoichiometry, and fixed constants, please import the exported protocol Excel directly into the ",
+                        html_strong("Design"),
+                        " page."
+                    ], className="mb-0 small text-dark")
+                ], className="small py-2 mb-3 shadow-sm", color="danger", style=Dict("borderLeft" => "5px solid #dc3545", "backgroundColor" => "#fff5f5")),
                 dbc_row([
                     dbc_col([
                         html_div([
                             dbc_label("Design Control", className="x-small fw-bold text-uppercase mb-2 d-block colourtx-v3dl"),
+                            dbc_label("Target Project / Protocol Name", className="small mb-1"),
+                            dbc_input(id="lens-prev-input-project", type="text", placeholder="Project Identifier", size="sm", className="form-control-sm mb-2"),
                             dbc_label("Matrix Protocol", className="small mb-1"),
                             dcc_dropdown(id="lens-prev-dd-method", options=[
                                 Dict("label" => "Taguchi (L9, Linear)",                     "value" => "TL09"),
@@ -625,31 +641,45 @@ function LENS_Layout_DDEF()
                 dbc_col(dbc_button([html_i(className="fas fa-check-circle me-2"), "Commit to Project Vault"], id="lens-prev-btn-commit", className="w-100 colourgl-c4tg", size="sm"), xs=12, md=6),
             ], className="w-100 g-2"); size="xl", close_button=false, backdrop="static", keyboard=false),
 
-        BASE_Modal_DDEF("lens-modal-radio-config", [html_i(className="fas fa-radiation-alt me-2 colourtx-c1sm"), "Radioactivity Decay Correction"],
+        BASE_Modal_DDEF("lens-modal-radio-config", [html_i(className="fas fa-radiation-alt me-2 colourtx-c1sm"), "Radioactivity Decay Correction Suite"],
             [
                 dbc_alert([
-                    html_strong("NOTICE: "),
-                    "Radioactive correction supports both absolute activity measurements (units such as mCi, MBq, Ci, GBq, CPM, CPS) and relative yield metrics. Mapping an output to a specific input triggers a yield calculation, which determines the decay-compensated ratio between the final and initial states. In these cases, percentage-based units are standard and ensure mathematical consistency within the analytical model."
+                    html_strong("RADIOCHEMICAL CORRECTION SUITE: "),
+                    "1) Forward Decay updates precursor activity at synthesis time and records actual activity in the ACTUAL_ column. ",
+                    "2) Reaction Penalty (DCYP) balances chemical conversion with physical decay by penalising composite desirability D over reaction incubation time. ",
+                    "3) Reverse Decay corrects absolute activity measurements (mCi, MBq, CPM) back to synthesis end. Percentage assays (ITLC / HPLC) cancel physical decay ratiometrically and are preserved."
                 ], color="danger", className="small py-2 mb-3 fw-bold"),
                 dbc_row([
                     dbc_col([
-                        html_h6("1. Forward Decay (Inputs)", className="small fw-bold colourtx-v4dh border-bottom pb-1"),
-                        html_p("Target radioactive inputs for correction:", className="x-small colourtx-v3dl mb-2"),
-                        dcc_dropdown(id="lens-radio-dd-inputs", options=[], multi=true, placeholder="Select...", className="small mb-3"),
+                        html_h6("1. Forward Decay (Precursors)", className="small fw-bold colourtx-v4dh border-bottom pb-1"),
+                        html_p("Adjust precursor activity from calibration to synthesis start time:", className="x-small colourtx-v3dl mb-2"),
+                        dcc_dropdown(id="lens-radio-dd-inputs", options=[], multi=true, placeholder="Select precursor...", className="small mb-3"),
                         
                         html_div(children=[
                             html_div(id="lens-radio-in-div-$i", className="mb-2 d-none", children=[
                                 html_span(id="lens-radio-in-lbl-$i", className="small fw-bold d-block colourtx-v5pb"),
                                 dbc_row([
-                                    dbc_col(dbc_input(id="lens-radio-in-name-$i", placeholder="Corrected Display Alias", type="text", size="sm", className="form-control-sm"), width=8),
-                                    dbc_col(dbc_input(id="lens-radio-in-unit-$i", placeholder="Measurement Unit", type="text", size="sm", className="form-control-sm"), width=4)
+                                    dbc_col(dbc_input(id="lens-radio-in-name-$i", placeholder="Display Alias", type="text", size="sm", className="form-control-sm"), width=8),
+                                    dbc_col(dbc_input(id="lens-radio-in-unit-$i", placeholder="Unit", type="text", size="sm", className="form-control-sm"), width=4)
                                 ], className="g-1")
                             ]) for i in 1:6
                         ])
-                    ], md=6),
+                    ], md=4),
                     dbc_col([
-                        html_h6("2. Reverse Decay & Yield (Outputs)", className="small fw-bold colourtx-v4dh border-bottom pb-1"),
-                        html_p("Map response variables to source inputs for yield calculation:", className="x-small colourtx-v3dl mb-2"),
+                        html_h6("2. Reaction Penalty (DCYP)", className="small fw-bold colourtx-v4dh border-bottom pb-1"),
+                        html_p("Penalise composite desirability D by e^(-lambda*t) over reaction time:", className="x-small colourtx-v3dl mb-2"),
+                        dcc_dropdown(id="lens-radio-dcyp-mode", options=[
+                            Dict("label" => "Enabled (Active Penalty)", "value" => "ON"),
+                            Dict("label" => "Disabled (Pure Chemical)", "value" => "OFF")
+                        ], value="ON", clearable=false, className="small mb-2"),
+                        html_p("Decay constant isotope source:", className="x-small colourtx-v3dl mb-1"),
+                        dcc_dropdown(id="lens-radio-dcyp-iso", options=[Dict("label" => "Auto-Detect from Project", "value" => "Auto")], value="Auto", clearable=false, className="small mb-2"),
+                        html_div(id="lens-radio-dcyp-info", className="small p-2 rounded bg-light border colourtx-v5pb",
+                            children="Penalises composite desirability score D directly across all virtual candidates and actual experimental runs.")
+                    ], md=4),
+                    dbc_col([
+                        html_h6("3. Reverse Decay & Yield (Outputs)", className="small fw-bold colourtx-v4dh border-bottom pb-1"),
+                        html_p("Correct absolute activity counts (MBq, mCi, CPM) back to synthesis end:", className="x-small colourtx-v3dl mb-2"),
                         
                         html_div(children=[
                             html_div(id="lens-radio-out-div-$i", className="mb-3 d-none", children=[
@@ -661,13 +691,13 @@ function LENS_Layout_DDEF()
                                 ], id="lens-radio-out-alias-div-$i", className="g-1 d-none")
                             ]) for i in 1:6
                         ])
-                    ], md=6)
+                    ], md=4)
                 ])
             ],
             html_div([
                 dbc_button("Cancel", id="lens-radio-btn-cancel", outline=false, className="me-2 colourgl-c0hr", size="sm"),
                 dbc_button(["Apply and Save ", html_i(className="fas fa-check ms-2")], id="lens-radio-btn-apply", className="colourgl-c4tg", size="sm"),
-            ], className="d-flex justify-content-end"); size="lg", close_button=false, backdrop="static", keyboard=false),
+            ], className="d-flex justify-content-end"); size="xl", close_button=false, backdrop="static", keyboard=false),
 
         dcc_store(id="lens-store-next-phase-proposal", data=Dict()),
     ], fluid=true, className="px-4 py-3")
@@ -824,6 +854,9 @@ function LENS_RegisterCallbacks_DDEF(app)
             goals_type   = fill("Nominal", 3)
             goals_weight = fill("1.00", 3)
 
+            config = Sys_Fast.FAST_ReadConfig_DDEF(path)
+            outputs_cfg = get(config, "Outputs", [])
+
             for (i, c) in enumerate(out_cols[1:min(length(out_cols), 3)])
                 raw_vals = skipmissing(df[!, c])
                 vals = Float64[]
@@ -833,14 +866,13 @@ function LENS_RegisterCallbacks_DDEF(app)
                     end
                 end
                 mn, mx = isempty(vals) ? (0.0, 0.0) : extrema(vals)
-                goals_name[i]   = replace(c, C.PRE_RESULT => "")
+                goals_name[i]   = Lib_Vise.VISE_ResolveName_DDEF(c, C.PRE_RESULT, outputs_cfg, C)
                 goals_type[i]   = "Nominal"
                 goals_min[i]    = round(mn; digits=2)
                 goals_max[i]    = round(mx; digits=2)
                 goals_target[i] = round((mn + mx) / 2; digits=2)
             end
 
-            config = Sys_Fast.FAST_ReadConfig_DDEF(path)
             method = get(get(config, "Global", Dict()), "Method", "")
 
             model_opts = []
@@ -867,7 +899,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             # Apply Radio Correction Overrides to UI Goals
             orig_goals_name = copy(goals_name)
             radio_opts = get(config, "RadioOpts", Dict{String,Any}())
-            rev_dict = get(radio_opts, "ReverseMap", Dict{String,Any}())
+            rev_dict = get(radio_opts, "REVE", Dict{String,Any}())
             for (i, name) in enumerate(orig_goals_name)
                 if haskey(rev_dict, name)
                     mapping = rev_dict[name]
@@ -881,10 +913,12 @@ function LENS_RegisterCallbacks_DDEF(app)
 
             saved_goals = get(config, "LensGoals", [])
             for (i, name) in enumerate(goals_name)
-                # Primary match via corrected alias, fallback to raw output name
-                g_idx = findfirst(g -> get(g, "Name", "") == name, saved_goals)
+                g_idx = findfirst(g -> Sys_Fast.FAST_GetSafe_DDEF(g, "Name", "") == name, saved_goals)
                 if isnothing(g_idx)
-                    g_idx = findfirst(g -> get(g, "Name", "") == orig_goals_name[i], saved_goals)
+                    g_idx = findfirst(g -> Sys_Fast.FAST_GetSafe_DDEF(g, "Name", "") == orig_goals_name[i], saved_goals)
+                end
+                if isnothing(g_idx) && i <= length(out_cols)
+                    g_idx = findfirst(g -> Sys_Fast.FAST_GetSafe_DDEF(g, "Name", "") == replace(out_cols[i], C.PRE_RESULT => ""), saved_goals)
                 end
                 
                 if !isnothing(g_idx)
@@ -896,7 +930,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                     goals_max[i]    = Float64(get(saved_g, "Max",    goals_max[i]))
                 end
             end
-            has_radio_headers = any(c -> occursin("TIME_EXP_", string(c)) || occursin("TIME_MEAS_", string(c)), names(df))
+            has_radio_headers = any(c -> occursin("TIME_FORW_", string(c)) || occursin("TIME_REVE_", string(c)) || occursin("TIME_DCYP_", string(c)), names(df))
             has_radio_config = false
             if haskey(config, "Ingredients")
                 has_radio_config = has_radio_config || any(get(f, "IsRadioactive", false) == true for f in config["Ingredients"])
@@ -1065,8 +1099,10 @@ function LENS_RegisterCallbacks_DDEF(app)
         gtypes   = collect(args[17:19])
         gweights = collect(args[20:22])
 
+        active_gnames = String[]
         for i in 1:3
             if !isnothing(gnames[i]) && strip(string(gnames[i])) != ""
+                push!(active_gnames, strip(string(gnames[i])))
                 push!(goals, Dict(
                     "Name"   => string(gnames[i]),
                     "Min"    => isnothing(gmins[i])    ? 0.0 : Float64(gmins[i]),
@@ -1076,6 +1112,15 @@ function LENS_RegisterCallbacks_DDEF(app)
                     "Weight" => isnothing(gweights[i]) ? 1.0 : parse(Float64, string(gweights[i]))
                 ))
             end
+        end
+
+        if isempty(active_gnames)
+            return nu, nu, html_span("❌ Systematic Error: At least one response goal must be specified.", className="fw-bold colourtx-c0hr"), nu, nu, nu, nu, nu, nu, true, nu
+        end
+
+        valid_gnames, gname_err = BASE_ValidateUniqueNames_DDEF(active_gnames, "Response")
+        if !valid_gnames
+            return nu, nu, html_span("❌ " * gname_err, className="fw-bold colourtx-c0hr"), nu, nu, nu, nu, nu, nu, true, nu
         end
 
         # Implementation of a race-condition lock to preserve system state integrity.
@@ -1126,6 +1171,7 @@ function LENS_RegisterCallbacks_DDEF(app)
             LENS_BatchPayload_DDEC[] = nothing
             LENS_LastPayloadTime_DDEC[] = 0.0
             local pkg1_copy = deepcopy(pkg1_graphs)
+            local pre_hidden_sheets = deepcopy(get(res, "_Hidden_Sheets", Dict{String,DataFrame}()))
 
             Sys_Fast.FAST_Log_DDEF("LENS", "Render", "(Pkg 1) Prepared $(length(pkg1_graphs)) units for Priority delivery.", "OK")
 
@@ -1143,11 +1189,8 @@ function LENS_RegisterCallbacks_DDEF(app)
                     
                     # 1. Unify pre-BBO sheets and Leaders sheet into a single atomic write transaction
                     commit_sheets = Dict{String,DataFrame}()
-                    raw_hidden = get(res, "_Hidden_Sheets", Dict())
-                    if raw_hidden isa AbstractDict
-                        for (k, v) in raw_hidden
-                            commit_sheets[string(k)] = v
-                        end
+                    for (k, v) in pre_hidden_sheets
+                        commit_sheets[string(k)] = v
                     end
                     if !isempty(ldf)
                         commit_sheets[C.PREFIX_LEADERS * phase_str] = ldf
@@ -2112,7 +2155,7 @@ end
             disp_name = c_name
             r_opts = get(res, "RadioOpts", Dict{String,Any}())
             if get(r_opts, "Apply", false)
-                alias = get(get(r_opts, "Forward", Dict{String,Any}()), disp_name, Dict{String,Any}())
+                alias = get(get(r_opts, "FORW", Dict{String,Any}()), disp_name, Dict{String,Any}())
                 !isempty(get(alias, "Name", "")) && (disp_name = alias["Name"])
             end
 
@@ -2249,8 +2292,9 @@ end
         State("lens-prev-dir-x2",      "value"),
         State("lens-prev-dir-x3",      "value"),
         State("lens-store-excluded-constants", "data"),
+        State("lens-prev-input-project",       "value"),
         prevent_initial_call=true
-    ) do n_commit, proposal, sel_rows, cand_data, src, base64_file, proj_v, slot_cfg, dir_x1, dir_x2, dir_x3, excluded_raw
+    ) do n_commit, proposal, sel_rows, cand_data, src, base64_file, proj_v, slot_cfg, dir_x1, dir_x2, dir_x3, excluded_raw, prev_proj_v
         (isnothing(n_commit) || n_commit == 0 || isnothing(proposal) || get(proposal, "Status", "") != "OK") && return Dash.no_update()
         (isnothing(sel_rows) || isempty(sel_rows)) && return Dash.no_update()
 
@@ -2288,11 +2332,20 @@ end
             filter!(c -> !(lowercase(strip(string(LENS_GetSafe_DDEF(c, "Role", "")))) in ("fixed", "fix") && string(LENS_GetSafe_DDEF(c, "Name", "")) in excluded), custom_conf)
         end
 
+        target_proj = if !isnothing(prev_proj_v) && !isempty(strip(string(prev_proj_v)))
+            String(strip(string(prev_proj_v)))
+        elseif !isnothing(proj_v) && !isempty(strip(string(proj_v)))
+            String(strip(string(proj_v)))
+        else
+            "DoECISORY"
+        end
+
         path = Sys_Fast.FAST_GetTransientPath_DDEF(base64_file)
         res  = Sys_Flow.FLOW_CommitIPKT_DDEF(
             path, src, sel_id, Float64(contraction), meth, Float64(translation);
             Direction=direction_vec,
-            CustomConfig=has_custom ? custom_conf : nothing
+            CustomConfig=has_custom ? custom_conf : nothing,
+            ProjectName=target_proj
         )
 
         if res["Status"] == "OK"
@@ -2301,8 +2354,7 @@ end
             _, bytes = Sys_Fast.FAST_PrepareDownload_DDEF(path)
             Sys_Fast.FAST_CleanTransient_DDEF(path)
 
-            proj_n = (isnothing(proj_v) || isempty(strip(string(proj_v)))) ? "DoECISORY" : string(proj_v)
-            fname = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_n, res["TargetPhase"], "EVO", "xlsx")
+            fname = Sys_Fast.FAST_GenerateSmartName_DDEF(target_proj, res["TargetPhase"], "EVO", "xlsx")
 
             return (
                 Dict("filename" => fname, "content" => base64encode(bytes), "base64" => true),
@@ -2455,20 +2507,24 @@ end
     end
 
     # 2. Populate Modal Options from Smart Vault Data
-    # Unit 1: Radioactivity - Forward Configuration (Inputs)
+    # Unit 1: Radioactivity - Forward Configuration (Inputs) & DCYP Reaction Penalty
     callback!(app,
         Output("lens-radio-dd-inputs", "options"),
         Output("lens-radio-dd-inputs", "value"),
+        Output("lens-radio-dcyp-mode", "value"),
+        Output("lens-radio-dcyp-iso",  "options"),
+        Output("lens-radio-dcyp-iso",  "value"),
         [Output("lens-radio-in-name-$i", "value") for i in 1:6]...,
         [Output("lens-radio-in-unit-$i", "value") for i in 1:6]...,
         Input("lens-modal-radio-config", "is_open"),
         State("store-master-vault", "data"),
         prevent_initial_call=true
     ) do is_open, active_data
-        (!is_open || isnothing(active_data) || active_data == "") && return [], [], fill("", 6)..., fill("", 6)...
+        default_iso_opts = [Dict("label" => "Auto-Detect from Project", "value" => "Auto")]
+        (!is_open || isnothing(active_data) || active_data == "") && return [], [], "ON", default_iso_opts, "Auto", fill("", 6)..., fill("", 6)...
         
         active_cont = active_data isa String ? active_data : get(active_data, "content", "")
-        (isnothing(active_cont) || active_cont == "") && return [], [], fill("", 6)..., fill("", 6)...
+        (isnothing(active_cont) || active_cont == "") && return [], [], "ON", default_iso_opts, "Auto", fill("", 6)..., fill("", 6)...
 
         path   = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
         config = Sys_Fast.FAST_ReadConfig_DDEF(path)
@@ -2479,15 +2535,34 @@ end
         in_options = [Dict("label" => get(i, "Name", ""), "value" => get(i, "Name", "")) for i in rad_inputs]
         
         radio_opts = get(config, "RadioOpts", Dict{String,Any}())
-        fwd_dict = get(radio_opts, "Forward", Dict{String,Any}())
+        fwd_dict = get(radio_opts, "FORW", Dict{String,Any}())
         fwd_keys = collect(keys(fwd_dict))
+
+        # DCYP configuration extraction
+        dcyp_cfg = get(radio_opts, "DCYP", Dict())
+        dcyp_mode = if dcyp_cfg isa AbstractDict
+            get(dcyp_cfg, "Enabled", true) ? "ON" : "OFF"
+        elseif dcyp_cfg isa AbstractString
+            uppercase(strip(dcyp_cfg)) in ("ON", "TRUE", "1") ? "ON" : "OFF"
+        elseif dcyp_cfg isa Bool
+            dcyp_cfg ? "ON" : "OFF"
+        else
+            "ON"
+        end
+
+        dcyp_iso_val = dcyp_cfg isa AbstractDict ? get(dcyp_cfg, "Isotope", "Auto") : "Auto"
+        iso_options = [Dict("label" => "Auto-Detect from Project", "value" => "Auto")]
+        for ing in rad_inputs
+            ing_n = get(ing, "Name", "")
+            !isempty(ing_n) && push!(iso_options, Dict("label" => ing_n, "value" => ing_n))
+        end
 
         in_names = fill("", 6); in_units = fill("", 6)
         for (idx, k) in enumerate(fwd_keys[1:min(length(fwd_keys), 6)])
             in_names[idx] = get(fwd_dict[k], "Name", "")
             in_units[idx] = get(fwd_dict[k], "Unit", "")
         end
-        return in_options, fwd_keys, in_names..., in_units...
+        return in_options, fwd_keys, dcyp_mode, iso_options, dcyp_iso_val, in_names..., in_units...
     end
 
     function LENS_IsRadioactiveTarget_DDEF(name::String, unit::String)
@@ -2538,7 +2613,7 @@ end
         append!(out_options, in_options)
 
         radio_opts = get(config, "RadioOpts", Dict{String,Any}())
-        rev_dict = get(radio_opts, "ReverseMap", Dict{String,Any}())
+        rev_dict = get(radio_opts, "REVE", Dict{String,Any}())
         
         out_div_classes = fill("d-none", 6); out_lbls = fill("", 6)
         out_src_vals = fill("None", 6); out_names = fill("", 6); out_units = fill("", 6)
@@ -2630,6 +2705,8 @@ end
         State("lens-upload-data",     "filename"),
         State("store-master-vault",   "data"),
         State("lens-radio-dd-inputs", "value"),
+        State("lens-radio-dcyp-mode", "value"),
+        State("lens-radio-dcyp-iso",  "value"),
         [State("lens-radio-in-lbl-$i", "children") for i in 1:6]...,
         [State("lens-radio-in-name-$i", "value") for i in 1:6]...,
         [State("lens-radio-in-unit-$i", "value") for i in 1:6]...,
@@ -2639,6 +2716,7 @@ end
         [State("lens-radio-out-unit-$i", "value") for i in 1:6]...,
         prevent_initial_call=true
     ) do apply_clicks, upload_cont, upload_fname, active_cont, fwd_inputs, 
+         dcyp_mode, dcyp_iso,
          il1, il2, il3, il4, il5, il6,
          in1, in2, in3, in4, in5, in6,
          iu1, iu2, iu3, iu4, iu5, iu6,
@@ -2697,11 +2775,17 @@ end
                 end
             end
 
-            apply_flag = !isempty(fwd_dict) || !isempty(rev_dict)
+            dcyp_dict = Dict(
+                "Enabled" => (dcyp_mode == "ON"),
+                "Isotope" => isnothing(dcyp_iso) ? "Auto" : string(dcyp_iso)
+            )
+
+            apply_flag = !isempty(fwd_dict) || !isempty(rev_dict) || (dcyp_mode == "ON")
             new_radio_opts = Dict(
                 "Apply" => apply_flag,
-                "Forward" => fwd_dict,
-                "ReverseMap" => rev_dict
+                "FORW"  => fwd_dict,
+                "DCYP"  => dcyp_dict,
+                "REVE"  => rev_dict
             )
 
             path   = Sys_Fast.FAST_GetTransientPath_DDEF(handle)
@@ -2778,7 +2862,9 @@ end
         prevent_initial_call=true
     ) do m1, m2, m3, a1, a2, a3, b1, b2, b3,
          sn1, sn2, sn3, smin1, smin2, smin3, smax1, smax2, smax3,
-         rn1, rn2, rn3, ru1, ru2, ru3, rl1a, rl1b, rl1c, rl2a, rl2b, rl2c, rl3a, rl3b, rl3c, rmin1, rmin2, rmin3, rmax1, rmax2, rmax3, proposal
+         rn1, rn2, rn3, ru1, ru2, ru3, rl1a, rl1b, rl1c, rl2a, rl2b, rl2c, rl3a, rl3b, rl3c,
+         rmin1, rmin2, rmin3, rmax1, rmax2, rmax3,
+         proposal
 
         modes  = [m1, m2, m3]
         alphas = [a1, a2, a3]
@@ -2810,11 +2896,9 @@ end
 
             slot = Dict{String,Any}("Mode" => mode, "Alpha" => α, "Beta" => β)
 
-            # Utilisation of global input validation helpers from Sys_Fast
             has_str(v) = Sys_Fast.FAST_IsPopulatedInput_DDEF(v)
             has_num(v) = Sys_Fast.FAST_IsNumericInput_DDEF(v)
 
-            # Explicit extraction vectors to ensure index-safety
             r_l1s = [rl1a, rl1b, rl1c]
             r_l2s = [rl2a, rl2b, rl2c]
             r_l3s = [rl3a, rl3b, rl3c]
@@ -2839,6 +2923,9 @@ end
                 slot["NewL3"] = isnan(v3) ? 0.0 : v3
                 has_num(rmins[i]) && (slot["NewMin"] = Sys_Fast.FAST_SafeNum_DDEF(rmins[i]))
                 has_num(rmaxs[i]) && (slot["NewMax"] = Sys_Fast.FAST_SafeNum_DDEF(rmaxs[i]))
+                slot["HalfLife"] = 0.0
+                slot["HalfLifeUnit"] = "Hours"
+                slot["IsRadioactive"] = false
                 transformed_displays[i] = string(round(Float64(slot["NewL2"]); digits=3))
             end
 

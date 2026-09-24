@@ -53,7 +53,7 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF, FAST_Constants_DDES,
        FAST_CacheRead_DDEF, FAST_CacheWrite_DDEF, FAST_CacheEvict_DDEF,
        FAST_VaultWrite_DDEF, FAST_VaultRead_DDEF, FAST_GetComputeThreads_DDEF,
        FAST_SafeExcelWrite_DDEF, FAST_CleanTransient_DDEF, FAST_FormatDuration_DDEF,
-       FAST_ValidateDataFrame_DDEF, FAST_GetSystemQuote_DDEF, FAST_InitialiseWorkforce_DDEF
+       FAST_SortColumns_DDEF
 
 export Lib_Core
 export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF, CORE_ExtractLeader_DDEF,
@@ -61,7 +61,7 @@ export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF, CORE_ExtractLeader_DDEF,
        CORE_OptimiseDesirability_DDEF, CORE_ValidateDesign_DDEF,
        CORE_D_Efficiency_DDEF, CORE_CalcDesignMetrics_DDEF, CORE_CodeMatrix_DDEF,
        CORE_CalcDesirability_DDEF, CORE_ExtractGoal_DDEF, CORE_GetModelType_DDEF,
-       CORE_DecayModifier_DDES, CORE_ApplyDecayPenalty_DDEF,
+       CORE_ModifierDCYP_DDES, CORE_ApplyDCYP_DDEF,
        CORE_AbstractDesignMethod_DDET, CORE_MethodBB15_DDES, CORE_MethodTL09_DDES,
        CORE_MethodCD17_DDES, CORE_MethodDF14_DDES
 
@@ -69,7 +69,7 @@ export Lib_Mole
 export MOLE_ParseTable_DDEF, MOLE_QuickAudit_DDEF, MOLE_CalcMass_DDEF,
        MOLE_ApproxEq_DDEF, MOLE_ValidatePhysicalUnit_DDEF, MOLE_AuditMatrix_DDEF,
        MOLE_AuditBatch_DDEF, MOLE_ValidateDesignFeasibility_DDEF,
-       MOLE_ApplyRadioDecay_DDEF, MOLE_ProcessDesign_DDEF,
+       MOLE_CalcRadioDecay_DDEF, MOLE_ProcessDesign_DDEF,
        MOLE_GetPercentageEquivalent_DDEF, MOLE_IsTimeUnit_DDEF,
        MOLE_ConvertTimeToMinutes_DDEF
 
@@ -85,8 +85,8 @@ export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
        VISE_GetTermNames_DDEF, VISE_ClampIndex_DDEF, VISE_SelectBestModel_DDEF,
        VISE_CalcMetrics_DDEF, VISE_SensitivityAnalysis_DDEF,
        VISE_GenerateScientificReport_DDEF, VISE_CalcVIF_DDEF, VISE_LackOfFit_DDEF,
-       VISE_GenerateAnovaTable_DDEF, VISE_PerformNormalityTest_DDEF,
-       VISE_ExportToExcel_DDEF, VISE_ExtractDecayModifiers_DDEF
+       VISE_ExportToExcel_DDEF, VISE_ExtractDCYP_DDEF, VISE_ApplyForwReveDecay_DDEF,
+       VISE_WidenColumnFloat_DDEF!
 
 export Lib_Arts
 export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,

@@ -228,7 +228,8 @@ Commits the complete IPKT synthesis (ACTA baseline adapted with any custom ASTM 
 function FLOW_CommitIPKT_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentPhase::Union{AbstractString,Nothing},
     SelectedLeaderID::Union{AbstractString,Nothing}="", ContractionFactor::Real=0.5, Method::AbstractString="TL09", TranslationFactor::Real=0.0;
     Direction::Union{Vector{Int}, Nothing}=[-1, -1, -1],
-    CustomConfig::Union{AbstractVector, Nothing}=nothing)::Dict{String,Any}
+    CustomConfig::Union{AbstractVector, Nothing}=nothing,
+    ProjectName::Union{AbstractString, Nothing}=nothing)::Dict{String,Any}
     
     (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict("Status" => "FAIL", "Message" => "Invalid master file path provided.")
     C   = Main.Sys_Fast.FAST_Data_DDEC
@@ -308,8 +309,8 @@ function FLOW_CommitIPKT_DDEF(MasterFile::Union{AbstractString,Nothing}, Current
 
     if haskey(res, "Outputs")
         for o in res["Outputs"]
-            n = string(get(o, "Name", ""))
-            u = string(get(o, "Unit", ""))
+            n = replace(strip(string(get(o, "Name", ""))), " " => "_")
+            u = replace(strip(string(get(o, "Unit", ""))), " " => "_")
             isempty(n) && continue
             
             res_header  = (isempty(u) || u == "-") ? C.PRE_RESULT * n : C.PRE_RESULT * n * "_" * u
@@ -320,12 +321,49 @@ function FLOW_CommitIPKT_DDEF(MasterFile::Union{AbstractString,Nothing}, Current
         end
     end
     df[!, C.COL_SCORE] = Vector{Union{Missing,Float64}}(missing, N_Runs)
+
+    for c in NewConfig
+        is_rad = get(c, "IsRadioactive", false) in (true, 1, "true", "TRUE")
+        hl_val = Main.Sys_Fast.FAST_SafeNum_DDEF(get(c, "HalfLife", 0.0))
+        if is_rad || hl_val > 0.0
+            rn = string(FLOW_GetSafeKey_DDEF(c, "Name", ""))
+            ru = string(FLOW_GetSafeKey_DDEF(c, "Unit", "mCi"))
+            if !isempty(rn)
+                df[!, "TIME_FORW_MINS_" * rn] = fill(0.0, N_Runs)
+                
+                dcyp_vals = fill(0.0, N_Runs)
+                for vi in var_indices
+                    v_r = NewConfig[vi]
+                    v_u = string(FLOW_GetSafeKey_DDEF(v_r, "Unit", ""))
+                    v_n = string(FLOW_GetSafeKey_DDEF(v_r, "Name", ""))
+                    if Main.Lib_Mole.MOLE_IsTimeUnit_DDEF(v_u) || occursin(r"(?i)min|time|süre", v_n)
+                        col_cand  = C.PRE_INPUT * v_n * "_" * v_u
+                        col_cand2 = C.PRE_INPUT * v_n
+                        target_c  = hasproperty(df, Symbol(col_cand)) ? Symbol(col_cand) : (hasproperty(df, Symbol(col_cand2)) ? Symbol(col_cand2) : nothing)
+                        if !isnothing(target_c)
+                            dcyp_vals = Float64.(df[!, target_c])
+                            break
+                        end
+                    end
+                end
+                df[!, "TIME_DCYP_MINS_" * rn] = dcyp_vals
+                df[!, "TIME_REVE_MINS_" * rn] = fill(0.0, N_Runs)
+
+                act_header = (isempty(ru) || ru == "-") ? "ACTUAL_" * rn : "ACTUAL_" * rn * "_" * ru
+                df[!, act_header] = Vector{Union{Missing,Float64}}(missing, N_Runs)
+            end
+        end
+    end
+
     current_config                = Main.Sys_Fast.FAST_ReadConfig_DDEF(MasterFile)
     current_config["Ingredients"] = [Dict{String,Any}(string(k) => v for (k, v) in pairs(c)) for c in NewConfig]
 
     g_info                   = get(current_config, "Global", Dict{String,Any}())
     g_info["Method"]         = Method
     g_info["Direction"]      = (Method == "DF14" ? Direction : nothing)
+    if !isnothing(ProjectName) && !isempty(strip(ProjectName))
+        g_info["ProjectName"] = strip(string(ProjectName))
+    end
 
     # PhaseHistory orchestration for scientific provenance and audit trail
     ph_raw = get(g_info, "PhaseHistory", Dict{String,Any}())
@@ -345,8 +383,8 @@ function FLOW_CommitIPKT_DDEF(MasterFile::Union{AbstractString,Nothing}, Current
     g_info["PhaseHistory"]  = ph_history
     current_config["Global"] = g_info
 
-    out_names = String[string(get(o, "Name", "")) for o in get(res, "Outputs", []) if !isempty(get(o, "Name", ""))]
-    in_names  = String[string(FLOW_GetSafeKey_DDEF(c, "Name", "")) for c in NewConfig]
+    out_names = String[replace(strip(string(get(o, "Name", ""))), " " => "_") for o in get(res, "Outputs", []) if !isempty(get(o, "Name", ""))]
+    in_names  = String[replace(strip(string(FLOW_GetSafeKey_DDEF(c, "Name", ""))), " " => "_") for c in NewConfig]
 
     success = Main.Sys_Fast.FAST_InitialiseMaster_DDEF(MasterFile, in_names, out_names, df, current_config)
     !success && return Dict("Status" => "FAIL", "Message" => "Excel commit failed for $TargetPhase.")

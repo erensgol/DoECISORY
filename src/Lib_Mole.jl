@@ -20,7 +20,7 @@ export MOLE_ParseTable_DDEF, MOLE_QuickAudit_DDEF,
     MOLE_CalcMass_DDEF, MOLE_ApproxEq_DDEF, 
     MOLE_ValidatePhysicalUnit_DDEF, MOLE_AuditMatrix_DDEF, 
     MOLE_AuditBatch_DDEF, MOLE_ValidateDesignFeasibility_DDEF, 
-    MOLE_ApplyRadioDecay_DDEF, MOLE_ProcessDesign_DDEF, 
+    MOLE_CalcRadioDecay_DDEF, MOLE_ProcessDesign_DDEF, 
     MOLE_GetPercentageEquivalent_DDEF,
     MOLE_IsTimeUnit_DDEF, MOLE_ConvertTimeToMinutes_DDEF
 
@@ -116,10 +116,10 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    MOLE_ApplyRadioDecay_DDEF(RawValue, HalfLife, HalfLifeUnit, DeltaTMinutes; Reverse=false) -> Float64
-Calculates effective mass/activity after isothermal decay (Mapping for Forward or Reverse Decay).
+    MOLE_CalcRadioDecay_DDEF(RawValue, HalfLife, HalfLifeUnit, DeltaTMinutes; Reverse=false) -> Float64
+Calculates effective activity or mass following the radioactive decay law N(t) = N_0 * exp(±lambda * t).
 """
-function MOLE_ApplyRadioDecay_DDEF(RawValue::Real, HalfLife::Real, HalfLifeUnit::AbstractString, DeltaTMinutes::Real; Reverse::Bool=false)
+function MOLE_CalcRadioDecay_DDEF(RawValue::Real, HalfLife::Real, HalfLifeUnit::AbstractString, DeltaTMinutes::Real; Reverse::Bool=false)::Float64
     hl_minutes = MOLE_ConvertTimeToMinutes_DDEF(HalfLife, HalfLifeUnit)
     hl_minutes <= 0.0 && return Float64(RawValue)
 

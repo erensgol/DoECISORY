@@ -193,7 +193,7 @@ const SUITE_START_TIME = time()
             @track G1 !isfile(dummy)
         end
     end
-
+    
     # ==========================================================================
     # GROUP 2: Lib_Core Optimal Matrices, D-A-G-I & Desirability (18 Tests)
     # ==========================================================================
@@ -326,15 +326,15 @@ const SUITE_START_TIME = time()
             @track G2 bx_y[1] > bx_i[1]
         end
 
-        # 33: Radiochemical decay penalty modification
-        let dm_ga = Lib_Core.CORE_DecayModifier_DDES(3, log(2.0) / 67.71, [1], "Ga-68"),
-            val_decay = Lib_Core.CORE_ApplyDecayPenalty_DDEF(100.0, dm_ga, [0.0, 0.0, 67.71])
-            @track G2 isapprox(val_decay, 50.0; atol=1e-2)
+        # 33: Radiochemical DCYP (Reaction Time Incubation Penalty) modification
+        let dm_ga = Lib_Core.CORE_ModifierDCYP_DDES(3, log(2.0) / 67.71, "Ga-68"),
+            val_decay = Lib_Core.CORE_ApplyDCYP_DDEF(1.0, dm_ga, [0.0, 0.0, 67.71])
+            @track G2 isapprox(val_decay, 0.5; atol=1e-2)
         end
 
-        # 34: Decay modifier structure validation
-        let dm = Lib_Core.CORE_DecayModifier_DDES(2, log(2.0) / 109.77, [1, 2], "F-18")
-            @track G2 dm.TimeIndex == 2 && dm.IsotopeName == "F-18" && length(dm.AffectedOutputs) == 2
+        # 34: ModifierDCYP structure validation
+        let dm = Lib_Core.CORE_ModifierDCYP_DDES(2, log(2.0) / 109.77, "F-18")
+            @track G2 dm.TimeIndex == 2 && dm.IsotopeName == "F-18" && isapprox(dm.Lambda, log(2.0) / 109.77; atol=1e-6)
         end
     end
 
@@ -437,15 +437,15 @@ const SUITE_START_TIME = time()
         end
 
         # 45: Forward and reverse radioactive decay kinetics
-        let fwd = Lib_Mole.MOLE_ApplyRadioDecay_DDEF(100.0, 67.71, "Minutes", 135.42; Reverse=false),
-            rev = Lib_Mole.MOLE_ApplyRadioDecay_DDEF(25.0, 67.71, "Minutes", 135.42; Reverse=true),
-            fwd_d = Lib_Mole.MOLE_ApplyRadioDecay_DDEF(100.0, 6.647, "Days", 6.647 * 1440.0; Reverse=false)
+        let fwd = Lib_Mole.MOLE_CalcRadioDecay_DDEF(100.0, 67.71, "Minutes", 135.42; Reverse=false),
+            rev = Lib_Mole.MOLE_CalcRadioDecay_DDEF(25.0, 67.71, "Minutes", 135.42; Reverse=true),
+            fwd_d = Lib_Mole.MOLE_CalcRadioDecay_DDEF(100.0, 6.647, "Days", 6.647 * 1440.0; Reverse=false)
             @track G3 isapprox(fwd, 25.0; atol=1e-3) && isapprox(rev, 100.0; atol=1e-3) && isapprox(fwd_d, 50.0; atol=1e-3)
         end
 
         # 46: Radio-decay temporal limit handling
-        let d_zero = Lib_Mole.MOLE_ApplyRadioDecay_DDEF(100.0, 60.0, "Minutes", 0.0),
-            d_inf  = Lib_Mole.MOLE_ApplyRadioDecay_DDEF(100.0, 1.0, "Minutes", 1e5)
+        let d_zero = Lib_Mole.MOLE_CalcRadioDecay_DDEF(100.0, 60.0, "Minutes", 0.0),
+            d_inf  = Lib_Mole.MOLE_CalcRadioDecay_DDEF(100.0, 1.0, "Minutes", 1e5)
             @track G3 isapprox(d_zero, 100.0; atol=1e-3) && isapprox(d_inf, 0.0; atol=1e-6)
         end
 
@@ -573,11 +573,28 @@ const SUITE_START_TIME = time()
             @track G4 best_m_q["ModelType"] == "quadratic" && best_m_l["ModelType"] == "linear"
         end
 
-        # 64: Radio-decay modifier extraction from configuration
+        # 64: Radio-decay DCYP extraction, forward & reverse matrix decay operations
         let cfg_decay = Dict("Ingredients" => [Dict("Name" => "ReactionTime", "Unit" => "min"), Dict("Name" => "Ga-68", "HalfLife" => 67.71, "HalfLifeUnit" => "min", "IsRadioactive" => true)]),
-            opts_decay = Dict("RadioOpts" => Dict("Apply" => true, "ReverseMap" => Dict("Yield" => Dict("Source" => "Ga-68")))),
-            d_mods = Lib_Vise.VISE_ExtractDecayModifiers_DDEF(["ReactionTime", "Temp", "Conc"], ["Yield"], cfg_decay, opts_decay)
-            @track G4 length(d_mods) == 1 && d_mods[1].IsotopeName == "Ga-68"
+            opts_decay = Dict("RadioOpts" => Dict("Apply" => true, "DCYP" => Dict("Enabled" => true, "Isotope" => "Ga-68"))),
+            d_mods = Lib_Vise.VISE_ExtractDCYP_DDEF(["ReactionTime", "Temp", "Conc"], ["Yield"], cfg_decay, opts_decay),
+            X_test = [100.0 20.0 5.0],
+            Y_test = [25.0 50.0],
+            in_n = ["Ga-68", "Temp", "pH"],
+            out_n = ["ProductActivity", "Purity%"],
+            df_test = DataFrame("TIME_FORW_MINS_Ga-68" => [67.71], "TIME_REVE_MINS_Ga-68" => [67.71]),
+            cfg_test = Dict(
+                "Ingredients" => [Dict("Name" => "Ga-68", "HalfLife" => 67.71, "HalfLifeUnit" => "min", "IsRadioactive" => true)],
+                "Outputs" => [Dict("Name" => "ProductActivity", "Unit" => "MBq"), Dict("Name" => "Purity%", "Unit" => "%")]
+            ),
+            opts_test = Dict("RadioOpts" => Dict(
+                "Apply" => true,
+                "FORW" => Dict("Ga-68" => Dict("Name" => "Ga-68 Precursor")),
+                "REVE" => Dict("ProductActivity" => Dict("Source" => "Ga-68"), "Purity%" => Dict("Source" => "Ga-68"))
+            )),
+            C = Sys_Fast.FAST_Data_DDEC,
+            Log = Sys_Fast.FAST_Log_DDEF,
+            audit = Lib_Vise.VISE_ApplyForwReveDecay_DDEF(X_test, Y_test, in_n, out_n, df_test, cfg_test, opts_test, C, Log)
+            @track G4 length(d_mods) == 1 && d_mods[1].IsotopeName == "Ga-68" && length(audit) == 3 && isapprox(X_test[1, 1], 50.0; atol=1e-2) && isapprox(Y_test[1, 1], 100.0; atol=1e-2) && isapprox(Y_test[1, 2], 50.0; atol=1e-2)
         end
 
         # 65: Grid search within parameter bounds
@@ -903,10 +920,10 @@ const SUITE_START_TIME = time()
             e2e_mod = Lib_Vise.VISE_Regress_DDEF(e2e_X, Float64.(e2e_read[!, "Yield"]), "quadratic"; InNames=["Temp", "Time", "Dose"])
             e2e_goal = Dict{String, Any}("Type" => "Maximise", "Min" => 0.0, "Max" => 30.0, "Target" => 25.0, "Weight" => 1.0, "WeightVal" => 1.0)
             e2e_mod["Goal"] = e2e_goal
-            e2e_decay = [Lib_Core.CORE_DecayModifier_DDES(2, log(2.0) / 67.71, [1], "Ga-68")]
+            e2e_decay = [Lib_Core.CORE_ModifierDCYP_DDES(2, log(2.0) / 67.71, "Ga-68")]
             e2e_bounds = [-1.0 1.0; -1.0 1.0; -1.0 1.0]
             
-            (e2e_best_x, e2e_best_s) = Lib_Core.CORE_OptimiseDesirability_DDEF([e2e_mod], [e2e_goal], e2e_bounds; MaxTime=0.2, DecayModifiers=e2e_decay)
+            (e2e_best_x, e2e_best_s) = Lib_Core.CORE_OptimiseDesirability_DDEF([e2e_mod], [e2e_goal], e2e_bounds; MaxTime=0.2, ModifiersDCYP=e2e_decay)
             e2e_next_range = Sys_Flow.FLOW_CalcACTA_DDEF(e2e_best_x[1], [-1.0, 0.0, 1.0], 0.5, 0.0, 0.0)
             Sys_Fast.FAST_CleanTransient_DDEF(e2e_temp)
 

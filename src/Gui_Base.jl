@@ -23,7 +23,7 @@ export BASE_StyleCell_DDEC, BASE_StyleInput_DDEC, BASE_StyleInputCentre_DDEC,
        BASE_IconButton_DDEF, BASE_TableHeader_DDEF, BASE_ControlGroup_DDEF, 
        BASE_ActionButton_DDEF, BASE_Separator_DDEF, BASE_SidebarHeader_DDEF, 
        BASE_Upload_DDEF, BASE_NextButton_DDEF, BASE_BuildIdRow_DDEF, BASE_BuildLevelRow_DDEF, 
-       BASE_BuildLimitsRow_DDEF, BASE_BuildGoalRow_DDEF
+       BASE_BuildLimitsRow_DDEF, BASE_BuildGoalRow_DDEF, BASE_ValidateUniqueNames_DDEF
 
 # ==============================================================================
 # PART A: DESIGN SYSTEM & ATOMIC WIDGETS
@@ -618,6 +618,29 @@ function BASE_ScientificAuditUI_DDEF()
             msg_text
         ], className="text-center fw-bold colourtx-v4dh mt-2 fst-italic")
     ], fluid=true, className="overflow-hidden p-0")
+end
+
+# ------------------------------------------------------------------------------
+# SECTION 7: NOMENCLATURE VALIDATION BUS
+# ------------------------------------------------------------------------------
+
+"""
+    BASE_ValidateUniqueNames_DDEF(Names::AbstractVector, EntityType::AbstractString="Response") -> Tuple{Bool, String}
+Validates that input or response names are non-empty and strictly unique.
+"""
+function BASE_ValidateUniqueNames_DDEF(Names::AbstractVector, EntityType::AbstractString="Response")::Tuple{Bool, String}
+    seen = Set{String}()
+    for (i, raw_n) in enumerate(Names)
+        n = strip(string(raw_n))
+        if isempty(n)
+            return (false, "Systematic Error: $(EntityType) name for row $(i) cannot be empty.")
+        end
+        if n in seen
+            return (false, "Systematic Error: $(EntityType) names must be unique. '$(n)' is repeated.")
+        end
+        push!(seen, n)
+    end
+    return (true, "")
 end
 
 end
