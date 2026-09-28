@@ -27,6 +27,8 @@ jobs:
           - windows-latest
     steps:
       - uses: actions/checkout@v4
+      - run: rm -f Manifest.toml
+        shell: bash
       - uses: julia-actions/setup-julia@v2
         with:
           version: ${{ matrix.version }}

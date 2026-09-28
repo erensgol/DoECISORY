@@ -790,5 +790,4 @@ function MOLE_ProcessDesign_DDEF(DesignMatrix::AbstractMatrix, TableData::Abstra
     
     return df
 end
-
 end
