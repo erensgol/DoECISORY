@@ -1,6 +1,6 @@
 /**
- * DoECISORY - Clientside Acceleration Bridge
- * Extends Dash functionality with high-speed JS callbacks for instant graph navigation.
+ * DoECISORY - Clientside Callback Bridge
+ * Client-side Dash callback orchestration for interactive graph navigation and responsive UI updates.
  * Architecture: Graphs live server-side in a Ref. Only metadata (count + timestamp)
  * travels through dcc_store. render_graph is server-side (single figure per request).
  */

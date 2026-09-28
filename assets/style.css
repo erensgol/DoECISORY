@@ -536,15 +536,15 @@ a:hover {
     box-shadow: none !important; 
     padding: 0 !important; 
     color: var(--colour-val5-purbla) !important; 
-    font-size: 0.78rem !important; 
+    font-size: 0.85rem !important; 
 }
 .Select-control { 
     background-color: var(--colour-val0-purwhi) !important; 
     border: 1px solid var(--colour-val1-lighig) !important; 
     border-radius: var(--rad-sm) !important; 
     color: var(--colour-val5-purbla) !important; 
-    min-height: 28px !important; 
-    height: 28px !important;
+    min-height: 31px !important; 
+    height: 31px !important;
     box-shadow: none !important; 
     cursor: pointer !important; 
 }
@@ -553,17 +553,17 @@ a:hover {
     box-shadow: 0 0 0 1px var(--colour-val3-darlow) !important; 
 }
 .Select-value {
-    line-height: 26px !important;
+    line-height: 29px !important;
 }
 .Select-value-label { 
     color: var(--colour-val5-purbla) !important; 
-    font-size: 0.78rem !important; 
-    line-height: 26px !important;
+    font-size: 0.85rem !important; 
+    line-height: 29px !important;
 }
 .Select-placeholder { 
     color: var(--colour-val3-darlow) !important; 
-    font-size: 0.78rem !important; 
-    line-height: 26px !important;
+    font-size: 0.85rem !important; 
+    line-height: 29px !important;
 }
 .Select-arrow { 
     border-color: var(--colour-val4-darhig) transparent transparent !important; 
@@ -598,7 +598,7 @@ a:hover {
     background-color: var(--colour-val0-purwhi) !important;
     color: var(--colour-val4-darhig) !important;
     padding: 6px 10px !important;
-    font-size: 0.78rem !important;
+    font-size: 0.85rem !important;
     line-height: 1.3 !important;
     cursor: pointer !important;
     white-space: nowrap !important;
@@ -618,7 +618,7 @@ a:hover {
 .Select-noresults { 
     background-color: var(--colour-val0-purwhi) !important; 
     color: var(--colour-val3-darlow) !important; 
-    font-size: 0.78rem !important; 
+    font-size: 0.85rem !important; 
 }
 
 /* --- 7. BUTTONS --- */

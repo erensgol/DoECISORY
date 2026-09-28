@@ -66,6 +66,7 @@ export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF, CORE_ExtractLeader_DDEF,
        CORE_D_Efficiency_DDEF, CORE_CalcDesignMetrics_DDEF, CORE_CodeMatrix_DDEF,
        CORE_CalcDesirability_DDEF, CORE_ExtractGoal_DDEF, CORE_GetModelType_DDEF,
        CORE_ModifierDCYP_DDES, CORE_ApplyDCYP_DDEF,
+       CORE_GetNeighborWeights_DDEF, CORE_StarWeights_DDEC,
        CORE_AbstractDesignMethod_DDET, CORE_MethodBB15_DDES, CORE_MethodTL09_DDES,
        CORE_MethodCD17_DDES, CORE_MethodDF14_DDES
 
@@ -116,8 +117,8 @@ export BASE_StyleCell_DDEC, BASE_StyleInput_DDEC, BASE_StyleInputCentre_DDEC,
        BASE_SystemAuditUI_DDEF, BASE_ScientificAuditUI_DDEF, BASE_StatusIcon_DDEF,
        BASE_IconButton_DDEF, BASE_TableHeader_DDEF, BASE_ControlGroup_DDEF,
        BASE_ActionButton_DDEF, BASE_Separator_DDEF, BASE_SidebarHeader_DDEF,
-       BASE_Upload_DDEF, BASE_NextButton_DDEF, BASE_BuildIdRow_DDEF, BASE_BuildLevelRow_DDEF,
-       BASE_BuildLimitsRow_DDEF, BASE_BuildGoalRow_DDEF,
+       BASE_Upload_DDEF, BASE_NextButton_DDEF, BASE_BuildIdRow_DDEF, 
+       BASE_BuildLevelRow_DDEF, BASE_BuildLimitsRow_DDEF, BASE_BuildGoalRow_DDEF,
        DECK_Layout_DDEF, DECK_RegisterCallbacks_DDEF,
        LENS_Layout_DDEF, LENS_RegisterCallbacks_DDEF
 
@@ -136,16 +137,22 @@ export APP_Launch_DDEF, run_app
 
 Launch the DoECISORY web application.
 """
-function APP_Launch_DDEF(; host::String="0.0.0.0", port::Union{Int, Nothing}=nothing, debug::Bool=false, open_browser::Bool=true)
-    app_path = joinpath(dirname(@__DIR__), "app.jl")
+function APP_Launch_DDEF(; host::String="0.0.0.0", port::Union{Int, Nothing}=nothing, debug::Bool=false, open_browser::Bool=true, wait::Bool=false)
+    app_path  = joinpath(dirname(@__DIR__), "app.jl")
+    proj_path = dirname(@__DIR__)
     if isfile(app_path)
+        env_vars = copy(ENV)
         if port !== nothing
-            ENV["PORT"] = string(port)
+            env_vars["PORT"] = string(port)
         end
         if !open_browser
-            ENV["DOECISORY_NO_BROWSER"] = "true"
+            env_vars["DOECISORY_NO_BROWSER"] = "true"
         end
-        include(app_path)
+        target_port = something(port, 8060)
+        println("DoECISORY web application launching with multi-threading at http://127.0.0.1:$target_port...")
+        cmd = setenv(`$(Base.julia_cmd()) --threads=auto --project=$proj_path $app_path`, env_vars)
+        run(cmd; wait=wait)
+        return nothing
     else
         error("DoECISORY entry point app.jl not found at: $app_path")
     end

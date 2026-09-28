@@ -395,7 +395,7 @@ end
 
 """
     ARTS_RenderPareto_DDEF(Model, OutName, R2_Adj, Q2) -> Plot
-Backwards compatible wrapper for the Pareto Draw Dispatch.
+Convenience dispatch wrapper for the Pareto Draw pipeline.
 """
 function ARTS_RenderPareto_DDEF(Model::AbstractDict, OutName::AbstractString, R2_Adj::AbstractFloat, R2_Pred::AbstractFloat)
     return ARTS_Draw_DDEF(ARTS_PlotPareto_DDES(), Model, OutName, R2_Adj, R2_Pred)
@@ -456,7 +456,7 @@ end
 
 """
     ARTS_RenderFit_DDEF(Y_Real, Y_Pred, OutName) -> Plot
-Backwards compatible wrapper for the Fit Accuracy Draw Dispatch.
+Convenience dispatch wrapper for the Fit Accuracy Draw pipeline.
 """
 function ARTS_RenderFit_DDEF(Y_Real::AbstractVector{Float64}, Y_Pred::AbstractVector{Float64}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotFit_DDES(), Y_Real, Y_Pred, OutName)
@@ -568,7 +568,7 @@ end
 
 """
     ARTS_RenderSurface_DDEF(Model, X_Train, Idx, Lbls, OutName) -> Plot
-Backwards compatible wrapper for the 3D Surface Draw Dispatch.
+Convenience dispatch wrapper for the 3D Surface Draw pipeline.
 """
 function ARTS_RenderSurface_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotSurface_DDES(), Model, X, Idx, Lbls, OutName)
@@ -610,7 +610,7 @@ end
 
 """
     ARTS_RenderContour_DDEF(Model, X_Train, Idx, Lbls, OutName) -> Plot
-Backwards compatible wrapper for the Contour Draw Dispatch.
+Convenience dispatch wrapper for the Contour Draw pipeline.
 """
 function ARTS_RenderContour_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotContour_DDES(), Model, X, Idx, Lbls, OutName)
@@ -652,7 +652,7 @@ end
 
 """
     ARTS_RenderSlice_DDEF(Model, X, Idx, Lbls, OutName) -> Plot
-Backwards compatible wrapper for the Interaction Slice Draw Dispatch.
+Convenience dispatch wrapper for the Interaction Slice Draw pipeline.
 """
 function ARTS_RenderSlice_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotSlice_DDES(), Model, X, Idx, Lbls, OutName)
@@ -692,7 +692,7 @@ end
 
 """
     ARTS_RenderTrend_DDEF(Model, X, Y_Real, Idx, Lbls, OutName) -> Plot
-Backwards compatible wrapper for the Main Effect Trend Draw Dispatch.
+Convenience dispatch wrapper for the Main Effect Trend Draw pipeline.
 """
 function ARTS_RenderTrend_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Y_Real::AbstractVector{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotTrend_DDES(), Model, X, Y_Real, Idx, Lbls, OutName)
@@ -777,30 +777,57 @@ function ARTS_RenderSpaceCore_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Id
 
     traces, all_scores = GenericTrace[], Vector{AbstractMatrix{Float64}}(undef, 3)
     parsed_goals = [Main.Lib_Core.CORE_ExtractGoal_DDEF(get(Models[m], "Goal", Goals[m])) for m in eachindex(Models)]
-    w_sum = sum([g[5] for g in parsed_goals])
-    pow = w_sum > 0.0 ? (1.0 / w_sum) : 1.0
+    base_goals   = [(g[1], g[2], g[3], g[4], 1.0) for g in parsed_goals]
+    k_models     = length(Models)
+    inv_k        = k_models > 0 ? (1.0 / k_models) : 1.0
+    neighbor_weights = [Main.Lib_Core.CORE_GetNeighborWeights_DDEF(g[5]) for g in parsed_goals]
 
     # Allocated once, reused for all 3 slices
     Grid_buf   = repeat(reshape(col_ref, 1, :), N * N)
     Xd_buf     = Matrix{Float64}(undef, N * N, 10)
+    Prod_u     = Vector{Float64}(undef, N * N)
+    Prod_e     = Vector{Float64}(undef, N * N)
     Scores_buf = Vector{Float64}(undef, N * N)
 
     for (s, zv) in enumerate(z_vals)
-        @inbounds for (k, pt) in enumerate(Iterators.product(x1, x2))
-            Grid_buf[k, ix], Grid_buf[k, iy], Grid_buf[k, iz] = pt[1], pt[2], zv
+        @inbounds for (k_idx, pt) in enumerate(Iterators.product(x1, x2))
+            Grid_buf[k_idx, ix], Grid_buf[k_idx, iy], Grid_buf[k_idx, iz] = pt[1], pt[2], zv
         end
 
-        fill!(Scores_buf, 1.0)
+        fill!(Prod_u, 1.0)
+        fill!(Prod_e, 1.0)
 
-        for m in eachindex(Models)
-            preds = ARTS_Predict_DDEF(Models[m], Grid_buf, Xd_buf)
-            goal_tup = parsed_goals[m]
+        for (m, model) in enumerate(Models)
+            preds = ARTS_Predict_DDEF(model, Grid_buf, Xd_buf)
+            bg = base_goals[m]
+            w_m, w_c, w_p = neighbor_weights[m]
             
-            @inbounds for i in eachindex(preds)
-                Scores_buf[i] *= Main.Lib_Core.CORE_CalcDesirability_DDEF(preds[i], goal_tup)
+            @inbounds for i in 1:(N * N)
+                val = preds[i]
+                if isnan(val) || isinf(val)
+                    Prod_u[i] = 0.0
+                    Prod_e[i] = 0.0
+                    continue
+                end
+
+                b = Main.Lib_Core.CORE_CalcDesirability_DDEF(val, bg)
+                if b <= 1e-12
+                    Prod_u[i] = 0.0
+                    Prod_e[i] = 0.0
+                else
+                    u = b^(w_c * inv_k)
+                    e = (b^(w_m * inv_k) + u + b^(w_p * inv_k)) / 3.0
+                    Prod_u[i] *= u
+                    Prod_e[i] *= e
+                end
             end
         end
-        all_scores[s] = clamp.(reshape(Scores_buf .^ pow, N, N)', 0.0, 1.0)
+
+        @inbounds for i in 1:(N * N)
+            sc = 0.50 * Prod_u[i] + 0.50 * Prod_e[i]
+            Scores_buf[i] = (isnan(sc) || isinf(sc)) ? 0.0 : clamp(sc, 0.0, 1.0)
+        end
+        all_scores[s] = reshape(Scores_buf, N, N)'
     end
 
     all_flat = vcat([vec(s) for s in all_scores]...)
@@ -831,7 +858,7 @@ end
 
 """
     ARTS_RenderOptimalZone_DDEF(Models, Goals, X, InNames, [Leaders_DF]) -> (Plot, PctString)
-Backwards compatible wrapper for the Optimal Zone Draw Dispatch.
+Convenience dispatch wrapper for the Optimal Zone Draw pipeline.
 """
 function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::AbstractMatrix{Float64}, InNames::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame=DataFrame())
     return ARTS_Draw_DDEF(ARTS_PlotOptimalZone_DDES(), Models, Goals, X, InNames, Leaders_DF)
@@ -847,21 +874,46 @@ function ARTS_Draw_DDEF(::ARTS_PlotOptimalZone_DDES, Models, Goals, X::AbstractM
         idx += 1
     end
 
-    Scores = ones(N^3)
     parsed_goals = [Main.Lib_Core.CORE_ExtractGoal_DDEF(get(Models[m], "Goal", Goals[m])) for m in eachindex(Models)]
-    w_sum = sum([g[5] for g in parsed_goals])
-    pow = w_sum > 0.0 ? (1.0 / w_sum) : 1.0
+    base_goals   = [(g[1], g[2], g[3], g[4], 1.0) for g in parsed_goals]
+    k_models     = length(Models)
+    inv_k        = k_models > 0 ? (1.0 / k_models) : 1.0
+    neighbor_weights = [Main.Lib_Core.CORE_GetNeighborWeights_DDEF(g[5]) for g in parsed_goals]
 
-    for m in eachindex(Models)
-        preds = ARTS_Predict_DDEF(Models[m], Grid)
-        goal  = parsed_goals[m]
-        for i in eachindex(preds)
-            # CalcDesirability already includes the ^Weight power. 
-            Scores[i] *= Main.Lib_Core.CORE_CalcDesirability_DDEF(preds[i], goal)
+    Prod_u = ones(N^3)
+    Prod_e = ones(N^3)
+    Scores = Vector{Float64}(undef, N^3)
+
+    for (m, model) in enumerate(Models)
+        preds = ARTS_Predict_DDEF(model, Grid)
+        bg = base_goals[m]
+        w_m, w_c, w_p = neighbor_weights[m]
+
+        @inbounds for i in 1:(N^3)
+            val = preds[i]
+            if isnan(val) || isinf(val)
+                Prod_u[i] = 0.0
+                Prod_e[i] = 0.0
+                continue
+            end
+
+            b = Main.Lib_Core.CORE_CalcDesirability_DDEF(val, bg)
+            if b <= 1e-12
+                Prod_u[i] = 0.0
+                Prod_e[i] = 0.0
+            else
+                u = b^(w_c * inv_k)
+                e = (b^(w_m * inv_k) + u + b^(w_p * inv_k)) / 3.0
+                Prod_u[i] *= u
+                Prod_e[i] *= e
+            end
         end
     end
-    # Apply the final 1/sum(weights) power for the true weighted geometric mean
-    Scores = clamp.(Scores .^ pow, 0.0, 1.0)
+
+    @inbounds for i in 1:(N^3)
+        sc = 0.50 * Prod_u[i] + 0.50 * Prod_e[i]
+        Scores[i] = (isnan(sc) || isinf(sc)) ? 0.0 : clamp(sc, 0.0, 1.0)
+    end
     valid_sc = filter(s -> !isnan(s) && s > 1e-6, Scores)
     thresh = isempty(valid_sc) ? 0.9 : quantile(valid_sc, 0.90)
     pct_str = @sprintf("%.2f", (count(s -> s >= thresh, Scores) / length(Scores)) * 100.0)
@@ -884,7 +936,7 @@ end
 
 """
     ARTS_RenderInteractionMatrix_DDEF(Model, InNames, OutName) -> Plot
-Backwards compatible wrapper for the Interaction Matrix Draw Dispatch.
+Convenience dispatch wrapper for the Interaction Matrix Draw pipeline.
 """
 function ARTS_RenderInteractionMatrix_DDEF(Model::AbstractDict, InNames::AbstractVector{<:AbstractString}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotInteractionMatrix_DDES(), Model, InNames, OutName)

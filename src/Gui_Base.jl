@@ -501,11 +501,11 @@ function BASE_BuildGoalRow_DDEF(i)
                     Dict("label" => "Minimise", "value" => "Minimise"),
                 ], value="Nominal", className="form-select form-select-sm border-0 py-0 colourtx-v5pb", style=Dict("width" => "100%", "fontSize" => "10px", "backgroundColor" => "transparent", "boxShadow" => "none")), style=merge(BASE_StyleCell_DDEC, Dict("width" => "20%")), className="p-1"),
         html_td(dbc_select(id="lens-goal-weight-$i", options=[
-                    Dict("label" => "★☆☆☆☆", "value" => "0.25"),
-                    Dict("label" => "★★☆☆☆", "value" => "0.50"),
+                    Dict("label" => "★☆☆☆☆", "value" => "0.50"),
+                    Dict("label" => "★★☆☆☆", "value" => "0.75"),
                     Dict("label" => "★★★☆☆", "value" => "1.00"),
-                    Dict("label" => "★★★★☆", "value" => "2.50"),
-                    Dict("label" => "★★★★★", "value" => "5.00"),
+                    Dict("label" => "★★★★☆", "value" => "1.50"),
+                    Dict("label" => "★★★★★", "value" => "2.00"),
                 ],value="1.00", className="form-select form-select-sm border-0 py-0 text-center colourtx-v4dh", style=Dict("width" => "100%", "fontSize" => "10px", "backgroundColor" => "transparent", "boxShadow" => "none")), style=merge(BASE_StyleCell_DDEC, Dict("width" => "19%", "borderBottom" => "none")), className="p-1")
     ])
 end

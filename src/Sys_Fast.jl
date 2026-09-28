@@ -33,7 +33,7 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
        FAST_CleanWorkforce_DDEF, FAST_Data_DDEC, FAST_SanitiseFilename_DDEF,
        FAST_LoadMemoFile_DDEF, FAST_ExtractDataID_DDEF, FAST_ValidateSheetStructure_DDEF, 
        FAST_FinaliseMasterWrite_DDEF, FAST_ActiveGroup_DDEC, FAST_ApplyExcelStyle_DDEF, 
-       FAST_FormatConditionNumber_DDEF, FAST_SortColumns_DDEF
+       FAST_FormatConditionNumber_DDEF, FAST_SortColumns_DDEF, FAST_ExtractPhaseNum_DDEF
 
 # ==============================================================================
 # PART A: TRANSIENT WORKFORCE
@@ -48,7 +48,7 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
 System-wide configuration, metadata structure, and primary colour palettes.
 """
 Base.@kwdef struct FAST_Constants_DDES
-    VERSION::String        = "v1.0-dev"
+    VERSION::String        = "v1.0.0"
     COLOUR_PURWHI::String  = "#FFFFFF"
     COLOUR_LIGHIG::String  = "#E6E6E6"
     COLOUR_LIGLOW::String  = "#DCDCDC"
@@ -155,7 +155,7 @@ function FAST_CleanWorkforce_DDEF(all::Bool=false)::Nothing
     try
         for (root, dirs, files) in walkdir(FAST_TempRoot_DDEC; topdown=false)
             for f in files
-                # Integrity Protocol: Enforcement of restricted deletion for files non-compliant with DDE patterns.
+                # Restricted deletion for files non-compliant with DDE patterns.
                 if all || startswith(f, "DOECISORY_TEMP_") || startswith(f, "DDE_")
                     try
                         rm(joinpath(root, f); force=true)
@@ -256,11 +256,11 @@ const FAST_FilenameMap_DDEC = Dict(
 
 """
     FAST_SanitiseFilename_DDEF(name::String) -> String
-ASCII-safe filename generator. Converts Turkish characters to ASCII and replaces 
+ASCII-safe filename generator. Converts non-ASCII characters to ASCII and replaces 
 non-alphanumeric characters with underscores. Ensures filesystem compatibility.
 """
 function FAST_SanitiseFilename_DDEF(name::AbstractString)
-    # Execution of character normalisation map for Turkish-to-ASCII collation.
+    # Character normalisation map for ASCII collation.
     res = map(c -> get(FAST_FilenameMap_DDEC, c, c), name)
     res = replace(res, r"[^\w\-_.]" => "_")
     res = replace(res, r"_{2,}" => "_")
@@ -325,7 +325,7 @@ function FAST_ReadExcel_DDEF(FilePath::AbstractString, SheetName::AbstractString
 
                 df = DataFrame(XLSX.gettable(xf[SheetName]))
                 
-                # Scientific Integrity Guard: Enforcement of mandatory structural columns.
+                # Enforcement of mandatory structural columns.
                 is_data_sheet = SheetName == FAST_Data_DDEC.SHEET_DATA || startswith(SheetName, FAST_Data_DDEC.PREFIX_LEADERS)
                 if is_data_sheet && !FAST_ValidateSheetStructure_DDEF(df, SheetName)
                     throw(ArgumentError("Structural mismatch in sheet [$SheetName]."))
@@ -340,7 +340,7 @@ function FAST_ReadExcel_DDEF(FilePath::AbstractString, SheetName::AbstractString
             return FAST_NormaliseCols_DDEF!(final_df)
 
         catch e
-            # Fail Fast Protocol: Exit immediately for structural/logical errors.
+            # Exit immediately for structural/logical errors.
             if e isa ArgumentError 
                 FAST_Log_DDEF("FAST", "IO_ERROR", "I/O Critical Failure: $(first(string(e), 150))", "FAIL")
                 return DataFrame()
@@ -354,7 +354,7 @@ function FAST_ReadExcel_DDEF(FilePath::AbstractString, SheetName::AbstractString
     return DataFrame()
 end
 
-# Internal structural validator for scientific sheets.
+# Internal structural validator for sheets.
 function FAST_ValidateSheetStructure_DDEF(df::DataFrame, SheetName::String)::Bool
     cols = uppercase.(strip.(string.(names(df))))
     has_id = any(x -> x == "EXP_ID" || x == "ID", cols)
@@ -403,7 +403,7 @@ function FAST_ApplyExcelStyle_DDEF(File::AbstractString, ValidPairs::Vector{Pair
                             end
                         end
                     end
-                    # Strict uniform width: exactly text width + 1 character padding for all columns
+                    # Strict uniform width for all columns
                     w = occursin("JSON", uppercase(header_str)) ? clamp(Float64(max_w + 1.0), 10.0, 60.0) : Float64(max_w + 1.0)
                     push!(widths, round(w; digits=1))
                 end
@@ -548,7 +548,7 @@ end
 FAST_ApplyExcelStyle_DDEF(File::AbstractString, Updates::Dict{<:AbstractString,DataFrame}) = 
     FAST_ApplyExcelStyle_DDEF(File, [k => v for (k, v) in Updates])
 
-# Backward compatibility bridge for legacy single-sheet signatures
+# Polymorphic fallback for single-sheet styling dispatches
 FAST_ApplyExcelStyle_DDEF(sheet, df::DataFrame) = nothing
 
 """
@@ -625,10 +625,10 @@ function FAST_SafeExcelWrite_DDEF(File::AbstractString, Updates::Dict{<:Abstract
                 # Windows-Specific: Initial delay to ensure previous handles are released.
                 sleep(0.3) 
                 
-                # Standard atomic multi-sheet write via one-shot API (most stable for creation & update)
+                # Standard multi-sheet write via one-shot API
                 XLSX.writetable(File, valid_pairs...; overwrite=true)
                 
-                # Apply Academic Auto-Fit: Enforce optimal column dimensions
+                # Auto-Fit: Enforce optimal column dimensions
                 try
                     FAST_ApplyExcelStyle_DDEF(File, valid_pairs)
                 catch e_style
@@ -637,7 +637,7 @@ function FAST_SafeExcelWrite_DDEF(File::AbstractString, Updates::Dict{<:Abstract
                 
                 FAST_Log_DDEF("FAST", "IO_WRITE", "Updates synchronised: $(File)", "OK")
                 
-                # Zero-Bug Sync Protocol: Invalidate RAM cache to ensure next read hits the physical disk.
+                # Invalidate RAM cache to ensure next read hits the physical disk.
                 lock(FAST_ConfigCacheLock_DDEC) do
                     if haskey(FAST_ConfigCache_DDEC, File)
                         delete!(FAST_ConfigCache_DDEC, File)
@@ -1114,11 +1114,21 @@ function FAST_GetTransientPath_DDEF(DataHandle::String)::String
         return tmp_path
     end
 
-    # 2. Check for Embedded Base64 Payload
+    # 2. Check for Embedded Base64 Payload or raw base64
     if contains(DataHandle, ";base64,")
         tmp_path = FAST_GetTransientPath_DDEF()
         write(tmp_path, base64decode(split(DataHandle, ',')[end]))
         return tmp_path
+    elseif length(DataHandle) > 100
+        try
+            decoded = base64decode(DataHandle)
+            if length(decoded) >= 4 && decoded[1] == 0x50 && decoded[2] == 0x4b
+                tmp_path = FAST_GetTransientPath_DDEF()
+                write(tmp_path, decoded)
+                return tmp_path
+            end
+        catch
+        end
     end
     
     return FAST_GetTransientPath_DDEF()
@@ -1248,20 +1258,38 @@ end
     FAST_GetSafe_DDEF(o, k, d=nothing)
 Safely extracts key `k` from dict or object regardless of whether key is String or Symbol.
 """
-FAST_GetSafe_DDEF(o::AbstractDict, k, d=nothing) = begin
-    haskey(o, string(k)) ? o[string(k)] : (haskey(o, Symbol(k)) ? o[Symbol(k)] : d)
+function FAST_GetSafe_DDEF(o::Any, k, d=nothing)
+    isnothing(o) && return d
+    try
+        sk = string(k)
+        sy = Symbol(k)
+        if o isa AbstractDict
+            return haskey(o, sk) ? o[sk] : (haskey(o, sy) ? o[sy] : d)
+        elseif haskey(o, sy)
+            return o[sy]
+        elseif haskey(o, sk)
+            return o[sk]
+        elseif hasproperty(o, sy)
+            return getproperty(o, sy)
+        end
+    catch
+    end
+    return d
 end
-FAST_GetSafe_DDEF(::Any, ::Any, d=nothing) = d
 
 """
     FAST_DecodeDirections_DDEF(source, names) -> Tuple{Int,Int,Int}
 Decodes factor directions using multiple dispatch on the source container type.
 """
-FAST_DecodeDirections_DDEF(dm::AbstractDict, names::AbstractVector) = (
-    Int(FAST_SafeNum_DDEF(get(dm, get(names, 1, ""), -1))),
-    Int(FAST_SafeNum_DDEF(get(dm, get(names, 2, ""), -1))),
-    Int(FAST_SafeNum_DDEF(get(dm, get(names, 3, ""), -1)))
-)
+function FAST_DecodeDirections_DDEF(dm::AbstractDict, names::AbstractVector)
+    dm_norm = Dict{String,Any}(lowercase(strip(string(k))) => FAST_SafeNum_DDEF(v) for (k, v) in pairs(dm))
+    function get_val(idx)
+        idx > length(names) && return -1
+        target_name = lowercase(strip(string(names[idx])))
+        return Int(get(dm_norm, target_name, -1))
+    end
+    return (get_val(1), get_val(2), get_val(3))
+end
 
 FAST_DecodeDirections_DDEF(v::AbstractVector, ::AbstractVector) = (
     length(v) >= 3 ? (
@@ -1280,18 +1308,34 @@ FAST_ExtractMap_DDEF(dm::AbstractDict) = isempty(dm) ? nothing : dm
 FAST_ExtractMap_DDEF(::Any)            = nothing
 
 """
-    FAST_ResolveHistoryMap_DDEF(history) -> Union{AbstractDict, Nothing}
-Iteratively resolves the active direction map across phase records.
+    FAST_ExtractPhaseNum_DDEF(key) -> Int
+Extracts numeric sequence value from arbitrary phase identifier strings (e.g. "Phase2", "P3" -> 2, 3).
 """
-function FAST_ResolveHistoryMap_DDEF(ph::AbstractDict)
-    for key in ("Phase1", "Phase2", "Phase3", "Phase4", "Phase5")
+function FAST_ExtractPhaseNum_DDEF(key::Any)::Int
+    m = match(r"\d+", string(key))
+    return isnothing(m) ? 0 : (tryparse(Int, m.match) !== nothing ? parse(Int, m.match) : 0)
+end
+
+"""
+    FAST_ResolveHistoryMap_DDEF(history, [active_phase]) -> Union{AbstractDict, Nothing}
+Dynamically resolves the active direction map across phase records, prioritizing active_phase or latest chronological phase.
+"""
+function FAST_ResolveHistoryMap_DDEF(ph::AbstractDict, active_phase::AbstractString="")
+    if !isempty(active_phase) && haskey(ph, active_phase)
+        node = get(ph, active_phase, nothing)
+        dm = FAST_ExtractMap_DDEF(FAST_GetDirectionMap_DDEF(node))
+        !isnothing(dm) && return dm
+    end
+    # Dynamic chronological sort: sort phase keys by numeric sequence descending without hardcoded limits
+    sorted_keys = sort(collect(keys(ph)), by=FAST_ExtractPhaseNum_DDEF, rev=true)
+    for key in sorted_keys
         node = get(ph, key, nothing)
         dm = FAST_ExtractMap_DDEF(FAST_GetDirectionMap_DDEF(node))
         !isnothing(dm) && return dm
     end
     return nothing
 end
-FAST_ResolveHistoryMap_DDEF(::Any) = nothing
+FAST_ResolveHistoryMap_DDEF(::Any, ::AbstractString="") = nothing
 
 """
     FAST_SelectSource_DDEF(history_source, global_source)
@@ -1301,22 +1345,42 @@ FAST_SelectSource_DDEF(hist::AbstractDict, ::Any) = hist
 FAST_SelectSource_DDEF(::Any, glob)               = glob
 
 """
-    FAST_ExtractDirections_DDEF(g, items) -> Tuple{Int,Int,Int}
-Extracts factor directions with backward compatibility across PhaseHistory and legacy vectors.
+    FAST_ExtractDirections_DDEF(g, items, [active_phase]) -> Tuple{Int,Int,Int}
+Extracts factor directions across multi-phase records and transient vector configurations.
 Handles both full ingredient vectors (filtering for Variable) and pre-filtered variable configs.
 """
-function FAST_ExtractDirections_DDEF(g::AbstractDict, items::AbstractVector)::Tuple{Int,Int,Int}
+function FAST_ExtractDirections_DDEF(g::AbstractDict, items::AbstractVector, active_phase::AbstractString="")::Tuple{Int,Int,Int}
     names = [
         string(FAST_GetSafe_DDEF(c, "Name", "")) 
         for c in items 
         if string(FAST_GetSafe_DDEF(c, "Role", "Variable")) in ("Variable", "Var")
     ]
-    hist_map = FAST_ResolveHistoryMap_DDEF(get(g, "PhaseHistory", nothing))
-    source   = FAST_SelectSource_DDEF(hist_map, get(g, "Direction", nothing))
-    return FAST_DecodeDirections_DDEF(source, names)
+    target_ph = !isempty(active_phase) ? active_phase : string(get(g, "Phase", get(g, :Phase, "")))
+    hist_map  = FAST_ResolveHistoryMap_DDEF(get(g, "PhaseHistory", nothing), target_ph)
+
+    # 1. If history map for target phase matches current variable names:
+    if !isnothing(hist_map)
+        norm_keys = [lowercase(strip(string(k))) for k in keys(hist_map)]
+        if any(lowercase(strip(n)) in norm_keys for n in names)
+            return FAST_DecodeDirections_DDEF(hist_map, names)
+        end
+    end
+
+    # 2. Check global Direction vector
+    glob_dir = get(g, "Direction", nothing)
+    if glob_dir isa AbstractVector && length(glob_dir) >= 3
+        return FAST_DecodeDirections_DDEF(glob_dir, names)
+    end
+
+    # 3. Fallback to hist_map if available
+    if !isnothing(hist_map)
+        return FAST_DecodeDirections_DDEF(hist_map, names)
+    end
+
+    return (-1, -1, -1)
 end
 
-FAST_ExtractDirections_DDEF(::Any, ::Any) = (-1, -1, -1)
+FAST_ExtractDirections_DDEF(::Any, ::Any, ::AbstractString="") = (-1, -1, -1)
 
 # ------------------------------------------------------------------------------
 # SECTION 16: HARDWARE AUDIT & THREADING
@@ -1495,7 +1559,7 @@ end
 # SECTION 19: BINARY VAULT (SERVER-SIDE BLOB STORAGE)
 # ------------------------------------------------------------------------------
 
-# Repository for large-scale binary objects (Excel archives) designed to preserve application performance.
+# Binary storage for binary objects (Excel archives).
 const FAST_BinaryVault_DDEC = Dict{String, Vector{UInt8}}()
 const FAST_VaultLock_DDEC   = ReentrantLock()
 

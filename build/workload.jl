@@ -112,14 +112,14 @@ configs_bench = [Dict("Levels" => [-1.0, 0.0, 1.0]) for _ in 1:3]
 Lib_Core.CORE_MapLevels_DDEF(X_dummy, configs_bench)
 Lib_Core.CORE_D_Efficiency_DDEF(X_dummy)
 
-# 5. Linear regression (Native OLS via LinearAlgebra)
+# 5. Linear regression
 names_in = ["X1", "X2", "X3"]
 mod_lin = Lib_Vise.VISE_Regress_DDEF(X_dummy, vec(Y_dummy), "linear"; InNames=names_in)
 
 # 6. Quadratic regression
 mod_quad = Lib_Vise.VISE_Regress_DDEF(X_dummy, vec(Y_dummy), "quadratic"; InNames=names_in)
 
-# 7. Grid search (both model types)
+# 7. Grid search
 bounds_dummy = [-1.0 1.0; -1.0 1.0; -1.0 1.0]
 goal_dummy = Dict{String, Any}("Type"=>"Maximise", "Min"=>0.0, "Max"=>20.0, "Target"=>15.0, "Weight"=>1.0, "WeightVal" => 1.0)
 mod_lin["Goal"]  = goal_dummy
@@ -128,7 +128,7 @@ mod_quad["Goal"] = goal_dummy
 Lib_Vise.VISE_GridSearch_DDEF([mod_lin],  [goal_dummy], bounds_dummy; Steps=11)
 Lib_Vise.VISE_GridSearch_DDEF([mod_quad], [goal_dummy], bounds_dummy; Steps=11)
 
-# 8. BlackBoxOptim (critical JIT bottleneck — 13.8s cold)
+# 8. BlackBoxOptim
 Lib_Core.CORE_OptimiseDesirability_DDEF([mod_lin],  [goal_dummy], bounds_dummy; MaxTime=0.1)
 Lib_Core.CORE_OptimiseDesirability_DDEF([mod_quad], [goal_dummy], bounds_dummy; MaxTime=0.1)
 
@@ -139,7 +139,7 @@ Lib_Vise.VISE_SensitivityAnalysis_DDEF(mod_quad, [0.5, 0.5, 0.5], X_dummy)
 Lib_Vise.VISE_CrossValidate_DDEF(X_dummy, vec(Y_dummy), "quadratic")
 Lib_Vise.VISE_CrossValidate_DDEF(X_dummy, vec(Y_dummy), "linear")
 
-# 10. Visualisation suite (PlotlyJS — may fail if Colors/FixedPointNumbers conflict)
+# 10. Visualisation suite
 try
     Lib_Arts.ARTS_Draw_DDEF(Lib_Arts.ARTS_PlotSurface_DDES(), mod_quad, X_dummy, [1, 2], ["X1", "X2"], "PC")
     Lib_Arts.ARTS_Draw_DDEF(Lib_Arts.ARTS_PlotContour_DDES(), mod_quad, X_dummy, [1, 2], ["X1", "X2"], "PC")
@@ -151,7 +151,7 @@ catch e
     println("[SYSIMAGE] Visualisation warmup skipped (PlotlyJS conflict): ", e)
 end
 
-# 11. Full analytical pipeline (ExecuteCore — the master path)
+# 11. Analytical pipeline
 pfx_in  = Main.Sys_Fast.FAST_Data_DDEC.PRE_INPUT
 pfx_out = Main.Sys_Fast.FAST_Data_DDEC.PRE_RESULT
 df_mock = DataFrame()
@@ -176,7 +176,7 @@ catch e
     println("[SYSIMAGE] ExecuteCore warmup partial (PlotlyJS may be unavailable): ", e)
 end
 
-# 12. Dash layout generation (triggers UI component compilation)
+# 12. Dash layout generation
 try
     app_pc = dash(; suppress_callback_exceptions=true)
     app_pc.layout = html_div("precompile")

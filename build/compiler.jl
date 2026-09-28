@@ -30,22 +30,13 @@ sysimg_name   = "sysimage.$sysimg_ext"
 sysimg_path   = joinpath(@__DIR__, sysimg_name)
 stmts_path    = joinpath(@__DIR__, "precompile_statements.txt")
 workload_file = joinpath(@__DIR__, "workload.jl")
-
 proj_toml     = joinpath(project_dir, "Project.toml")
-mani_toml     = joinpath(project_dir, "Manifest.toml")
-proj_backup   = joinpath(@__DIR__, "Project.toml.bak")
-mani_backup   = joinpath(@__DIR__, "Manifest.toml.bak")
 
 # Pre-run check: Recover from any interrupted prior build
+proj_backup = joinpath(@__DIR__, "Project.toml.bak")
+mani_backup = joinpath(@__DIR__, "Manifest.toml.bak")
 if isfile(proj_backup) || isfile(mani_backup)
-    println("[BUILD] Pre-run check: Detected backup files from an interrupted previous build.")
-    current_proj_text = isfile(proj_toml) ? read(proj_toml, String) : ""
-    if !occursin("PlotlyJS", current_proj_text) && isfile(proj_backup)
-        println("[BUILD] Recovering Project.toml and Manifest.toml from backup...")
-        cp(proj_backup, proj_toml; force=true)
-        isfile(mani_backup) && cp(mani_backup, mani_toml; force=true)
-        println("[BUILD] Clean project state recovered.")
-    end
+    println("[BUILD] Pre-run check: Cleaning obsolete backup files...")
     rm(proj_backup; force=true)
     rm(mani_backup; force=true)
 end
@@ -62,17 +53,10 @@ Pkg.resolve()
 Pkg.instantiate()
 println("[BUILD] Project dependencies resolved.")
 
-# --- 3. Backup Project State ------------------------------------------------
-
-println("[BUILD] Backing up Project.toml and Manifest.toml...")
-cp(proj_toml, proj_backup; force=true)
-cp(mani_toml, mani_backup; force=true)
-println("[BUILD] Backups created.")
-
-# --- 4. Build -------------------------------------
+# --- 3. Build Workflow ------------------------------------------------------
 
 try
-    # Phase 1: Trace workload (PlotlyJS must be present for Sys_Flow.jl)
+    # Phase 1: Trace workload to capture precompile statements
     println("[BUILD] Phase 1: Tracing workload to capture precompile statements...")
     t_trace = time()
     trace_cmd = Cmd(`$(Base.julia_cmd()) --project=$project_dir
@@ -93,23 +77,18 @@ try
         end
     end
 
-    # Phase 2: Remove PlotlyJS (Colors/FixedPointNumbers precompile conflict)
-    println("[BUILD] Phase 2: Removing PlotlyJS temporarily...")
-    try
-        Pkg.rm("PlotlyJS"; mode=Pkg.PKGMODE_PROJECT)
-    catch
-    end
-    # Re-resolve after removal so Manifest is consistent
-    Pkg.resolve()
-    Pkg.instantiate()
-    println("[BUILD] PlotlyJS removed. Manifest re-resolved.")
-
-    # Phase 3: Filter precompile statements to eliminate removed or undeclared modules
+    # Phase 2: Filter precompile statements
+    # Exclude non-sysimage modules (PlotlyJS/Kaleido/WebIO) and dynamic/local Main scopes
     if isfile(stmts_path)
-        println("[BUILD] Filtering precompile statements (removing PlotlyJS and local Main references)...")
+        println("[BUILD] Phase 2: Filtering precompile statements (excluding non-sysimage modules)...")
         raw_lines = readlines(stmts_path)
+        excluded_patterns = [
+            "Plotly", "Kaleido", "JSExpr", "WebIO", "Blink", "Hiccup", "Mustache",
+            "AssetRegistry", "Colors", "ColorTypes", "ColorVectorSpace", "ColorSchemes",
+            "FixedPointNumbers", "Main.", "DoECISORY."
+        ]
         filtered_lines = filter(raw_lines) do line
-            !occursin("Plotly", line) && !occursin("Kaleido", line) && !occursin("JSExpr", line) && !occursin("Main.", line)
+            !any(pat -> occursin(pat, line), excluded_patterns)
         end
         open(stmts_path, "w") do io
             for line in filtered_lines
@@ -119,13 +98,14 @@ try
         println("[BUILD] Statements filtered: $(length(raw_lines)) -> $(length(filtered_lines)) clean statements.")
     end
 
-    # Phase 4: Read remaining packages from Project.toml dynamically
+    # Phase 3: Dynamic package discovery (excluding PackageCompiler and PlotlyJS)
     proj_data = TOML.parsefile(proj_toml)
     dep_names = collect(keys(get(proj_data, "deps", Dict())))
-    filter!(n -> n != "PackageCompiler", dep_names)
+    filter!(n -> !(n in ["PackageCompiler", "PlotlyJS"]), dep_names)
     packages  = Symbol.(sort(dep_names))
 
-    println("[BUILD] Phase 4: Building sysimage ($(length(packages)) packages)...\n")
+    println("[BUILD] Phase 3: Building sysimage ($(length(packages)) packages):")
+    println("        $(join(string.(packages), ", "))\n")
     t0 = time()
 
     create_sysimage(
@@ -153,19 +133,8 @@ try
     println("="^60 * "\n")
 
 finally
-    # ALWAYS restore Project.toml and Manifest.toml
-    println("\n[BUILD] Restoring Project.toml and Manifest.toml from backup...")
-    isfile(proj_backup) && cp(proj_backup, proj_toml; force=true)
-    isfile(mani_backup) && cp(mani_backup, mani_toml; force=true)
-    isfile(proj_backup) && rm(proj_backup;  force=true)
-    isfile(mani_backup) && rm(mani_backup;  force=true)
-    isfile(stmts_path)  && rm(stmts_path;   force=true)
-    println("[BUILD] Project state restored. Re-instantiating full dependencies...")
-    try
-        Pkg.resolve()
-        Pkg.instantiate()
-        println("[BUILD] Dependency restoration complete.")
-    catch e
-        println("[BUILD] Warning: Failed to instantiate full dependencies: $e")
+    # Clean up temporary precompile statements
+    if isfile(stmts_path)
+        rm(stmts_path; force=true)
     end
 end

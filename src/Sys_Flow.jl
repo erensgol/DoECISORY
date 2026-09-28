@@ -360,6 +360,13 @@ function FLOW_CommitIPKT_DDEF(MasterFile::Union{AbstractString,Nothing}, Current
     end
 
     current_config                = Main.Sys_Fast.FAST_ReadConfig_DDEF(MasterFile)
+    for c in NewConfig
+        if haskey(c, "Levels") && c["Levels"] isa AbstractVector && length(c["Levels"]) >= 3
+            c["L1"] = Float64(c["Levels"][1])
+            c["L2"] = Float64(c["Levels"][2])
+            c["L3"] = Float64(c["Levels"][3])
+        end
+    end
     current_config["Ingredients"] = [Dict{String,Any}(string(k) => v for (k, v) in pairs(c)) for c in NewConfig]
 
     g_info                   = get(current_config, "Global", Dict{String,Any}())
@@ -369,7 +376,6 @@ function FLOW_CommitIPKT_DDEF(MasterFile::Union{AbstractString,Nothing}, Current
         g_info["ProjectName"] = strip(string(ProjectName))
     end
 
-    # PhaseHistory orchestration for scientific provenance and audit trail
     ph_raw = get(g_info, "PhaseHistory", Dict{String,Any}())
     ph_history = (ph_raw isa AbstractDict) ? Dict{String,Any}(string(k) => v for (k, v) in pairs(ph_raw)) : Dict{String,Any}()
     var_names = [string(FLOW_GetSafeKey_DDEF(NewConfig[i], "Name", "")) for i in var_indices]
@@ -385,6 +391,7 @@ function FLOW_CommitIPKT_DDEF(MasterFile::Union{AbstractString,Nothing}, Current
     )
     ph_history[TargetPhase] = ph_entry
     g_info["PhaseHistory"]  = ph_history
+    g_info["Phase"]         = TargetPhase
     current_config["Global"] = g_info
 
     out_names = String[replace(strip(string(get(o, "Name", ""))), " " => "_") for o in get(res, "Outputs", []) if !isempty(get(o, "Name", ""))]
@@ -426,6 +433,9 @@ function FLOW_ApplyACTA_DDEF(LeaderInfo::Dict, ContractionFactor::Float64=0.5, T
         min_lim = Float64(get(conf, "Min", 0.0))
 
         conf["Levels"] = FLOW_CalcACTA_DDEF(Val, L_Old, ContractionFactor, TranslationFactor, min_lim)
+        conf["L1"]     = Float64(conf["Levels"][1])
+        conf["L2"]     = Float64(conf["Levels"][2])
+        conf["L3"]     = Float64(conf["Levels"][3])
 
         status = FLOW_DetermineBoundaryStatus_DDEF(Val, L_Old[1], L_Old[3])
         action = (abs(TranslationFactor) > 0.05) ? "TRANSLATION (MANUAL)" : get(FLOW_ActionTagMap_DDEC, typeof(status), "UPDATE")
@@ -500,7 +510,7 @@ Visualises the IPKT adaptation of search space boundaries between sequential exp
 Standardised Coded Scale: Current boundaries are mapped to [-1, 1].
 """
 function FLOW_RenderIPKT_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVector, LeaderVals::AbstractVector;
-    Method::AbstractString="TL09", Direction::Vector{Int}=[-1, -1, -1])
+    Method::AbstractString="TL09", Direction::AbstractVector=[-1, -1, -1])
     FD = Main.Sys_Fast.FAST_Data_DDEC
 
     vars = [(i, c) for (i, c) in enumerate(OldConfig) if get(c, "Role", "Variable") == FD.ROLE_VAR]
@@ -514,6 +524,7 @@ function FLOW_RenderIPKT_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVect
 
     traces      = GenericTrace[]
     annotations = Dict{String,Any}[]
+    has_leader_legend = false
     new_vars = [c for c in NewConfig if get(c, "Role", "Variable") == FD.ROLE_VAR]
 
     y_nms       = [j <= length(new_vars) ? get(new_vars[j], "Name", "Var$j") : get(c, "Name", "Var$j") for (j, (i, c)) in enumerate(vars)]
@@ -524,17 +535,13 @@ function FLOW_RenderIPKT_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVect
 
         y_pos = n_vars - j + 1
 
+        old_vname = string(get(conf, "Name", "Var$j"))
+        new_vname = j <= length(new_vars) ? string(get(new_vars[j], "Name", old_vname)) : old_vname
+        is_replaced = (old_vname != new_vname) || (j <= length(new_vars) && get(new_vars[j], "IsReplaced", false) == true)
+
         Val = (j <= length(LeaderVals)) ? Float64(LeaderVals[j]) : L_Old[2]
         
-        base_mid  = (L_Old[1] + L_Old[3]) / 2.0
-        base_span = max(L_Old[3] - L_Old[1], 1e-5)
-        FLOW_NormaliseValue_DDEF(v) = (v - base_mid) / (base_span / 2.0)
-
-        n_new_min = clamp(FLOW_NormaliseValue_DDEF(L_New[1]), AXIS_LO, AXIS_HI)
-        n_new_max = clamp(FLOW_NormaliseValue_DDEF(L_New[3]), AXIS_LO, AXIS_HI)
-        n_new_mid = clamp(FLOW_NormaliseValue_DDEF(L_New[2]), AXIS_LO, AXIS_HI)
-        n_leader  = FLOW_NormaliseValue_DDEF(Val)
-
+        # 1. Current Reference Trace
         push!(traces, scatter(; 
             x=[-1.0, 1.0], y=[y_pos, y_pos], mode="lines",
             name="Current", 
@@ -544,16 +551,62 @@ function FLOW_RenderIPKT_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVect
             hoverinfo="skip"
         ))
 
+        # 2. Target Domain & Centre Mapping
+        if is_replaced
+            n_new_min = -1.0
+            n_new_max = 1.0
+            span = L_New[3] - L_New[1]
+            n_new_mid = (span > 1e-6) ? clamp(((L_New[2] - (L_New[1] + L_New[3]) / 2.0) / (span / 2.0)), -1.0, 1.0) : 0.0
+            n_leader  = nothing
+            lead_disp = 0.0
+        else
+            base_mid  = (L_Old[1] + L_Old[3]) / 2.0
+            base_span = max(L_Old[3] - L_Old[1], 1e-5)
+            FLOW_NormaliseValue_DDEF(v) = (v - base_mid) / (base_span / 2.0)
+
+            raw_min  = FLOW_NormaliseValue_DDEF(L_New[1])
+            raw_mid  = FLOW_NormaliseValue_DDEF(L_New[2])
+            raw_max  = FLOW_NormaliseValue_DDEF(L_New[3])
+            raw_lead = FLOW_NormaliseValue_DDEF(Val)
+            n_leader = clamp(raw_lead, AXIS_LO, AXIS_HI)
+            lead_disp = Val
+
+            VIS_LO = AXIS_LO + 0.15 
+            VIS_HI = AXIS_HI - 0.15  
+
+            if raw_min >= VIS_LO && raw_max <= VIS_HI
+                # Standard representation fitting comfortably inside [-2.0, 2.0]
+                n_new_min = raw_min
+                n_new_max = raw_max
+                n_new_mid = raw_mid
+            elseif raw_min >= 0.95
+                # Entirely shifted into the upper domain (> +1.0)
+                n_new_min = 1.10
+                n_new_max = VIS_HI
+                n_new_mid = (n_new_min + n_new_max) / 2.0
+            elseif raw_max <= -0.95
+                # Entirely shifted into the lower domain (< -1.0)
+                n_new_min = VIS_LO
+                n_new_max = -1.10
+                n_new_mid = (n_new_min + n_new_max) / 2.0
+            else
+                # Straddles boundary or expands across frame
+                n_new_min = clamp(raw_min, VIS_LO, VIS_HI - 0.40)
+                n_new_max = clamp(raw_max, n_new_min + 0.40, VIS_HI)
+                n_new_mid = clamp(raw_mid, n_new_min + 0.10, n_new_max - 0.10)
+            end
+        end
+
         push!(traces, scatter(; 
             x=[n_new_min, n_new_max], y=[y_pos, y_pos], mode="lines",
             name="Target", 
             legendgroup="Target",
             line=attr(color=FD.COLOUR_HUEYEL, width=12),
-            showlegend=(j == 1),
+            showlegend=(j == 1), 
             hoverinfo="text",
-            hovertext="New: $(round(L_New[1]; digits=2)) → $(round(L_New[3]; digits=2))"
+            hovertext="$new_vname Target: $(round(L_New[1]; digits=2)) → $(round(L_New[3]; digits=2))"
         ))
-        
+
         push!(traces, scatter(; 
             x=[n_new_mid], y=[y_pos], mode="markers", 
             name="Target Centre",
@@ -561,15 +614,13 @@ function FLOW_RenderIPKT_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVect
             marker=attr(symbol="circle", size=12, color=FD.COLOUR_TONGRE, line=attr(color=FD.COLOUR_PURWHI, width=2)),
             showlegend=false,
             hoverinfo="text",
-            hovertext="Target Centre: $(round(L_New[2]; digits=2))"
+            hovertext="$new_vname Centre: $(round(L_New[2]; digits=2))"
         ))
 
-        if Method == "DF14"
+        if uppercase(strip(string(Method))) == "DF14"
             dir_j = (j <= length(Direction)) ? Direction[j] : -1
             tip_x = (dir_j == -1) ? n_new_min : n_new_max
             tip_side = (dir_j == -1) ? "Lower (−1)" : "Upper (+1)"
-            v_name = j <= length(new_vars) ? get(new_vars[j], "Name", "Var$j") : "Var$j"
-            
             push!(traces, scatter(;
                 x=[tip_x], y=[y_pos], mode="markers",
                 name="DF14 Axial Focus",
@@ -582,48 +633,53 @@ function FLOW_RenderIPKT_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVect
                 ),
                 showlegend=(j == 1),
                 hoverinfo="text",
-                hovertext="$v_name Axial Star Focus: $tip_side"
+                hovertext="$new_vname Axial Focus: $tip_side"
             ))
         end
 
-        y_ann = y_pos - 0.35
+        # 3. Leader Marker
+        if !is_replaced && !isnothing(n_leader)
+            push!(traces, scatter(; 
+                x=[n_leader], y=[y_pos], mode="markers", 
+                name="Leader",
+                legendgroup="Leader",
+                marker=attr(
+                    symbol="circle", size=12, color=FD.COLOUR_SHAMAG,
+                    line=attr(color=FD.COLOUR_PURWHI, width=2)
+                ),
+                showlegend=(!has_leader_legend),
+                hoverinfo="text",
+                hovertext="Leader: $(round(lead_disp; digits=2))"
+            ))
+            has_leader_legend = true
+        end
+
+        # Annotations (Top = Baseline, Bottom = Target)
+        y_ann_top = y_pos + 0.35
+        y_ann_bot = y_pos - 0.35
         push!(annotations, Dict(
-            "x" => n_new_min, "y" => y_ann, "xref" => "x", "yref" => "y",
+            "x" => -1.0, "y" => y_ann_top, "xref" => "x", "yref" => "y",
+            "text" => is_replaced ? "—" : string(round(L_Old[1]; digits=1)),
+            "showarrow" => false, "xanchor" => "center",
+            "font" => Dict("size" => 8, "color" => FD.COLOUR_DARLOW),
+        ))
+        push!(annotations, Dict(
+            "x" => 1.0, "y" => y_ann_top, "xref" => "x", "yref" => "y",
+            "text" => is_replaced ? "—" : string(round(L_Old[3]; digits=1)),
+            "showarrow" => false, "xanchor" => "center",
+            "font" => Dict("size" => 8, "color" => FD.COLOUR_DARLOW),
+        ))
+        push!(annotations, Dict(
+            "x" => n_new_min, "y" => y_ann_bot, "xref" => "x", "yref" => "y",
             "text" => string(round(L_New[1]; digits=1)),
             "showarrow" => false, "xanchor" => "center",
             "font" => Dict("size" => 8, "color" => FD.COLOUR_DARHIG),
         ))
         push!(annotations, Dict(
-            "x" => n_new_max, "y" => y_ann, "xref" => "x", "yref" => "y",
+            "x" => n_new_max, "y" => y_ann_bot, "xref" => "x", "yref" => "y",
             "text" => string(round(L_New[3]; digits=1)),
             "showarrow" => false, "xanchor" => "center",
             "font" => Dict("size" => 8, "color" => FD.COLOUR_DARHIG),
-        ))
-
-        push!(traces, scatter(; 
-            x=[n_leader], y=[y_pos], mode="markers", 
-            name="Leader",
-            legendgroup="Leader",
-            marker=attr(
-                symbol="circle", size=12, color=FD.COLOUR_SHAMAG,
-                line=attr(color=FD.COLOUR_PURWHI, width=2)
-            ),
-            showlegend=(j == 1),
-            hoverinfo="text",
-            hovertext="Leader: $(round(Val; digits=2))"
-        ))
-
-        push!(annotations, Dict(
-            "x" => -1.0, "y" => y_pos + 0.35, "xref" => "x", "yref" => "y",
-            "text" => string(round(L_Old[1]; digits=1)),
-            "showarrow" => false, "xanchor" => "center",
-            "font" => Dict("size" => 8, "color" => FD.COLOUR_DARLOW),
-        ))
-        push!(annotations, Dict(
-            "x" => 1.0, "y" => y_pos + 0.35, "xref" => "x", "yref" => "y",
-            "text" => string(round(L_Old[3]; digits=1)),
-            "showarrow" => false, "xanchor" => "center",
-            "font" => Dict("size" => 8, "color" => FD.COLOUR_DARLOW),
         ))
     end
 

@@ -22,8 +22,8 @@ export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF,
     CORE_OptimiseDesirability_DDEF, CORE_ValidateDesign_DDEF,
     CORE_D_Efficiency_DDEF, CORE_CalcDesignMetrics_DDEF, CORE_CodeMatrix_DDEF,
     CORE_CalcDesirability_DDEF, CORE_ExtractGoal_DDEF, CORE_GetModelType_DDEF,
-    CORE_ModifierDCYP_DDES, CORE_ApplyDCYP_DDEF, CORE_MethodBB15_DDES, 
-    CORE_MethodTL09_DDES, CORE_MethodCD17_DDES, CORE_MethodDF14_DDES
+    CORE_ModifierDCYP_DDES, CORE_ApplyDCYP_DDEF, CORE_GetNeighborWeights_DDEF, CORE_StarWeights_DDEC,
+    CORE_MethodBB15_DDES, CORE_MethodTL09_DDES, CORE_MethodCD17_DDES, CORE_MethodDF14_DDES
 
 # ==============================================================================
 # PART A: DESIGN MATRIX & COORDINATE GENERATION
@@ -177,7 +177,7 @@ CORE_GenerateMatrix_DDEF(::CORE_MethodDF14_DDES, fc::Integer, dir::AbstractVecto
 """
     CORE_MapLevels_DDEF(CodedMatrix, Config) -> Matrix{Float64}
 Maps coded entries in [-1, 1] to physical units via piecewise linear interpolation.
-Backward compatible: integer coded values (-1, 0, 1) yield identical results to discrete indexing.
+Integer coded coordinates (-1, 0, 1) map directly to discrete level boundaries (L1, L2, L3).
 """
 function CORE_MapLevels_DDEF(CodedMatrix::AbstractMatrix, Config::AbstractVector)
     rows = size(CodedMatrix, 1)
@@ -281,6 +281,16 @@ function CORE_CalcDesirability_DDEF(::CORE_GoalNominal_DDES, Val::Float64, G_Min
     return clamp(res, 0.0, 1.0)
 end
 
+const CORE_StarWeights_DDEC = Float64[0.50, 0.75, 1.00, 1.50, 2.00]
+
+function CORE_GetNeighborWeights_DDEF(Weight::Float64)::Tuple{Float64, Float64, Float64}
+    idx = findmin(abs.(CORE_StarWeights_DDEC .- Weight))[2]
+    w_minus = CORE_StarWeights_DDEC[max(1, idx - 1)]
+    w_curr  = CORE_StarWeights_DDEC[idx]
+    w_plus  = CORE_StarWeights_DDEC[min(5, idx + 1)]
+    return (w_minus, w_curr, w_plus)
+end
+
 # ------------------------------------------------------------------------------
 # SECTION 5: DECAY-COUPLED OPTIMISATION MODIFIER
 # ------------------------------------------------------------------------------
@@ -329,18 +339,17 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
     Dim       = 3
     NumModels = length(Models)
 
+    active_indices = Int[]
     parsed_goals = [CORE_ExtractGoal_DDEF(m <= length(Goals) ? Goals[m] : get(Models[m], "Goal", Dict{String, Any}())) for m in 1:NumModels]
-
-    num_active  = 0
-    sum_weights = 0.0
+    base_goals   = [(g[1], g[2], g[3], g[4], 1.0) for g in parsed_goals]
     for m in 1:NumModels
         if get(Models[m], "Status", "") == "OK"
-            num_active += 1
-            gtup = parsed_goals[m]
-            sum_weights += gtup[5]
+            push!(active_indices, m)
         end
     end
-    pow_factor = sum_weights > 0.0 ? (1.0 / sum_weights) : (num_active > 0 ? 1.0 / num_active : 1.0)
+    num_active = length(active_indices)
+    inv_k      = num_active > 0 ? (1.0 / num_active) : 1.0
+    neighbor_weights = [CORE_GetNeighborWeights_DDEF(parsed_goals[m][5]) for m in active_indices]
 
     closures = Any[nothing for _ in 1:NumModels]
     for m in 1:NumModels
@@ -356,18 +365,28 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
     end
 
     function CORE_CalcObjective_DDEF(x)
-        s = 1.0
-        for m in 1:NumModels
+        prod_u = 1.0
+        prod_e = 1.0
+        for (j, m) in enumerate(active_indices)
             c = closures[m]
             isnothing(c) && continue
             val = c(x)
             (isnan(val) || isinf(val)) && return 0.0
 
-            gtup = parsed_goals[m]
-            d    = CORE_CalcDesirability_DDEF(val, gtup)
-            s   *= max(1e-12, d)
+            b = CORE_CalcDesirability_DDEF(val, base_goals[m])
+            if b <= 1e-12
+                prod_u = 0.0
+                prod_e = 0.0
+                break
+            end
+
+            w_m, w_c, w_p = neighbor_weights[j]
+            u = b^(w_c * inv_k)
+            e = (b^(w_m * inv_k) + u + b^(w_p * inv_k)) / 3.0
+            prod_u *= u
+            prod_e *= e
         end
-        score = clamp(s^pow_factor, 0.0, 1.0)
+        score = clamp(0.50 * prod_u + 0.50 * prod_e, 0.0, 1.0)
 
         # Decay-Coupled Optimization: Penalise composite desirability directly by reaction time decay
         for dm in ModifiersDCYP

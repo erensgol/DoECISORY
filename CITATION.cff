@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use DoECISORY in your research, thesis, or publications, please cite it using the metadata below."
+title: "DoECISORY.jl: Design of Experiments with Computational Interactive Sequential Optimization for Response Yield"
+abstract: "DoECISORY is an open-source scientific software and web platform for experimental design (DoE), statistical modelling, stoichiometric verification, and multi-objective optimisation, developed in Julia and Dash."
+authors:
+  - family-names: "Göl"
+    given-names: "Eren Selim"
+    orcid: "https://orcid.org/0009-0000-4491-7759"
+    affiliation: "Department of Radiopharmacy, Faculty of Pharmacy, Hacettepe University"
+version: 1.0.0
+# doi: "10.5281/zenodo.PLACEHOLDER"
+# date-released: "YYYY-MM-DD"
+license: "MPL-2.0"
+repository-code: "https://github.com/erensgol/DoECISORY"
+url: "https://erensgol-doecisory.hf.space"
+keywords:
+  - "dash"
+  - "design-of-experiments"
+  - "julia"
+  - "julia-language"
+  - "julia-package"
+  - "multi-objective-optimization"
+  - "pharmaceutical-formulation"
+  - "radiopharmacy"
+  - "response-surface-methodology"
+  - "scientific-computing"

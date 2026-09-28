@@ -1,7 +1,7 @@
 # DOECISORY - APP MAIN (ORCHESTRATOR)
 # Description: Primary application entry point, routing orchestrator, and UI layout definition.
-# Author:      Ecz. Eren Selim GÖL
-# Version:     v1.0-dev
+# Author:      Eren Selim GÖL, MPharm
+# Version:     v1.0.0
 # Module Tag:  APP
 # ==============================================================================
 
@@ -93,7 +93,7 @@ catch e
     println("CRITICAL ERROR: Failed to load Sys_Fast.jl: $e")
     rethrow(e)
 end
-using Main.Sys_Fast
+using .Sys_Fast
 Sys_Fast.FAST_InitialiseWorkforce_DDEF()
 
 # ------------------------------------------------------------------------------
@@ -102,9 +102,9 @@ Sys_Fast.FAST_InitialiseWorkforce_DDEF()
 
 println("\e[1m               \e[32m_\e[0m")
 println("\e[1m   \e[34m_\e[0m       _ \e[31m_\e[32m(_)\e[35m_\e[0m     |")
-println("\e[1m  \e[34m(_)\e[0m     | \e[31m(_)\e[0m \e[35m(_)\e[0m    |  System Status: \e[32m[OPTIMAL]\e[0m")
-println("\e[1m   _ _   _| |_  __ _   |  \e[1mDoECISORY\e[0m v1.0-dev")
-println("\e[1m  | | | | | | |/ _` |  |  Author: E.S. GÖL, Pharmacist  ")
+println("\e[1m  \e[34m(_)\e[0m     | \e[31m(_)\e[0m \e[35m(_)\e[0m    |  \e[1mDoECISORY\e[0m $(Sys_Fast.FAST_Data_DDEC.VERSION)")
+println("\e[1m   _ _   _| |_  __ _   |  System Status: \e[32m[OPTIMAL]\e[0m")
+println("\e[1m  | | | | | | |/ _` |  |  Author: E.S. GÖL, MPharm")
 println("\e[1m  | | |_| | | | (_| |  |  Department of Radiopharmacy")
 println("\e[1m _/ |\\__'_|_|_|\\__'_|  |  Hacettepe University. 2026.")
 println("\e[1m|__/                   |")
@@ -143,15 +143,15 @@ for (label, file) in [
     end
 end
 
-using Main.Lib_Arts
-using Main.Lib_Core
-using Main.Lib_Mole
-using Main.Lib_Vise
-using Main.Sys_Fast
-using Main.Sys_Flow
-using Main.Gui_Base
-using Main.Gui_Deck
-using Main.Gui_Lens
+using .Lib_Arts
+using .Lib_Core
+using .Lib_Mole
+using .Lib_Vise
+using .Sys_Fast
+using .Sys_Flow
+using .Gui_Base
+using .Gui_Deck
+using .Gui_Lens
 
 Logging.disable_logging(Logging.BelowMinLevel)
 FAST_Log_DDEF("BOOT", "Complete", "All Modules Integrated", "OK")
@@ -223,7 +223,7 @@ APP_Navbar_DDEC = html_div([
     ], className="nav-links d-flex justify-content-center"),
 
     html_div([
-        html_span("v1.0-dev", 
+        html_span(Sys_Fast.FAST_Data_DDEC.VERSION, 
             className="badge opacity-75", 
             style=Dict("backgroundColor" => "var(--colour-val3-darlow)", "color" => "var(--colour-val0-purwhi)")
         ),
@@ -640,13 +640,12 @@ function APP_Warmup_DDEF()::Nothing
         design_mock = fill(20.0, 5, 1) 
 
         Lib_Mole.MOLE_AuditBatch_DDEF(table_mock, design_mock, 5.0, 10.0)
-        pfx_in, pfx_out = Main.Sys_Fast.FAST_Data_DDEC.PRE_INPUT, Main.Sys_Fast.FAST_Data_DDEC.PRE_RESULT
+        pfx_in, pfx_out = Sys_Fast.FAST_Data_DDEC.PRE_INPUT, Sys_Fast.FAST_Data_DDEC.PRE_RESULT
 
-        # Standard BB15 (Box-Behnken) matrix from Lib_Core for idiomatic JIT pulse
+        # Standard BB15 matrix from Lib_Core for JIT pulse
         X_dummy = Float64.(Lib_Core.CORE_Bb15Design_DDEC)
         
         # Dynamic Y response synthesis: Parabolic function to ensure perfect modelling fit
-        # Formula: Y = 50 + 10*x1 + 5*x2 - 2*x3 + 8*x1^2 + 6*x2^2 + 4*x3^2
         Y_dummy = [50 + 10*r[1] + 5*r[2] - 2*r[3] + 8*r[1]^2 + 6*r[2]^2 + 4*r[3]^2 for r in eachrow(X_dummy)]
         
         names_in = ["X1", "X2", "X3"]
@@ -672,7 +671,6 @@ function APP_Warmup_DDEF()::Nothing
         FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Algorithmic Layer (Phase-C: BBO & Audit)...", "WAIT")
         
         # Pre-compiling the Global Multi-Objective Optimiser (BlackBoxOptim)
-        # Using a very short MaxTime for warmup
         Lib_Core.CORE_OptimiseDesirability_DDEF([mod_quad], [goal_dummy], bounds_dummy; MaxTime=0.1)
         
         # Pre-compiling the Stoichiometric Safety Audit
@@ -701,7 +699,6 @@ function APP_Warmup_DDEF()::Nothing
             "Global"      => Dict("Volume" => 5.0, "Conc" => 10.0)
         )
         # Trigger the Core Execution Pipeline for both Linear and Quadratic paths
-        # Optimised for JIT Speed: 0.1s BBO and Staged Rendering Portfolio Pulse
         warmup_opts = Dict{String, Any}("MaxTime" => 0.1, "GridSteps" => 11)
         
         FAST_Log_DDEF("BOOT", "Warmup", "Pulsing Integration Layer (Linear Mode)...", "WAIT")

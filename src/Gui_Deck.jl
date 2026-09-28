@@ -70,13 +70,19 @@ Maps imported factor raw data structures into the standardised DoECISORY row for
 """
 function DECK_MapImportRow_DDEF(inputs::AbstractVector; override_roles::Bool=true)
     return map(enumerate(inputs)) do (i, m)
-        role_val = override_roles ? (i <= 3 ? "Variable" : "Fixed") : string(DECK_GetSafeKey_DDEF(m, "Role", "Variable"))
+        role_val = override_roles ? (i <= 3 ? "Variable" : "Fixed") : string(DECK_GetSafeKey_DDEF(m, "Role", i <= 3 ? "Variable" : "Fixed"))
+        lvls = DECK_GetSafeKey_DDEF(m, "Levels", nothing)
+        has_lvls = !isnothing(lvls) && lvls isa AbstractVector && length(lvls) >= 3
+        l1_val = has_lvls ? Float64(lvls[1]) : Float64(DECK_GetSafeKey_DDEF(m, "L1", 0.0))
+        l2_val = has_lvls ? Float64(lvls[2]) : Float64(DECK_GetSafeKey_DDEF(m, "L2", 0.0))
+        l3_val = has_lvls ? Float64(lvls[3]) : Float64(DECK_GetSafeKey_DDEF(m, "L3", 0.0))
         Dict(
             "Name" => DECK_GetSafeKey_DDEF(m, "Name", ""), 
             "Role" => role_val,
-            "L1" => DECK_GetSafeKey_DDEF(m, "L1", 0.0), 
-            "L2" => DECK_GetSafeKey_DDEF(m, "L2", 0.0),
-            "L3" => DECK_GetSafeKey_DDEF(m, "L3", 0.0), 
+            "L1" => l1_val, 
+            "L2" => l2_val,
+            "L3" => l3_val, 
+            "Levels" => [l1_val, l2_val, l3_val],
             "Min" => DECK_GetSafeKey_DDEF(m, "Min", 0.0),
             "Max" => DECK_GetSafeKey_DDEF(m, "Max", 0.0), 
             "MW" => DECK_GetSafeKey_DDEF(m, "MW", 0.0),
@@ -496,10 +502,10 @@ function DECK_Layout_DDEF()
                                 BASE_ControlGroup_DDEF("Design Method",
                                     dcc_dropdown(id="deck-dd-method",
                                         options = [
-                                            Dict("label" => "Box-Behnken (15 Runs, Quadratic)",        "value" => "BB15"),
-                                            Dict("label" => "Central Composite (17 Runs, Quadratic)",    "value" => "CD17"),
-                                            Dict("label" => "D-Optimal (14 Runs, Quadratic)",            "value" => "DF14"),
-                                            Dict("label" => "Taguchi L9 (9 Runs, Linear)",               "value" => "TL09"),
+                                            Dict("label" => "Box-Behnken (15 Runs, Q)",        "value" => "BB15"),
+                                            Dict("label" => "Central Composite (17 Runs, Q)",    "value" => "CD17"),
+                                            Dict("label" => "D-Optimal (14 Runs, Q)",            "value" => "DF14"),
+                                            Dict("label" => "Taguchi L9 (9 Runs, L)",               "value" => "TL09"),
                                         ],
                                         value     = "BB15", 
                                         clearable = false, 
@@ -598,7 +604,7 @@ const DECK_ExtractDirections_DDEF = Sys_Fast.FAST_ExtractDirections_DDEF
     DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method) -> (Success, Message)
 Orchestrates the generation and validation of an experimental protocol Excel document.
 """
-function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, stoch_data, project="DoECISORY"; direction=[-1, -1, -1])
+function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, stoch_data, project="DoECISORY"; direction=[-1, -1, -1], target_phase::Union{String,Nothing}=nothing)
     C = Sys_Fast.FAST_Data_DDEC
     # Local alias definitions for architectural scoping.
     L_PT   = Main.Lib_Mole.MOLE_ParseTable_DDEF
@@ -720,10 +726,12 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
             return (false, "Mass Calculation Error: One or more runs resulted in invalid chemical mass. Please check your MW and Concentration values.")
         end
 
-        phase_num     = 1
-        current_phase = "Phase1"
-        try
-            if isfile(path)
+        current_phase = !isnothing(target_phase) && !isempty(strip(target_phase)) ? strip(target_phase) : "Phase1"
+        m_tgt = match(r"\d+", current_phase)
+        phase_num = !isnothing(m_tgt) ? parse(Int, m_tgt.match) : 1
+
+        if (isnothing(target_phase) || isempty(strip(target_phase))) && isfile(path)
+            try
                 df_old = Sys_Fast.FAST_ReadExcel_DDEF(path, C.SHEET_DATA)
                 phase_col = Sys_Fast.FAST_GetCol_DDEF(df_old, C.COL_PHASE)
                 if !isempty(df_old) && !isempty(phase_col)
@@ -732,8 +740,8 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
                     phase_num     = isempty(nums) ? 1 : maximum(nums) + 1
                     current_phase = "Phase$phase_num"
                 end
+            catch
             end
-        catch
         end
 
         df_chem = Lib_Mole.MOLE_ProcessDesign_DDEF(real_matrix, processed_rows, sv, sc)
@@ -741,8 +749,8 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
         df_sys = DataFrame(
             C.COL_EXP_ID    => ["EXP_P$(phase_num)_$(lpad(i, 2, '0'))" for i in 1:N_Runs],
             C.COL_PHASE     => fill(current_phase, N_Runs),
-            C.COL_RUN_ORDER => 1:N_Runs,
             C.COL_STATUS    => fill("Pending", N_Runs),
+            C.COL_NOTES     => fill("", N_Runs),
         )
 
         df = hcat(df_sys, df_chem)
@@ -757,7 +765,6 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
         end
 
         df[!, C.COL_SCORE] = fill(missing, N_Runs)
-        df[!, C.COL_NOTES] = fill("", N_Runs)
 
         for r in D["Rows"]
             if get(r, "IsRadioactive", false)
@@ -801,6 +808,26 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
         dir_map = (method == "DF14" && length(var_rows) == 3 && length(direction) >= 3) ?
             Dict{String,Any}(string(get(var_rows[i], "Name", "")) => Int(direction[i]) for i in 1:3) : nothing
 
+        existing_config = isfile(path) ? Sys_Fast.FAST_ReadConfig_DDEF(path) : Dict{String,Any}()
+        existing_global = get(existing_config, "Global", Dict{String,Any}())
+        ph_raw = get(existing_global, "PhaseHistory", Dict{String,Any}())
+        ph_history = (ph_raw isa AbstractDict) ? Dict{String,Any}(string(k) => v for (k, v) in pairs(ph_raw)) : Dict{String,Any}()
+
+        ph_entry = Dict{String,Any}(
+            "Method"       => method,
+            "DirectionMap" => dir_map,
+            "DEfficiency"  => d_eff,
+            "N_Runs"       => N_Runs
+        )
+        if haskey(ph_history, current_phase) && ph_history[current_phase] isa AbstractDict
+            for (k, v) in pairs(ph_history[current_phase])
+                if !haskey(ph_entry, k) || isnothing(ph_entry[k])
+                    ph_entry[k] = v
+                end
+            end
+        end
+        ph_history[current_phase] = ph_entry
+
         ConfigDict = Dict{String,Any}(
             "Ingredients" => D["Rows"],
             "Global"      => Dict{String,Any}(
@@ -812,14 +839,8 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
                 "FillerName"   => f_name,
                 "FillerMW"     => f_mw,
                 "DEfficiency"  => d_eff,
-                "PhaseHistory" => Dict{String,Any}(
-                    "Phase1" => Dict{String,Any}(
-                        "Method"       => method,
-                        "DirectionMap" => dir_map,
-                        "DEfficiency"  => d_eff,
-                        "N_Runs"       => N_Runs
-                    )
-                )
+                "Phase"        => current_phase,
+                "PhaseHistory" => ph_history
             ),
             "Outputs"     => output_data,
         )
@@ -865,7 +886,7 @@ function DECK_RegisterCallbacks_DDEF(app)
 # SECTION 8: INTERFACE & STATE CALLBACKS
 # ------------------------------------------------------------------------------
 
-    # Visibility Orchestration of DF14 Direction Selection Panel
+    # DF14 Direction Selection Panel
     callback!(app,
         Output("deck-direction-container", "style"),
         Input("deck-dd-method", "value"),
@@ -1041,10 +1062,8 @@ function DECK_RegisterCallbacks_DDEF(app)
             idx_gl    = 11 + DECK_MaxRows_DDEC
             
             # Integration of primary action triggers spanning core system components (Buttons, Stores, Uploads).
-            # Integration of row-level deletion triggers within the experimental workspace.
-            # Synchronisation with the primary factor persistence store.
-            # Extraction of the current transient filename from the data stream.
-            # Mapping of multidimensional row states for factor property management.
+            # Integration of row-level deletion triggers within the experimental workspace. Synchronisation with the primary factor persistence store.
+            # Extraction of the current transient filename from the data stream. Mapping of multidimensional row states for factor property management.
             # Orchestration of supplementary global parameters and modal interface states (Vol/Conc, Project/Phase).
 
             n_add, n_clear, up_memo, n_temp, n_save, session, up_cont = args[1:7]
@@ -1100,10 +1119,6 @@ function DECK_RegisterCallbacks_DDEF(app)
 # ------------------------------------------------------------------------------
 # SECTION 9: SYSTEM LEVEL HELPERS (POLYMORPHIC)
 # ------------------------------------------------------------------------------
-
-            # DECK_GetSafeKey_DDEF is defined at the module level
-
-
 
             # Extraction and normalisation of global system parameters.
             idx_gl = 11 + DECK_MaxRows_DDEC + 2 + 9 * DECK_MaxRows_DDEC
@@ -1217,8 +1232,9 @@ function DECK_RegisterCallbacks_DDEF(app)
                         push!(new_rows, new_r)
                     end
                     
+                    cur_vault = !isnothing(store_data) ? get(store_data, "vault", get(store_data, :vault, nothing)) : nothing
                     count_val = isnothing(store_data) ? length(new_rows) : DECK_GetSafeKey_DDEF(store_data, "count", length(new_rows))
-                    new_store = Dict{String,Any}("rows" => new_rows, "count" => count_val)
+                    new_store = Dict{String,Any}("rows" => new_rows, "count" => count_val, "vault" => cur_vault)
                     return (new_store, ntuple(_ -> Dash.no_update(), 20)...)
                 end
                 return ntuple(_ -> Dash.no_update(), 21)
@@ -1244,7 +1260,8 @@ function DECK_RegisterCallbacks_DDEF(app)
                         end
                         push!(new_rows, nr)
                     end
-                    ns = Dict{String,Any}("rows" => new_rows, "count" => isnothing(store_data) ? length(new_rows) : DECK_GetSafeKey_DDEF(store_data, "count", length(new_rows)))
+                    cur_vault = !isnothing(store_data) ? get(store_data, "vault", get(store_data, :vault, nothing)) : nothing
+                    ns = Dict{String,Any}("rows" => new_rows, "count" => isnothing(store_data) ? length(new_rows) : DECK_GetSafeKey_DDEF(store_data, "count", length(new_rows)), "vault" => cur_vault)
                     return (ns, ntuple(_ -> Dash.no_update(), 20)...)
                 end
                 return ntuple(_ -> Dash.no_update(), 21)
@@ -1260,7 +1277,8 @@ function DECK_RegisterCallbacks_DDEF(app)
                     deleteat!(rows, ri)
                 end
                 nc = length(rows)
-                return DECK_Return_DDEF(Dict("rows" => rows, "count" => nc), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, fill(NO, 6))
+                cur_vault = !isnothing(store_data) ? get(store_data, "vault", get(store_data, :vault, nothing)) : nothing
+                return DECK_Return_DDEF(Dict("rows" => rows, "count" => nc, "vault" => cur_vault), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, fill(NO, 6))
 
             elseif trig == "deck-btn-add-row"
                 rows = DECK_SnapRows_DDEF()
@@ -1273,7 +1291,8 @@ function DECK_RegisterCallbacks_DDEF(app)
                 else
                     new_count = current_count 
                 end
-                return DECK_Return_DDEF(Dict("rows" => rows, "count" => new_count), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, fill(NO, 6))
+                cur_vault = !isnothing(store_data) ? get(store_data, "vault", get(store_data, :vault, nothing)) : nothing
+                return DECK_Return_DDEF(Dict("rows" => rows, "count" => new_count, "vault" => cur_vault), rows, NO, NO, NO, NO, NO, NO, NO, NO, NO, NO, fill(NO, 6))
 
             # Reset of the design canvas and state initialisation.
             elseif trig == "deck-btn-clear"
@@ -1508,6 +1527,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                         end
 
                         cfg = Sys_Fast.FAST_ReadConfig_DDEF(tmp)
+                        df_data = Sys_Fast.FAST_ReadExcel_DDEF(tmp, Sys_Fast.FAST_Data_DDEC.SHEET_DATA)
                         Sys_Fast.FAST_CleanTransient_DDEF(tmp)
                         
                         if !isempty(cfg) && (haskey(cfg, "Ingredients") || haskey(cfg, :Ingredients))
@@ -1515,7 +1535,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                             all_ingreds = DECK_GetSafeKey_DDEF(cfg, "Ingredients", [])
                             filtered_ingreds = filter(itm -> string(get(itm, "Role", get(itm, :Role, ""))) != "Filler", all_ingreds)
                             
-                            mapped = DECK_MapImportRow_DDEF(filtered_ingreds)
+                            mapped = DECK_MapImportRow_DDEF(filtered_ingreds; override_roles=false)
                             real_count = 0
                             for (i, r) in enumerate(mapped)
                                 if !isempty(strip(string(get(r, "Name", ""))))
@@ -1539,7 +1559,26 @@ function DECK_RegisterCallbacks_DDEF(app)
                                 [i <= length(outs) ? get(outs[i], "Unit", "-") : "-" for i in 1:3]
                             )
                             stat_msg = html_span("✅ Sync: Valid Workspace", className="small fw-bold", style=Dict("color" => "var(--colour-chr4-tongre)"))
-                            ph_opts = [Dict("label" => "Phase 1 Initiated", "value" => "Phase1")]
+                            
+                            detected_phases = String[]
+                            if !isempty(df_data) && hasproperty(df_data, Symbol(Sys_Fast.FAST_Data_DDEC.COL_PHASE))
+                                raw_p = filter(!ismissing, unique(df_data[!, Symbol(Sys_Fast.FAST_Data_DDEC.COL_PHASE)]))
+                                detected_phases = String[string(p) for p in raw_p]
+                            end
+                            if isempty(detected_phases)
+                                ph_h = get(g, "PhaseHistory", Dict())
+                                if ph_h isa AbstractDict && !isempty(ph_h)
+                                    detected_phases = String[string(k) for k in keys(ph_h)]
+                                end
+                            end
+                            if isempty(detected_phases)
+                                detected_phases = ["Phase1"]
+                            else
+                                sort!(detected_phases, by=Sys_Fast.FAST_ExtractPhaseNum_DDEF)
+                            end
+
+                            ph_opts = [Dict("label" => p, "value" => p) for p in detected_phases]
+                            active_ph = detected_phases[end]
 
                             loaded_stoch = Dict(
                                 "FillerName" => string(get(g, "FillerName", "")),
@@ -1548,9 +1587,9 @@ function DECK_RegisterCallbacks_DDEF(app)
                                 "Conc" => Float64(get(g, "Conc", 0.0))
                             )
 
-                            dir_vals = DECK_ExtractDirections_DDEF(g, filtered_ingreds)
-                            return DECK_Return_DDEF(Dict("rows" => mapped[1:DECK_MaxRows_DDEC], "count" => nc), mapped[1:DECK_MaxRows_DDEC], ph_opts,
-                                get(g, "Volume", 0.0), get(g, "Conc", 0.0), proj_v, method_val, NO, NO, stat_msg, "Phase1", loaded_stoch, out_vals, dir_vals)
+                            dir_vals = DECK_ExtractDirections_DDEF(g, filtered_ingreds, active_ph)
+                            return DECK_Return_DDEF(Dict("rows" => mapped[1:DECK_MaxRows_DDEC], "count" => nc, "vault" => up_cont), mapped[1:DECK_MaxRows_DDEC], ph_opts,
+                                get(g, "Volume", 0.0), get(g, "Conc", 0.0), proj_v, method_val, NO, NO, stat_msg, active_ph, loaded_stoch, out_vals, dir_vals)
                         end
                     end
                 catch e
@@ -1761,6 +1800,7 @@ function DECK_RegisterCallbacks_DDEF(app)
         State("deck-dir-x1", "value"),
         State("deck-dir-x2", "value"),
         State("deck-dir-x3", "value"),
+        State("deck-dd-phase", "value"),
         prevent_initial_call=true
     ) do args...
         try
@@ -1768,10 +1808,11 @@ function DECK_RegisterCallbacks_DDEF(app)
             out_names = collect(args[3:5])
             out_units = collect(args[6:8])
             vol, conc, method, session_data, store_data, master_vault = args[9:14]
-            stoch_settings = args[end-3]
-            dir_x1 = something(args[end-2], -1)
-            dir_x2 = something(args[end-1], -1)
-            dir_x3 = something(args[end],   -1)
+            sel_phase = args[end]
+            dir_x3 = something(args[end-1], -1)
+            dir_x2 = something(args[end-2], -1)
+            dir_x1 = something(args[end-3], -1)
+            stoch_settings = args[end-4]
             dx1 = dir_x1 isa Number ? Int(dir_x1) : parse(Int, string(dir_x1))
             dx2 = dir_x2 isa Number ? Int(dir_x2) : parse(Int, string(dir_x2))
             dx3 = dir_x3 isa Number ? Int(dir_x3) : parse(Int, string(dir_x3))
@@ -1853,23 +1894,33 @@ function DECK_RegisterCallbacks_DDEF(app)
                 ))
             end
 
-            if !isnothing(session_data) && session_data != "" && !isnothing(master_vault) && master_vault != ""
-                path = Sys_Fast.FAST_GetTransientPath_DDEF(master_vault)
+            stored_vault = !isnothing(store_data) ? get(store_data, "vault", get(store_data, :vault, nothing)) : nothing
+            vault_source = if !isnothing(stored_vault) && !isempty(stored_vault)
+                stored_vault
+            elseif !isnothing(master_vault) && !isempty(master_vault)
+                master_vault
             else
-                path = Sys_Fast.FAST_GetTransientPath_DDEF()
+                nothing
             end
-            ok, msg = DECK_GenerateProtocol_DDEF(path, in_d, out_d, vol, conc, method, stoch_settings, project; direction=direction_vec)
+
+            path = !isnothing(vault_source) ? Sys_Fast.FAST_GetTransientPath_DDEF(vault_source) : Sys_Fast.FAST_GetTransientPath_DDEF()
+            target_phase_str = isnothing(sel_phase) ? nothing : string(sel_phase)
+            ok, msg = DECK_GenerateProtocol_DDEF(path, in_d, out_d, vol, conc, method, stoch_settings, project; direction=direction_vec, target_phase=target_phase_str)
                 !ok && return Dash.no_update(), html_div(msg, className="", style=Dict("color" => "var(--colour-chr0-huered)")), Dash.no_update()
 
             store_content = Sys_Fast.FAST_ReadToStore_DDEF(path)
             raw_base64 = base64encode(read(path))
 
-            current_phase = "P1"
-            if !isnothing(session_data) && session_data != ""
+            current_phase = if !isnothing(target_phase_str) && !isempty(strip(target_phase_str))
+                strip(target_phase_str)
+            elseif !isnothing(session_data) && session_data != ""
                 try
-                    current_phase = get(JSON3.read(session_data), "TargetPhase", "P1")
+                    get(JSON3.read(session_data), "TargetPhase", "Phase1")
                 catch
+                    "Phase1"
                 end
+            else
+                "Phase1"
             end
             # Standardised Naming: Project, Phase, Tag (DOE), Extension (xlsx)
             fname = Sys_Fast.FAST_GenerateSmartName_DDEF(project, current_phase, "DOE", "xlsx")

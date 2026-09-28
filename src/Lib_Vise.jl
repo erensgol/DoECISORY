@@ -594,7 +594,7 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_B
     X_Linear = VISE_ExpandDesign_DDEF(Candidates, "linear")
     X_Quadratic = VISE_ExpandDesign_DDEF(Candidates, "quadratic")
 
-    # 1. Deterministic Matrix-Vector Multiplication (Pure Julia: Thread-safe, zero OpenBLAS lock risk)
+    # 1. Deterministic Matrix-Vector Multiplication (Thread-safe)
     for m in 1:NumModels
         Mod = Models[m]
         Mod["Status"] != "OK" && continue
@@ -620,23 +620,40 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_B
     if isempty(active_idx)
         fill!(Scores, 1.0)
     else
-        sum_weights = 0.0
         parsed_goals = Vector{Tuple}(undef, NumModels)
         for m in 1:NumModels
             gtup = Main.Lib_Core.CORE_ExtractGoal_DDEF(m <= length(Goals) ? Goals[m] : get(Models[m], "Goal", Dict()))
             parsed_goals[m] = gtup
-            if m in active_idx; sum_weights += gtup[5] end
         end
-        
-        pow = sum_weights > 0.0 ? (1.0 / sum_weights) : (length(active_idx) > 0 ? 1.0 / length(active_idx) : 1.0)
+        base_goals = [(g[1], g[2], g[3], g[4], 1.0) for g in parsed_goals]
+        inv_k = length(active_idx) > 0 ? (1.0 / length(active_idx)) : 1.0
+        neighbor_weights = [Main.Lib_Core.CORE_GetNeighborWeights_DDEF(parsed_goals[m][5]) for m in active_idx]
 
         @inbounds for i in 1:NumPoints
-            s = 1.0
-            for m_idx in active_idx
+            prod_u = 1.0
+            prod_e = 1.0
+            for (j, m_idx) in enumerate(active_idx)
                 pred_val = Predictions[i, m_idx]
-                s *= Main.Lib_Core.CORE_CalcDesirability_DDEF(pred_val, parsed_goals[m_idx])
+                if isnan(pred_val) || isinf(pred_val)
+                    prod_u = 0.0
+                    prod_e = 0.0
+                    break
+                end
+
+                b = Main.Lib_Core.CORE_CalcDesirability_DDEF(pred_val, base_goals[m_idx])
+                if b <= 1e-12
+                    prod_u = 0.0
+                    prod_e = 0.0
+                    break
+                end
+
+                w_m, w_c, w_p = neighbor_weights[j]
+                u = b^(w_c * inv_k)
+                e = (b^(w_m * inv_k) + u + b^(w_p * inv_k)) / 3.0
+                prod_u *= u
+                prod_e *= e
             end
-            res_val = s^pow
+            res_val = clamp(0.50 * prod_u + 0.50 * prod_e, 0.0, 1.0)
             for dm in ModifiersDCYP
                 res_val = Main.Lib_Core.CORE_ApplyDCYP_DDEF(res_val, dm, view(Candidates, i, :))
             end
@@ -1361,6 +1378,7 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
         return Dict("Status" => "FAIL", "Message" => "Insufficient data (N=$n_samples). Minimum 3 valid rows required."), Dict()
     end
     
+    X_Nominal = copy(X_Clean)
     radio_audit = VISE_ApplyForwReveDecay_DDEF(X_Clean, Y_Clean, InNames, OutNames, df_raw, config, Opts, C, Log; mask=valid_mask)
     eff_model = ModelType == "Auto" ? (n_samples > 12 ? "quadratic" : "linear") : lowercase(ModelType)
     if (lowercase(ModelType) != "auto" && lowercase(ModelType) != "") 
@@ -1378,27 +1396,34 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
     if get(r_opts, "Apply", false)
         f_dict = get(r_opts, "FORW", Dict{String,Any}())
         r_dict = get(r_opts, "REVE", Dict{String,Any}())
-        for (i, n) in enumerate(DispInNames)
-            if haskey(f_dict, n)
-                disp_n = get(f_dict[n], "Name", "")
-                disp_u = get(f_dict[n], "Unit", "")
-                !isempty(disp_n) && (DispInNames[i] = disp_n * (isempty(disp_u) ? "" : " ($disp_u)"))
+        forw_active_disp = get(f_dict, "Enabled", false) in (true, 1, "ON", "true", "TRUE")
+        reve_active_disp = get(r_dict, "Enabled", false) in (true, 1, "ON", "true", "TRUE")
+
+        if forw_active_disp
+            for (i, n) in enumerate(DispInNames)
+                if haskey(f_dict, n) && f_dict[n] isa AbstractDict
+                    disp_n = get(f_dict[n], "Name", "")
+                    disp_u = get(f_dict[n], "Unit", "")
+                    !isempty(disp_n) && (DispInNames[i] = disp_n * (isempty(disp_u) ? "" : " ($disp_u)"))
+                end
             end
         end
-        for (i, n) in enumerate(DispOutNames)
-            if haskey(r_dict, n)
-                disp_n = get(r_dict[n], "Name", "")
-                disp_u = get(r_dict[n], "Unit", "")
-                !isempty(disp_n) && (DispOutNames[i] = disp_n * (isempty(disp_u) ? "" : " ($disp_u)"))
+        if reve_active_disp
+            for (i, n) in enumerate(DispOutNames)
+                if haskey(r_dict, n) && r_dict[n] isa AbstractDict
+                    disp_n = get(r_dict[n], "Name", "")
+                    disp_u = get(r_dict[n], "Unit", "")
+                    !isempty(disp_n) && (DispOutNames[i] = disp_n * (isempty(disp_u) ? "" : " ($disp_u)"))
+                end
             end
         end
     end
 
     mods_dcyp = VISE_ExtractDCYP_DDEF(InNames_v, OutNames_v, config, Opts)
 
-    # Mathematical Optimisation: BBO Pulse handled concurrently or skipped for Priority Start
+    # Mathematical Optimisation: BBO Pulse in Initial Space (X_Nominal bounds)
     bp, bs, ldf, SC, warns = if Optim
-        VISE_RunOptimisation_DDEF(X_Clean, models, Goals, config, Phase, InNames_v, OutNames_v, Opts, C, Log)
+        VISE_RunOptimisation_DDEF(X_Clean, models, Goals, config, Phase, InNames_v, OutNames_v, Opts, C, Log; X_Nominal=X_Nominal)
     else
         [], 0.0, DataFrame(), zeros(1), String[]
     end
@@ -1453,7 +1478,7 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
     opts_with_mode = copy(Opts)
     opts_with_mode["Mode"] = RenderMode
 
-    graphs = Main.Lib_Arts.ARTS_Render_DDEF(models, X_Clean, Y_Clean, DispInNames, DispOutNames, Goals, 
+    graphs = Main.Lib_Arts.ARTS_Render_DDEF(models, X_Nominal, Y_Clean, DispInNames, DispOutNames, Goals, 
         [get(m, "R2_Adj", 0.0) for m in models], [get(m, "Q2", 0.0) for m in models], opts_with_mode, ldf,
         sens_list, residuals)
         
@@ -1462,7 +1487,7 @@ function VISE_ExecuteCore_DDEF(df_raw::DataFrame, config::AbstractDict, Phase::A
     sheets_to_commit[sheet_leader] = ldf
     
     res_bundle = VISE_AssembleBundle_DDEF(Phase, InNames_v, OutNames_v, DispInNames, DispOutNames, models, bp, bs, ldf, X_Clean, Y_Clean, Opts, 
-        Goals, Y_Pred, Actual_Scores, radio_audit, warns, vitals, anova_tables, normality_res, residuals, sens_list, graphs, t_start, C)
+        Goals, Y_Pred, Actual_Scores, radio_audit, warns, vitals, anova_tables, normality_res, residuals, sens_list, graphs, t_start, C; X_Nominal=X_Nominal)
         
     return res_bundle, sheets_to_commit
 end
@@ -1568,7 +1593,7 @@ function VISE_ResolveName_DDEF(ColumnName::AbstractString, Prefix::AbstractStrin
                 return nm
             end
 
-            # Match with unit suffix stripped (e.g. "KOLLOIDAL ORAN %" vs "KOLLOIDAL ORAN")
+            # Match with unit suffix stripped
             u = strip(string(Main.Sys_Fast.FAST_GetSafe_DDEF(item, "Unit", "")))
             if !isempty(u) && u != "-"
                 if col_norm == norm_tok(nm * " " * u) || col_norm == norm_tok(nm * "_" * u)
@@ -1651,6 +1676,9 @@ function VISE_ApplyForwReveDecay_DDEF(X, Y, in_n, out_n, df, config, opts, C, Lo
     fwd_dict    = get(r_opts, "FORW", Dict{String,Any}())
     rev_dict    = get(r_opts, "REVE", Dict{String,Any}())
 
+    forw_active = apply_radio && (get(fwd_dict, "Enabled", false) in (true, 1, "ON", "true", "TRUE"))
+    reve_active = apply_radio && (get(rev_dict, "Enabled", false) in (true, 1, "ON", "true", "TRUE"))
+
     ingreds = get(config, "Ingredients", [])
     idx_m   = findall(mask)
     N       = length(idx_m)
@@ -1658,7 +1686,7 @@ function VISE_ApplyForwReveDecay_DDEF(X, Y, in_n, out_n, df, config, opts, C, Lo
 
     # --------------------------------------------------------------------------
     # Phase 1: Forward Decay (Inputs & Fixed Precursors)
-    # Always populates ACTUAL_ columns in the dataset for scientific provenance.
+    # Populates ACTUAL_ columns in the dataset.
     # --------------------------------------------------------------------------
     for ing in ingreds
         v_name = strip(string(get(ing, "Name", "")))
@@ -1701,10 +1729,13 @@ function VISE_ApplyForwReveDecay_DDEF(X, Y, in_n, out_n, df, config, opts, C, Lo
             VISE_WidenColumnFloat_DDEF!(df, Symbol(col_actual))
         end
 
+        is_target_forw = forw_active && haskey(fwd_dict, v_name) && (fwd_dict[v_name] isa AbstractDict)
+
         dfs = Float64[]
         for (i, r_idx) in enumerate(idx_m)
             t_min   = isempty(col_exp) ? 0.0 : Main.Sys_Fast.FAST_SafeNum_DDEF(df[r_idx, col_exp])
-            val_nom = isempty(col_nom) ? 0.0 : Main.Sys_Fast.FAST_SafeNum_DDEF(df[r_idx, col_nom])
+            val_nom = !isempty(col_nom) ? Main.Sys_Fast.FAST_SafeNum_DDEF(df[r_idx, col_nom]) :
+                      (i <= size(X, 1) && !isnothing(v_idx) && v_idx <= size(X, 2) ? Float64(X[i, v_idx]) : 0.0)
             df_row  = (hl_min > 0.0 && t_min > 0.0) ? Main.Lib_Mole.MOLE_CalcRadioDecay_DDEF(1.0, hl_raw, hl_unit, t_min; Reverse=false) : 1.0
 
             val_act = (hl_min > 0.0 && t_min > 0.0 && val_nom > 0.0) ?
@@ -1715,13 +1746,14 @@ function VISE_ApplyForwReveDecay_DDEF(X, Y, in_n, out_n, df, config, opts, C, Lo
                 df[r_idx, Symbol(col_actual)] = round(val_act; digits=4)
             end
 
-            if apply_radio && !isnothing(v_idx) && val_act > 0.0
+            # Only mutate training matrix X if Forward Decay is explicitly active for this ingredient
+            if is_target_forw && !isnothing(v_idx) && val_act > 0.0
                 X[i, v_idx] = val_act
             end
             push!(dfs, df_row)
         end
 
-        if apply_radio && (haskey(fwd_dict, v_name) || !isnothing(v_idx))
+        if is_target_forw
             type_lbl = isnothing(v_idx) ? "FORW (Fixed)" : "FORW (Input)"
             f_opts = get(fwd_dict, v_name, Dict())
             disp_name = get(f_opts, "Name", "")
@@ -1777,104 +1809,83 @@ function VISE_ApplyForwReveDecay_DDEF(X, Y, in_n, out_n, df, config, opts, C, Lo
 
     # --------------------------------------------------------------------------
     # Phase 2: Pure Reverse Decay & Activity EOS Restoration (Outputs)
-    # Always populates ACTUAL_<OutputName> immediately right of input ACTUAL_
+    # Populates ACTUAL_<OutputName> immediately right of input ACTUAL_
     # --------------------------------------------------------------------------
-    effective_rev = copy(rev_dict)
-    if isempty(effective_rev)
-        outputs_cfg = get(config, "Outputs", [])
-        rad_inputs = filter(i -> (get(i, "IsRadioactive", false) in (true, 1, "true", "TRUE")) ||
-                                 Sys_Fast.FAST_SafeNum_DDEF(get(i, "HalfLife", 0.0)) > 0, ingreds)
-        default_iso_name = !isempty(rad_inputs) ? string(get(first(rad_inputs), "Name", "")) : ""
-        if !isempty(default_iso_name)
-            for o in outputs_cfg
-                o_name = string(get(o, "Name", ""))
-                o_unit = string(get(o, "Unit", ""))
-                if (get(o, "IsRadioactive", false) in (true, 1, "true", "TRUE")) ||
-                   occursin(r"\b(mbq|mci|ci|gbq|kbq|bq|cpm|cps|dpm|dps)\b", lowercase(o_unit))
-                    effective_rev[o_name] = Dict(
-                        "Source" => default_iso_name,
-                        "Name"   => "$o_name (EOS)",
-                        "Unit"   => o_unit
-                    )
+    if reve_active
+        effective_rev = filter(p -> p.first != "Enabled" && p.second isa AbstractDict, rev_dict)
+        for (out_name, out_data) in effective_rev
+            out_data isa AbstractDict || continue
+            mapped_in_name = get(out_data, "Source", "None")
+            (mapped_in_name == "None" || isempty(mapped_in_name)) && continue
+            o_idx = findfirst(==(out_name), out_n)
+            isnothing(o_idx) && continue
+
+            idx = findfirst(i -> get(i, "Name", "") == mapped_in_name, ingreds)
+            isnothing(idx) && continue
+            ing = ingreds[idx]
+
+            hl_raw  = Float64(Main.Sys_Fast.FAST_SafeNum_DDEF(get(ing, "HalfLife", 0.0)))
+            hl_unit = string(get(ing, "HalfLifeUnit", "Hours"))
+            hl_min  = Main.Lib_Mole.MOLE_ConvertTimeToMinutes_DDEF(hl_raw, hl_unit)
+            hl_min <= 0.0 && continue
+
+            # Measurement latency column: TIME_REVE_MINS_<Source> or TIME_REVE_MINS_<Output>
+            col_meas = Main.Sys_Fast.FAST_GetCol_DDEF(df, "TIME_REVE_MINS_" * mapped_in_name)
+            isempty(col_meas) && (col_meas = Main.Sys_Fast.FAST_GetCol_DDEF(df, "TIME_REVE_MINS_" * out_name))
+
+            # Raw experimental result column: RESULT_<Output> (strictly preserved)
+            col_res = Main.Sys_Fast.FAST_GetCol_DDEF(df, C.PRE_RESULT * out_name)
+            if isempty(col_res)
+                p_names = string.(names(df))
+                m_res = findfirst(c -> startswith(c, C.PRE_RESULT) && occursin(out_name, c), p_names)
+                !isnothing(m_res) && (col_res = p_names[m_res])
+            end
+
+            # Resolve output ACTUAL column header: ACTUAL_<OutputName>
+            outputs_cfg = get(config, "Outputs", [])
+            o_cfg_idx = findfirst(o -> get(o, "Name", "") == out_name, outputs_cfg)
+            out_unit = !isnothing(o_cfg_idx) ? string(get(outputs_cfg[o_cfg_idx], "Unit", "")) : ""
+            disp_unit = get(out_data, "Unit", out_unit)
+
+            col_act_out = Main.Sys_Fast.FAST_GetCol_DDEF(df, "ACTUAL_" * out_name)
+            if isempty(col_act_out)
+                col_act_out = (isempty(disp_unit) || disp_unit == "-") ? ("ACTUAL_" * out_name) : ("ACTUAL_" * out_name * "_" * disp_unit)
+            end
+
+            VISE_WidenColumnFloat_DDEF!(df, Symbol(col_act_out))
+
+            # Reorder df columns: Place ACTUAL_<OutputName> immediately to the right of input ACTUAL_ column
+            in_act_cols = filter(c -> startswith(string(c), "ACTUAL_") && string(c) != col_act_out, names(df))
+            if !isempty(in_act_cols)
+                ref_col = string(last(in_act_cols))
+                VISE_InsertColAfter_DDEF!(df, col_act_out, ref_col)
+            end
+
+            dfs = Float64[]
+            for (i, r_idx) in enumerate(idx_m)
+                t_meas = isempty(col_meas) ? 0.0 : Main.Sys_Fast.FAST_SafeNum_DDEF(df[r_idx, col_meas])
+                val_raw = !isempty(col_res) ? Main.Sys_Fast.FAST_SafeNum_DDEF(df[r_idx, col_res]) :
+                          (i <= size(Y, 1) && o_idx <= size(Y, 2) ? Float64(Y[i, o_idx]) : 0.0)
+
+                df_row = (hl_min > 0.0 && t_meas > 0.0) ?
+                         Main.Lib_Mole.MOLE_CalcRadioDecay_DDEF(1.0, hl_raw, hl_unit, t_meas; Reverse=true) : 1.0
+
+                # Pure Reverse Decay: Restore delayed measurement to End of Synthesis (EOS)
+                A_out_corr = (hl_min > 0.0 && t_meas > 0.0 && val_raw > 0.0) ?
+                             Main.Lib_Mole.MOLE_CalcRadioDecay_DDEF(val_raw, hl_raw, hl_unit, t_meas; Reverse=true) :
+                             val_raw
+
+                if A_out_corr > 0.0
+                    df[r_idx, Symbol(col_act_out)] = round(A_out_corr; digits=4)
                 end
-            end
-        end
-    end
 
-    for (out_name, out_data) in effective_rev
-        out_data isa AbstractDict || continue
-        mapped_in_name = get(out_data, "Source", "None")
-        (mapped_in_name == "None" || isempty(mapped_in_name)) && continue
-        o_idx = findfirst(==(out_name), out_n)
-        isnothing(o_idx) && continue
-
-        idx = findfirst(i -> get(i, "Name", "") == mapped_in_name, ingreds)
-        isnothing(idx) && continue
-        ing = ingreds[idx]
-
-        hl_raw  = Float64(Main.Sys_Fast.FAST_SafeNum_DDEF(get(ing, "HalfLife", 0.0)))
-        hl_unit = string(get(ing, "HalfLifeUnit", "Hours"))
-        hl_min  = Main.Lib_Mole.MOLE_ConvertTimeToMinutes_DDEF(hl_raw, hl_unit)
-        hl_min <= 0.0 && continue
-
-        # Measurement latency column: TIME_REVE_MINS_<Source> or TIME_REVE_MINS_<Output>
-        col_meas = Main.Sys_Fast.FAST_GetCol_DDEF(df, "TIME_REVE_MINS_" * mapped_in_name)
-        isempty(col_meas) && (col_meas = Main.Sys_Fast.FAST_GetCol_DDEF(df, "TIME_REVE_MINS_" * out_name))
-
-        # Raw experimental result column: RESULT_<Output> (strictly preserved)
-        col_res = Main.Sys_Fast.FAST_GetCol_DDEF(df, C.PRE_RESULT * out_name)
-        if isempty(col_res)
-            p_names = string.(names(df))
-            m_res = findfirst(c -> startswith(c, C.PRE_RESULT) && occursin(out_name, c), p_names)
-            !isnothing(m_res) && (col_res = p_names[m_res])
-        end
-
-        # Resolve output ACTUAL column header: ACTUAL_<OutputName>
-        outputs_cfg = get(config, "Outputs", [])
-        o_cfg_idx = findfirst(o -> get(o, "Name", "") == out_name, outputs_cfg)
-        out_unit = !isnothing(o_cfg_idx) ? string(get(outputs_cfg[o_cfg_idx], "Unit", "")) : ""
-        disp_unit = get(out_data, "Unit", out_unit)
-
-        col_act_out = Main.Sys_Fast.FAST_GetCol_DDEF(df, "ACTUAL_" * out_name)
-        if isempty(col_act_out)
-            col_act_out = (isempty(disp_unit) || disp_unit == "-") ? ("ACTUAL_" * out_name) : ("ACTUAL_" * out_name * "_" * disp_unit)
-        end
-
-        VISE_WidenColumnFloat_DDEF!(df, Symbol(col_act_out))
-
-        # Reorder df columns: Place ACTUAL_<OutputName> immediately to the right of input ACTUAL_ column
-        in_act_cols = filter(c -> startswith(string(c), "ACTUAL_") && string(c) != col_act_out, names(df))
-        if !isempty(in_act_cols)
-            ref_col = string(last(in_act_cols))
-            VISE_InsertColAfter_DDEF!(df, col_act_out, ref_col)
-        end
-
-        dfs = Float64[]
-        for (i, r_idx) in enumerate(idx_m)
-            t_meas = isempty(col_meas) ? 0.0 : Main.Sys_Fast.FAST_SafeNum_DDEF(df[r_idx, col_meas])
-            val_raw = !isempty(col_res) ? Main.Sys_Fast.FAST_SafeNum_DDEF(df[r_idx, col_res]) :
-                      (i <= size(Y, 1) && o_idx <= size(Y, 2) ? Float64(Y[i, o_idx]) : 0.0)
-
-            df_row = (hl_min > 0.0 && t_meas > 0.0) ?
-                     Main.Lib_Mole.MOLE_CalcRadioDecay_DDEF(1.0, hl_raw, hl_unit, t_meas; Reverse=true) : 1.0
-
-            # Pure Reverse Decay: Restore delayed measurement to End of Synthesis (EOS)
-            A_out_corr = (hl_min > 0.0 && t_meas > 0.0 && val_raw > 0.0) ?
-                         Main.Lib_Mole.MOLE_CalcRadioDecay_DDEF(val_raw, hl_raw, hl_unit, t_meas; Reverse=true) :
-                         val_raw
-
-            if A_out_corr > 0.0
-                df[r_idx, Symbol(col_act_out)] = round(A_out_corr; digits=4)
+                # When radio correction is applied, update Y directly with EOS activity
+                if A_out_corr > 0.0
+                    Y[i, o_idx] = A_out_corr
+                end
+                push!(dfs, df_row)
             end
 
-            # When radio correction is applied, update Y directly with EOS activity
-            if apply_radio && A_out_corr > 0.0
-                Y[i, o_idx] = A_out_corr
-            end
-            push!(dfs, df_row)
-        end
-
-        if apply_radio
             disp_name = get(out_data, "Name", "")
             disp_name = isempty(disp_name) ? out_name : disp_name
 
@@ -1914,13 +1925,13 @@ function VISE_ExtractDCYP_DDEF(in_n::AbstractVector{<:AbstractString}, out_n::Ab
     dcyp_cfg  = get(r_opts, "DCYP", Dict())
     
     dcyp_enabled = if dcyp_cfg isa AbstractDict
-        get(dcyp_cfg, "Enabled", true)
+        get(dcyp_cfg, "Enabled", false) in (true, 1, "ON", "true", "TRUE")
     elseif dcyp_cfg isa AbstractString
         uppercase(strip(dcyp_cfg)) in ("ON", "TRUE", "1")
     elseif dcyp_cfg isa Bool
         dcyp_cfg
     else
-        true
+        false
     end
     !dcyp_enabled && return modifiers
 
@@ -1989,21 +2000,20 @@ function VISE_ExtractDCYP_DDEF(in_n::AbstractVector{<:AbstractString}, out_n::Ab
     return modifiers
 end
 
-function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n, opts, C, Log)
+function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n, opts, C, Log; X_Nominal=X)
     !get(opts, "Optim", true) && return [], 0.0, DataFrame(), zeros(1), String[]
     
-    bounds = hcat(minimum(X; dims=1)', maximum(X; dims=1)')
+    # Search space bounds derived from initial nominal space (X_Nominal)
+    bounds = hcat(minimum(X_Nominal; dims=1)', maximum(X_Nominal; dims=1)')
     mods_dcyp = VISE_ExtractDCYP_DDEF(in_n, out_n, config, opts)
     
-    # 1. High-Density Grid Exploration
     grid_steps = get(opts, "GridSteps", 41)
     XT, YP, SC = VISE_GridSearch_DDEF(models, goals, bounds; Steps=grid_steps, ModifiersDCYP=mods_dcyp)
     
-    # 2. Continuous Global Desirability Maximum (BlackBoxOptim)
     max_time = get(opts, "MaxTime", 2.0)
     bp, bs = Main.Lib_Core.CORE_OptimiseDesirability_DDEF(models, goals, bounds; MaxTime=max_time, ModifiersDCYP=mods_dcyp)
     
-    # Predict outputs for continuous BBO point (unpenalised chemical CQA values)
+    # Predict outputs for continuous BBO point 
     num_models = length(models)
     bp_mat = reshape(Float64.(bp), 1, 3)
     yp_bbo = zeros(Float64, 1, num_models)
@@ -2013,7 +2023,7 @@ function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n,
         end
     end
 
-    # 3. Fuse BBO Optimum and Grid Candidates into 14-Leader Vault
+    # Fuse BBO Optimum and Grid Candidates
     num_candidates = length(SC)
     top_grid_indices = partialsortperm(SC, 1:min(8, num_candidates); rev=true)
 
@@ -2041,7 +2051,7 @@ function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n,
     tier_indices = findall(>=(score_limit), SC)
     (isempty(tier_indices)) && (tier_indices = top_grid_indices)
 
-    # 4. Input Minimisation Diversity (3 Leaders: INP-X1, INP-X2, INP-X3)
+    # Input Minimisation Diversity
     for i in 1:min(3, size(XT, 2))
         tag_pre = i <= length(in_n) ? replace(strip(in_n[i]), " " => "_") : "X$i"
         best_idx, min_val = -1, Inf
@@ -2059,7 +2069,7 @@ function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n,
         end
     end
 
-    # 5. Output Maximisation Diversity (3 Leaders: OUT-Y1, OUT-Y2, OUT-Y3)
+    # Output Maximisation Diversity
     for i in 1:min(3, size(YP, 2))
         tag_pre = i <= length(out_n) ? replace(strip(out_n[i]), " " => "_") : "Y$i"
         m_goal = get(models[i], "Goal", Dict())
@@ -2117,7 +2127,7 @@ function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n,
 
     ldf = VISE_PrepareLeadersDF_DDEF(final_XT, final_YP, final_SC, cand_tags, in_n, out_n, phase, C)
 
-    # 7. Stoichiometric Safety Audit
+    # Stoichiometric Safety Audit
     ingreds = get(config, "Ingredients", [])
     if !isempty(ingreds)
         g_cfg = get(config, "Global", Dict())
@@ -2132,7 +2142,7 @@ function VISE_RunOptimisation_DDEF(X, models, goals, config, phase, in_n, out_n,
         end
     end
 
-    # 8. Boundary Warnings
+    # Boundary Warnings
     warns = String[]
     if !isempty(bp)
         for i in 1:min(3, length(bp))
@@ -2157,13 +2167,13 @@ function VISE_PrepareLeadersDF_DDEF(xt, yp, sc, tags, in_n, out_n, phase, C)
         df[!, col_sym] = round.(xt[:, i]; digits=3)
     end
     
-    # Result columns first (res res res)
+    # Result columns first 
     for (i, n) in enumerate(out_n)
         col_res = Symbol(C.PRE_RESULT * n)
         df[!, col_res] = Vector{Union{Missing, Float64}}(missing, length(tags))
     end
 
-    # Prediction columns second (pred pred pred)
+    # Prediction columns second 
     for (i, n) in enumerate(out_n)
         col_pred = Symbol(C.PRE_PRED * n)
         df[!, col_pred] = round.(yp[:, i]; digits=3)
@@ -2175,30 +2185,50 @@ end
 function VISE_GeneratePredictions_DDEF(X, Y, models, goals;
     ModifiersDCYP::Vector{Main.Lib_Core.CORE_ModifierDCYP_DDES}=Main.Lib_Core.CORE_ModifierDCYP_DDES[])
     yp = hcat([VISE_Predict_DDEF(m, X) for m in models]...)
-    pg = [Main.Lib_Core.CORE_ExtractGoal_DDEF(get(m, "Goal", Dict())) for m in models]
+    pg = [Main.Lib_Core.CORE_ExtractGoal_DDEF(j <= length(goals) ? goals[j] : get(models[j], "Goal", Dict())) for j in eachindex(models)]
+    bg = [(g[1], g[2], g[3], g[4], 1.0) for g in pg]
     
-    sum_w = sum(g[5] for g in pg)
-    pow   = sum_w > 0.0 ? (1.0 / sum_w) : (length(models) > 0 ? 1.0 / length(models) : 1.0)
+    k = length(models)
+    inv_k = k > 0 ? (1.0 / k) : 1.0
+    neighbor_weights = [Main.Lib_Core.CORE_GetNeighborWeights_DDEF(g[5]) for g in pg]
     
     n_points = size(X, 1)
     sc = zeros(n_points)
     
-    for i in 1:n_points
-        s = 1.0
+    @inbounds for i in 1:n_points
+        prod_u = 1.0
+        prod_e = 1.0
         for j in eachindex(models)
-            d = Main.Lib_Core.CORE_CalcDesirability_DDEF(yp[i, j], pg[j])
-            s *= d
-        end
-        score = s^pow
+            val = yp[i, j]
+            if isnan(val) || isinf(val)
+                prod_u = 0.0
+                prod_e = 0.0
+                break
+            end
 
-        # Decay-Coupled Optimization: Penalise composite desirability directly by reaction time decay
+            b = Main.Lib_Core.CORE_CalcDesirability_DDEF(val, bg[j])
+            if b <= 1e-12
+                prod_u = 0.0
+                prod_e = 0.0
+                break
+            end
+
+            w_m, w_c, w_p = neighbor_weights[j]
+            u = b^(w_c * inv_k)
+            e = (b^(w_m * inv_k) + u + b^(w_p * inv_k)) / 3.0
+            prod_u *= u
+            prod_e *= e
+        end
+        score = clamp(0.50 * prod_u + 0.50 * prod_e, 0.0, 1.0)
+
+        # Decay-Coupled Optimization
         for dm in ModifiersDCYP
             if dm.TimeIndex >= 1 && dm.TimeIndex <= size(X, 2)
                 score = Main.Lib_Core.CORE_ApplyDCYP_DDEF(score, dm, view(X, i, :))
             end
         end
 
-        sc[i] = clamp(score, 0.0, 1.0)
+        sc[i] = (isnan(score) || isinf(score)) ? 0.0 : clamp(score, 0.0, 1.0)
     end
     
     return yp, sc
@@ -2247,9 +2277,9 @@ function VISE_PreparePredictionsSheet_DDEF(df::DataFrame, phase::AbstractString,
 end
 
 
-function VISE_AssembleBundle_DDEF(phase, in_n, out_n, disp_in, disp_out, models, bp, bs, ldf, xc, yc, opts, goals, yp, sc, radio, warns, vitals, anova, normality, residuals, sens, graphs, t0, C)
+function VISE_AssembleBundle_DDEF(phase, in_n, out_n, disp_in, disp_out, models, bp, bs, ldf, xc, yc, opts, goals, yp, sc, radio, warns, vitals, anova, normality, residuals, sens, graphs, t0, C; X_Nominal=xc)
     ui_mods = deepcopy(models); for m in ui_mods delete!(m, "_Closure") end
-    return Dict("Status"=>"OK", "Phase"=>phase, "InNames"=>in_n, "OutNames"=>out_n, "DisplayInNames"=>disp_in, "DisplayOutNames"=>disp_out, "Models"=>ui_mods, "Goals"=>goals, "R2_Adj"=>[get(m, "R2_Adj", 0.0) for m in models], "Q2"=>[get(m, "Q2", 0.0) for m in models], "BestPoint"=>bp, "BestScore"=>bs, "Leaders"=>ldf, "X_Clean"=>xc, "Y_Clean"=>yc, "Graphs"=>graphs, "Vitals"=>vitals, "Sensitivities"=>sens, "ANOVA"=>anova, "Normality"=>normality, "Residuals"=>residuals, "RadioCorrection"=>radio, "BoundaryWarnings"=>warns, "Elapsed"=>"$(round(time()-t0; digits=1))s")
+    return Dict("Status"=>"OK", "Phase"=>phase, "InNames"=>in_n, "OutNames"=>out_n, "DisplayInNames"=>disp_in, "DisplayOutNames"=>disp_out, "Models"=>ui_mods, "Goals"=>goals, "R2_Adj"=>[get(m, "R2_Adj", 0.0) for m in models], "Q2"=>[get(m, "Q2", 0.0) for m in models], "BestPoint"=>bp, "BestScore"=>bs, "Leaders"=>ldf, "X_Clean"=>xc, "X_Nominal"=>X_Nominal, "Y_Clean"=>yc, "Graphs"=>graphs, "Vitals"=>vitals, "Sensitivities"=>sens, "ANOVA"=>anova, "Normality"=>normality, "Residuals"=>residuals, "RadioCorrection"=>radio, "BoundaryWarnings"=>warns, "Elapsed"=>"$(round(time()-t0; digits=1))s")
 end
 
 """
@@ -2346,7 +2376,7 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::AbstractString)
             end
         end
         Main.Sys_Fast.FAST_ApplyExcelStyle_DDEF(FilePath)
-        Main.Sys_Fast.FAST_Log_DDEF("VISE", "EXPORT", "Scientific Portfolio Generated with Legacy Fidelity.", "OK")
+        Main.Sys_Fast.FAST_Log_DDEF("VISE", "EXPORT", "Scientific Portfolio Generated with Publication Fidelity.", "OK")
         return true
     catch e
         Main.Sys_Fast.FAST_Log_DDEF("VISE", "EXPORT", "Excel export failed: $e", "FAIL")
