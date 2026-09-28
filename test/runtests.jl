@@ -713,8 +713,8 @@ const SUITE_START_TIME = time()
             ),
             opts_test = Dict("RadioOpts" => Dict(
                 "Apply" => true,
-                "FORW" => Dict("Ga-68" => Dict("Name" => "Ga-68 Precursor")),
-                "REVE" => Dict("ProductActivity" => Dict("Source" => "Ga-68"), "Purity%" => Dict("Source" => "Ga-68"))
+                "FORW" => Dict("Enabled" => true, "Ga-68" => Dict("Name" => "Ga-68 Precursor")),
+                "REVE" => Dict("Enabled" => true, "ProductActivity" => Dict("Source" => "Ga-68"), "Purity%" => Dict("Source" => "Ga-68"))
             )),
             C = Sys_Fast.FAST_Data_DDEC,
             Log = Sys_Fast.FAST_Log_DDEF,
