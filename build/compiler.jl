@@ -14,14 +14,19 @@ println("="^60 * "\n")
 
 # --- 1. Setup ---------------------------------------------------------------
 
-println("[BUILD] Checking PackageCompiler availability...")
+println("[BUILD] Checking PackageCompiler availability in Julia depot...")
 try
     @eval using PackageCompiler
-    println("[BUILD] PackageCompiler found.")
+    println("[BUILD] PackageCompiler is available.")
 catch
-    println("[BUILD] Installing PackageCompiler...")
-    Pkg.add("PackageCompiler")
-    @eval using PackageCompiler
+    println("\n" * "!"^60)
+    println("  [NOTICE] PackageCompiler is not installed.")
+    println("  To preserve DoECISORY's lightweight package dependencies,")
+    println("  PackageCompiler is not bundled in Project.toml.")
+    println("  Please install it once in your global environment:")
+    println("    julia -e \"using Pkg; Pkg.add(\\\"PackageCompiler\\\")\"")
+    println("!"^60 * "\n")
+    error("[BUILD] PackageCompiler not found. Please install it globally and re-run.")
 end
 
 project_dir   = abspath(joinpath(@__DIR__, ".."))

@@ -1,3 +1,22 @@
+"""
+    DoECISORY
+
+A scientific computation library for classical and adaptive Design of Experiments (DoE),
+stoichiometric formulation balancing, multi-response statistical modelling, and visual
+analytics in chemical and radiopharmaceutical research.
+
+# Submodules
+- `Lib_Core`: Algorithmic matrix generation (BB15, CD17, TL09, DF14), optimality metrics (D, A, G, I), and desirability optimisation.
+- `Lib_Mole`: Stoichiometric mass conservation, unit conversions, and radiochemical decay kinetics.
+- `Lib_Vise`: Ordinary least-squares regression, AIC model selection, ANOVA diagnostics, and scientific report generation.
+- `Lib_Arts`: Visualisation routines built upon PlotlyJS with the Viridis colour palette.
+- `Sys_Flow`: Adaptive Continuous Transition Algorithm (ACTA) and iterative experimental space navigation.
+- `Sys_Fast`: Multi-threaded Excel data exchange, session caching, and workspace file management.
+- `Gui_Base`, `Gui_Deck`, `Gui_Lens`: Interactive Dash web application components and page layouts.
+
+# Entry Points
+- [`run_app`](@ref): Launch the interactive web user interface in the local browser.
+"""
 module DoECISORY
 
 # ==============================================================================
@@ -46,81 +65,54 @@ using .Gui_Lens
 # SECTION 2: PUBLIC INTERFACE EXPORTS
 # ------------------------------------------------------------------------------
 
-export Sys_Fast
-export FAST_Log_DDEF, FAST_ReadExcel_DDEF, FAST_Constants_DDES,
-       FAST_SafeNum_DDEF, FAST_GetLabDefaults_DDEF, FAST_InitialiseMaster_DDEF,
-       FAST_NormaliseCols_DDEF!, FAST_SanitiseJson_DDEF, FAST_PrepareDownload_DDEF,
-       FAST_GenerateSmartName_DDEF, FAST_ExtractProjectFromFilename_DDEF,
-       FAST_GetTransientPath_DDEF, FAST_ReadToStore_DDEF, FAST_UpdateConfig_DDEF,
-       FAST_GetThreadInfo_DDEF, FAST_ClearConfigCache_DDEF, FAST_SanitiseInput_DDEF,
-       FAST_AcquireLock_DDEF, FAST_ReleaseLock_DDEF, FAST_ForceReleaseAll_DDEF,
-       FAST_CacheRead_DDEF, FAST_CacheWrite_DDEF, FAST_CacheEvict_DDEF,
-       FAST_VaultWrite_DDEF, FAST_VaultRead_DDEF, FAST_GetComputeThreads_DDEF,
-       FAST_SafeExcelWrite_DDEF, FAST_CleanTransient_DDEF, FAST_FormatDuration_DDEF,
-       FAST_SortColumns_DDEF, FAST_DisplayHeader_DDEF
+# Submodule Accessors
+export Sys_Fast, Lib_Core, Lib_Mole, Sys_Flow, Lib_Vise, Lib_Arts,
+       Gui_Base, Gui_Deck, Gui_Lens
 
-export Lib_Core
-export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF, CORE_ExtractLeader_DDEF,
-       CORE_GenDf14Design_DDEF, CORE_ExpandModelMatrix_DDEF,
-       CORE_OptimiseDesirability_DDEF, CORE_ValidateDesign_DDEF,
-       CORE_D_Efficiency_DDEF, CORE_CalcDesignMetrics_DDEF, CORE_CodeMatrix_DDEF,
-       CORE_CalcDesirability_DDEF, CORE_ExtractGoal_DDEF, CORE_GetModelType_DDEF,
-       CORE_ModifierDCYP_DDES, CORE_ApplyDCYP_DDEF,
-       CORE_GetNeighborWeights_DDEF, CORE_StarWeights_DDEC,
-       CORE_AbstractDesignMethod_DDET, CORE_MethodBB15_DDES, CORE_MethodTL09_DDES,
-       CORE_MethodCD17_DDES, CORE_MethodDF14_DDES
+# Sys_Fast: Excel Data Exchange & Logging
+export FAST_ReadExcel_DDEF, FAST_SafeExcelWrite_DDEF,
+       FAST_InitialiseMaster_DDEF, FAST_GenerateSmartName_DDEF,
+       FAST_SafeNum_DDEF, FAST_Log_DDEF, FAST_Data_DDEC
 
-export Lib_Mole
+# Lib_Core: Experimental Design Generation, Optimality & Desirability
+export CORE_GenDesign_DDEF, CORE_GenerateMatrix_DDEF,
+       CORE_MapLevels_DDEF, CORE_CodeMatrix_DDEF,
+       CORE_ExpandModelMatrix_DDEF, CORE_D_Efficiency_DDEF,
+       CORE_CalcDesignMetrics_DDEF, CORE_OptimiseDesirability_DDEF,
+       CORE_CalcDesirability_DDEF, CORE_ExtractGoal_DDEF,
+       CORE_ValidateDesign_DDEF, CORE_ExtractLeader_DDEF,
+       CORE_ModifierDCYP_DDES, CORE_ApplyDCYP_DDEF
+
+# Lib_Mole: Stoichiometric Mass Balance & Radiochemical Kinetics
 export MOLE_ParseTable_DDEF, MOLE_QuickAudit_DDEF, MOLE_CalcMass_DDEF,
-       MOLE_ApproxEq_DDEF, MOLE_ValidatePhysicalUnit_DDEF, MOLE_AuditMatrix_DDEF,
-       MOLE_AuditBatch_DDEF, MOLE_ValidateDesignFeasibility_DDEF,
-       MOLE_CalcRadioDecay_DDEF, MOLE_ProcessDesign_DDEF,
-       MOLE_GetPercentageEquivalent_DDEF, MOLE_IsTimeUnit_DDEF,
-       MOLE_ConvertTimeToMinutes_DDEF
+       MOLE_ApproxEq_DDEF, MOLE_ValidatePhysicalUnit_DDEF,
+       MOLE_AuditMatrix_DDEF, MOLE_AuditBatch_DDEF,
+       MOLE_ValidateDesignFeasibility_DDEF, MOLE_CalcRadioDecay_DDEF,
+       MOLE_ProcessDesign_DDEF, MOLE_GetPercentageEquivalent_DDEF,
+       MOLE_IsTimeUnit_DDEF, MOLE_ConvertTimeToMinutes_DDEF
 
-export Sys_Flow
-export FLOW_AskLeader_DDEF, FLOW_BuildIPKT_DDEF, FLOW_GetCandidates_DDEF,
-       FLOW_CommitIPKT_DDEF, FLOW_ApplyACTA_DDEF, FLOW_WriteLeaders_DDEF,
-       FLOW_CalcACTA_DDEF, FLOW_RenderIPKT_DDEF,
-       FLOW_ApplyASTM_DDEF, FLOW_ValidateASTM_DDEF
+# Sys_Flow: Phase Transition & Iterative Space Exploration (ACTA / ASTM)
+export FLOW_ApplyACTA_DDEF, FLOW_CalcACTA_DDEF,
+       FLOW_ApplyASTM_DDEF, FLOW_ValidateASTM_DDEF,
+       FLOW_AskLeader_DDEF, FLOW_BuildIPKT_DDEF, FLOW_CommitIPKT_DDEF,
+       FLOW_GetCandidates_DDEF, FLOW_WriteLeaders_DDEF, FLOW_RenderIPKT_DDEF
 
-export Lib_Vise
-export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
-       VISE_Predict_DDEF, VISE_Execute_DDEF, VISE_CrossValidate_DDEF,
-       VISE_GetTermNames_DDEF, VISE_ClampIndex_DDEF, VISE_SelectBestModel_DDEF,
-       VISE_CalcMetrics_DDEF, VISE_SensitivityAnalysis_DDEF,
-       VISE_GenerateScientificReport_DDEF, VISE_CalcVIF_DDEF, VISE_LackOfFit_DDEF,
-       VISE_ExportToExcel_DDEF, VISE_ExtractDCYP_DDEF, VISE_ApplyForwReveDecay_DDEF,
-       VISE_WidenColumnFloat_DDEF!, VISE_InsertColAfter_DDEF!
+# Lib_Vise: Statistical Modelling, ANOVA & Scientific Reporting
+export VISE_Regress_DDEF, VISE_SelectBestModel_DDEF, VISE_Predict_DDEF,
+       VISE_CrossValidate_DDEF, VISE_CalcMetrics_DDEF,
+       VISE_GenerateAnovaTable_DDEF, VISE_LackOfFit_DDEF, VISE_CalcVIF_DDEF,
+       VISE_PerformNormalityTest_DDEF, VISE_GridSearch_DDEF, VISE_SensitivityAnalysis_DDEF,
+       VISE_GenerateScientificReport_DDEF, VISE_ExportToExcel_DDEF,
+       VISE_ApplyForwReveDecay_DDEF, VISE_ExtractDCYP_DDEF, VISE_Execute_DDEF,
+       VISE_GetTermNames_DDEF, VISE_ExpandDesign_DDEF
 
-export Lib_Arts
-export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
-       ARTS_RenderContour_DDEF, ARTS_RenderSlice_DDEF, ARTS_RenderTrend_DDEF,
-       ARTS_RenderSpace_DDEF, ARTS_RenderCandidates_DDEF, ARTS_Render_DDEF,
-       ARTS_Downsample_DDEF, ARTS_RenderOptimalZone_DDEF,
-       ARTS_RenderInteractionMatrix_DDEF, ARTS_BaseLayout_DDEF,
-       ARTS_Predict_DDEF, ARTS_BuildGrid_DDEF, ARTS_AdaptiveGridN_DDEF,
-       ARTS_RenderSpaceImpl_DDEF, ARTS_GetDynamicN_DDEF,
-       ARTS_PlotPareto_DDES, ARTS_PlotFit_DDES, ARTS_PlotInteractionMatrix_DDES,
-       ARTS_PlotQQ_DDES, ARTS_PlotResiduals_DDES, ARTS_PlotSensitivity_DDES,
-       ARTS_PlotSurface_DDES, ARTS_PlotContour_DDES, ARTS_PlotSlice_DDES,
-       ARTS_PlotTrend_DDES, ARTS_PlotOptimalZone_DDES, ARTS_PlotDesignSpace_DDES,
-       ARTS_PlotCandidates_DDES
-
-# GUI modules
-export Gui_Base, Gui_Deck, Gui_Lens
-export BASE_StyleCell_DDEC, BASE_StyleInput_DDEC, BASE_StyleInputCentre_DDEC,
-       BASE_StyleHeader_DDEC, BASE_StyleDatatableCell_DDEC, BASE_StyleInlineHeader_DDEC,
-       BASE_StyleHr_DDEC, BASE_EmptyFigure_DDEC, BASE_SafeRows_DDEF, BASE_GetTrigger_DDEF,
-       BASE_PageHeader_DDEF, BASE_GlassPanel_DDEF, BASE_DataTable_DDEF, BASE_Modal_DDEF,
-       BASE_ConvertThemePlotlyWhite!_DDEF, BASE_MiniVitals_DDEF, BASE_Loading_DDEF,
-       BASE_SystemAuditUI_DDEF, BASE_ScientificAuditUI_DDEF, BASE_StatusIcon_DDEF,
-       BASE_IconButton_DDEF, BASE_TableHeader_DDEF, BASE_ControlGroup_DDEF,
-       BASE_ActionButton_DDEF, BASE_Separator_DDEF, BASE_SidebarHeader_DDEF,
-       BASE_Upload_DDEF, BASE_NextButton_DDEF, BASE_BuildIdRow_DDEF, 
-       BASE_BuildLevelRow_DDEF, BASE_BuildLimitsRow_DDEF, BASE_BuildGoalRow_DDEF,
-       DECK_Layout_DDEF, DECK_RegisterCallbacks_DDEF,
-       LENS_Layout_DDEF, LENS_RegisterCallbacks_DDEF
+# Lib_Arts: Plotly Visualisation Suite
+export ARTS_RenderSurface_DDEF, ARTS_RenderContour_DDEF, ARTS_RenderSlice_DDEF,
+       ARTS_RenderTrend_DDEF, ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF,
+       ARTS_RenderQQPlot_DDEF, ARTS_RenderResidualsVsPred_DDEF,
+       ARTS_RenderSensitivityPlot_DDEF, ARTS_RenderSpace_DDEF,
+       ARTS_RenderOptimalZone_DDEF, ARTS_RenderCandidates_DDEF,
+       ARTS_RenderInteractionMatrix_DDEF, ARTS_Render_DDEF
 
 # ==============================================================================
 # PART B: APPLICATION RUNTIME LAUNCHER
@@ -133,9 +125,28 @@ export BASE_StyleCell_DDEC, BASE_StyleInput_DDEC, BASE_StyleInputCentre_DDEC,
 export APP_Launch_DDEF, run_app
 
 """
-    run_app(; host="0.0.0.0", port=nothing, debug=false, open_browser=true)
+    APP_Launch_DDEF(; host="0.0.0.0", port=nothing, debug=false, open_browser=true, wait=false)
 
-Launch the DoECISORY web application.
+Launch the DoECISORY interactive web application.
+
+Spawns a multi-threaded Julia process hosting the Dash web server and initialises
+the experimental formulation workspace (Deck) alongside the response surface analysis dashboard (Lens).
+
+# Arguments
+- `host::String`: Host interface address to bind (default: `"0.0.0.0"`).
+- `port::Union{Int, Nothing}`: Network port to bind. If `nothing`, defaults to 8060 (or 7860 on Hugging Face Spaces).
+- `debug::Bool`: Enables Dash developer hot-reloading and debug tools (default: `false`).
+- `open_browser::Bool`: Automatically launches the default web browser upon startup (default: `true`).
+- `wait::Bool`: Blocks the calling process until the web server is terminated (default: `false`).
+
+# Returns
+- `nothing`
+
+# Examples
+```julia
+using DoECISORY
+run_app()
+```
 """
 function APP_Launch_DDEF(; host::String="0.0.0.0", port::Union{Int, Nothing}=nothing, debug::Bool=false, open_browser::Bool=true, wait::Bool=false)
     app_path  = joinpath(dirname(@__DIR__), "app.jl")
@@ -158,6 +169,11 @@ function APP_Launch_DDEF(; host::String="0.0.0.0", port::Union{Int, Nothing}=not
     end
 end
 
+"""
+    run_app(; host="0.0.0.0", port=nothing, debug=false, open_browser=true, wait=false)
+
+Convenient alias for [`APP_Launch_DDEF`](@ref).
+"""
 const run_app = APP_Launch_DDEF
 
 end

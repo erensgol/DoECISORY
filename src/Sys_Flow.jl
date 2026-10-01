@@ -24,8 +24,7 @@ const Main = parentmodule(@__MODULE__)
 
 export FLOW_AskLeader_DDEF, FLOW_BuildIPKT_DDEF, FLOW_GetCandidates_DDEF,
     FLOW_CommitIPKT_DDEF, FLOW_ApplyACTA_DDEF, FLOW_WriteLeaders_DDEF,
-    FLOW_CalcACTA_DDEF, FLOW_RenderIPKT_DDEF,
-    FLOW_ApplyASTM_DDEF, FLOW_ValidateASTM_DDEF
+    FLOW_CalcACTA_DDEF, FLOW_RenderIPKT_DDEF, FLOW_ApplyASTM_DDEF, FLOW_ValidateASTM_DDEF
 
 # ==============================================================================
 # PART A: TYPE DEFINITIONS & CONSTANTS & TRANSITION
@@ -340,7 +339,7 @@ function FLOW_CommitIPKT_DDEF(MasterFile::Union{AbstractString,Nothing}, Current
                     v_r = NewConfig[vi]
                     v_u = string(FLOW_GetSafeKey_DDEF(v_r, "Unit", ""))
                     v_n = string(FLOW_GetSafeKey_DDEF(v_r, "Name", ""))
-                    if Main.Lib_Mole.MOLE_IsTimeUnit_DDEF(v_u) || occursin(r"(?i)min|time|süre", v_n)
+                    if Main.Lib_Mole.MOLE_IsTimeUnit_DDEF(v_u) || occursin(r"(?i)min|time|duration", v_n)
                         col_cand  = C.PRE_INPUT * v_n * "_" * v_u
                         col_cand2 = C.PRE_INPUT * v_n
                         target_c  = hasproperty(df, Symbol(col_cand)) ? Symbol(col_cand) : (hasproperty(df, Symbol(col_cand2)) ? Symbol(col_cand2) : nothing)

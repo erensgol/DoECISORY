@@ -17,13 +17,15 @@ using BlackBoxOptim
 const Main = parentmodule(@__MODULE__)
 
 
-export CORE_GenDesign_DDEF, CORE_MapLevels_DDEF,
-    CORE_ExtractLeader_DDEF, CORE_GenDf14Design_DDEF, CORE_ExpandModelMatrix_DDEF,
-    CORE_OptimiseDesirability_DDEF, CORE_ValidateDesign_DDEF,
-    CORE_D_Efficiency_DDEF, CORE_CalcDesignMetrics_DDEF, CORE_CodeMatrix_DDEF,
-    CORE_CalcDesirability_DDEF, CORE_ExtractGoal_DDEF, CORE_GetModelType_DDEF,
-    CORE_ModifierDCYP_DDES, CORE_ApplyDCYP_DDEF, CORE_GetNeighborWeights_DDEF, CORE_StarWeights_DDEC,
-    CORE_MethodBB15_DDES, CORE_MethodTL09_DDES, CORE_MethodCD17_DDES, CORE_MethodDF14_DDES
+export CORE_GenDesign_DDEF, CORE_GenerateMatrix_DDEF, CORE_MapLevels_DDEF,
+       CORE_CodeMatrix_DDEF, CORE_ExpandModelMatrix_DDEF, CORE_D_Efficiency_DDEF,
+       CORE_CalcDesignMetrics_DDEF, CORE_OptimiseDesirability_DDEF, CORE_CalcDesirability_DDEF,
+       CORE_ExtractGoal_DDEF, CORE_ValidateDesign_DDEF, CORE_ExtractLeader_DDEF,
+       CORE_ModifierDCYP_DDES, CORE_ApplyDCYP_DDEF, CORE_GetNeighborWeights_DDEF,
+       CORE_StarWeights_DDEC, CORE_GetMethodType_DDEF, CORE_GetModelType_DDEF,
+       CORE_AbstractDesignMethod_DDET, CORE_MethodBB15_DDES, CORE_MethodTL09_DDES,
+       CORE_MethodCD17_DDES, CORE_MethodDF14_DDES, CORE_AbstractModelType_DDET,
+       CORE_ModelLinear_DDES, CORE_ModelQuadratic_DDES
 
 # ==============================================================================
 # PART A: DESIGN MATRIX & COORDINATE GENERATION
@@ -55,8 +57,6 @@ const CORE_ModelMap_DDEC = Dict{String, CORE_AbstractModelType_DDET}(
     "quadratic" => CORE_ModelQuadratic_DDES(),
     "quad"      => CORE_ModelQuadratic_DDES()
 )
-
-export CORE_AbstractModelType_DDET, CORE_ModelLinear_DDES, CORE_ModelQuadratic_DDES
 
 # ------------------------------------------------------------------------------
 # SECTION 2: CONSTANTS - PRE-ALLOCATED DESIGN MATRICES
@@ -135,11 +135,42 @@ function CORE_GenDf14Design_DDEF(direction::AbstractVector=[-1, -1, -1])::Matrix
 end
 
 """
-    CORE_GenDesign_DDEF(Method::AbstractString, FactorCount::Integer=3, Direction::AbstractVector=[-1, -1, -1]) -> Matrix{Int8}
-Generates a coded (-1, 0, 1) experimental design matrix for the specified method.
-Supports Box-Behnken (BB15), Taguchi (TL09), Central Composite (CD17), and Fractional D-Optimal (DF14).
+    CORE_GenDesign_DDEF(Method::AbstractString, FactorCount::Integer=3; Direction=[-1, -1, -1]) -> Matrix{Int8}
+
+Generate a coded (-1, 0, 1) experimental design matrix for the specified method.
+
+# Supported Methods
+- `"BB15"`: Box-Behnken Design (15 experimental runs, 3 factors)
+- `"CD17"`: Central Composite Design (17 experimental runs with face-centred axial points)
+- `"TL09"`: Taguchi L9 Orthogonal Array (9 experimental runs)
+- `"DF14"`: Directional Fractional D-Optimal Design (14 experimental runs, guided by `Direction`)
+
+# Arguments
+- `Method::AbstractString`: Design identifier code (`"BB15"`, `"CD17"`, `"TL09"`, or `"DF14"`). Case-insensitive.
+- `FactorCount::Integer`: Number of continuous factors (currently strictly 3 in canonical space).
+- `Direction::AbstractVector`: Directional vector for DF14 search orientation (default: `[-1, -1, -1]`).
+
+# Returns
+- `Matrix{Int8}`: Coded design matrix of size `N x 3` where `N` is the run count.
+
+# Examples
+```julia
+using DoECISORY
+
+# Generate Box-Behnken 15-run design
+X_bb = CORE_GenDesign_DDEF("BB15")
+
+# Generate Central Composite 17-run design
+X_ccd = CORE_GenDesign_DDEF("CD17")
+
+# Generate Taguchi L9 design
+X_tag = CORE_GenDesign_DDEF("TL09")
+```
 """
 function CORE_GenDesign_DDEF(Method::AbstractString, FactorCount::Integer=3; Direction::AbstractVector=[-1, -1, -1])
+    if FactorCount != 3
+        throw(ArgumentError("DoECISORY experimental design methods (BB15, CD17, TL09, DF14) currently support exactly 3 factors (received FactorCount = $FactorCount)."))
+    end
     Main.Sys_Fast.FAST_Log_DDEF("CORE", "DESIGN_GEN", "Generating matrix for $Method (Strict 3-Var Mode)", "WAIT")
     method_type = CORE_GetMethodType_DDEF(Method)
     design = CORE_GenerateMatrix_DDEF(method_type, FactorCount, Direction)
@@ -164,10 +195,17 @@ end
 
 CORE_GetModelType_DDEF(m::CORE_AbstractModelType_DDET) = m
 
-CORE_GenerateMatrix_DDEF(::CORE_MethodTL09_DDES, fc::Integer, dir::AbstractVector=[-1, -1, -1]) = copy(CORE_Tl09Design_DDEC)
-CORE_GenerateMatrix_DDEF(::CORE_MethodBB15_DDES, fc::Integer, dir::AbstractVector=[-1, -1, -1]) = copy(CORE_Bb15Design_DDEC)
-CORE_GenerateMatrix_DDEF(::CORE_MethodCD17_DDES, fc::Integer, dir::AbstractVector=[-1, -1, -1]) = copy(CORE_Cd17Design_DDEC)
-CORE_GenerateMatrix_DDEF(::CORE_MethodDF14_DDES, fc::Integer, dir::AbstractVector=[-1, -1, -1]) = CORE_GenDf14Design_DDEF(dir)
+CORE_GenerateMatrix_DDEF(::CORE_MethodTL09_DDES, fc::Integer, dir::AbstractVector=[-1, -1, -1]) = 
+    fc == 3 ? copy(CORE_Tl09Design_DDEC) : throw(ArgumentError("Method TL09 requires exactly 3 factors (received $fc)."))
+CORE_GenerateMatrix_DDEF(::CORE_MethodBB15_DDES, fc::Integer, dir::AbstractVector=[-1, -1, -1]) = 
+    fc == 3 ? copy(CORE_Bb15Design_DDEC) : throw(ArgumentError("Method BB15 requires exactly 3 factors (received $fc)."))
+CORE_GenerateMatrix_DDEF(::CORE_MethodCD17_DDES, fc::Integer, dir::AbstractVector=[-1, -1, -1]) = 
+    fc == 3 ? copy(CORE_Cd17Design_DDEC) : throw(ArgumentError("Method CD17 requires exactly 3 factors (received $fc)."))
+CORE_GenerateMatrix_DDEF(::CORE_MethodDF14_DDES, fc::Integer, dir::AbstractVector=[-1, -1, -1]) = 
+    fc == 3 ? CORE_GenDf14Design_DDEF(dir) : throw(ArgumentError("Method DF14 requires exactly 3 factors (received $fc)."))
+
+CORE_GenerateMatrix_DDEF(Method::AbstractString, fc::Integer=3, dir::AbstractVector=[-1, -1, -1]) = 
+    CORE_GenerateMatrix_DDEF(CORE_GetMethodType_DDEF(Method), fc, dir)
 
 
 # ------------------------------------------------------------------------------
@@ -181,11 +219,13 @@ Integer coded coordinates (-1, 0, 1) map directly to discrete level boundaries (
 """
 function CORE_MapLevels_DDEF(CodedMatrix::AbstractMatrix, Config::AbstractVector)
     rows = size(CodedMatrix, 1)
-    cols = 3
+    cols = size(CodedMatrix, 2)
+    length(Config) < cols && throw(ArgumentError("Configuration vector length ($(length(Config))) is insufficient for coded matrix columns ($cols)."))
 
     result = Matrix{Float64}(undef, rows, cols)
-    @inbounds for i in 1:cols
-        lvls = get(Config[i], "Levels", zeros(3))
+    for i in 1:cols
+        cfg_entry = Config[i]
+        lvls = isa(cfg_entry, AbstractDict) ? get(cfg_entry, "Levels", zeros(3)) : zeros(3)
         length(lvls) < 3 && (lvls = zeros(3))
         L1, L2, L3 = Float64(lvls[1]), Float64(lvls[2]), Float64(lvls[3])
         for r in 1:rows

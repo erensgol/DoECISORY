@@ -1,1 +1,3 @@
 build/sysimage.dll
+Manifest.toml
+*.cov

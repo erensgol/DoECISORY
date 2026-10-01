@@ -27,14 +27,13 @@ using HypothesisTests
 import HypothesisTests: pvalue
 
 export VISE_Regress_DDEF, VISE_GridSearch_DDEF, VISE_ExpandDesign_DDEF,
-    VISE_Predict_DDEF, VISE_Execute_DDEF, VISE_CrossValidate_DDEF,
-    VISE_GetTermNames_DDEF, VISE_ClampIndex_DDEF,
-    VISE_SelectBestModel_DDEF, VISE_CalcMetrics_DDEF,
-    VISE_SensitivityAnalysis_DDEF, VISE_GenerateScientificReport_DDEF,
-    VISE_FormatMarkdownTable_DDEF, VISE_CalcVIF_DDEF, VISE_LackOfFit_DDEF,
-    VISE_GenerateAnovaTable_DDEF, VISE_PerformNormalityTest_DDEF,
-    VISE_ApplyForwReveDecay_DDEF, VISE_ResolveName_DDEF,
-    VISE_WidenColumnFloat_DDEF!, VISE_InsertColAfter_DDEF!
+       VISE_Predict_DDEF, VISE_Execute_DDEF, VISE_CrossValidate_DDEF,
+       VISE_GetTermNames_DDEF, VISE_ClampIndex_DDEF, VISE_SelectBestModel_DDEF,
+       VISE_CalcMetrics_DDEF, VISE_SensitivityAnalysis_DDEF, VISE_GenerateScientificReport_DDEF,
+       VISE_FormatMarkdownTable_DDEF, VISE_GetWeightRating_DDEF, VISE_CalcVIF_DDEF,
+       VISE_LackOfFit_DDEF, VISE_GenerateAnovaTable_DDEF, VISE_PerformNormalityTest_DDEF,
+       VISE_ExportToExcel_DDEF, VISE_ExtractDCYP_DDEF, VISE_ApplyForwReveDecay_DDEF,
+       VISE_ResolveName_DDEF, VISE_WidenColumnFloat_DDEF!, VISE_InsertColAfter_DDEF!
 
 # ==============================================================================
 # PART A: MODELLING & DESIGN EXPANSION
@@ -142,9 +141,20 @@ Universal prediction gateway for OLS models (Linear / Quadratic).
 """
 function VISE_Predict_DDEF(Model::AbstractDict, X_Raw::Any)
     X = VISE_PrepareMatrix_DDEF(X_Raw)
+    X_mat = (X isa AbstractVector) ? reshape(X, 1, length(X)) : X
     m_type = get(Model, "ModelType", "linear")
-    Xd = VISE_ExpandDesign_DDEF(X, m_type)
-    Beta = collect(Float64, get(Model, "Coefs", zeros(size(Xd, 2))))
+    Xd = VISE_ExpandDesign_DDEF(X_mat, m_type)
+    p = size(Xd, 2)
+    raw_beta = get(Model, "Coefs", Float64[])
+    Beta = if isempty(raw_beta)
+        zeros(Float64, p)
+    elseif length(raw_beta) == p
+        collect(Float64, raw_beta)
+    elseif length(raw_beta) > p
+        collect(Float64, raw_beta[1:p])
+    else
+        vcat(collect(Float64, raw_beta), zeros(Float64, p - length(raw_beta)))
+    end
     return Xd * Beta
 end
 
@@ -369,9 +379,9 @@ function VISE_GenerateAnovaTable_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::An
         Source = sources,
         SS     = round.(ss_vals; digits=4),
         df     = df_vals,
-        MS     = fill(NaN, length(sources)),
-        F      = fill(NaN, length(sources)),
-        P      = fill(NaN, length(sources))
+        MS     = Vector{Union{Float64, Missing}}(missing, length(sources)),
+        F      = Vector{Union{Float64, Missing}}(missing, length(sources)),
+        P      = Vector{Union{Float64, Missing}}(missing, length(sources))
     )
 
     # Resolve derived metrics including Mean Squares, F-Statistics, and P-Values.
@@ -386,7 +396,7 @@ function VISE_GenerateAnovaTable_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::An
     idx_res = findfirst(==("Residual"), sources)
 
     if !isnothing(idx_mod) && !isnothing(idx_res)
-        if df_anova.MS[idx_res] > 1e-12
+        if !ismissing(df_anova.MS[idx_res]) && !ismissing(df_anova.MS[idx_mod]) && df_anova.MS[idx_res] > 1e-12
             f                   = df_anova.MS[idx_mod] / df_anova.MS[idx_res]
             df_anova.F[idx_mod] = round(f; digits=2)
             df_anova.P[idx_mod] = round(1.0 - cdf(FDist(df_anova.df[idx_mod], df_anova.df[idx_res]), f); digits=4)
@@ -397,7 +407,7 @@ function VISE_GenerateAnovaTable_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::An
     idx_lof = findfirst(==("Lack of Fit"), sources)
     idx_pe = findfirst(==("Pure Error"), sources)
     if !isnothing(idx_lof) && !isnothing(idx_pe)
-        if df_anova.MS[idx_pe] > 1e-12
+        if !ismissing(df_anova.MS[idx_pe]) && !ismissing(df_anova.MS[idx_lof]) && df_anova.MS[idx_pe] > 1e-12
             f_lof               = df_anova.MS[idx_lof] / df_anova.MS[idx_pe]
             df_anova.F[idx_lof] = round(f_lof; digits=2)
             df_anova.P[idx_lof] = round(1.0 - cdf(FDist(df_anova.df[idx_lof], df_anova.df[idx_pe]), f_lof); digits=4)
@@ -691,23 +701,40 @@ Constructs a Markdown table with strictly uniform, character-perfect column alig
 Supported alignments: :left, :right, :center.
 """
 function VISE_FormatMarkdownTable_DDEF(headers::Vector{String}, aligns::Vector{Symbol}, rows::Vector{Vector{String}})::String
+    clean_cell(s::AbstractString) = replace(replace(s, r"</?[a-zA-Z][a-zA-Z0-9]*\b[^>]*>" => ""), "&lt;" => "<", "&gt;" => ">")
+    
     n_cols = length(headers)
-    widths = [textwidth(headers[j]) for j in 1:n_cols]
-    for r in rows
-        for j in 1:min(n_cols, length(r))
+    clean_headers = [clean_cell(h) for h in headers]
+    clean_rows = [[clean_cell(j <= length(r) ? r[j] : "") for j in 1:n_cols] for r in rows]
+
+    widths = [max(textwidth(clean_headers[j]), 3) for j in 1:n_cols]
+    for r in clean_rows
+        for j in 1:n_cols
             widths[j] = max(widths[j], textwidth(r[j]))
         end
     end
-    widths = [max(w, 3) for w in widths]
+
+    function pad_vis(s::AbstractString, w::Int, align::Symbol)::String
+        tw = textwidth(s)
+        tw >= w && return s
+        pad = w - tw
+        if align == :right
+            return repeat(' ', pad) * s
+        elseif align == :center
+            left_pad = pad ÷ 2
+            right_pad = pad - left_pad
+            return repeat(' ', left_pad) * s * repeat(' ', right_pad)
+        else # :left
+            return s * repeat(' ', pad)
+        end
+    end
 
     io = IOBuffer()
     
     # 1. Header row
     write(io, "|")
     for j in 1:n_cols
-        w = widths[j]
-        h = headers[j]
-        h_str = aligns[j] == :right ? lpad(h, w) : (aligns[j] == :center ? lpad(rpad(h, w - (w - textwidth(h))÷2), w) : rpad(h, w))
+        h_str = pad_vis(clean_headers[j], widths[j], aligns[j])
         write(io, " ", h_str, " |")
     end
     write(io, "\n")
@@ -717,23 +744,21 @@ function VISE_FormatMarkdownTable_DDEF(headers::Vector{String}, aligns::Vector{S
     for j in 1:n_cols
         w = widths[j]
         div_str = if aligns[j] == :right
-            "-"^(w + 1) * ":"
+            repeat('-', w + 1) * ":"
         elseif aligns[j] == :center
-            ":" * "-"^w * ":"
+            ":" * repeat('-', w) * ":"
         else
-            ":" * "-"^(w + 1)
+            ":" * repeat('-', w + 1)
         end
         write(io, div_str, "|")
     end
     write(io, "\n")
     
     # 3. Data rows
-    for r in rows
+    for r in clean_rows
         write(io, "|")
         for j in 1:n_cols
-            val = (j <= length(r)) ? r[j] : ""
-            w = widths[j]
-            c_str = aligns[j] == :right ? lpad(val, w) : (aligns[j] == :center ? lpad(rpad(val, w - (w - textwidth(val))÷2), w) : rpad(val, w))
+            c_str = pad_vis(r[j], widths[j], aligns[j])
             write(io, " ", c_str, " |")
         end
         write(io, "\n")
@@ -742,16 +767,28 @@ function VISE_FormatMarkdownTable_DDEF(headers::Vector{String}, aligns::Vector{S
     return String(take!(io))
 end
 
+function VISE_GetWeightRating_DDEF(w::Any)::String
+    w_val = round((w isa Real) ? Float64(w) : something(tryparse(Float64, string(w)), 1.0); digits=2)
+    w_val == 0.50 && return "1/5"
+    w_val == 0.75 && return "2/5"
+    w_val == 1.00 && return "3/5"
+    w_val == 1.50 && return "4/5"
+    w_val == 2.00 && return "5/5"
+    return "3/5"
+end
+
 function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     io = IOBuffer()
     
     phase     = get(Res, "Phase", "Phase1")
-    n_samples = haskey(Res, "X_Clean") ? size(Res["X_Clean"], 1) : 0
-    n_factors = haskey(Res, "X_Clean") ? size(Res["X_Clean"], 2) : 0
-    n_outputs = haskey(Res, "Y_Clean") ? size(Res["Y_Clean"], 2) : 0
+    in_names_all  = get(Res, "DisplayInNames", get(Res, "InNames", []))
+    out_names_all = get(Res, "DisplayOutNames", get(Res, "OutNames", []))
+    n_samples = haskey(Res, "X_Clean") ? (Res["X_Clean"] isa AbstractMatrix ? size(Res["X_Clean"], 1) : length(Res["X_Clean"])) : 0
+    n_factors = !isempty(in_names_all) ? length(in_names_all) : (haskey(Res, "X_Clean") ? (Res["X_Clean"] isa AbstractMatrix ? size(Res["X_Clean"], 2) : (length(Res["X_Clean"]) > 0 && Res["X_Clean"][1] isa AbstractVector ? length(Res["X_Clean"][1]) : 0)) : 0)
+    n_outputs = !isempty(out_names_all) ? length(out_names_all) : (haskey(Res, "Y_Clean") ? (Res["Y_Clean"] isa AbstractMatrix ? size(Res["Y_Clean"], 2) : (length(Res["Y_Clean"]) > 0 && Res["Y_Clean"][1] isa AbstractVector ? length(Res["Y_Clean"][1]) : 0)) : 0)
 
-    fmt_pos(s::AbstractString) = "<ins class=\"report-pos colourtx-c4tg\">$(replace(s, "<" => "&lt;"))</ins>"
-    fmt_neg(s::AbstractString) = "<del class=\"report-neg colourtx-c0hr\">$(replace(s, "<" => "&lt;"))</del>"
+    fmt_pos(s::AbstractString) = String(s)
+    fmt_neg(s::AbstractString) = String(s)
 
     write(io, "# STATISTICAL ANALYSIS REPORT\n")
     write(io, Printf.@sprintf("*Execution Date: %s | Experimental Phase: %s*\n", Dates.format(now(), "yyyy-mm-dd HH:MM"), phase))
@@ -981,8 +1018,9 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
             idx_l = findfirst(==("Lack of Fit"), df_ano.Source)
             
             ano_notes = String[]
-            if !isnothing(idx_m) && !isnan(df_ano.P[idx_m])
-                f_m, p_m = df_ano.F[idx_m], df_ano.P[idx_m]
+            if !isnothing(idx_m) && !ismissing(df_ano.P[idx_m]) && !isnan(df_ano.P[idx_m])
+                f_m = (!ismissing(df_ano.F[idx_m]) && !isnan(df_ano.F[idx_m])) ? Float64(df_ano.F[idx_m]) : NaN
+                p_m = Float64(df_ano.P[idx_m])
                 if p_m < 0.05
                     push!(ano_notes, @sprintf("The regression model explains a statistically significant portion of variance (F = %.2f, p = %.4f).", f_m, p_m))
                 else
@@ -990,8 +1028,9 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
                 end
             end
             
-            if !isnothing(idx_l) && !isnan(df_ano.P[idx_l])
-                f_l, p_l = df_ano.F[idx_l], df_ano.P[idx_l]
+            if !isnothing(idx_l) && !ismissing(df_ano.P[idx_l]) && !isnan(df_ano.P[idx_l])
+                f_l = (!ismissing(df_ano.F[idx_l]) && !isnan(df_ano.F[idx_l])) ? Float64(df_ano.F[idx_l]) : NaN
+                p_l = Float64(df_ano.P[idx_l])
                 if p_l >= 0.05
                     push!(ano_notes, @sprintf("Lack-of-Fit is non-significant (F = %.2f, p = %.4f ≥ 0.05), indicating adequate model structure.", f_l, p_l))
                 else
@@ -1122,7 +1161,32 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         
         write(io, "### VI. Multi-Response Numerical Optimization\n")
         write(io, "Simultaneous optimization via Derringer-Suich desirability function maximization.\n\n")
-        @printf(io, "- **Overall Composite Desirability (D)**: `%.4f` (Scale: 0.0000 to 1.0000)\n\n", bs)
+        @printf(io, "- **Overall Composite Desirability (D)**: `%.3f` (Scale: 0.000 to 1.000)\n\n", bs)
+
+        # Optimization Goals Specification Table
+        goals = get(Res, "Goals", [])
+        if !isempty(goals)
+            write(io, "#### Multi-Response Optimization Criteria\n")
+            goals_headers = ["Parameter", "Criterion / Goal", "Target", "Lower Limit", "Upper Limit", "Weight", "Rating"]
+            goals_aligns  = [:left, :left, :right, :right, :right, :right, :center]
+            goals_rows    = Vector{String}[]
+            for (g_idx, g) in enumerate(goals)
+                p_name = string(get(g, "Name", get(g, "Variable", (g_idx <= length(out_names) ? out_names[g_idx] : "Response $g_idx"))))
+                p_goal = string(get(g, "Type", get(g, "Goal", "Nominal")))
+                p_target = get(g, "Target", NaN)
+                p_target_str = (ismissing(p_target) || isnan(p_target)) ? "-" : @sprintf("%.3f", Float64(p_target))
+                p_low = get(g, "Low", get(g, "Min", NaN))
+                p_low_str = (ismissing(p_low) || isnan(p_low)) ? "-" : @sprintf("%.3f", Float64(p_low))
+                p_high = get(g, "High", get(g, "Max", NaN))
+                p_high_str = (ismissing(p_high) || isnan(p_high)) ? "-" : @sprintf("%.3f", Float64(p_high))
+                raw_w = Float64(get(g, "Weight", 1.0))
+                p_weight = @sprintf("%.2f", raw_w)
+                p_rating = VISE_GetWeightRating_DDEF(raw_w)
+                push!(goals_rows, [p_name, p_goal, p_target_str, p_low_str, p_high_str, p_weight, p_rating])
+            end
+            write(io, VISE_FormatMarkdownTable_DDEF(goals_headers, goals_aligns, goals_rows))
+            write(io, "\n")
+        end
 
         write(io, "#### Optimal Factor Operating Conditions\n")
         opt_headers = ["Factor Parameter", "Optimal Setting (X*)", "Design Space Status"]
@@ -1133,7 +1197,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
             fname = (i <= length(in_names)) ? in_names[i] : "Factor $i"
             has_b_warn = any(w -> occursin(fname, w), warns)
             b_status = has_b_warn ? fmt_neg("Boundary proximity") : fmt_pos("Interior design point")
-            push!(opt_rows, [fname, @sprintf("%.4f", val), b_status])
+            push!(opt_rows, [fname, @sprintf("%.3f", val), b_status])
         end
 
         write(io, VISE_FormatMarkdownTable_DDEF(opt_headers, opt_aligns, opt_rows))
@@ -1145,7 +1209,6 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
             pred_aligns  = [:left, :left, :right, :right]
             pred_rows    = Vector{String}[]
             
-            goals = get(Res, "Goals", [])
             bp_mat = reshape(Float64.(best_pt), 1, length(best_pt))
             
             for (m_idx, name) in enumerate(out_names)
@@ -1153,32 +1216,60 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
                 mod = models[m_idx]
                 mod["Status"] != "OK" && continue
                 
-                y_opt = VISE_Predict_DDEF(mod, bp_mat)[1]
+                y_opt = try
+                    VISE_Predict_DDEF(mod, bp_mat)[1]
+                catch
+                    NaN
+                end
                 m_goal = (m_idx <= length(goals)) ? goals[m_idx] : get(mod, "Goal", Dict())
                 gtup = Main.Lib_Core.CORE_ExtractGoal_DDEF(m_goal)
                 d_i = Main.Lib_Core.CORE_CalcDesirability_DDEF(y_opt, gtup)
                 
-                g_type = string(get(m_goal, "Type", "Maximize"))
+                g_type = string(get(m_goal, "Type", "Maximise"))
                 g_target = get(m_goal, "Target", NaN)
                 g_desc = if g_type == "Target" && !isnan(g_target)
-                    @sprintf("Target (= %.2f)", Float64(g_target))
+                    @sprintf("Target (= %.3f)", Float64(g_target))
                 else
                     g_type
                 end
                 
-                push!(pred_rows, [first(name, 24), g_desc, @sprintf("%.4f", y_opt), @sprintf("%.4f", d_i)])
+                push!(pred_rows, [first(name, 24), g_desc, @sprintf("%.3f", y_opt), @sprintf("%.3f", d_i)])
             end
 
             write(io, VISE_FormatMarkdownTable_DDEF(pred_headers, pred_aligns, pred_rows))
             write(io, "\n")
         end
 
+        # Leader Candidates & Pareto Frontier Table
+        ldf = get(Res, "Leaders", nothing)
+        if !isnothing(ldf) && isa(ldf, DataFrame) && !isempty(ldf)
+            write(io, "#### Candidate Optimization Solutions (Pareto Frontier & Leader Candidates)\n")
+            lead_headers = string.(names(ldf))
+            lead_aligns = [:left; fill(:right, length(lead_headers) - 1)]
+            lead_rows = Vector{String}[]
+            for r in eachrow(ldf)
+                row_strs = String[]
+                for (col_idx, val) in enumerate(r)
+                    if ismissing(val)
+                        push!(row_strs, "-")
+                    elseif isa(val, Number)
+                        push!(row_strs, @sprintf("%.3f", Float64(val)))
+                    else
+                        push!(row_strs, string(val))
+                    end
+                end
+                push!(lead_rows, row_strs)
+            end
+            write(io, VISE_FormatMarkdownTable_DDEF(lead_headers, lead_aligns, lead_rows))
+            write(io, "\n")
+        end
+
         d_interp = if bs >= 0.80
-            @sprintf("Composite desirability D = %.4f indicates excellent simultaneous attainment of response goals.", bs)
+            @sprintf("Composite desirability D = %.3f indicates excellent simultaneous attainment of response goals.", bs)
         elseif bs >= 0.50
-            @sprintf("Composite desirability D = %.4f indicates acceptable satisfaction of competing response targets.", bs)
+            @sprintf("Composite desirability D = %.3f indicates acceptable satisfaction of competing response targets.", bs)
         else
-            @sprintf("Composite desirability D = %.4f reflects significant compromise among conflicting response requirements.", bs)
+            @sprintf("Composite desirability D = %.3f reflects significant compromise among conflicting response requirements.", bs)
         end
         
         b_interp = if !isempty(warns)
@@ -1232,18 +1323,23 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    VISE_LoadPhaseData_DDEF(FilePath, Phase, C, Log) -> DataFrame
+    VISE_LoadPhaseData_DDEF(Source, Phase, C, [Log]) -> DataFrame
 High-fidelity data loader that filters global experiment records for phase-specific analysis.
+Accepts either an Excel FilePath or an existing DataFrame.
 """
-function VISE_LoadPhaseData_DDEF(FilePath::String, Phase::String, C, Log)
-    df = Main.Sys_Fast.FAST_ReadExcel_DDEF(FilePath, C.SHEET_DATA)
+function VISE_LoadPhaseData_DDEF(df::AbstractDataFrame, Phase::AbstractString, C, Log=Sys_Fast.FAST_Log_DDEF)
     isempty(df) && return DataFrame()
     if hasproperty(df, Symbol(C.COL_PHASE))
         clean_target = replace(strip(Phase), " " => "")
-        df_p = filter(r -> replace(strip(string(r[C.COL_PHASE])), " " => "") == clean_target, df)
-        return isempty(df_p) ? df : df_p
+        isempty(clean_target) && return df
+        return filter(r -> replace(strip(string(r[C.COL_PHASE])), " " => "") == clean_target, df)
     end
     return df
+end
+
+function VISE_LoadPhaseData_DDEF(FilePath::AbstractString, Phase::AbstractString, C, Log=Sys_Fast.FAST_Log_DDEF)
+    df = Main.Sys_Fast.FAST_ReadExcel_DDEF(FilePath, C.SHEET_DATA)
+    return VISE_LoadPhaseData_DDEF(df, Phase, C, Log)
 end
 
 # ------------------------------------------------------------------------------
@@ -1285,7 +1381,7 @@ end
 # ------------------------------------------------------------------------------
 
 function VISE_Execute_DDEF(DataFile::AbstractString, Phase::AbstractString, Goals::AbstractVector, ModelType::AbstractString="Auto"; 
-    Opts=Dict{String,Any}(), ConfigUpdates::Dict{String,Any}=Dict{String,Any}(), t_start::Float64=time(), RenderMode::Symbol=:Full, Optim::Bool=true)
+    Opts::AbstractDict=Dict{String,Any}(), ConfigUpdates::AbstractDict=Dict{String,Any}(), t_start::Float64=time(), RenderMode::Symbol=:Full, Optim::Bool=true)
     t0 = t_start
     C, Log = Main.Sys_Fast.FAST_Data_DDEC, Main.Sys_Fast.FAST_Log_DDEF
     Log("VISE", "INITIALISATION", "Analysing Phase: $Phase (File: $(basename(DataFile)))", "WAIT")
@@ -1646,7 +1742,7 @@ Safely positions `new_col` immediately to the right of `ref_col` in `df` without
 """
 function VISE_InsertColAfter_DDEF!(df::DataFrame, new_col::String, ref_col::String)::DataFrame
     col_names = string.(names(df))
-    new_col == ref_col && return df
+    (new_col == ref_col || !(new_col in col_names)) && return df
     ref_idx = findlast(==(ref_col), col_names)
     isnothing(ref_idx) && return df
 
@@ -1880,7 +1976,7 @@ function VISE_ApplyForwReveDecay_DDEF(X, Y, in_n, out_n, df, config, opts, C, Lo
                 end
 
                 # When radio correction is applied, update Y directly with EOS activity
-                if A_out_corr > 0.0
+                if A_out_corr > 0.0 && i <= size(Y, 1) && o_idx <= size(Y, 2)
                     Y[i, o_idx] = A_out_corr
                 end
                 push!(dfs, df_row)
@@ -1943,11 +2039,11 @@ function VISE_ExtractDCYP_DDEF(in_n::AbstractVector{<:AbstractString}, out_n::Ab
         ing_match = findfirst(i -> get(i, "Name", "") == name, ingreds)
         if !isnothing(ing_match)
             unit_str = string(get(ingreds[ing_match], "Unit", ""))
-            if Main.Lib_Mole.MOLE_IsTimeUnit_DDEF(unit_str) || occursin(Regex("(?i)(time|süre|sure|min|dakika|hour|saat)"), name)
+            if Main.Lib_Mole.MOLE_IsTimeUnit_DDEF(unit_str) || occursin(r"(?i)(time|duration|min|minute|hour|sec)", name)
                 push!(time_indices, idx)
             end
         else
-            if occursin(Regex("(?i)(time|süre|sure|min|dakika|hour|saat)"), name)
+            if occursin(r"(?i)(time|duration|min|minute|hour|sec)", name)
                 push!(time_indices, idx)
             end
         end
@@ -2290,14 +2386,44 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::AbstractString)
     Main.Sys_Fast.FAST_Log_DDEF("VISE", "EXPORT", "Generating High-Fidelity Scientific Portfolio: $FilePath", "WAIT")
     try
         XLSX.openxlsx(FilePath, mode="w") do xf
+            # 1. Summary Sheet with Project Vitals
             sheet_ov       = xf[1]
             XLSX.rename!(sheet_ov, "Summary")
-            sheet_ov["A1"] = "DoECISORY Analysis Report"
-            sheet_ov["A2"] = "Generated: $(Dates.now())"
-            sheet_ov["A3"] = "Project: $(get(Res, "Phase", "Unnamed Phase"))"
+            sheet_ov["A1"] = "DoECISORY Scientific Analysis Summary"
+            sheet_ov["A2"] = "Generated: $(Dates.format(Dates.now(), "yyyy-mm-dd HH:MM:SS"))"
+            sheet_ov["A3"] = "Experimental Phase: $(get(Res, "Phase", "Phase1"))"
+            in_names  = get(Res, "InNames", get(Res, "DisplayInNames", []))
+            out_names = get(Res, "OutNames", get(Res, "DisplayOutNames", []))
+            n_runs    = haskey(Res, "X_Clean") ? (Res["X_Clean"] isa AbstractMatrix ? size(Res["X_Clean"], 1) : length(Res["X_Clean"])) : 0
+            sheet_ov["A4"] = "Sample Size (N): $(n_runs) runs"
+            sheet_ov["A5"] = "Factors (k): $(length(in_names))"
+            sheet_ov["A6"] = "Responses (m): $(length(out_names))"
 
+            if haskey(Res, "Vitals") && !isnothing(Res["Vitals"])
+                v = Res["Vitals"]
+                sheet_ov["A8"] = ["Design Vital Criterion", "Value", "Benchmark Reference", "Status"]
+                d_v = Float64(get(v, "D", 0.0))
+                a_v = Float64(get(v, "A", 0.0))
+                g_v = Float64(get(v, "G", 0.0))
+                i_v = Float64(get(v, "I", 0.0))
+                c_v = get(v, "Condition", Inf)
+                c_num = isinf(c_v) ? "Inf" : round(Float64(c_v); digits=2)
+                v_num = round(Float64(get(v, "MaxVIF", 1.0)); digits=2)
+                lof_v = get(v, "LOF", NaN)
+                lof_str = (ismissing(lof_v) || isnan(lof_v)) ? "N/A" : round(Float64(lof_v); digits=4)
+
+                sheet_ov["A9"]  = ["D-Efficiency", round(d_v * 100; digits=2), ">= 35.00% (RSM)", d_v >= 0.35 ? "Pass" : "Marginal"]
+                sheet_ov["A10"] = ["A-Optimality", a_v > 0.0 ? round(a_v; digits=4) : "N/A", "tr((X'X)^-1) minim.", "Average parameter variance"]
+                sheet_ov["A11"] = ["G-Optimality", g_v > 0.0 ? round(g_v; digits=4) : "N/A", "max SPV minim.", "Maximum prediction variance"]
+                sheet_ov["A12"] = ["I-Optimality", i_v > 0.0 ? round(i_v; digits=4) : "N/A", "Integral(SPV dX) minim.", "Mean prediction variance"]
+                sheet_ov["A13"] = ["Condition Number (kappa)", c_num, "< 100.00", (c_v < 100.0) ? "Well-conditioned" : "Collinear"]
+                sheet_ov["A14"] = ["Maximum VIF", v_num, "<= 5.00", (v_num <= 5.0) ? "Low Collinearity" : "High Collinearity"]
+                sheet_ov["A15"] = ["Lack-of-Fit (p-value)", lof_str, "p >= 0.0500", ((ismissing(lof_v) || isnan(lof_v)) ? "N/A" : (lof_v >= 0.05 ? "Adequate Fit" : "Significant Lack of Fit"))]
+            end
+
+            # 2. Model Statistics with Q² (LOOCV)
             sheet_mod       = XLSX.addsheet!(xf, "Model_Statistics")
-            sheet_mod["A1"] = ["Response", "Model Type", "R2", "R2_Adj", "RMSE", "P-Value", "Normality (p)"]
+            sheet_mod["A1"] = ["Response", "Model Type", "R2", "R2_Adj", "Q2", "RMSE", "P-Value", "Normality (p)"]
 
             X_Raw = Res["X_Clean"]
             Y_Raw = Res["Y_Clean"]
@@ -2310,22 +2436,31 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::AbstractString)
                 m    = Res["Models"][i]
                 norm = VISE_PerformNormalityTest_DDEF(m, X_Clean, Y_Clean[:, i])
 
+                r2_v   = get(m, "R2", 0.0)
+                r2a_v  = get(m, "R2_Adj", 0.0)
+                q2_v   = get(m, "Q2", 0.0)
+                rmse_v = get(m, "RMSE", 0.0)
+                pv_v   = get(m, "P_Value", 1.0)
+                norm_p = get(norm, "p", NaN)
+
                 sheet_mod[row_idx, 1] = out_name
                 sheet_mod[row_idx, 2] = get(m, "ModelType", "N/A")
-                sheet_mod[row_idx, 3] = round(get(m, "R2", 0.0); digits=4)
-                sheet_mod[row_idx, 4] = round(get(m, "R2_Adj", 0.0); digits=4)
-                sheet_mod[row_idx, 5] = round(get(m, "RMSE", 0.0); digits=4)
-                sheet_mod[row_idx, 6] = round(get(m, "P_Value", 1.0); digits=4)
-                sheet_mod[row_idx, 7] = norm["p"]
+                sheet_mod[row_idx, 3] = (ismissing(r2_v) || isnan(r2_v) || isinf(r2_v)) ? "N/A" : round(Float64(r2_v); digits=4)
+                sheet_mod[row_idx, 4] = (ismissing(r2a_v) || isnan(r2a_v) || isinf(r2a_v)) ? "N/A" : round(Float64(r2a_v); digits=4)
+                sheet_mod[row_idx, 5] = (ismissing(q2_v) || isnan(q2_v) || isinf(q2_v)) ? "N/A" : round(Float64(q2_v); digits=4)
+                sheet_mod[row_idx, 6] = (ismissing(rmse_v) || isnan(rmse_v) || isinf(rmse_v)) ? "N/A" : round(Float64(rmse_v); digits=4)
+                sheet_mod[row_idx, 7] = (ismissing(pv_v) || isnan(pv_v) || isinf(pv_v)) ? "N/A" : round(Float64(pv_v); digits=4)
+                sheet_mod[row_idx, 8] = (ismissing(norm_p) || isnan(norm_p) || isinf(norm_p)) ? "N/A" : round(Float64(norm_p); digits=4)
 
                 row_idx += 1
             end
 
+            # 3. Individual ANOVA and Coefficients per response
             for (i, out_name) in enumerate(get(Res, "DisplayOutNames", get(Res, "OutNames", [])))
                 m         = Res["Models"][i]
                 safe_name = first(replace(out_name, r"[^\w]" => "_"), 25)
 
-                # Execution of Analysis of Variance (ANOVA) documentation with collision protection.
+                # ANOVA Documentation
                 ano_target = "ANOVA_$(safe_name)"
                 if ano_target in XLSX.sheetnames(xf)
                     suffix     = "_$(i)"
@@ -2334,9 +2469,13 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::AbstractString)
                 end
                 sh_ano   = XLSX.addsheet!(xf, ano_target)
                 df_anova = VISE_GenerateAnovaTable_DDEF(m, X_Clean, Y_Clean[:, i])
-                XLSX.writetable!(sh_ano, df_anova; anchor_cell=XLSX.CellRef("A1"))
+                df_anova_clean = copy(df_anova)
+                for col in names(df_anova_clean)
+                    df_anova_clean[!, col] = [ismissing(v) || (v isa Number && (isnan(v) || isinf(v))) ? missing : v for v in df_anova_clean[!, col]]
+                end
+                XLSX.writetable!(sh_ano, df_anova_clean; anchor_cell=XLSX.CellRef("A1"))
 
-                # Tabulation of model coefficients and diagnostic metrics with collision protection.
+                # Model Coefficients
                 coef_target = "Coefs_$(safe_name)"
                 if coef_target in XLSX.sheetnames(xf)
                     suffix      = "_$(i)"
@@ -2351,15 +2490,74 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::AbstractString)
 
                 sh_coef["A1"] = ["Term", "Coefficient", "P-Value", "VIF", "Significance"]
                 for j in eachindex(terms)
-                    sh_coef[j+1, 1] = terms[j]
-                    sh_coef[j+1, 2] = round(coefs[j]; digits=4)
-                    sh_coef[j+1, 3] = isnan(p_vals[j]) ? "N/A" : round(p_vals[j]; digits=4)
-                    sh_coef[j+1, 4] = (j == 1) ? 1.0 : round(vifs[j]; digits=2)
-                    sh_coef[j+1, 5] = (!isnan(p_vals[j]) && p_vals[j] < 0.05) ? "*" : ""
+                    c_v  = coefs[j]
+                    pv_v = (length(p_vals) >= j) ? p_vals[j] : NaN
+                    vf_v = (j == 1) ? 1.0 : ((length(vifs) >= j) ? vifs[j] : NaN)
+                    
+                    c_out  = (ismissing(c_v) || isnan(c_v) || isinf(c_v)) ? "N/A" : round(Float64(c_v); digits=4)
+                    pv_out = (ismissing(pv_v) || isnan(pv_v) || isinf(pv_v)) ? "N/A" : round(Float64(pv_v); digits=4)
+                    vf_out = (ismissing(vf_v) || isnan(vf_v) || isinf(vf_v)) ? "N/A" : round(Float64(vf_v); digits=2)
+
+                    term_clean = replace(replace(string(terms[j]), "×" => "*"), "²" => "^2")
+                    sh_coef[j+1, 1] = term_clean
+                    sh_coef[j+1, 2] = c_out
+                    sh_coef[j+1, 3] = pv_out
+                    sh_coef[j+1, 4] = vf_out
+                    sh_coef[j+1, 5] = (!ismissing(pv_v) && !isnan(pv_v) && pv_v < 0.05) ? "*" : ""
                 end
             end
 
-            # Integrated radiation and isothermal decay correction registry.
+            # 4. Leader Candidates Sheet
+            if haskey(Res, "Leaders") && !isnothing(Res["Leaders"])
+                ldf_raw = Res["Leaders"]
+                ldf = if isa(ldf_raw, DataFrame)
+                    ldf_raw
+                elseif isa(ldf_raw, AbstractVector) && !isempty(ldf_raw)
+                    DataFrame(ldf_raw)
+                else
+                    DataFrame()
+                end
+                if !isempty(ldf)
+                    ldf_clean = copy(ldf)
+                    for col in names(ldf_clean)
+                        ldf_clean[!, col] = [ismissing(v) || (v isa Number && (isnan(v) || isinf(v))) ? missing : v for v in ldf_clean[!, col]]
+                    end
+                    sh_lead = XLSX.addsheet!(xf, "Leader_Candidates")
+                    XLSX.writetable!(sh_lead, ldf_clean; anchor_cell=XLSX.CellRef("A1"))
+                end
+            end
+
+            # 5. Optimization Goals Sheet
+            if haskey(Res, "Goals") && !isnothing(Res["Goals"])
+                goals_list = Res["Goals"]
+                if !isempty(goals_list)
+                    sh_goals = XLSX.addsheet!(xf, "Optimization_Goals")
+                    sh_goals["A1"] = ["Parameter", "Criterion / Goal", "Target", "Lower Limit", "Upper Limit", "Weight", "Rating"]
+                    for (g_idx, g) in enumerate(goals_list)
+                        p_name = string(get(g, "Name", get(g, "Variable", "Parameter $g_idx")))
+                        p_goal = string(get(g, "Type", get(g, "Goal", "Nominal")))
+                        p_target = get(g, "Target", NaN)
+                        p_target_val = (ismissing(p_target) || isnan(p_target)) ? "N/A" : round(Float64(p_target); digits=4)
+                        p_low = get(g, "Low", get(g, "Min", NaN))
+                        p_low_val = (ismissing(p_low) || isnan(p_low)) ? "N/A" : round(Float64(p_low); digits=4)
+                        p_high = get(g, "High", get(g, "Max", NaN))
+                        p_high_val = (ismissing(p_high) || isnan(p_high)) ? "N/A" : round(Float64(p_high); digits=4)
+                        raw_w = Float64(get(g, "Weight", 1.0))
+                        p_weight = round(raw_w; digits=2)
+                        p_rating = VISE_GetWeightRating_DDEF(raw_w)
+
+                        sh_goals[g_idx+1, 1] = p_name
+                        sh_goals[g_idx+1, 2] = p_goal
+                        sh_goals[g_idx+1, 3] = p_target_val
+                        sh_goals[g_idx+1, 4] = p_low_val
+                        sh_goals[g_idx+1, 5] = p_high_val
+                        sh_goals[g_idx+1, 6] = p_weight
+                        sh_goals[g_idx+1, 7] = p_rating
+                    end
+                end
+            end
+
+            # 6. Integrated radiation and isothermal decay correction registry
             if haskey(Res, "RadioCorrection")
                 sh_rad       = XLSX.addsheet!(xf, "Radiation_Decay_Correction")
                 sh_rad["A1"] = ["Component", "Type", "Half-Life", "Unit", "Avg Delta-T (min)", "Avg Decay Factor", "Correction Applied"]

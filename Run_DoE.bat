@@ -130,18 +130,19 @@ GOTO MENU
 
 :MODE5
 CLS
-TITLE DoECISORY [Test Suite]
+TITLE DoECISORY [Automated Test Suite]
 COLOR 0B
 set "t=%TIME: =0%"
 set "t=%t:,=.%0"
 echo [%t%] GATEWAY       : Routing         Executing Automated Test Suite...
 echo.
-julia --depwarn=no --threads auto --project=. -e "using Pkg; Pkg.test()"
+julia --depwarn=no --threads auto --project=. test/coverage.jl
 echo.
 set "t=%TIME: =0%"
 set "t=%t:,=.%0"
 echo [%t%] GATEWAY       : Return          Press any key to return to System Gateway...
 pause >nul
 GOTO MENU
+
 
 

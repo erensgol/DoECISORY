@@ -16,21 +16,17 @@ using DataFrames
 using JSON3
 using Base64
 
-export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
-       FAST_Constants_DDES, FAST_SafeNum_DDEF, FAST_GetLabDefaults_DDEF,
-       FAST_InitialiseMaster_DDEF, FAST_NormaliseCols_DDEF!,
-       FAST_SanitiseJson_DDEF, FAST_PrepareDownload_DDEF,
-       FAST_GenerateSmartName_DDEF, FAST_ExtractProjectFromFilename_DDEF,
-       FAST_GetTransientPath_DDEF, FAST_ReadToStore_DDEF,
+export FAST_Log_DDEF, FAST_ReadExcel_DDEF, FAST_Constants_DDES, FAST_SafeNum_DDEF,
+       FAST_GetLabDefaults_DDEF, FAST_InitialiseMaster_DDEF, FAST_NormaliseCols_DDEF!,
+       FAST_SanitiseJson_DDEF, FAST_PrepareDownload_DDEF, FAST_GenerateSmartName_DDEF,
+       FAST_ExtractProjectFromFilename_DDEF, FAST_GetTransientPath_DDEF, FAST_ReadToStore_DDEF,
        FAST_UpdateConfig_DDEF, FAST_GetThreadInfo_DDEF, FAST_ClearConfigCache_DDEF,
-       FAST_SanitiseInput_DDEF, FAST_AcquireLock_DDEF, FAST_ReleaseLock_DDEF, 
-       FAST_ForceReleaseAll_DDEF, FAST_CacheRead_DDEF, FAST_CacheWrite_DDEF, 
-       FAST_CacheEvict_DDEF, FAST_VaultWrite_DDEF, FAST_VaultRead_DDEF,
-       FAST_GetComputeThreads_DDEF, FAST_SafeExcelWrite_DDEF, FAST_CleanTransient_DDEF,
-       FAST_FormatDuration_DDEF, FAST_ValidateDataFrame_DDEF, FAST_GetSystemQuote_DDEF,
-       FAST_RoundCols_DDEF!, FAST_GetCol_DDEF, FAST_CleanHeader_DDEF,
-       FAST_DisplayHeader_DDEF, FAST_InitialiseWorkforce_DDEF,
-       FAST_CleanWorkforce_DDEF, FAST_Data_DDEC, FAST_SanitiseFilename_DDEF,
+       FAST_SanitiseInput_DDEF, FAST_AcquireLock_DDEF, FAST_ReleaseLock_DDEF, FAST_ForceReleaseAll_DDEF,
+       FAST_CacheRead_DDEF, FAST_CacheWrite_DDEF, FAST_CacheEvict_DDEF, FAST_VaultWrite_DDEF,
+       FAST_VaultRead_DDEF, FAST_GetComputeThreads_DDEF, FAST_SafeExcelWrite_DDEF, FAST_CleanTransient_DDEF, 
+       FAST_FormatDuration_DDEF, FAST_ValidateDataFrame_DDEF, FAST_GetSystemQuote_DDEF, 
+       FAST_RoundCols_DDEF!, FAST_GetCol_DDEF, FAST_CleanHeader_DDEF, FAST_DisplayHeader_DDEF, 
+       FAST_InitialiseWorkforce_DDEF, FAST_CleanWorkforce_DDEF, FAST_Data_DDEC, FAST_SanitiseFilename_DDEF,
        FAST_LoadMemoFile_DDEF, FAST_ExtractDataID_DDEF, FAST_ValidateSheetStructure_DDEF, 
        FAST_FinaliseMasterWrite_DDEF, FAST_ActiveGroup_DDEC, FAST_ApplyExcelStyle_DDEF, 
        FAST_FormatConditionNumber_DDEF, FAST_SortColumns_DDEF, FAST_ExtractPhaseNum_DDEF
@@ -48,7 +44,7 @@ export FAST_Log_DDEF, FAST_ReadExcel_DDEF,
 System-wide configuration, metadata structure, and primary colour palettes.
 """
 Base.@kwdef struct FAST_Constants_DDES
-    VERSION::String        = "v1.0.0"
+    VERSION::String        = "v0.1.0"
     COLOUR_PURWHI::String  = "#FFFFFF"
     COLOUR_LIGHIG::String  = "#E6E6E6"
     COLOUR_LIGLOW::String  = "#DCDCDC"
@@ -155,8 +151,8 @@ function FAST_CleanWorkforce_DDEF(all::Bool=false)::Nothing
     try
         for (root, dirs, files) in walkdir(FAST_TempRoot_DDEC; topdown=false)
             for f in files
-                # Restricted deletion for files non-compliant with DDE patterns.
-                if all || startswith(f, "DOECISORY_TEMP_") || startswith(f, "DDE_")
+                # Restricted deletion for files non-compliant with DoECISORY patterns.
+                if all || startswith(f, "DOECISORY_TEMP_") || startswith(f, "DoECISORY_") || startswith(f, "DDE_")
                     try
                         rm(joinpath(root, f); force=true)
                     catch
@@ -453,6 +449,7 @@ function FAST_ApplyExcelStyle_DDEF(File::AbstractString, ValidPairs::Vector{Pair
         entries = Tuple{String, Vector{UInt8}, UInt16}[]
         wb_xml_str = ""
         rels_xml_str = ""
+        all_ws = String[]
         for f in zin.files
             b = read(f)
             push!(entries, (f.name, b, f.method))
@@ -460,6 +457,8 @@ function FAST_ApplyExcelStyle_DDEF(File::AbstractString, ValidPairs::Vector{Pair
                 wb_xml_str = String(copy(b))
             elseif f.name == "xl/_rels/workbook.xml.rels"
                 rels_xml_str = String(copy(b))
+            elseif occursin(r"^xl/worksheets/sheet\d+\.xml$", f.name)
+                push!(all_ws, f.name)
             end
         end
         close(zin)
@@ -483,14 +482,37 @@ function FAST_ApplyExcelStyle_DDEF(File::AbstractString, ValidPairs::Vector{Pair
             end
         end
         
-        # Re-pack archive with auto-fitted column tags
+        # Re-pack archive with auto-fitted column tags and OpenXML structural compliance
         zout = ZipFile.Writer(temp_file)
         for (name, bytes, method) in entries
             f_out = ZipFile.addfile(zout, name; method=method)
             m_sheet = match(r"^xl/worksheets/(sheet\d+\.xml)$", name)
             
-            if m_sheet !== nothing
+            if name == "[Content_Types].xml"
+                xml_ct = String(copy(bytes))
+                # Ensure all worksheet parts have an explicit Override tag to prevent Excel repair prompt
+                for ws in all_ws
+                    part_name = "/$ws"
+                    if !occursin("PartName=\"$part_name\"", xml_ct)
+                        override_tag = "<Override PartName=\"$part_name\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml\"/>"
+                        pos_types = findlast("</Types>", xml_ct)
+                        if pos_types !== nothing
+                            xml_ct = xml_ct[1:first(pos_types)-1] * override_tag * xml_ct[first(pos_types):end]
+                        end
+                    end
+                end
+                write(f_out, xml_ct)
+            elseif name == "xl/workbook.xml"
+                xml_wb = String(copy(bytes))
+                # Remove obsolete developer machine absolute path metadata causing external link warning
+                xml_wb = replace(xml_wb, r"<mc:AlternateContent\b[^>]*>.*?</mc:AlternateContent>"s => "")
+                write(f_out, xml_wb)
+            elseif m_sheet !== nothing
                 xml = String(copy(bytes))
+                # Purge invalid IEEE 754 numeric tokens (NaN, Inf) that cause Excel recovery dialogs
+                xml = replace(xml, r"<c\b([^>]*\br=\"[A-Z0-9]+\"[^>]*)><v>(?:NaN|Inf|-Inf)<\/v><\/c>" => s"<c\1/>")
+                xml = replace(xml, r"<v>(?:NaN|Inf|-Inf)<\/v>" => "")
+                
                 sheet_filename = m_sheet.captures[1]
                 
                 # Resolve target sheet column widths
@@ -726,16 +748,22 @@ end
 FAST_SafeNum_DDEF(x::Any) = FAST_SafeNum_DDEF(string(x))
 
 """
-    FAST_FormatConditionNumber_DDEF(c::Real) -> Tuple{String, String, String}
+    FAST_FormatConditionNumber_DDEF(c::Any) -> Tuple{String, String, String}
 Scientific condition number formatter: Translates raw condition number (κ) into human-readable numeric scale,
-descriptive academic status label, and standard theme color token.
+descriptive academic status label, and standard theme colour token.
 """
-function FAST_FormatConditionNumber_DDEF(c::Real)::Tuple{String, String, String}
-    if ismissing(c) || isnan(c)
+function FAST_FormatConditionNumber_DDEF(c::Any)::Tuple{String, String, String}
+    if ismissing(c) || isnothing(c)
         return ("N/A", "Unknown", "var(--colour-val3-darlow)")
     end
-    c_f = Float64(c)
-    if isinf(c_f) || c_f > 1e12
+    c_f = try
+        Float64(c)
+    catch
+        return ("N/A", "Unknown", "var(--colour-val3-darlow)")
+    end
+    if isnan(c_f)
+        return ("N/A", "Unknown", "var(--colour-val3-darlow)")
+    elseif isinf(c_f) || c_f > 1e12
         return ("Singular", "Ill-Conditioned Matrix", "var(--colour-chr0-huered)")
     elseif c_f < 100.0
         return (@sprintf("%.1f", c_f), "Ideal Orthogonality (κ < 100)", "var(--colour-chr4-tongre)")
@@ -1056,8 +1084,8 @@ FAST_InitialiseMaster_DDEF(::Nothing, args...) = false
 
 """
     FAST_GenerateSmartName_DDEF(Project, Phase, Tag, [Extension]) -> String
-Generates a standardised, timestamped protocol filename according to the DDE specification.
-Template: DDE_[Proj]_[Phase]_[Tag]_[Timestamp].[Ext]
+Generates a standardised, timestamped protocol filename according to the DoECISORY specification.
+Template: DoECISORY_[Proj]_[Phase]_[Tag]_[Timestamp].[Ext]
 """
 function FAST_GenerateSmartName_DDEF(Project::AbstractString, Phase::AbstractString, Tag::AbstractString, Ext::AbstractString="xlsx")::String
     p_raw    = strip(Project)
@@ -1065,17 +1093,17 @@ function FAST_GenerateSmartName_DDEF(Project::AbstractString, Phase::AbstractStr
     ph_clean = replace(Phase, "Phase" => "P")
     ts       = Dates.format(now(), "yyyy_mmdd_HHMM")
     
-    return "DDE_$(p_clean)_$(ph_clean)_$(Tag)_$(ts).$(Ext)"
+    return isempty(Ext) ? "DoECISORY_$(p_clean)_$(ph_clean)_$(Tag)_$(ts)" : "DoECISORY_$(p_clean)_$(ph_clean)_$(Tag)_$(ts).$(Ext)"
 end
 
 """
     FAST_ExtractProjectFromFilename_DDEF(Filename::AbstractString) -> String
 Extracts the project name from a DoECISORY standard filename.
-Returns empty string if the pattern doesn't match.
+Returns empty string if the pattern doesn't match. Supports both DoECISORY_ and legacy DDE_ prefixes.
 """
 function FAST_ExtractProjectFromFilename_DDEF(Filename::AbstractString)::String
-    # Formulation of the extraction pattern: DDE_ProjectName_Phase_Tag_TS.ext.
-    m = match(r"^DDE_(.*?)_P\d+_", Filename)
+    # Formulation of the extraction pattern: (DoECISORY|DDE)_ProjectName_Phase_Tag_TS.ext.
+    m = match(r"^(?:DoECISORY|DDE)_(.*?)_P\d+_", Filename)
     !isnothing(m) && return string(m.captures[1])
 
     # Fallback Protocol: If the filename is non-standard, return the base name minus extension.
@@ -1101,6 +1129,7 @@ function FAST_GetTransientPath_DDEF()::String
 end
 
 FAST_GetTransientPath_DDEF(::Nothing) = FAST_GetTransientPath_DDEF()
+FAST_GetTransientPath_DDEF(vault::AbstractDict) = FAST_GetTransientPath_DDEF(FAST_ExtractDataID_DDEF(vault))
 
 # Specialised handling for Data Handles (Vault vs Base64 vs Empty)
 function FAST_GetTransientPath_DDEF(DataHandle::String)::String

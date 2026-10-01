@@ -404,10 +404,19 @@ function LENS_Layout_DDEF()
                     BASE_Loading_DDEF("lens-upload-status", "No Data Source"; class="glass-loading-status mb-2"),
                     BASE_Separator_DDEF(),
 
-                    BASE_SidebarHeader_DDEF("EXPORT", icon="fas fa-file-export"),
-                    BASE_ActionButton_DDEF("lens-btn-export-plots",    "Plots",    "fas fa-camera-retro"),
-                    BASE_ActionButton_DDEF("lens-btn-download-report", "Report",   "fas fa-file-export"),
-                    BASE_ActionButton_DDEF("lens-btn-export-excel",    "(XLSX)",   "fas fa-file-excel",   class="w-100 fw-bold mb-3"),
+                    BASE_SidebarHeader_DDEF("CRITERIA PROFILES (JSON)"),
+                    dbc_row([
+                        dbc_col(BASE_ActionButton_DDEF("lens-btn-export-json", "Save",   "fas fa-download", class="w-100 fw-bold"), xs=6, className="pe-1 mb-2"),
+                        dbc_col(dcc_upload(
+                            id       = "lens-upload-config-json", 
+                            children = BASE_ActionButton_DDEF("lens-upload-config-json-btn", "Load", "fas fa-upload", class="w-100 fw-bold"), 
+                            multiple = false, 
+                            className = "w-100"
+                        ), xs=6, className="ps-1 mb-2"),
+                        dbc_col(BASE_ActionButton_DDEF("lens-btn-clear", "Reset Goals", "fas fa-undo-alt", class="w-100 fw-bold"), xs=12, className="mb-3"),
+                    ], className="g-0"),
+
+                    dbc_row(dbc_col(html_div(id="lens-memo-msg", className="small mb-2 fw-bold text-center"), xs=12)),
                     BASE_Separator_DDEF(),
 
                     BASE_ControlGroup_DDEF("Project Name",
@@ -417,7 +426,7 @@ function LENS_Layout_DDEF()
                         dcc_dropdown(id="lens-dd-phase",
                             options=[Dict("label" => "Phase 1", "value" => "Phase1")],
                             clearable=false, className="mb-3")),
-                    BASE_ControlGroup_DDEF("Model",
+                    BASE_ControlGroup_DDEF("Regression Model",
                         dcc_dropdown(id="lens-dd-model", options=[
                             Dict("label" => "Automatic", "value" => "Auto"),
                             Dict("label" => "Linear",    "value" => "Linear"),
@@ -433,19 +442,19 @@ function LENS_Layout_DDEF()
                         ], xs=12)),
                         BASE_Separator_DDEF(),
                     ]),
-                    BASE_ActionButton_DDEF("lens-btn-view-report",    "Summary",    "fas fa-file-alt", disabled=true),
-                    BASE_ActionButton_DDEF("lens-btn-next-phase",    "Next Phase", "fas fa-forward"),
+                    BASE_ActionButton_DDEF("lens-btn-export-portfolio", "Export Portfolio",   "fas fa-file-archive", class="w-100 mb-2", disabled=true),
+                    BASE_ActionButton_DDEF("lens-btn-view-report",      "Analytical Summary", "fas fa-file-alt",     class="w-100 mb-2", disabled=true),
+                    BASE_ActionButton_DDEF("lens-btn-next-phase",       "Phase Evolution",    "fas fa-forward",      class="w-100 mb-2"),
                     html_div(id="lens-phase-guard-msg", className="small text-center mb-1"),
-                    BASE_NextButton_DDEF("lens-btn-run",            "Run Analysis", disabled=true),
+                    BASE_NextButton_DDEF("lens-btn-run",                "Run Analysis", disabled=true),
 
                     dcc_download(id="lens-download-phase"),
-                    dcc_download(id="lens-download-analysis"),
-                    dcc_download(id="lens-download-plots"),
+                    dcc_download(id="lens-download-portfolio"),
                     dcc_download(id="lens-download-report-file"),
+                    dcc_download(id="lens-download-config-json"),
 
-                    BASE_Loading_DDEF("lens-run-output",           ""),
-                    BASE_Loading_DDEF("lens-export-plots-status", ""),
-                    BASE_Loading_DDEF("lens-export-excel-status", ""),
+                    BASE_Loading_DDEF("lens-run-output",              ""),
+                    BASE_Loading_DDEF("lens-export-portfolio-status", ""),
                 ]; panel_class="mb-3 h-auto", content_class="p-2"), xs=12)),
             ]; xs=12, md=3, className="mb-3 mb-md-0"),
 
@@ -485,7 +494,18 @@ function LENS_Layout_DDEF()
                         dcc_graph(
                             id     = "lens-graph-main",
                             style  = Dict("width" => "100%", "maxWidth" => "320px", "height" => "400px", "margin" => "0 auto"),
-                            config = Dict("displayModeBar" => "hover", "displaylogo" => false, "responsive" => true),
+                            config = Dict(
+                                "displayModeBar" => "hover",
+                                "displaylogo"    => false,
+                                "responsive"     => true,
+                                "toImageButtonOptions" => Dict(
+                                    "format"   => "png",
+                                    "filename" => "DoECISORY_ARTS_Plot",
+                                    "width"    => 640,
+                                    "height"   => 800,
+                                    "scale"    => 2
+                                )
+                            ),
                             figure = BASE_EmptyFigure_DDEC,
                         )),
                 ]; panel_class="mb-2", content_class="glass-content p-2"),
@@ -512,6 +532,7 @@ function LENS_Layout_DDEF()
                 dcc_store(id="lens-store-excluded-constants", data=String[]),
                 dcc_store(id="lens-store-graphs-blob",   data=""),
                 dcc_store(id="lens-store-batch-status",  data=Dict("next_pkg" => 0, "handle" => "", "expected" => 0)),
+                dcc_store(id="lens-store-toast",         data=Dict("msg" => "", "status" => "idle")),
                 dcc_interval(id="lens-interval-batch", interval=2000, n_intervals=0, disabled=true),
             ]; xs=12, md=9),
         ], className="g-3"),
@@ -879,28 +900,331 @@ function LENS_RegisterCallbacks_DDEF(app)
         end
     end
 
-    # Pipeline Orchestration Stage 1B: Global session synchronisation and objective initialisation.
+    # Pipeline Orchestration Stage 1B: Global session synchronisation and analytical profile management.
     callback!(app,
-        Output("lens-dd-phase",       "options"),
-        Output("lens-upload-status",  "children"),
-        Output("lens-upload-data-btn", "className"),
-        Output("lens-dd-phase",       "value"),
-        [Output("lens-goal-name-$i",   "value") for i in 1:3]...,
-        [Output("lens-goal-min-$i",    "value") for i in 1:3]...,
-        [Output("lens-goal-target-$i", "value") for i in 1:3]...,
-        [Output("lens-goal-max-$i",    "value") for i in 1:3]...,
-        [Output("lens-goal-type-$i",   "value") for i in 1:3]...,
-        [Output("lens-goal-weight-$i", "value") for i in 1:3]...,
-        Output("lens-dd-model",       "options"),
-        Output("lens-dd-model",       "value"),
-        Output("lens-store-sync-flag", "data"),
-        Output("lens-panel-radio", "className"),
-        Output("lens-input-project",  "value"),
-        Input("store-master-vault",   "data"),
-        State("lens-input-project",   "value"),
-        State("lens-store-batch-status", "data"),
+        Output("lens-dd-phase",             "options"),
+        Output("lens-upload-status",        "children"),
+        Output("lens-upload-data-btn",       "className"),
+        Output("lens-dd-phase",             "value"),
+        [Output("lens-goal-name-$i",        "value") for i in 1:3]...,
+        [Output("lens-goal-min-$i",         "value") for i in 1:3]...,
+        [Output("lens-goal-target-$i",      "value") for i in 1:3]...,
+        [Output("lens-goal-max-$i",         "value") for i in 1:3]...,
+        [Output("lens-goal-type-$i",        "value") for i in 1:3]...,
+        [Output("lens-goal-weight-$i",      "value") for i in 1:3]...,
+        Output("lens-dd-model",             "options"),
+        Output("lens-dd-model",             "value"),
+        Output("lens-store-sync-flag",       "data"),
+        Output("lens-panel-radio",          "className"),
+        Output("lens-input-project",        "value"),
+        Output("lens-store-toast",          "data"),
+        Output("lens-memo-msg",             "children"),
+        Output("lens-download-config-json", "data"),
+        Input("store-master-vault",         "data"),
+        Input("lens-upload-config-json",    "contents"),
+        Input("lens-btn-clear",             "n_clicks"),
+        Input("lens-btn-export-json",       "n_clicks"),
+        State("lens-input-project",         "value"),
+        State("lens-store-batch-status",    "data"),
+        State("lens-dd-phase",              "value"),
+        State("lens-dd-model",              "value"),
+        [State("lens-goal-name-$i",         "value") for i in 1:3]...,
+        [State("lens-goal-min-$i",          "value") for i in 1:3]...,
+        [State("lens-goal-target-$i",       "value") for i in 1:3]...,
+        [State("lens-goal-max-$i",          "value") for i in 1:3]...,
+        [State("lens-goal-type-$i",         "value") for i in 1:3]...,
+        [State("lens-goal-weight-$i",       "value") for i in 1:3]...,
+        State("lens-radio-forw-mode",       "value"),
+        State("lens-radio-forw-iso",        "value"),
+        State("lens-radio-dd-inputs",       "value"),
+        State("lens-radio-in-name-1",       "value"),
+        State("lens-radio-in-unit-1",       "value"),
+        State("lens-radio-dcyp-mode",       "value"),
+        State("lens-radio-dcyp-iso",        "value"),
+        State("lens-radio-dcyp-factor",     "value"),
+        State("lens-radio-reve-mode",       "value"),
+        State("lens-radio-reve-iso",        "value"),
+        State("lens-radio-reve-out-sel",    "value"),
+        State("lens-radio-out-name-1",      "value"),
+        State("lens-radio-out-unit-1",      "value"),
         prevent_initial_call=true
-    ) do active_data, current_proj, batch_status
+    ) do active_data, json_contents, n_clear, n_export, current_proj, batch_status, phase_val, model_val, args...
+        trig = BASE_GetTrigger_DDEF(callback_context())
+
+        # Reset of optimisation criteria to dataset bounds.
+        if trig == "lens-btn-clear"
+            g_names   = Any[Dash.no_update() for _ in 1:3]
+            g_mins    = Any[Dash.no_update() for _ in 1:3]
+            g_targets = Any[Dash.no_update() for _ in 1:3]
+            g_maxs    = Any[Dash.no_update() for _ in 1:3]
+            g_types   = Any["Nominal", "Nominal", "Nominal"]
+            g_weights = Any["1.00", "1.00", "1.00"]
+
+            active_cont = Sys_Fast.FAST_ExtractDataID_DDEF(active_data)
+            if !isempty(active_cont) && active_cont != "none"
+                cpath = ""
+                try
+                    cpath = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
+                    if isfile(cpath)
+                        df = Sys_Fast.FAST_ReadExcel_DDEF(cpath, C.SHEET_DATA)
+                        isempty(df) && (df = Sys_Fast.FAST_ReadExcel_DDEF(cpath, "DATA_RECORDS"))
+                        out_cols = filter(c -> startswith(c, C.PRE_RESULT), names(df))
+                        for i in 1:min(length(out_cols), 3)
+                            vals = Float64[Float64(v) for v in skipmissing(df[!, out_cols[i]]) if v isa Number && !isnan(v)]
+                            mn, mx = isempty(vals) ? (0.0, 0.0) : extrema(vals)
+                            g_mins[i]    = round(mn; digits=2)
+                            g_maxs[i]    = round(mx; digits=2)
+                            g_targets[i] = round((mn + mx) / 2; digits=2)
+                        end
+                    end
+                catch e
+                    Sys_Fast.FAST_Log_DDEF("LENS", "CLEAR_RELOAD", "Dataset bound recovery notice: $e", "WARN")
+                finally
+                    !isempty(cpath) && isfile(cpath) && try rm(cpath; force=true) catch end
+                end
+            end
+
+            toast_data = Dict("status" => "info", "message" => "Dataset goal bounds restored.", "ts" => time())
+            status_lbl = html_div([html_i(className="fas fa-undo-alt me-2"), "Goals Restored"],
+                                  className="badge p-2 w-100",
+                                  style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr3-toncya)", "fontSize" => "0.85rem"))
+            return (
+                Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(),
+                g_names...,
+                g_mins...,
+                g_targets...,
+                g_maxs...,
+                g_types...,
+                g_weights...,
+                Dash.no_update(),
+                "Auto",
+                Dash.no_update(), Dash.no_update(), Dash.no_update(),
+                toast_data,
+                status_lbl,
+                Dash.no_update()
+            )
+        end
+
+        # Import of high-fidelity user profiles via JSON deserialisation with smart name matching.
+        if trig == "lens-upload-config-json" && !isnothing(json_contents) && json_contents != ""
+            try
+                b64_part = occursin(",", json_contents) ? split(json_contents, ",")[end] : json_contents
+                json_raw = String(base64decode(b64_part))
+                cfg = JSON3.read(json_raw)
+
+                has_goals = haskey(cfg, "Goals") || haskey(cfg, :Goals)
+                cfg_type  = get(cfg, "Type", get(cfg, :Type, ""))
+                has_type  = cfg_type in ("DoECISORY_Lens_Config", "DoECISORY_Lens_Criteria")
+                if !has_goals && !has_type
+                    throw(ArgumentError("Invalid JSON configuration schema: missing 'Goals' or criteria specification."))
+                end
+
+                model_out = string(get(cfg, "Model", get(cfg, :Model, "Auto")))
+                if !(model_out in ("Auto", "Linear", "Quadratic"))
+                    model_out = "Auto"
+                end
+
+                loaded_goals = get(cfg, "Goals", get(cfg, :Goals, []))
+                
+                # Responses currently rendered on the user interface
+                curr_names = args[1:3]
+                norm_str(s) = lowercase(replace(replace(strip(string(s)), "_" => " "), r"\s+" => " "))
+
+                g_names   = [Dash.no_update() for _ in 1:3]
+                g_mins    = [Dash.no_update() for _ in 1:3]
+                g_targets = [Dash.no_update() for _ in 1:3]
+                g_maxs    = [Dash.no_update() for _ in 1:3]
+                g_types   = [Dash.no_update() for _ in 1:3]
+                g_weights = [Dash.no_update() for _ in 1:3]
+
+                # Check if UI already has defined response names
+                has_active_ui_names = any(n -> !isnothing(n) && !isempty(strip(string(n))), curr_names)
+                norm_base(s) = norm_str(split(split(string(s), "(")[1], "[")[1])
+
+                for i in 1:3
+                    target_goal = nothing
+                    if has_active_ui_names
+                        c_name = isnothing(curr_names[i]) ? "" : strip(string(curr_names[i]))
+                        if !isempty(c_name)
+                            # Match loaded goal by exact normalised or base response name
+                            m_idx = findfirst(g -> norm_str(get(g, "Name", get(g, :Name, ""))) == norm_str(c_name), loaded_goals)
+                            if isnothing(m_idx)
+                                m_idx = findfirst(g -> norm_base(get(g, "Name", get(g, :Name, ""))) == norm_base(c_name), loaded_goals)
+                            end
+                            if isnothing(m_idx) && i <= length(loaded_goals)
+                                m_idx = i
+                            end
+                            if !isnothing(m_idx)
+                                target_goal = loaded_goals[m_idx]
+                            end
+                        elseif i <= length(loaded_goals)
+                            target_goal = loaded_goals[i]
+                            g_nm = string(get(target_goal, "Name", get(target_goal, :Name, "")))
+                            !isempty(g_nm) && (g_names[i] = g_nm)
+                        end
+                    else
+                        # Fallback to positional mapping when canvas names are uninitialised
+                        if i <= length(loaded_goals)
+                            target_goal = loaded_goals[i]
+                            g_nm = string(get(target_goal, "Name", get(target_goal, :Name, "")))
+                            !isempty(g_nm) && (g_names[i] = g_nm)
+                        end
+                    end
+
+                    # If this response matched, apply values; otherwise keep Dash.no_update() so dataset defaults are preserved!
+                    if !isnothing(target_goal)
+                        v_min = get(target_goal, "Min", get(target_goal, :Min, nothing))
+                        s_min = (isnothing(v_min) || ismissing(v_min)) ? nothing : Sys_Fast.FAST_SafeNum_DDEF(v_min)
+                        g_mins[i] = (isnothing(s_min) || (s_min isa Number && isnan(s_min))) ? nothing : s_min
+
+                        v_tar = get(target_goal, "Target", get(target_goal, :Target, nothing))
+                        s_tar = (isnothing(v_tar) || ismissing(v_tar)) ? nothing : Sys_Fast.FAST_SafeNum_DDEF(v_tar)
+                        g_targets[i] = (isnothing(s_tar) || (s_tar isa Number && isnan(s_tar))) ? nothing : s_tar
+
+                        v_max = get(target_goal, "Max", get(target_goal, :Max, nothing))
+                        s_max = (isnothing(v_max) || ismissing(v_max)) ? nothing : Sys_Fast.FAST_SafeNum_DDEF(v_max)
+                        g_maxs[i] = (isnothing(s_max) || (s_max isa Number && isnan(s_max))) ? nothing : s_max
+
+                        v_type = string(get(target_goal, "Type", get(target_goal, :Type, "Nominal")))
+                        if v_type in ("Nominal", "Maximise", "Minimise")
+                            g_types[i] = v_type
+                        end
+
+                        v_wt = string(get(target_goal, "Weight", get(target_goal, :Weight, "1.00")))
+                        if v_wt in ("0.50", "0.75", "1.00", "1.50", "2.00")
+                            g_weights[i] = v_wt
+                        end
+                    end
+                end
+
+                toast_data = Dict("status" => "success", "message" => "Criteria profile loaded successfully.", "ts" => time())
+                status_lbl = html_div([html_i(className="fas fa-folder-open me-2"), "Criteria Loaded"],
+                                      className="badge p-2 w-100",
+                                      style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr3-toncya)", "fontSize" => "0.85rem"))
+
+                return (
+                    Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(),
+                    g_names...,
+                    g_mins...,
+                    g_targets...,
+                    g_maxs...,
+                    g_types...,
+                    g_weights...,
+                    Dash.no_update(),
+                    model_out,
+                    Dash.no_update(), Dash.no_update(), Dash.no_update(),
+                    toast_data,
+                    status_lbl,
+                    Dash.no_update()
+                )
+            catch e
+                err_toast = Dict("status" => "error", "message" => "Load Error: $e", "ts" => time())
+                err_lbl = html_div("❌ Load Error: $(first(string(e), 40))",
+                                   className="badge w-100 p-2",
+                                   style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)", "fontSize" => "0.75rem"))
+                return (
+                    ntuple(_ -> Dash.no_update(), 27)...,
+                    err_toast,
+                    err_lbl,
+                    Dash.no_update()
+                )
+            end
+        end
+
+        # Export of active analytical configuration to standardised JSON format.
+        if trig == "lens-btn-export-json"
+            try
+                proj_str  = (isnothing(current_proj) || isempty(strip(string(current_proj)))) ? "DoECISORY" : strip(string(current_proj))
+                phase_str = (isnothing(phase_val) || isempty(strip(string(phase_val)))) ? "Phase1" : strip(string(phase_val))
+                model_str = (isnothing(model_val) || isempty(strip(string(model_val)))) ? "Auto" : strip(string(model_val))
+
+                g_names   = args[1:3]
+                g_mins    = args[4:6]
+                g_targets = args[7:9]
+                g_maxs    = args[10:12]
+                g_types   = args[13:15]
+                g_weights = args[16:18]
+                r_states  = args[19:31]
+
+                goals_list = [
+                    Dict{String,Any}(
+                        "Name"   => string(something(g_names[i], "")),
+                        "Min"    => (isnothing(g_mins[i]) || ismissing(g_mins[i])) ? nothing : Sys_Fast.FAST_SafeNum_DDEF(g_mins[i]),
+                        "Target" => (isnothing(g_targets[i]) || ismissing(g_targets[i])) ? nothing : Sys_Fast.FAST_SafeNum_DDEF(g_targets[i]),
+                        "Max"    => (isnothing(g_maxs[i]) || ismissing(g_maxs[i])) ? nothing : Sys_Fast.FAST_SafeNum_DDEF(g_maxs[i]),
+                        "Type"   => string(something(g_types[i], "Nominal")),
+                        "Weight" => string(something(g_weights[i], "1.00"))
+                    ) for i in 1:3
+                ]
+
+                radio_dict = Dict{String,Any}(
+                    "ForwMode"   => string(something(r_states[1], "OFF")),
+                    "ForwIso"    => string(something(r_states[2], "None")),
+                    "ForwTarget" => string(something(r_states[3], "None")),
+                    "ForwAlias"  => string(something(r_states[4], "")),
+                    "ForwUnit"   => string(something(r_states[5], "")),
+                    "DcypMode"   => string(something(r_states[6], "OFF")),
+                    "DcypIso"    => string(something(r_states[7], "None")),
+                    "DcypFactor" => string(something(r_states[8], "None")),
+                    "ReveMode"   => string(something(r_states[9], "OFF")),
+                    "ReveIso"    => string(something(r_states[10], "None")),
+                    "ReveTarget" => string(something(r_states[11], "None")),
+                    "ReveAlias"  => string(something(r_states[12], "")),
+                    "ReveUnit"   => string(something(r_states[13], ""))
+                )
+
+                afname = (active_data isa AbstractDict && haskey(active_data, "filename")) ? string(active_data["filename"]) : ""
+                config_payload = Dict{String,Any}(
+                    "SchemaVersion" => "1.0",
+                    "Type"          => "DoECISORY_Lens_Criteria",
+                    "Timestamp"     => string(Dates.now()),
+                    "Project"       => proj_str,
+                    "Phase"         => phase_str,
+                    "Model"         => model_str,
+                    "DataSource"    => afname,
+                    "Goals"         => goals_list,
+                    "Radioactivity" => radio_dict
+                )
+
+                json_str = JSON3.write(config_payload)
+                b64 = base64encode(json_str)
+                fname = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_str, phase_str, "CRITERIA", "json")
+
+                dl = Dict("filename" => fname, "content" => b64, "base64" => true)
+                status_lbl = html_div([html_i(className="fas fa-check-circle me-2"), "Criteria Exported"],
+                                      className="badge p-2 w-100",
+                                      style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr4-tongre)", "fontSize" => "0.85rem", "boxShadow" => "0 2px 5px var(--colour-val3-darlow)"))
+                toast_data = Dict("status" => "success", "message" => "Criteria profile exported successfully.", "ts" => time())
+                return (
+                    Dash.no_update(), Dash.no_update(), Dash.no_update(), Dash.no_update(),
+                    g_names...,
+                    g_mins...,
+                    g_targets...,
+                    g_maxs...,
+                    g_types...,
+                    g_weights...,
+                    Dash.no_update(),
+                    model_str,
+                    Dash.no_update(), Dash.no_update(), proj_str,
+                    toast_data,
+                    status_lbl,
+                    dl
+                )
+            catch e
+                err_lbl = html_div("❌ Save Error: $(first(string(e), 40))",
+                                   className="badge w-100 p-2",
+                                   style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr0-huered)", "fontSize" => "0.75rem"))
+                err_toast = Dict("status" => "error", "message" => "Save Error: $e", "ts" => time())
+                return (
+                    ntuple(_ -> Dash.no_update(), 27)...,
+                    err_toast,
+                    err_lbl,
+                    Dash.no_update()
+                )
+            end
+        end
+
+        # Master vault synchronisation and dynamic session orchestration.
         # Unified Initialisation of Session Metadata
         is_loading = get(batch_status, "next_pkg", get(batch_status, :next_pkg, 0)) > 0
         proj_v = isnothing(current_proj) || isempty(strip(string(current_proj))) || lowercase(strip(string(current_proj))) == "doecisory" ? "" : string(current_proj)
@@ -909,11 +1233,24 @@ function LENS_RegisterCallbacks_DDEF(app)
         try
             active_cont = Sys_Fast.FAST_ExtractDataID_DDEF(active_data)
 
+            # Sync Guard: If this update is a science pulse from an active analysis run,
+            # we MUST NOT overwrite the UI goals with dataset defaults.
+            is_science_pulse = (active_data isa AbstractDict || active_data isa Dict) && get(active_data, "type", "") == "SCIENCE_PULSE"
+            if is_science_pulse
+                out = ntuple(_ -> Dash.no_update(), 30)
+                mutable_out = collect(Any, out)
+                if !isempty(active_cont) && active_cont != "none"
+                    mutable_out[25] = Dict("status" => 1, "dataid" => active_cont)
+                    mutable_out[27] = proj_v
+                end
+                return Tuple(mutable_out)
+            end
+
             # Sync-Lock Guard: Prevent vault sync from overriding the UI during background rendering phases.
             # However, we MUST allow the sync-flag to update to the current DataID even if loading.
             if is_loading
                 # Selective Update: We return no_updates for everything EXCEPT the sync-flag and project name.
-                out = ntuple(_ -> Dash.no_update(), 27)
+                out = ntuple(_ -> Dash.no_update(), 30)
                 mutable_out = collect(Any, out)
                 
                 # Fetch minimal metadata for the flag
@@ -925,10 +1262,10 @@ function LENS_RegisterCallbacks_DDEF(app)
             end
             
             # If nothing in vault, return no updates
-            (isempty(active_cont) || active_cont == "none") && return ntuple(_ -> Dash.no_update(), 27)
+            (isempty(active_cont) || active_cont == "none") && return ntuple(_ -> Dash.no_update(), 30)
 
             path = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
-            !isfile(path) && return ntuple(_ -> Dash.no_update(), 27)
+            !isfile(path) && return ntuple(_ -> Dash.no_update(), 30)
 
             df = Main.Sys_Fast.FAST_ReadExcel_DDEF(path, Main.Sys_Fast.FAST_Data_DDEC.SHEET_CONFIG)
             config = Main.Sys_Fast.FAST_ReadConfig_DDEF(path)
@@ -939,17 +1276,7 @@ function LENS_RegisterCallbacks_DDEF(app)
                 phases = unique(filter(!ismissing, df[!, col_phase]))
             end
    
-            active_fname = ""
-            if active_data isa String
-                active_cont = active_data
-            elseif active_data isa AbstractDict || active_data isa Dict
-                active_cont = get(active_data, "content", active_data)
-                active_fname = get(active_data, "filename", "")
-                # Sync Guard: If this is a science pulse from an active analysis, skip redundant I/O read.
-                if get(active_data, "type", "") == "SCIENCE_PULSE"
-                    return ntuple(_ -> Dash.no_update(), 27)
-                end
-            end
+            active_fname = (active_data isa AbstractDict || active_data isa Dict) ? string(get(active_data, "filename", "")) : ""
 
             afname = (active_data isa AbstractDict && haskey(active_data, "filename")) ? string(active_data["filename"]) : ""
             extracted_proj = Main.Sys_Fast.FAST_ExtractProjectFromFilename_DDEF(afname)
@@ -957,19 +1284,19 @@ function LENS_RegisterCallbacks_DDEF(app)
             (proj_v == "") && (proj_v = "DoECISORY")
 
             if isnothing(active_cont) || active_cont == ""
-                return tuple([], "No Data Source", "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 0, "dataid" => ""), "d-none", proj_v)
+                return tuple([], "No Data Source", "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 0, "dataid" => ""), "d-none", proj_v, Dash.no_update(), Dash.no_update(), Dash.no_update())
             end
 
             Sys_Fast.FAST_Log_DDEF("LENS", "Sync", "Synchronising from Smart Vault (Handle: $(first(active_cont, 64))...)...", "INFO")
             path = Sys_Fast.FAST_GetTransientPath_DDEF(active_cont)
             if !isfile(path)
-                 return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "Data handle expired or missing. Please re-upload."], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "dataid" => ""), "d-none", proj_v)
+                 return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "Data handle expired or missing. Please re-upload."], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "dataid" => ""), "d-none", proj_v, Dash.no_update(), Dash.no_update(), Dash.no_update())
             end
 
             ext = lowercase(splitext(path)[2])
             if ext != ".xlsx"
                 Sys_Fast.FAST_CleanTransient_DDEF(path)
-                return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "This is not a valid Excel file! (Please upload .xlsx)"], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "dataid" => ""), "d-none", proj_v)
+                return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "This is not a valid Excel file! (Please upload .xlsx)"], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green", nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "dataid" => ""), "d-none", proj_v, Dash.no_update(), Dash.no_update(), Dash.no_update())
             end
 
             df = Sys_Fast.FAST_ReadExcel_DDEF(path, C.SHEET_DATA)
@@ -1069,7 +1396,10 @@ function LENS_RegisterCallbacks_DDEF(app)
                 if isnothing(g_idx) && i <= length(out_cols)
                     g_idx = findfirst(g -> norm_g(Sys_Fast.FAST_GetSafe_DDEF(g, "Name", "")) == norm_g(replace(out_cols[i], C.PRE_RESULT => "")), saved_goals)
                 end
-                
+                if isnothing(g_idx) && i <= length(saved_goals)
+                    g_idx = i
+                end
+
                 if !isnothing(g_idx)
                     saved_g = saved_goals[g_idx]
                     goals_type[i]   = string(get(saved_g, "Type", "Nominal"))
@@ -1106,14 +1436,17 @@ function LENS_RegisterCallbacks_DDEF(app)
                 model_val,
                 Dict("status" => 1, "dataid" => active_cont),
                 panel_class,
-                proj_v
+                proj_v,
+                Dash.no_update(),
+                Dash.no_update(),
+                Dash.no_update()
             )
 
         catch e
             bt = sprint(showerror, e, catch_backtrace())
             Sys_Fast.FAST_Log_DDEF("LENS", "SYNC_FAIL", bt, "FAIL")
             return tuple([], html_span([html_i(className="fas fa-times-circle me-2"), "Sync Error: $(first(string(e), 120))"], className="small colourtx-c0hr"), "w-100 mb-2 fw-bold pulse-green",
-                nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "dataid" => ""), "d-none", proj_v)
+                nothing, ntuple(_ -> "", 3)..., ntuple(_ -> nothing, 9)..., ntuple(_ -> "Nominal", 3)..., ntuple(_ -> "1.00", 3)..., [], nothing, Dict("status" => 2, "dataid" => ""), "d-none", proj_v, Dash.no_update(), Dash.no_update(), Dash.no_update())
         finally
             !isempty(path) && try
                 rm(path; force=true)
@@ -1190,17 +1523,18 @@ function LENS_RegisterCallbacks_DDEF(app)
                 res_leaders = isnothing(opt_data) ? nu : get(opt_data, "Leaders", nu)
                 res_badge   = isnothing(opt_data) ? nu : get(opt_data, "Badge",   nu)
                 
-                vault_b64   = get(payload, "vault_b64",   nu)
-                g_count     = get(payload, "graph_count",  0)
-                graph_meta  = g_count > 0 ? Dict("count" => g_count, "ts" => time()) : nu
-                graph_blob  = get(payload, "graph_blob",   nu)
+                vault_b64     = get(payload, "vault_b64", nu)
+                vault_payload = get(payload, "vault_payload", (!isnothing(vault_b64) && vault_b64 != nu) ? Dict{String,Any}("content" => vault_b64, "dataid" => vault_b64, "type" => "SCIENCE_PULSE", "filename" => "") : nu)
+                g_count       = get(payload, "graph_count", 0)
+                graph_meta    = g_count > 0 ? Dict("count" => g_count, "ts" => time()) : nu
+                graph_blob    = get(payload, "graph_blob", nu)
                 
                 t_dur = get(payload, "t_total", nothing)
                 dur_badge = isnothing(t_dur) ? "" : html_span(" ($(t_dur)s)", className="colourtx-v3dl")
                 final_status = html_span(["✅ Analysis Complete", dur_badge], className="fw-bold small colourtx-c4tg")
                 
                 # Deliver: We keep the interval enabled to allow retries until st_next == 0 is received.
-                return (graph_meta, nu, final_status, res_report, res_bundle, vault_b64, res_leaders, res_badge, Dict("next_pkg" => 0, "handle" => "", "working" => false), false, graph_blob)
+                return (graph_meta, nu, final_status, res_report, res_bundle, vault_payload, res_leaders, res_badge, Dict("next_pkg" => 0, "handle" => "", "working" => false), false, graph_blob)
             end
             
             # Scenario C: No Payload - Polling or Timeout phase.
@@ -1390,12 +1724,14 @@ function LENS_RegisterCallbacks_DDEF(app)
                     
                     t_bg_total = round(time() - t_start; digits=1)
                     # 8. Store payload for interval pickup (NO graphs, small payload)
+                    vault_pkg = Dict{String,Any}("content" => updated_vault_b64, "dataid" => updated_vault_b64, "type" => "SCIENCE_PULSE", "filename" => "")
                     LENS_BatchPayload_DDEC[] = Dict{String,Any}(
-                        "opt_results" => Dict{String,Any}("Report" => rep_b, "Bundle" => final_bundle, "Leaders" => ld_html, "Badge" => rad_b),
-                        "vault_b64"   => updated_vault_b64,
-                        "graph_count" => length(full_graphs),
-                        "graph_blob"  => full_blob,
-                        "t_total"     => t_bg_total
+                        "opt_results"   => Dict{String,Any}("Report" => rep_b, "Bundle" => final_bundle, "Leaders" => ld_html, "Badge" => rad_b),
+                        "vault_payload" => vault_pkg,
+                        "vault_b64"     => updated_vault_b64,
+                        "graph_count"   => length(full_graphs),
+                        "graph_blob"    => full_blob,
+                        "t_total"       => t_bg_total
                     )
                     Log("LENS", "Batch_Async", "Background Portfolio Compiled [Total: $(length(full_graphs))]. Blob Packed.", "OK")
                 catch e
@@ -1415,8 +1751,13 @@ function LENS_RegisterCallbacks_DDEF(app)
                         style=Dict("padding" => "2px")
                     ),
                     html_td(
+                        (i <= length(res["Models"]) && haskey(res["Models"][i], "RMSE") && !ismissing(res["Models"][i]["RMSE"]) && !isnan(res["Models"][i]["RMSE"])) ?
+                            @sprintf("%.3f", Float64(res["Models"][i]["RMSE"])) : "-",
+                        style=Dict("padding" => "2px")
+                    ),
+                    html_td(
                         (i <= length(res["Models"]) && haskey(res["Models"][i], "P_Value") && !ismissing(res["Models"][i]["P_Value"]) && !isnan(res["Models"][i]["P_Value"])) ?
-                            @sprintf("%.5f", Float64(res["Models"][i]["P_Value"])) : "N/A",
+                            (Float64(res["Models"][i]["P_Value"]) < 0.0001 ? "<0.0001" : @sprintf("%.4f", Float64(res["Models"][i]["P_Value"]))) : "N/A",
                         className = LENS_EvalClass_DDEF(:pval, (i <= length(res["Models"]) && haskey(res["Models"][i], "P_Value")) ? res["Models"][i]["P_Value"] : NaN),
                         style=Dict("padding" => "2px")
                     ),
@@ -1488,10 +1829,11 @@ function LENS_RegisterCallbacks_DDEF(app)
                 html_h6("MODEL PERFORMANCE SUMMARY", className="fw-bold text-center mb-3 colourtx-c1sm", style=Dict("letterSpacing" => "1px")),
                 html_table([
                     html_thead(html_tr([
-                        html_th("Output",   style=Dict("width" => "40%", "padding" => "2px")),
-                        html_th("R² (Adj)", style=Dict("width" => "20%", "padding" => "2px")),
-                        html_th("Q² (Pred)", style=Dict("width" => "20%", "padding" => "2px")),
-                        html_th("P-Value",  style=Dict("width" => "20%", "padding" => "2px"))
+                        html_th("Output",    style=Dict("width" => "32%", "padding" => "2px")),
+                        html_th("R² (Adj)",  style=Dict("width" => "17%", "padding" => "2px")),
+                        html_th("Q² (Pred)", style=Dict("width" => "17%", "padding" => "2px")),
+                        html_th("RMSE",      style=Dict("width" => "17%", "padding" => "2px")),
+                        html_th("P-Value",   style=Dict("width" => "17%", "padding" => "2px"))
                     ])),
                     html_tbody(summary_rows)
                 ], className="table table-sm table-hover small mb-3 border", style=Dict("tableLayout" => "fixed", "width" => "100%")),
@@ -1597,15 +1939,45 @@ function LENS_RegisterCallbacks_DDEF(app)
                     ]) for (i, out_name) in enumerate(get(res, "DisplayOutNames", res["OutNames"]))]...
                 ], className="mt-3"),
 
+                # Visual Radiochemical Decay Corrections Table
+                (haskey(res, "RadioCorrection") && !isempty(res["RadioCorrection"]) ? html_div([
+                    html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px solid var(--colour-val1-lighig)", "margin" => "15px 0")),
+                    html_h6([html_i(className="fas fa-radiation me-2 colourtx-v5pb"), "RADIOCHEMICAL DECAY CORRECTIONS"], className="fw-bold text-center mb-3 colourtx-c1sm", style=Dict("letterSpacing" => "1px")),
+                    html_table([
+                        html_thead(html_tr([
+                            html_th("Component",    style=Dict("width" => "25%", "padding" => "2px")),
+                            html_th("Type",         style=Dict("width" => "15%", "padding" => "2px")),
+                            html_th("Half-Life",    style=Dict("width" => "15%", "padding" => "2px")),
+                            html_th("Unit",         style=Dict("width" => "10%", "padding" => "2px")),
+                            html_th("Avg Δt (min)", style=Dict("width" => "15%", "padding" => "2px")),
+                            html_th("Decay Factor", style=Dict("width" => "20%", "padding" => "2px"))
+                        ])),
+                        html_tbody([
+                            html_tr([
+                                html_td(string(get(itm, "Name", "-")), style=Dict("padding" => "2px"), className="fw-bold"),
+                                html_td(string(get(itm, "Type", "Decay")), style=Dict("padding" => "2px")),
+                                html_td(@sprintf("%.2f", Float64(get(itm, "HalfLife", 0.0))), style=Dict("padding" => "2px")),
+                                html_td(string(get(itm, "Unit", "min")), style=Dict("padding" => "2px")),
+                                html_td(@sprintf("%.2f", Float64(get(itm, "AvgDeltaT", 0.0))), style=Dict("padding" => "2px")),
+                                html_td(@sprintf("%.4f", Float64(get(itm, "AvgDF", 1.0))), className="fw-bold colourtx-v5pb", style=Dict("padding" => "2px"))
+                            ]) for itm in res["RadioCorrection"]
+                        ])
+                    ], className="table table-sm table-hover small mb-3 border", style=Dict("tableLayout" => "fixed", "width" => "100%"))
+                ]) : html_div()),
+
                 # Orchestration of architectural boundary warnings and spatial limit detections (AskLeader Integration).
                 let warnings = get(res, "BoundaryWarnings", String[])
-                    !isempty(warnings) ? dbc_alert([
-                        html_div([
-                            html_i(className="fas fa-exclamation-triangle me-2"), 
-                            html_strong("Boundary Warning (Search Space Limit)"),
-                        ], className="mb-1"),
-                        html_ul([html_li(w, className="mb-0") for w in warnings], className="ps-3 mb-0 small")
-                    ], className="mt-2 py-2 border-0 shadow-sm colourgl-c5hy colourtx-v5pb", style=Dict("borderColor" => "var(--colour-chr5-hueyel)")) : html_div()
+                    !isempty(warnings) ? html_div([
+                        html_hr(style=Dict("height" => "1px", "border" => "none", "borderTop" => "1px solid var(--colour-val1-lighig)", "margin" => "15px 0")),
+                        html_h6([html_i(className="fas fa-exclamation-triangle me-2 colourtx-v5pb"), "SEARCH SPACE BOUNDARY LIMITS"], className="fw-bold text-center mb-3 colourtx-c1sm", style=Dict("letterSpacing" => "1px")),
+                        dbc_alert([
+                            html_div([
+                                html_i(className="fas fa-exclamation-triangle me-2"), 
+                                html_strong("Boundary Warning (Search Space Limit)"),
+                            ], className="mb-1"),
+                            html_ul([html_li(w, className="mb-0") for w in warnings], className="ps-3 mb-0 small")
+                        ], className="mt-2 py-2 border-0 shadow-sm colourgl-c5hy colourtx-v5pb", style=Dict("borderColor" => "var(--colour-chr5-hueyel)"))
+                    ]) : html_div()
                 end
             ])
 
@@ -1628,13 +2000,20 @@ function LENS_RegisterCallbacks_DDEF(app)
             is_staged = true
             interim_status = html_span("🔄 Analysing Data...", className="fw-bold small colourtx-c1sm")
             
+            updated_vault_payload = Dict{String,Any}(
+                "content"  => updated_base64,
+                "dataid"   => updated_base64,
+                "type"     => "SCIENCE_PULSE",
+                "filename" => ""
+            )
+
             return (
                 Dict("count" => length(pkg1_graphs), "ts" => time()), 
                 summary, 
                 interim_status, 
                 sci_report, 
                 final_res, 
-                updated_base64, 
+                updated_vault_payload, 
                 leaders_html, 
                 rad_badge,
                 Dict("next_pkg" => 2, "handle" => "", "working" => false),
@@ -1663,7 +2042,7 @@ function LENS_RegisterCallbacks_DDEF(app)
 # ------------------------------------------------------------------------------
 
     callback!(app,
-        [Output("lens-btn-$id", "disabled") for id in ["run", "view-report", "export-plots", "download-report", "export-excel"]]...,
+        [Output("lens-btn-$id", "disabled") for id in ["run", "view-report", "export-portfolio"]]...,
         Input("store-master-vault",   "data"),
         Input("lens-store-sync-flag",  "data"),
         Input("lens-store-results",    "data"),
@@ -1675,9 +2054,9 @@ function LENS_RegisterCallbacks_DDEF(app)
         if trig == "lens-store-diag-force" && diag_force > 0
             Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Emergency Unlock triggered via Diagnostics.", "OK")
             if !isnothing(results) && haskey(results, "dataid")
-                return ntuple(_ -> false, 5)
+                return ntuple(_ -> false, 3)
             end
-            return false, true, true, true, true
+            return false, true, true
         end
 
         # Deliver-to-Unlock Security Lock: Prevent re-entry while analysis or delivery is active.
@@ -1687,39 +2066,39 @@ function LENS_RegisterCallbacks_DDEF(app)
             # Safety Check: If timeout hasn't reached, keep it locked.
             if lpt < 1.0 || (time() - lpt < 60.0)
                 has_res = !isnothing(results) && Sys_Fast.FAST_ExtractDataID_DDEF(results) == Sys_Fast.FAST_ExtractDataID_DDEF(vault)
-                return true, !has_res, !has_res, !has_res, !has_res
+                return true, !has_res, !has_res
             end
         end
 
         if isnothing(vault) || isempty(vault)
-            return ntuple(_ -> true, 5)
+            return ntuple(_ -> true, 3)
         end
 
         curr_dataid = Sys_Fast.FAST_ExtractDataID_DDEF(vault)
 
         if isnothing(curr_dataid) || isempty(curr_dataid)
-            return ntuple(_ -> true, 5)
+            return ntuple(_ -> true, 3)
         end
 
         # 1. Direct Analysis Match: Results are already calculated for this specific data.
         if !isnothing(results) && Sys_Fast.FAST_ExtractDataID_DDEF(results) == curr_dataid
             Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Analysis valid for current data. Unlocked all.", "OK")
-            return ntuple(_ -> false, 5)
+            return ntuple(_ -> false, 3)
         end
 
         # 2. Sync State Match: Data is loaded but analysis is not yet run.
         if !isnothing(sync_flag) && Sys_Fast.FAST_ExtractDataID_DDEF(sync_flag) == curr_dataid && get(sync_flag, "status", 0) == 1
             Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Sync validated. Unlocked Analysis Engine.", "OK")
-            return false, true, true, true, true
+            return false, true, true
         end
 
         # Exception: Diagnostics override for power users.
         if !isnothing(diag_force) && diag_force > 0
-             return ntuple(_ -> false, 5)
+             return ntuple(_ -> false, 3)
         end
 
         Sys_Fast.FAST_Log_DDEF("LENS", "Guard", "Data in transition or sync pending [DataID: $(first(curr_dataid, 8))].", "WAIT")
-        return ntuple(_ -> true, 5)
+        return ntuple(_ -> true, 3)
     end
 
 # ------------------------------------------------------------------------------
@@ -1816,7 +2195,7 @@ function LENS_ParseInlineContent_DDEF(text::AbstractString; is_cell::Bool=false)
         m_pos = match(r"<ins[^>]*>(.*?)</ins>", clean)
     end
     if !isnothing(m_pos)
-        inner = replace(m_pos.captures[1], r"<[^>]*>" => "")
+        inner = replace(m_pos.captures[1], r"</?[a-zA-Z][a-zA-Z0-9]*\b[^>]*>" => "")
         pfx = clean[1:m_pos.offset-1]
         sfx = clean[m_pos.offset + length(m_pos.match):end]
         return Any[
@@ -1832,7 +2211,7 @@ function LENS_ParseInlineContent_DDEF(text::AbstractString; is_cell::Bool=false)
         m_neg = match(r"<del[^>]*>(.*?)</del>", clean)
     end
     if !isnothing(m_neg)
-        inner = replace(m_neg.captures[1], r"<[^>]*>" => "")
+        inner = replace(m_neg.captures[1], r"</?[a-zA-Z][a-zA-Z0-9]*\b[^>]*>" => "")
         pfx = clean[1:m_neg.offset-1]
         sfx = clean[m_neg.offset + length(m_neg.match):end]
         return Any[
@@ -1845,7 +2224,7 @@ function LENS_ParseInlineContent_DDEF(text::AbstractString; is_cell::Bool=false)
     # 3. Tag-based matching: generic <span>
     m_span = match(r"<span[^>]*>(.*?)</span>", clean)
     if !isnothing(m_span)
-        inner = replace(m_span.captures[1], r"<[^>]*>" => "")
+        inner = replace(m_span.captures[1], r"</?[a-zA-Z][a-zA-Z0-9]*\b[^>]*>" => "")
         pfx = clean[1:m_span.offset-1]
         sfx = clean[m_span.offset + length(m_span.match):end]
         return Any[
@@ -1889,6 +2268,71 @@ function LENS_ParseInlineContent_DDEF(text::AbstractString; is_cell::Bool=false)
     end
 
     return isempty(clean) ? Any[] : Any[clean]
+end
+
+"""
+    LENS_RealignMarkdownTables_DDEF(txt::AbstractString) -> String
+Re-parses and reformats all Markdown tables in a text document to guarantee character-perfect monospaced alignment.
+"""
+function LENS_RealignMarkdownTables_DDEF(txt::AbstractString)::String
+    clean_unified = replace(txt, "\r\n" => "\n")
+    lines = split(clean_unified, "\n")
+    out_lines = String[]
+    n_lines = length(lines)
+    i = 1
+    
+    while i <= n_lines
+        line = lines[i]
+        s_line = strip(line)
+        if startswith(s_line, "|") && endswith(s_line, "|") && occursin("|", s_line[2:end-1])
+            tbl_lines = String[]
+            while i <= n_lines && startswith(strip(lines[i]), "|") && endswith(strip(lines[i]), "|")
+                push!(tbl_lines, strip(lines[i]))
+                i += 1
+            end
+            if length(tbl_lines) >= 2
+                raw_headers = [strip(c) for c in split(tbl_lines[1], "|")[2:end-1]]
+                raw_divs    = [strip(c) for c in split(tbl_lines[2], "|")[2:end-1]]
+                n_cols = length(raw_headers)
+                aligns = Symbol[]
+                for d in raw_divs
+                    if startswith(d, ":") && endswith(d, ":")
+                        push!(aligns, :center)
+                    elseif endswith(d, ":")
+                        push!(aligns, :right)
+                    else
+                        push!(aligns, :left)
+                    end
+                end
+                while length(aligns) < n_cols
+                    push!(aligns, :left)
+                end
+                
+                rows = Vector{String}[]
+                for r_line in tbl_lines[3:end]
+                    raw_cells = [strip(c) for c in split(r_line, "|")[2:end-1]]
+                    while length(raw_cells) < n_cols
+                        push!(raw_cells, "")
+                    end
+                    push!(rows, String[raw_cells[1:n_cols]...])
+                end
+                
+                aligned_tbl = Lib_Vise.VISE_FormatMarkdownTable_DDEF(String[raw_headers...], aligns, rows)
+                for tl in split(rstrip(aligned_tbl, '\n'), "\n")
+                    push!(out_lines, tl)
+                end
+            else
+                for tl in tbl_lines
+                    push!(out_lines, tl)
+                end
+            end
+        else
+            push!(out_lines, line)
+            i += 1
+        end
+    end
+    
+    return join(out_lines, "\n")
 end
 
 """
@@ -1994,23 +2438,20 @@ end
     callback!(app,
         Output("lens-download-report-file", "data"),
         Input("lens-btn-download-txt", "n_clicks"),
-        Input("lens-btn-download-report", "n_clicks"),
         State("lens-store-report",     "data"),
         State("lens-input-project",    "value"),
         State("lens-dd-phase",         "value"),
         prevent_initial_call=true
-    ) do n1, n2, report, project, phase
-        if (isnothing(n1) || n1 == 0) && (isnothing(n2) || n2 == 0)
-            return Dash.no_update()
-        end
-        
+    ) do n, report, project, phase
+        (isnothing(n) || n == 0) && return Dash.no_update()
         (isnothing(report) || isempty(report)) && return Dash.no_update()
 
-        proj  = isnothing(project) ? "DoECISORY" : project
-        ph    = isnothing(phase)   ? "Phase1" : phase
-        fname = "DoECISORY_$(proj)_$(ph)_Scientific_Report.txt"
-        clean_txt = replace(report, r"<[^>]*>" => "")
+        proj  = (isnothing(project) || isempty(strip(string(project)))) ? "DoECISORY" : string(project)
+        ph    = (isnothing(phase)   || isempty(strip(string(phase))))   ? "Phase1"    : string(phase)
+        fname = Sys_Fast.FAST_GenerateSmartName_DDEF(proj, ph, "REPORT", "txt")
+        clean_txt = replace(report, r"</?[a-zA-Z][a-zA-Z0-9]*\b[^>]*>" => "")
         clean_txt = replace(clean_txt, "&lt;" => "<", "&gt;" => ">")
+        clean_txt = LENS_RealignMarkdownTables_DDEF(clean_txt)
 
         return Dict("filename" => fname, "content" => clean_txt)
     end
@@ -2535,58 +2976,118 @@ end
     end
 
 # ------------------------------------------------------------------------------
-# SECTION 14: DATA & PLOT EXPORT
+# SECTION 14: PORTFOLIO EXPORT
 # ------------------------------------------------------------------------------
 
     callback!(app,
-        Output("lens-download-plots",        "data"),
-        Output("lens-export-plots-status", "children"),
-        Input("lens-btn-export-plots", "n_clicks"),
-        State("lens-input-project",    "value"),
-        State("lens-dd-phase",         "value"),
-        State("lens-store-graphs-blob", "data"),
+        Output("lens-download-portfolio",        "data"),
+        Output("lens-export-portfolio-status", "children"),
+        Input("lens-btn-export-portfolio", "n_clicks"),
+        State("lens-input-project",        "value"),
+        State("lens-dd-phase",             "value"),
+        State("lens-store-graphs-blob",    "data"),
+        State("lens-store-report",         "data"),
+        State("lens-store-results",        "data"),
+        State("store-master-vault",        "data"),
         prevent_initial_call=true
-    ) do n, proj_v, phase_v, blob_st
-        (isnothing(n) || n == 0 || isnothing(blob_st) || isempty(blob_st)) &&
-            return Dash.no_update(), Dash.no_update()
+    ) do n, proj_v, phase_v, blob_st, report_st, res_st, vault_st
+        (isnothing(n) || n == 0) && return Dash.no_update(), Dash.no_update()
 
-        graphs = JSON3.read(blob_st, Vector{Dict{String, Any}})
-        isempty(graphs) && return Dash.no_update(), Dash.no_update()
+        has_graphs  = !isnothing(blob_st) && !isempty(blob_st)
+        has_report  = !isnothing(report_st) && !isempty(report_st)
+        has_results = !isnothing(res_st) && !isempty(res_st)
 
+        if !has_graphs && !has_report && !has_results
+            return Dash.no_update(), html_span([html_i(className="fas fa-exclamation-triangle me-1"), "Run analysis before exporting portfolio."], className="fw-bold small colourtx-c0hr")
+        end
+
+        proj_n = (isnothing(proj_v) || isempty(strip(string(proj_v)))) ? "DoECISORY" : string(proj_v)
+        ph_n   = (isnothing(phase_v) || isempty(strip(string(phase_v)))) ? "Phase1" : string(phase_v)
+        fname  = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_n, ph_n, "PORTFOLIO", "zip")
+
+        temp_uuid    = replace(string(Base.UUID(rand(UInt128))), "-" => "")
+        export_dir   = joinpath(Sys_Fast.FAST_TempRoot_DDEC, "DoECISORYPortfolio_$temp_uuid")
+        mkpath(export_dir)
+        plots_folder = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_n, ph_n, "PLOTS", "")
+        plots_dir    = joinpath(export_dir, plots_folder)
+        mkpath(plots_dir)
+
+        plot_count = 0
         try
-            # Standardised Naming: Project, Phase, Tag (ARTS), Extension (zip)
-            proj_n = (isnothing(proj_v) || isempty(strip(string(proj_v)))) ? "DoECISORY" : string(proj_v)
-            ph_n   = (isnothing(phase_v) || isempty(strip(string(phase_v)))) ? "Phase1" : string(phase_v)
-            fname  = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_n, ph_n, "ARTS", "zip")
+            # 1. High-Resolution Visualisation Artifacts
+            if has_graphs
+                try
+                    graphs = JSON3.read(blob_st, Vector{Dict{String, Any}})
+                    for (i, g) in enumerate(graphs)
+                        title      = get(g, "title", "Plot_$i")
+                        safe_title = Sys_Fast.FAST_SanitiseFilename_DDEF(title)
+                        filepath   = joinpath(plots_dir, "$(safe_title).png")
 
-            temp_uuid  = replace(string(Base.UUID(rand(UInt128))), "-" => "")
-            export_dir = joinpath(Sys_Fast.FAST_TempRoot_DDEC, "DoECISORYRender_$temp_uuid")
-            mkpath(export_dir)
+                        fig_dict = g["figure"]
+                        layout_dict = deepcopy(fig_dict["layout"])
+                        layout_dict["width"]  = 640
+                        layout_dict["height"] = 800
+                        if !haskey(layout_dict, "margin")
+                            layout_dict["margin"] = Dict()
+                        end
+                        layout_dict["margin"]["t"] = 130
 
-            count = 0
-            for (i, g) in enumerate(graphs)
-                title      = get(g, "title", "Plot_$i")
-                safe_title = Sys_Fast.FAST_SanitiseFilename_DDEF(title)
-                filepath   = joinpath(export_dir, "$(safe_title).png")
-
-                fig_dict = g["figure"]
-                layout_dict = deepcopy(fig_dict["layout"])
-                layout_dict["width"]  = 640
-                layout_dict["height"] = 800
-                if !haskey(layout_dict, "margin") layout_dict["margin"] = Dict() end
-                layout_dict["margin"]["t"] = 130
-
-                p = Plot([GenericTrace(d) for d in fig_dict["data"]], Layout(layout_dict))
-                savefig(p, filepath; width=640, height=800, scale=1.0)
-                count += 1
+                        p = Plot([GenericTrace(d) for d in fig_dict["data"]], Layout(layout_dict))
+                        savefig(p, filepath; width=640, height=800, scale=1.0)
+                        plot_count += 1
+                    end
+                catch e_p
+                    Sys_Fast.FAST_Log_DDEF("LENS", "Plot_Export_Warn", string(e_p), "WARN")
+                end
             end
 
+            # 2. Comprehensive Textual Analysis Report
+            if has_report
+                try
+                    report_fname = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_n, ph_n, "REPORT", "txt")
+                    clean_txt = replace(report_st, r"</?[a-zA-Z][a-zA-Z0-9]*\b[^>]*>" => "")
+                    clean_txt = replace(clean_txt, "&lt;" => "<", "&gt;" => ">")
+                    clean_txt = LENS_RealignMarkdownTables_DDEF(clean_txt)
+                    write(joinpath(export_dir, report_fname), clean_txt)
+                catch e_r
+                    Sys_Fast.FAST_Log_DDEF("LENS", "Report_Export_Warn", string(e_r), "WARN")
+                end
+            end
+
+            # 3. Scientific Excel Calculation Workbook
+            if has_results && !isnothing(vault_st)
+                path_trans = ""
+                try
+                    path_trans = Sys_Fast.FAST_GetTransientPath_DDEF(vault_st)
+                    if Lib_Vise.VISE_ExportToExcel_DDEF(res_st, path_trans)
+                        excel_fname = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_n, ph_n, "ANALYTICS", "xlsx")
+                        cp(path_trans, joinpath(export_dir, excel_fname); force=true)
+                    end
+                catch e_x
+                    Sys_Fast.FAST_Log_DDEF("LENS", "Excel_Export_Warn", string(e_x), "WARN")
+                finally
+                    Sys_Fast.FAST_CleanTransient_DDEF(path_trans)
+                end
+            end
+
+            # 4. Construct Bundled Portfolio Archive
             zip_path = joinpath(Sys_Fast.FAST_TempRoot_DDEC, fname)
             let zdir = ZipFile.Writer(zip_path)
                 for file in readdir(export_dir)
                     fpath = joinpath(export_dir, file)
-                    f     = ZipFile.addfile(zdir, file; method=ZipFile.Deflate)
-                    write(f, read(fpath))
+                    if isfile(fpath)
+                        f = ZipFile.addfile(zdir, file; method=ZipFile.Deflate)
+                        write(f, read(fpath))
+                    end
+                end
+                if isdir(plots_dir)
+                    for pfile in readdir(plots_dir)
+                        pfpath = joinpath(plots_dir, pfile)
+                        if isfile(pfpath)
+                            f = ZipFile.addfile(zdir, "$plots_folder/$pfile"; method=ZipFile.Deflate)
+                            write(f, read(pfpath))
+                        end
+                    end
                 end
                 close(zdir)
             end
@@ -2595,56 +3096,15 @@ end
             rm(export_dir; recursive=true, force=true)
             rm(zip_path; force=true)
 
-            Sys_Fast.FAST_Log_DDEF("LENS", "Export", "Zipped $count high-res plots.", "OK")
+            Sys_Fast.FAST_Log_DDEF("LENS", "Export", "Portfolio exported with $plot_count plots, report, and scientific workbook.", "OK")
             return (
                 Dict("filename" => fname, "content" => base64encode(bytes), "base64" => true),
-                html_span([html_i(className="fas fa-check-circle me-2"), "Successfully downloaded $count High-Res plots."], className="fw-bold colourtx-c4tg"),
+                html_span([html_i(className="fas fa-check-circle me-1"), "Portfolio exported successfully."], className="fw-bold small colourtx-c4tg")
             )
         catch e
             Sys_Fast.FAST_Log_DDEF("LENS", "Export_Error", string(e), "FAIL")
-            return Dash.no_update(), html_span([html_i(className="fas fa-times-circle me-2"), "Error during plot export (Kaleido missing?): $e"], className="fw-bold colourtx-c0hr")
-        end
-    end
-
-    callback!(app,
-        Output("lens-download-analysis",     "data"),
-        Output("lens-export-excel-status", "children"),
-        Input("lens-btn-export-excel", "n_clicks"),
-        State("lens-store-results",    "data"),
-        State("lens-input-project",    "value"),
-        State("lens-dd-phase",         "value"),
-        State("store-master-vault",    "data"),
-        prevent_initial_call=true
-    ) do n, res, proj, phase, mv
-        (isnothing(n) || n == 0 || isnothing(res) || isempty(res)) && return Dash.no_update(), Dash.no_update()
-        isnothing(mv) && return Dash.no_update(), html_span("❌ No data source found.", className="colourtx-c0hr")
-
-        path = ""
-        try
-            path = Sys_Fast.FAST_GetTransientPath_DDEF(mv)
- 
-            success = Lib_Vise.VISE_ExportToExcel_DDEF(res, path)
-
-            if success
-                bytes = read(path)
-                
-                # Standardised Naming: Project, Phase, Tag (SCI), Extension (xlsx)
-                proj_n = (isnothing(proj) || isempty(strip(string(proj)))) ? "DoECISORY" : string(proj)
-                ph_n   = (isnothing(phase) || isempty(strip(string(phase)))) ? "Phase1" : string(phase)
-                fname  = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_n, ph_n, "SCI", "xlsx")
-
-                return (
-                    Dict("filename" => fname, "content" => base64encode(bytes), "base64" => true),
-                    html_span([html_i(className="fas fa-check-circle me-1"), "Scientific XLSX downloaded."], className="fw-bold small colourtx-c4tg")
-                )
-            else
-                return Dash.no_update(), html_span([html_i(className="fas fa-times-circle me-1"), "Excel export failed."], className="small colourtx-c0hr")
-            end
-        catch e
-            Sys_Fast.FAST_Log_DDEF("LENS", "EXCEL_EXPORT_FAIL", string(e), "FAIL")
-            return Dash.no_update(), html_span([html_i(className="fas fa-times-circle me-1"), "Export Error: $e"], className="small colourtx-c0hr")
-        finally
-            Sys_Fast.FAST_CleanTransient_DDEF(path)
+            rm(export_dir; recursive=true, force=true)
+            return Dash.no_update(), html_span([html_i(className="fas fa-times-circle me-1"), "Export Error: $e"], className="fw-bold small colourtx-c0hr")
         end
     end
 

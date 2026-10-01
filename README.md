@@ -11,8 +11,10 @@ short_description: DoE with Computational Interactive SeqOpt for Response Yield
 
 # DoECISORY.jl
 
-**Design of Experiments with Computational Interactive Sequential Optimization for Response Yield**
+**Design of Experiments with Computational Interactive Sequential Optimisation for Response Yield**
 
+[![CI](https://github.com/erensgol/DoECISORY.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/erensgol/DoECISORY.jl/actions/workflows/CI.yml)
+[![codecov](https://codecov.io/gh/erensgol/DoECISORY.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/erensgol/DoECISORY.jl)
 [![Julia Version](https://img.shields.io/badge/Julia-v1.10+-9558B2)](https://julialang.org)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows_%7C_Linux_%7C_macOS-lightgrey)]()
@@ -21,18 +23,38 @@ short_description: DoE with Computational Interactive SeqOpt for Response Yield
 
 **DoECISORY** is a Julia package and interactive web application for Design of Experiments (DoE), statistical modelling, and multi-objective optimisation. Developed for formulation science and scientific research, it supports cloud deployment, local workstation execution, and integration with the Julia REPL, Pluto.jl, and Jupyter computational environments.
 
-> *If you use DoECISORY in your academic research, formulation development, or thesis, please [cite this repository](#citation).*
+> *If you use DoECISORY in your research, please [cite this repository](#citation).*
 
 ---
 
 ## Capabilities
 
-* **Experimental Designs**: Box-Behnken, Central Composite, Taguchi, and Fractional D-Optimal matrices.
-* **Optimality Metrics**: Evaluation of D-, A-, G-, and I-efficiencies and matrix condition numbers.
-* **Statistical Modelling**: Linear and quadratic OLS regression with AIC, adjusted $R^2$, and ANOVA diagnostics.
-* **Formulation & Decay**: Mass balance validation, physical unit checks, and radioactive decay corrections.
-* **Multi-Objective Optimisation**: Derringer-Suich desirability profiling via global metaheuristic algorithms.
-* **Scientific Reporting**: Multi-sheet Excel workbooks (`.xlsx`) and interactive Plotly response surfaces.
+* **3-Factor Experimental Designs**: Specialised matrices for 3-factor formulation spaces, including Box-Behnken (BB15), Central Composite (CD17), Taguchi (TL09), and Fractional D-Optimal (DF14).
+* **Optimality Metrics**: Evaluation of D-, A-, G-, and I-efficiencies and design matrix condition numbers.
+* **Statistical Modelling & Diagnostics**: Linear and quadratic OLS regression with AIC, adjusted $R^2$, VIF multicollinearity, and ANOVA diagnostics.
+* **Sequential Multi-Phase Optimisation**: Search-space transitions (ACTA&ASTM) tracking leader formulation conditions across stages.
+* **Stoichiometry & Radiochemical Kinetics**: Mass balance audits, physical unit checks, and decay corrections (DCYP incubation penalties, FORW/REVE decay alignment).
+* **Multi-Objective Optimisation**: Derringer-Suich desirability profiling with continuous and categorical objective functions via global metaheuristics.
+* **Scientific Reporting & Visualisation**: Automated multi-sheet Excel workbooks (`.xlsx`), interactive Plotly response surfaces, and project archives (`.zip`).
+
+---
+
+## Architecture & Scientific Workflow
+
+DoECISORY follows an iterative three-stage experimental workflow:
+
+1. **Phase 1: Formulation Design (`Gui_Deck`)**  
+   * **Ingredient Specification & Audit**: Input active ingredients and excipients; automatic stoichiometric mass balancing and physical unit auditing (`Lib_Mole`).
+   * **Design Selection**: Generate 3-factor coded matrices (`BB15`, `CD17`, `TL09`, `DF14`) and evaluate D-, A-, G-, and I-optimality metrics (`Lib_Core`).
+   * **Protocol Generation**: Export laboratory execution workbooks (`.xlsx`) with automated randomised run orders (`Sys_Fast`).
+
+2. **Phase 2: Statistical Modelling & Analytics (`Gui_Lens`)**  
+   * **OLS Regression & ANOVA**: Import experimental responses, fit linear or quadratic models, compute $R^2$, AIC, VIF multicollinearity, and ANOVA diagnostics (`Lib_Vise`).
+   * **Multi-Objective Desirability**: Optimise competing responses simultaneously using Derringer-Suich desirability profiling (`Lib_Core`).
+   * **Visual Analytics & Reporting**: Generate 2D contour and 3D response surface plots (`Lib_Arts`) and export scientific report workbooks (`.xlsx`).
+
+3. **Phase 3: Sequential Space Transitions (`Sys_Flow`)**  
+   * **Adaptive Navigation (ACTA&ASTM)**: Identify optimal leader formulation coordinates and perform automated search-space contraction and translation to define factor boundaries for subsequent iterative phases.
 
 ---
 
@@ -61,17 +83,28 @@ Select the access point according to your operational goal:
 For users working directly with the source code:
 
 ```bash
-git clone https://github.com/erensgol/DoECISORY.git
-cd DoECISORY
+git clone https://github.com/erensgol/DoECISORY.jl.git
+cd DoECISORY.jl
 ```
 
 * **Option 2A: Interactive Gateway (`Run_DoE.bat`)**  
   Execute `Run_DoE.bat` in the project root to open the startup menu:
-  - **Standard Mode**: Default execution profile. Utilises a precompiled system image (`build/sysimage.dll`) if present, or proceeds with standard JIT compilation.
-  - **Developer Mode**: Development environment for code modification without restarting the session.
-  - **Clean JIT Mode**: JIT execution with basic compiler optimisations (`-O1`), bypassing any system image.
-  - **Build Sysimage**: Compiles a local system image via `build/compiler.jl` to reduce warmup time.
-  - **Run Test Suite**: Executes the automated test suite (100 verifications) directly from the gateway menu.
+  - **Standard Mode [1]**: Default execution profile. Utilises a precompiled system image (`build/sysimage.dll` or `sysimage.so`) if present, or proceeds with standard JIT compilation.
+  - **Developer Mode [2]**: Environment for code modification without restarting the session (via Revise.jl)
+  - **Clean JIT Mode [3]**: JIT execution with basic compiler optimisations (`-O1`), bypassing any system image.
+  - **Build Sysimage [4]**: Compiles a local system image via `build/compiler.jl` to eliminate JIT latency.
+  - **Run Test Suite [5]**: Executes the automated test suite (100 verifications) directly from the gateway menu.
+
+* **Sysimage Compilation Workflow**  
+  Install `PackageCompiler` once in your global Julia environment (`@v#.#`):
+  ```bash
+  julia -e "using Pkg; Pkg.activate(); Pkg.add(\"PackageCompiler\")"
+  ```
+  Then build the precompiled sysimage via command-line or `Run_DoE.bat`:
+  ```bash
+  julia --project=. build/compiler.jl
+  ```
+  Once compiled, the application launches with prewarmed Plotly and Dash caches.
 
 * **Option 2B: Command-Line Execution**  
   Launch directly from the terminal with automatic multi-threading:
@@ -88,7 +121,11 @@ For integration into existing Julia workflows or computational pipelines:
 
 ```julia
 using Pkg
-Pkg.add("DoECISORY")
+# Install from GitHub repository:
+Pkg.add(url="https://github.com/erensgol/DoECISORY.jl")
+# Or once published to the General Registry:
+# Pkg.add("DoECISORY")
+
 using DoECISORY
 ```
 
@@ -102,20 +139,20 @@ using DoECISORY
   *(Press `Ctrl + C` in the console to terminate the server).*
 
 * **Asynchronous Process Mode (Non-blocking)**  
-  Spawns the server as an independent child process, keeping the active Julia REPL prompt or notebook cell unblocked:
+  Spawns the server as an independent child process, keeping the active REPL prompt unblocked:
   ```julia
   run_app()
   ```
 
 #### Option 3B: Headless Algorithmic Execution (Julia REPL, Scripts & Notebooks)
 
-All mathematical, stoichiometric, and statistical routines in DoECISORY can be executed directly without launching the graphical user interface. This enables interactive computational workflows within the **Julia REPL**, standalone `.jl` scripts, **Pluto.jl**, and **Jupyter Notebooks**:
+Mathematical, stoichiometric, and statistical routines in DoECISORY can be executed directly without launching the graphical user interface. This enables interactive computational workflows within the **Julia REPL**, standalone `.jl` scripts, **Pluto.jl**, and **Jupyter Notebooks**:
 
 ```julia
 using DoECISORY
 
-# 1. Generate an experimental design matrix (e.g. Box-Behnken, 15 runs, 3 factors)
-X_coded = CORE_GenDesign_DDEF("BB15", 3)
+# 1. Generate a 3-factor experimental design matrix (e.g. Box-Behnken, 15 runs)
+X_coded = CORE_GenDesign_DDEF("BB15")
 
 # 2. Compute D-, A-, G-, and I-optimality metrics and condition number
 metrics = CORE_CalcDesignMetrics_DDEF(Float64.(X_coded), "quadratic")
@@ -135,24 +172,27 @@ begin
 end
 ```
 
+> **Design Space Scope:** DoECISORY is specifically architected for 3-factor experimental and formulation design spaces (the canonical formulation geometry). All core matrix generators (`BB15`, `CD17`, `TL09`, `DF14`), D-A-G-I optimality calculations, and response surface routines operate on 3 continuous/process factors.
+
 ---
 
 ## Module Structure
 
-The package is organised into functional submodules:
+The package is organised into functional submodules following strict architectural separation of concerns:
 
-| Module | Purpose |
+| Module / Component | Purpose |
 | :--- | :--- |
 | **DoECISORY** | Root module, public API exports, and application launcher (`run_app`). |
-| **Lib_Core** | Experimental design generation, level mapping, and D-A-G-I optimality metrics. |
-| **Lib_Mole** | Stoichiometric checks, molar balances, and radioactive decay equations. |
-| **Lib_Vise** | OLS regression, AIC model selection, VIF collinearity, and sensitivity analysis. |
-| **Lib_Arts** | PlotlyJS visualisation (Pareto charts, 2D/3D response surfaces, contour slices). |
-| **Sys_Fast** | Excel (XLSX) I/O, logging, and transient file management. |
-| **Sys_Flow** | Multi-phase search-space transitions (Zoom & Shift) and candidate tracking. |
-| **Gui_Base** | Shared Dash-Bootstrap components and theme styling tokens. |
-| **Gui_Deck** | Design phase UI, ingredient tables, and recipe protocol exports. |
-| **Gui_Lens** | Analysis phase UI, desirability tuning, and report generation. |
+| **app.jl** | Primary application entry point, routing orchestrator, and server bootstrapper. |
+| **Lib_Core** | Mathematical algorithms, experimental design matrices, and D-A-G-I optimality metrics. |
+| **Lib_Mole** | Chemistry, stoichiometry, mass balance validation, and radioactive decay equations. |
+| **Lib_Vise** | Statistics (OLS regression, AIC selection, VIF multicollinearity, HypothesisTests). |
+| **Lib_Arts** | Visualisation suite (PlotlyJS, 2D/3D response surfaces and contours). |
+| **Sys_Fast** | System utilities, Excel (XLSX) I/O, transient storage, and cross-module sync. |
+| **Sys_Flow** | Workflow orchestration, multi-phase search-space transitions, and candidate tracking. |
+| **Gui_Base** | Shared Dash-Bootstrap UI components, common layouts, and design tokens. |
+| **Gui_Deck** | Design phase UI, ingredient tables, and Protocol Templates management. |
+| **Gui_Lens** | Analysis phase UI, Criteria Profiles, desirability tuning, and scientific report exports. |
 
 ---
 
@@ -162,6 +202,12 @@ To run the automated test suite (100 verifications):
 
 ```bash
 julia --project=. -e "using Pkg; Pkg.test()"
+```
+
+To run the test suite with comprehensive line-by-line code coverage analysis (identical to Gateway Mode [5]):
+
+```bash
+julia --project=. test/coverage.jl
 ```
 
 ---
@@ -174,17 +220,15 @@ This project is licensed under the **Mozilla Public License 2.0 (MPL-2.0)**.
 
 ## Citation
 
-If you use **DoECISORY** in your research, thesis, academic publications, or industrial workflows, please cite it using the following format:
+If you use DoECISORY in your research, please cite:
 
 ```bibtex
 @software{Gol_DoECISORY_2026,
-  author    = {Göl, Eren Selim},
-  title     = {{DoECISORY.jl: Design of Experiments with Computational Interactive Sequential Optimization for Response Yield}},
-  year      = {2026},
-  version   = {1.0.0},
-  publisher = {Zenodo},
-  doi       = {10.5281/zenodo.PLACEHOLDER},
-  url       = {https://github.com/erensgol/DoECISORY}
+  author       = {Göl, Eren Selim},
+  title        = {{DoECISORY.jl: Design of Experiments with Computational Interactive Sequential Optimisation for Response Yield}},
+  year         = {2026},
+  version      = {0.1.0},
+  url          = {https://github.com/erensgol/DoECISORY.jl}
 }
 ```
 

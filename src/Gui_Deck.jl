@@ -164,7 +164,7 @@ function DECK_ModalStoch_DDEF()
     return dbc_modal([
         dbc_modalheader(dbc_modaltitle([
             html_i(className="fas fa-flask me-2 colourtx-c5hy"),
-            "Stoichiometry Settings"
+            "Stoichiometry Setup"
         ])),
         dbc_modalbody([
             dbc_alert([
@@ -265,10 +265,10 @@ end
 
 function DECK_ModalAudit_DDEF()
     return html_div([
-        BASE_Modal_DDEF("deck-modal-audit", "Quick Audit Report",
+        BASE_Modal_DDEF("deck-modal-audit", "Feasibility Audit Report",
             dbc_row(dbc_col(html_div(id="deck-audit-output"), xs=12)),
             dbc_button("Close", id="deck-btn-audit-close", className="ms-auto colourgl-c0hr", outline=false)),
- BASE_Modal_DDEF("deck-modal-sci-audit", [html_i(className="fas fa-certificate me-2 colourtx-c1sm"),"Detailed Matrix Audit"],
+        BASE_Modal_DDEF("deck-modal-sci-audit", [html_i(className="fas fa-certificate me-2 colourtx-c1sm"),"Matrix Diagnostic Report"],
             dbc_row(dbc_col(dcc_loading(html_div(id="deck-sci-audit-output"), type="default", color="var(--colour-chr1-shamag)"), xs=12)),
             dbc_button("Close", id="deck-btn-sci-audit-close", className="ms-auto colourgl-c0hr", outline=false))
     ])
@@ -478,7 +478,7 @@ function DECK_Layout_DDEF()
                                 
                                 BASE_Separator_DDEF(),
                                 
-                                BASE_SidebarHeader_DDEF("JSON PROFILES"),
+                                BASE_SidebarHeader_DDEF("PROTOCOL TEMPLATES (JSON)"),
                                 dbc_row([
                                     dbc_col(BASE_ActionButton_DDEF("deck-btn-save-memo", "Save",   "fas fa-download", class="w-100 fw-bold"), xs=6, className="pe-1 mb-2"),
                                     dbc_col(dcc_upload(
@@ -561,12 +561,12 @@ function DECK_Layout_DDEF()
                                 
                                 BASE_Separator_DDEF(),
                                 
-                                BASE_ActionButton_DDEF("deck-btn-stoch-settings", "Stoichiometry Settings", "fas fa-flask",      class="w-100 mb-2"),
-                                BASE_ActionButton_DDEF("deck-btn-audit",          "Quick Audit",            "fas fa-vial",       class="w-100 mb-2"),
-                                BASE_ActionButton_DDEF("deck-btn-sci-audit",      "Matrix Audit",           "fas fa-microscope", class="w-100 mb-2"),
+                                BASE_ActionButton_DDEF("deck-btn-stoch-settings", "Stoichiometry Setup", "fas fa-flask",      class="w-100 mb-2"),
+                                BASE_ActionButton_DDEF("deck-btn-audit",          "Feasibility Audit",   "fas fa-vial",       class="w-100 mb-2"),
+                                BASE_ActionButton_DDEF("deck-btn-sci-audit",      "Matrix Diagnostic",   "fas fa-microscope", class="w-100 mb-2"),
                                 
                                 BASE_Loading_DDEF("deck-run-output", ""),
-                                BASE_NextButton_DDEF("deck-btn-run", "Generate Protocol"),
+                                BASE_NextButton_DDEF("deck-btn-run", "Generate Design"),
                             ]; panel_class = "mb-3 h-auto"
                         ), xs=12, md=3),
 
@@ -778,7 +778,7 @@ function DECK_GenerateProtocol_DDEF(path, in_data, out_data, vol, conc, method, 
                         v_r = D["Rows"][vi]
                         v_u = string(get(v_r, "Unit", ""))
                         v_n = string(get(v_r, "Name", ""))
-                        if Main.Lib_Mole.MOLE_IsTimeUnit_DDEF(v_u) || occursin(r"(?i)min|time|süre", v_n)
+                        if Main.Lib_Mole.MOLE_IsTimeUnit_DDEF(v_u) || occursin(r"(?i)min|time|duration", v_n)
                             col_cand  = C.PRE_INPUT * v_n * "_" * v_u
                             col_cand2 = C.PRE_INPUT * v_n
                             target_c  = hasproperty(df, Symbol(col_cand)) ? Symbol(col_cand) : (hasproperty(df, Symbol(col_cand2)) ? Symbol(col_cand2) : nothing)
@@ -1418,11 +1418,11 @@ function DECK_RegisterCallbacks_DDEF(app)
                     json_str = JSON3.write(Dict("Inputs" => DECK_SnapRows_DDEF(), "Outputs" => out_d, "Global" => g_dict))
                     b64 = base64encode(json_str)
 
-                    # Standardised Naming: Project, Phase, Tag (MEMO), Extension (json)
-                    fname = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_v, phase_v, "MEMO", "json")
+                    # Standardised Naming: Project, Phase, Tag (PROTOCOL), Extension (json)
+                    fname = Sys_Fast.FAST_GenerateSmartName_DDEF(proj_v, phase_v, "PROTOCOL", "json")
 
                     dl_dict = Dict("filename" => fname, "content" => b64, "base64" => true)
-                    lbl = html_div([html_i(className="fas fa-check-circle me-2"), "Workspace Exported"],
+                    lbl = html_div([html_i(className="fas fa-check-circle me-2"), "Protocol Exported"],
                     className="badge p-2 w-100", style=Dict("color" => "var(--colour-val0-purwhi)", "backgroundColor" => "var(--colour-chr4-tongre)", "fontSize" =>"0.85rem","boxShadow" =>"0 2px 5px var(--colour-val3-darlow)"))
                     return DECK_Return_DDEF(NO, NO, NO, NO, NO, NO, NO, lbl, dl_dict, NO, NO, NO, fill(NO, 6))
                 catch e
@@ -1508,7 +1508,7 @@ function DECK_RegisterCallbacks_DDEF(app)
                             [i <= length(outs) ? get(outs[i], "Name", "") : "" for i in 1:3],
                             [i <= length(outs) ? get(outs[i], "Unit", "-") : "-" for i in 1:3]
                         )
-                        stat_msg = html_span("✅ Sync: JSON Loaded", className="small fw-bold", style=Dict("color" => "var(--colour-chr4-tongre)"))
+                        stat_msg = html_span("✅ Sync: Protocol Loaded", className="small fw-bold", style=Dict("color" => "var(--colour-chr4-tongre)"))
                         ph_opts = [Dict("label" => "Phase 1 Initiated", "value" => "Phase1")]
                         
                         loaded_stoch = Dict(
@@ -1922,14 +1922,13 @@ function DECK_RegisterCallbacks_DDEF(app)
             else
                 "Phase1"
             end
-            # Standardised Naming: Project, Phase, Tag (DOE), Extension (xlsx)
-            fname = Sys_Fast.FAST_GenerateSmartName_DDEF(project, current_phase, "DOE", "xlsx")
+            fname = Sys_Fast.FAST_GenerateSmartName_DDEF(project, current_phase, "DESIGN", "xlsx")
             rm(path; force=true)
 
             return (
                 Dict("filename" => fname, "content" => raw_base64, "base64" => true),
                 html_span([html_i(className="fas fa-check-circle me-1"),
-                "Protocol generated."], className="", style=Dict("color" => "var(--colour-chr4-tongre)")),
+                "Design generated."], className="", style=Dict("color" => "var(--colour-chr4-tongre)")),
                 store_content,
             )
         catch e

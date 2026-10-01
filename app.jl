@@ -1,7 +1,7 @@
 # DOECISORY - APP MAIN (ORCHESTRATOR)
 # Description: Primary application entry point, routing orchestrator, and UI layout definition.
 # Author:      Eren Selim GÖL, MPharm
-# Version:     v1.0.0
+# Version:     v0.1.0
 # Module Tag:  APP
 # ==============================================================================
 
@@ -10,15 +10,10 @@
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# SECTION 0: AUTOMATIC DEPENDENCY BOOTSTRAP
+# SECTION 0: RUNTIME LOGGING INITIALISATION
 # ------------------------------------------------------------------------------
 using Logging
-Logging.disable_logging(Logging.Error)
-using Pkg
-if Pkg.project().path != joinpath(@__DIR__, "Project.toml")
-    Pkg.activate(@__DIR__)
-end
-Pkg.instantiate()
+Logging.disable_logging(Logging.Warn)
 
 # ------------------------------------------------------------------------------
 # SECTION 1: ENVIRONMENT & STABILITY CONFIGURATIONS
@@ -44,8 +39,6 @@ ENV["GKSwstype"]               = "100"
 ENV["JULIA_WEBIO_NOT_AVAILABLE"] = "1"
 ENV["PLOTLY_KALEIDO_NO_SANDBOX"] = "1"
 
-using Logging
-Logging.disable_logging(Logging.Error)
 old_stderr = stderr
 redirect_stderr(devnull)
 using Dash

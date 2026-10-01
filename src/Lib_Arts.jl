@@ -23,13 +23,13 @@ export ARTS_RenderPareto_DDEF, ARTS_RenderFit_DDEF, ARTS_RenderSurface_DDEF,
     ARTS_RenderContour_DDEF, ARTS_RenderSlice_DDEF, ARTS_RenderTrend_DDEF,
     ARTS_RenderSpace_DDEF, ARTS_RenderCandidates_DDEF, ARTS_Render_DDEF,
     ARTS_Downsample_DDEF, ARTS_RenderOptimalZone_DDEF, ARTS_RenderInteractionMatrix_DDEF,
-    ARTS_BaseLayout_DDEF, ARTS_Predict_DDEF, ARTS_BuildGrid_DDEF,
-    ARTS_AdaptiveGridN_DDEF, ARTS_RenderSpaceImpl_DDEF,
-    ARTS_GetDynamicN_DDEF, ARTS_PlotPareto_DDES, ARTS_PlotFit_DDES,
-    ARTS_PlotInteractionMatrix_DDES, ARTS_PlotQQ_DDES, ARTS_PlotResiduals_DDES, 
-    ARTS_PlotSensitivity_DDES, ARTS_PlotSurface_DDES, ARTS_PlotContour_DDES, 
-    ARTS_PlotSlice_DDES, ARTS_PlotTrend_DDES, ARTS_PlotOptimalZone_DDES, 
-    ARTS_PlotDesignSpace_DDES, ARTS_PlotCandidates_DDES
+    ARTS_RenderQQPlot_DDEF, ARTS_RenderResidualsVsPred_DDEF, ARTS_RenderSensitivityPlot_DDEF,
+    ARTS_BaseLayout_DDEF, ARTS_Predict_DDEF, ARTS_BuildGrid_DDEF, ARTS_AdaptiveGridN_DDEF,
+    ARTS_RenderSpaceImpl_DDEF, ARTS_GetDynamicN_DDEF, ARTS_PlotPareto_DDES,
+    ARTS_PlotFit_DDES, ARTS_PlotInteractionMatrix_DDES, ARTS_PlotQQ_DDES,
+    ARTS_PlotResiduals_DDES, ARTS_PlotSensitivity_DDES, ARTS_PlotSurface_DDES,
+    ARTS_PlotContour_DDES, ARTS_PlotSlice_DDES, ARTS_PlotTrend_DDES,
+    ARTS_PlotOptimalZone_DDES, ARTS_PlotDesignSpace_DDES, ARTS_PlotCandidates_DDES
 
 # ==============================================================================
 # PART A: VISUAL CORE & INFRASTRUCTURE
