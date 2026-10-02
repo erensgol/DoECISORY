@@ -850,7 +850,7 @@ end
 
 """
     FAST_GetLabDefaults_DDEF()::Dict{String,Any}
-Provides the canonical initial state for a fresh DoECISORY session.
+Provides the default initial state for a fresh DoECISORY session.
 """
 function FAST_GetLabDefaults_DDEF()::Dict{String,Any}
     # Using explicit types for standard return
@@ -1347,7 +1347,7 @@ end
 
 """
     FAST_ResolveHistoryMap_DDEF(history, [active_phase]) -> Union{AbstractDict, Nothing}
-Dynamically resolves the active direction map across phase records, prioritizing active_phase or latest chronological phase.
+Dynamically resolves the active direction map across phase records, prioritising active_phase or latest chronological phase.
 """
 function FAST_ResolveHistoryMap_DDEF(ph::AbstractDict, active_phase::AbstractString="")
     if !isempty(active_phase) && haskey(ph, active_phase)
@@ -1693,7 +1693,7 @@ function FAST_GetCol_DDEF(df::DataFrame, Target::String)::String
     norm_col(s) = uppercase(replace(replace(strip(string(s)), " " => "_"), r"_+" => "_"))
     t_norm = norm_col(Target)
 
-    # 1. Exact normalized match (spaces vs underscores, case-insensitive)
+    # 1. Exact normalised match (spaces vs underscores, case-insensitive)
     for n in names(df)
         n_str = string(n)
         if norm_col(n_str) == t_norm

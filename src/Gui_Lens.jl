@@ -2297,7 +2297,7 @@ function LENS_RealignMarkdownTables_DDEF(txt::AbstractString)::String
                 aligns = Symbol[]
                 for d in raw_divs
                     if startswith(d, ":") && endswith(d, ":")
-                        push!(aligns, :center)
+                        push!(aligns, :centre)
                     elseif endswith(d, ":")
                         push!(aligns, :right)
                     else

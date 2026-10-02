@@ -14,6 +14,7 @@ short_description: DoE with Computational Interactive SeqOpt for Response Yield
 **Design of Experiments with Computational Interactive Sequential Optimisation for Response Yield**
 
 [![CI](https://github.com/erensgol/DoECISORY.jl/actions/workflows/CI.yml/badge.svg)](https://github.com/erensgol/DoECISORY.jl/actions/workflows/CI.yml)
+[![Documentation](https://img.shields.io/badge/docs-dev-blue.svg)](https://erensgol.github.io/DoECISORY.jl/dev/)
 [![codecov](https://codecov.io/gh/erensgol/DoECISORY.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/erensgol/DoECISORY.jl)
 [![Julia Version](https://img.shields.io/badge/Julia-v1.10+-9558B2)](https://julialang.org)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](LICENSE)
@@ -167,11 +168,11 @@ println("R²: ", round(model["R2"], digits=4))
 # 4. Predict responses (interactive in REPL, or wrapped in begin...end in Pluto.jl)
 begin
     pred = VISE_Predict_DDEF(model, [0.0, 0.0, 0.0])
-    println("Predicted Center Response: ", round(pred[1], digits=2))
+    println("Predicted Centre Response: ", round(pred[1], digits=2))
 end
 ```
 
-> **Design Space Scope:** DoECISORY is specifically architected for 3-factor experimental and formulation design spaces (the canonical formulation geometry). All core matrix generators (`BB15`, `CD17`, `TL09`, `DF14`), D-A-G-I optimality calculations, and response surface routines operate on 3 continuous/process factors.
+> **Design Space Scope:** DoECISORY is designed for 3-factor experimental and formulation studies. Matrix generators (`BB15`, `CD17`, `TL09`, `DF14`), optimality calculations, and response surface models operate on 3 continuous factors.
 
 ---
 
@@ -211,7 +212,7 @@ julia --project=. test/coverage.jl
 
 ---
 
-## License
+## Licence
 
 This project is licensed under the **Mozilla Public License 2.0 (MPL-2.0)**.
 

@@ -1,0 +1,29 @@
+using Documenter
+using DoECISORY
+
+DocMeta.setdocmeta!(DoECISORY, :DocTestSetup, :(using DoECISORY); recursive=true)
+
+makedocs(
+    sitename = "DoECISORY.jl",
+    modules = [DoECISORY],
+    authors = "Eren Selim GÖL, MPharm",
+    format = Documenter.HTML(
+        prettyurls = get(ENV, "CI", "false") == "true",
+        canonical = "https://erensgol.github.io/DoECISORY.jl",
+        edit_link = "main",
+        assets = String[]
+    ),
+    pages = [
+        "Home" => "index.md",
+        "Workflow Manual" => "manual.md",
+        "API Reference" => "api.md",
+        "Licence & Citation" => "licence.md"
+    ],
+    warnonly = [:missing_docs, :cross_references]
+)
+
+deploydocs(
+    repo = "github.com/erensgol/DoECISORY.jl.git",
+    devbranch = "main",
+    push_preview = true
+)

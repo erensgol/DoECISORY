@@ -780,7 +780,7 @@ function ARTS_RenderSpaceCore_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Id
     base_goals   = [(g[1], g[2], g[3], g[4], 1.0) for g in parsed_goals]
     k_models     = length(Models)
     inv_k        = k_models > 0 ? (1.0 / k_models) : 1.0
-    neighbor_weights = [Main.Lib_Core.CORE_GetNeighborWeights_DDEF(g[5]) for g in parsed_goals]
+    neighbour_weights = [Main.Lib_Core.CORE_GetNeighbourWeights_DDEF(g[5]) for g in parsed_goals]
 
     # Allocated once, reused for all 3 slices
     Grid_buf   = repeat(reshape(col_ref, 1, :), N * N)
@@ -800,7 +800,7 @@ function ARTS_RenderSpaceCore_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Id
         for (m, model) in enumerate(Models)
             preds = ARTS_Predict_DDEF(model, Grid_buf, Xd_buf)
             bg = base_goals[m]
-            w_m, w_c, w_p = neighbor_weights[m]
+            w_m, w_c, w_p = neighbour_weights[m]
             
             @inbounds for i in 1:(N * N)
                 val = preds[i]
@@ -878,7 +878,7 @@ function ARTS_Draw_DDEF(::ARTS_PlotOptimalZone_DDES, Models, Goals, X::AbstractM
     base_goals   = [(g[1], g[2], g[3], g[4], 1.0) for g in parsed_goals]
     k_models     = length(Models)
     inv_k        = k_models > 0 ? (1.0 / k_models) : 1.0
-    neighbor_weights = [Main.Lib_Core.CORE_GetNeighborWeights_DDEF(g[5]) for g in parsed_goals]
+    neighbour_weights = [Main.Lib_Core.CORE_GetNeighbourWeights_DDEF(g[5]) for g in parsed_goals]
 
     Prod_u = ones(N^3)
     Prod_e = ones(N^3)
@@ -887,7 +887,7 @@ function ARTS_Draw_DDEF(::ARTS_PlotOptimalZone_DDES, Models, Goals, X::AbstractM
     for (m, model) in enumerate(Models)
         preds = ARTS_Predict_DDEF(model, Grid)
         bg = base_goals[m]
-        w_m, w_c, w_p = neighbor_weights[m]
+        w_m, w_c, w_p = neighbour_weights[m]
 
         @inbounds for i in 1:(N^3)
             val = preds[i]
@@ -1202,7 +1202,7 @@ function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts
                     end
                 end
             else
-                Main.Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_SKIP", "Composite visualizations bypassed due to training failure in one or more models.", "WARN")
+                Main.Sys_Fast.FAST_Log_DDEF("ARTS", "RENDER_SKIP", "Composite visualisations bypassed due to training failure in one or more models.", "WARN")
             end
         catch e; ARTS_SafeErrorLog_DDEF("ERR_P1113_SPACE", "Space logic failed", e); end
         push!(tasks, t_space)

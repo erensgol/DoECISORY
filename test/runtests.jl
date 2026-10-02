@@ -48,7 +48,7 @@ const TEST_TITLES = String[
     # Group 1 (1-16)
     "Scientific, decimal, and negative numeric parsing",
     "Degenerate and malformed numeric input validation",
-    "Filename sanitisation and path traversal defense",
+    "Filename sanitisation and path traversal defence",
     "Universal DataID and unique hash code extraction",
     "Smart protocol filename generation and extraction",
     "Condition number formatting and GUI colour tokens",
@@ -143,7 +143,7 @@ const TEST_TITLES = String[
     "Academic mini vital card layout and token mapping",
     "System and scientific audit dashboard tree layout",
     "JSON state payload sanitisation & deserialisation",
-    "Clientside Plotly figure JSON schema serialization",
+    "Clientside Plotly figure JSON schema serialisation",
     "Markdown scientific report synthesis with LOF data",
     "Chemical formulation grid default row definition",
     "Factor row import mapping and data normalisation",
@@ -221,7 +221,7 @@ const SUITE_START_TIME = time()
         # 2: Degenerate and malformed numeric input validation
         @track G1 all(isnan, [Sys_Fast.FAST_SafeNum_DDEF(nothing), Sys_Fast.FAST_SafeNum_DDEF(missing), Sys_Fast.FAST_SafeNum_DDEF("  -  "), Sys_Fast.FAST_SafeNum_DDEF("-"), Sys_Fast.FAST_SafeNum_DDEF("nan"), Sys_Fast.FAST_SafeNum_DDEF("abc"), Sys_Fast.FAST_SafeNum_DDEF(""), Sys_Fast.FAST_SafeNum_DDEF("   "), Sys_Fast.FAST_SafeNum_DDEF("1.2.3")])
 
-        # 3: Filename sanitisation and path traversal defense
+        # 3: Filename sanitisation and path traversal defence
         @track G1 Sys_Fast.FAST_SanitiseFilename_DDEF("öğrenci_işleri.xlsx") == "ogrenci_isleri.xlsx" &&
                   Sys_Fast.FAST_SanitiseFilename_DDEF("test/file!name.csv") == "test_file_name.csv" &&
                   Sys_Fast.FAST_SanitiseFilename_DDEF("secret/system.xlsx") == "secret_system.xlsx"
@@ -763,9 +763,9 @@ const SUITE_START_TIME = time()
             d_nom = Lib_Core.CORE_CalcDesirability_DDEF(20.0, g_nom),
             d_tgt = Lib_Core.CORE_CalcDesirability_DDEF(20.0, g_tgt),
             d_non = Lib_Core.CORE_CalcDesirability_DDEF(0.0, g_non),
-            w_05  = Lib_Core.CORE_GetNeighborWeights_DDEF(0.5),
-            w_10  = Lib_Core.CORE_GetNeighborWeights_DDEF(1.0),
-            w_20  = Lib_Core.CORE_GetNeighborWeights_DDEF(2.0)
+            w_05  = Lib_Core.CORE_GetNeighbourWeights_DDEF(0.5),
+            w_10  = Lib_Core.CORE_GetNeighbourWeights_DDEF(1.0),
+            w_20  = Lib_Core.CORE_GetNeighbourWeights_DDEF(2.0)
             @track G2 isapprox(d_max, 0.5; atol=1e-3) && d_min == 1.0 && d_nom == 1.0 && d_tgt == 1.0 && d_non == 1.0 &&
                       length(w_05) == 3 && length(w_10) == 3 && length(w_20) == 3
         end
@@ -1052,7 +1052,7 @@ const SUITE_START_TIME = time()
     end
 
     # ==========================================================================
-    # GROUP 4: Lib_Vise Statistical Modeling, OLS & Tournament (18 Tests)
+    # GROUP 4: Lib_Vise Statistical Modelling, OLS & Tournament (18 Tests)
     # ==========================================================================
     Sys_Fast.FAST_ActiveGroup_DDEC[] = "G4"
     @testset "Group 4: Lib_Vise Statistical Modelling, OLS & Tournament" begin
@@ -1381,7 +1381,7 @@ const SUITE_START_TIME = time()
                 rep_mod_md = Lib_Vise.VISE_GenerateScientificReport_DDEF(rep_mod_bundle),
                 m_lin  = Lib_Vise.VISE_ExpandDesign_DDEF(X_quad, "linear"),
                 t_lin  = Lib_Vise.VISE_GetTermNames_DDEF(["X1", "X2", "X3"], "linear"),
-                md_tbl = Lib_Vise.VISE_FormatMarkdownTable_DDEF(["H1", "H2", "H3"], [:left, :right, :center], [["A", "1", "C"], ["B", "2", "D"]]),
+                md_tbl = Lib_Vise.VISE_FormatMarkdownTable_DDEF(["H1", "H2", "H3"], [:left, :right, :centre], [["A", "1", "C"], ["B", "2", "D"]]),
                 w_ratings = [Lib_Vise.VISE_GetWeightRating_DDEF(w) for w in (0.50, 0.75, 1.00, 1.50, 2.00, "fallback")],
                 res_n1 = Lib_Vise.VISE_ResolveName_DDEF("INPUT_X1_mg", "INPUT_", [Dict("Name" => "X1", "Unit" => "mg")], C),
                 res_n2 = Lib_Vise.VISE_ResolveName_DDEF("INPUT_X2", "INPUT_", [Dict("Name" => "X2", "Unit" => "-")], C),
@@ -1785,7 +1785,7 @@ const SUITE_START_TIME = time()
                       lens_parsed["Type"] == "DoECISORY_Lens_Config" && lens_parsed["Project"] == "ValidationProject"
         end
 
-        # 93: Clientside Plotly figure JSON schema serialization
+        # 93: Clientside Plotly figure JSON schema serialisation
         let p_pareto = Lib_Arts.ARTS_Draw_DDEF(Lib_Arts.ARTS_PlotPareto_DDES(), model_arts, "Yield", 0.9, 0.8),
             plot_json = JSON3.write(Dict("data" => p_pareto.data, "layout" => p_pareto.layout)),
             parsed_plot = JSON3.read(plot_json, Dict{String, Any})

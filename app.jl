@@ -368,7 +368,7 @@ function APP_RoutePage_DDEF(pathname::AbstractString)
                     html_p([
                         "Design of Experiments with",
                         html_br(),
-                        "Computational Interactive Sequential Optimization for Response Yield"
+                        "Computational Interactive Sequential Optimisation for Response Yield"
                     ],
                         className = "lead mb-2", 
                         style     = Dict("color" => "var(--colour-val4-darhig)", "maxWidth" => "800px", "margin" => "0 auto")

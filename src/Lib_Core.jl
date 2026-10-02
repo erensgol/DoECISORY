@@ -21,7 +21,7 @@ export CORE_GenDesign_DDEF, CORE_GenerateMatrix_DDEF, CORE_MapLevels_DDEF,
        CORE_CodeMatrix_DDEF, CORE_ExpandModelMatrix_DDEF, CORE_D_Efficiency_DDEF,
        CORE_CalcDesignMetrics_DDEF, CORE_OptimiseDesirability_DDEF, CORE_CalcDesirability_DDEF,
        CORE_ExtractGoal_DDEF, CORE_ValidateDesign_DDEF, CORE_ExtractLeader_DDEF,
-       CORE_ModifierDCYP_DDES, CORE_ApplyDCYP_DDEF, CORE_GetNeighborWeights_DDEF,
+       CORE_ModifierDCYP_DDES, CORE_ApplyDCYP_DDEF, CORE_GetNeighbourWeights_DDEF,
        CORE_StarWeights_DDEC, CORE_GetMethodType_DDEF, CORE_GetModelType_DDEF,
        CORE_AbstractDesignMethod_DDET, CORE_MethodBB15_DDES, CORE_MethodTL09_DDES,
        CORE_MethodCD17_DDES, CORE_MethodDF14_DDES, CORE_AbstractModelType_DDET,
@@ -147,7 +147,7 @@ Generate a coded (-1, 0, 1) experimental design matrix for the specified method.
 
 # Arguments
 - `Method::AbstractString`: Design identifier code (`"BB15"`, `"CD17"`, `"TL09"`, or `"DF14"`). Case-insensitive.
-- `FactorCount::Integer`: Number of continuous factors (currently strictly 3 in canonical space).
+- `FactorCount::Integer`: Number of continuous factors (currently strictly 3).
 - `Direction::AbstractVector`: Directional vector for DF14 search orientation (default: `[-1, -1, -1]`).
 
 # Returns
@@ -323,7 +323,7 @@ end
 
 const CORE_StarWeights_DDEC = Float64[0.50, 0.75, 1.00, 1.50, 2.00]
 
-function CORE_GetNeighborWeights_DDEF(Weight::Float64)::Tuple{Float64, Float64, Float64}
+function CORE_GetNeighbourWeights_DDEF(Weight::Float64)::Tuple{Float64, Float64, Float64}
     idx = findmin(abs.(CORE_StarWeights_DDEC .- Weight))[2]
     w_minus = CORE_StarWeights_DDEC[max(1, idx - 1)]
     w_curr  = CORE_StarWeights_DDEC[idx]
@@ -389,7 +389,7 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
     end
     num_active = length(active_indices)
     inv_k      = num_active > 0 ? (1.0 / num_active) : 1.0
-    neighbor_weights = [CORE_GetNeighborWeights_DDEF(parsed_goals[m][5]) for m in active_indices]
+    neighbour_weights = [CORE_GetNeighbourWeights_DDEF(parsed_goals[m][5]) for m in active_indices]
 
     closures = Any[nothing for _ in 1:NumModels]
     for m in 1:NumModels
@@ -420,7 +420,7 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
                 break
             end
 
-            w_m, w_c, w_p = neighbor_weights[j]
+            w_m, w_c, w_p = neighbour_weights[j]
             u = b^(w_c * inv_k)
             e = (b^(w_m * inv_k) + u + b^(w_p * inv_k)) / 3.0
             prod_u *= u
@@ -428,7 +428,7 @@ function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractV
         end
         score = clamp(0.50 * prod_u + 0.50 * prod_e, 0.0, 1.0)
 
-        # Decay-Coupled Optimization: Penalise composite desirability directly by reaction time decay
+        # Decay-Coupled Optimisation: Penalise composite desirability directly by reaction time decay
         for dm in ModifiersDCYP
             score = CORE_ApplyDCYP_DDEF(score, dm, x)
         end
@@ -705,7 +705,7 @@ end
 
 """
     CORE_D_Efficiency_DDEF(X::AbstractMatrix, [ModelType]) -> Float64
-Calculates academic D-Efficiency based on normalized Fisher information determinant:
+Calculates academic D-Efficiency based on normalised Fisher information determinant:
 D = (|X'X| / N^p)^(1/p) where N is run count and p is number of model parameters (10 for quadratic, 4 for linear).
 """
 function CORE_D_Efficiency_DDEF(X::AbstractMatrix, ModelType::CORE_AbstractModelType_DDET=CORE_ModelQuadratic_DDES())::Float64

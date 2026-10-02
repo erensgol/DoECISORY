@@ -251,7 +251,7 @@ function VISE_CalcVIF_DDEF(X_Design::AbstractMatrix)
     n, p = size(X_Design)
     p <= 1 && return Float64[]
 
-    # Isolate independent variables and initialize variance inflation vector.
+    # Isolate independent variables and initialise variance inflation vector.
     X     = X_Design[:, 2:end]
     p_eff = p - 1
     vifs  = fill(1.0, p)
@@ -637,7 +637,7 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_B
         end
         base_goals = [(g[1], g[2], g[3], g[4], 1.0) for g in parsed_goals]
         inv_k = length(active_idx) > 0 ? (1.0 / length(active_idx)) : 1.0
-        neighbor_weights = [Main.Lib_Core.CORE_GetNeighborWeights_DDEF(parsed_goals[m][5]) for m in active_idx]
+        neighbour_weights = [Main.Lib_Core.CORE_GetNeighbourWeights_DDEF(parsed_goals[m][5]) for m in active_idx]
 
         @inbounds for i in 1:NumPoints
             prod_u = 1.0
@@ -657,7 +657,7 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_B
                     break
                 end
 
-                w_m, w_c, w_p = neighbor_weights[j]
+                w_m, w_c, w_p = neighbour_weights[j]
                 u = b^(w_c * inv_k)
                 e = (b^(w_m * inv_k) + u + b^(w_p * inv_k)) / 3.0
                 prod_u *= u
@@ -698,7 +698,7 @@ end
 """
     VISE_FormatMarkdownTable_DDEF(headers::Vector{String}, aligns::Vector{Symbol}, rows::Vector{Vector{String}}) -> String
 Constructs a Markdown table with strictly uniform, character-perfect column alignment.
-Supported alignments: :left, :right, :center.
+Supported alignments: :left, :right, :centre.
 """
 function VISE_FormatMarkdownTable_DDEF(headers::Vector{String}, aligns::Vector{Symbol}, rows::Vector{Vector{String}})::String
     clean_cell(s::AbstractString) = replace(replace(s, r"</?[a-zA-Z][a-zA-Z0-9]*\b[^>]*>" => ""), "&lt;" => "<", "&gt;" => ">")
@@ -720,7 +720,7 @@ function VISE_FormatMarkdownTable_DDEF(headers::Vector{String}, aligns::Vector{S
         pad = w - tw
         if align == :right
             return repeat(' ', pad) * s
-        elseif align == :center
+        elseif align == :centre
             left_pad = pad ÷ 2
             right_pad = pad - left_pad
             return repeat(' ', left_pad) * s * repeat(' ', right_pad)
@@ -739,13 +739,13 @@ function VISE_FormatMarkdownTable_DDEF(headers::Vector{String}, aligns::Vector{S
     end
     write(io, "\n")
     
-    # 2. Divider row (:--- for left, ---: for right, :---: for center)
+    # 2. Divider row (:--- for left, ---: for right, :---: for centre)
     write(io, "|")
     for j in 1:n_cols
         w = widths[j]
         div_str = if aligns[j] == :right
             repeat('-', w + 1) * ":"
-        elseif aligns[j] == :center
+        elseif aligns[j] == :centre
             ":" * repeat('-', w) * ":"
         else
             ":" * repeat('-', w + 1)
@@ -1123,7 +1123,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     # --- Report Stage V: Factor Sensitivity & Relative Importance ---
     if !isempty(sens)
         write(io, "### V. Factor Sensitivity & Relative Importance\n")
-        write(io, "Normalized sensitivity derivatives (|∂ŷ/∂Xᵢ|) indicating relative contribution to response variation.\n\n")
+        write(io, "Normalised sensitivity derivatives (|∂ŷ/∂Xᵢ|) indicating relative contribution to response variation.\n\n")
 
         sens_headers = ["Factor Parameter", "Relative Sensitivity (%)", "Sensitivity Rank"]
         sens_aligns  = [:left, :right, :left]
@@ -1153,22 +1153,22 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         end
     end
 
-    # --- Report Stage VI: Multi-Response Numerical Optimization ---
+    # --- Report Stage VI: Multi-Response Numerical Optimisation ---
     best_pt = get(Res, "BestPoint", [])
     if !isempty(best_pt)
         bs = Float64(get(Res, "BestScore", 0.0))
         warns = get(Res, "BoundaryWarnings", String[])
         
-        write(io, "### VI. Multi-Response Numerical Optimization\n")
-        write(io, "Simultaneous optimization via Derringer-Suich desirability function maximization.\n\n")
+        write(io, "### VI. Multi-Response Numerical Optimisation\n")
+        write(io, "Simultaneous optimisation via Derringer-Suich desirability function maximisation.\n\n")
         @printf(io, "- **Overall Composite Desirability (D)**: `%.3f` (Scale: 0.000 to 1.000)\n\n", bs)
 
-        # Optimization Goals Specification Table
+        # Optimisation Goals Specification Table
         goals = get(Res, "Goals", [])
         if !isempty(goals)
-            write(io, "#### Multi-Response Optimization Criteria\n")
+            write(io, "#### Multi-Response Optimisation Criteria\n")
             goals_headers = ["Parameter", "Criterion / Goal", "Target", "Lower Limit", "Upper Limit", "Weight", "Rating"]
-            goals_aligns  = [:left, :left, :right, :right, :right, :right, :center]
+            goals_aligns  = [:left, :left, :right, :right, :right, :right, :centre]
             goals_rows    = Vector{String}[]
             for (g_idx, g) in enumerate(goals)
                 p_name = string(get(g, "Name", get(g, "Variable", (g_idx <= length(out_names) ? out_names[g_idx] : "Response $g_idx"))))
@@ -1243,7 +1243,7 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         # Leader Candidates & Pareto Frontier Table
         ldf = get(Res, "Leaders", nothing)
         if !isnothing(ldf) && isa(ldf, DataFrame) && !isempty(ldf)
-            write(io, "#### Candidate Optimization Solutions (Pareto Frontier & Leader Candidates)\n")
+            write(io, "#### Candidate Optimisation Solutions (Pareto Frontier & Leader Candidates)\n")
             lead_headers = string.(names(ldf))
             lead_aligns = [:left; fill(:right, length(lead_headers) - 1)]
             lead_rows = Vector{String}[]
@@ -1273,15 +1273,15 @@ function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
         end
         
         b_interp = if !isempty(warns)
-            "One or more optimal settings lie near the boundary of the experimental domain. Expanding the design space in future trials may yield further optimization gains."
+            "One or more optimal settings lie near the boundary of the experimental domain. Expanding the design space in future trials may yield further optimisation gains."
         else
             "All optimal factor coordinates lie within the interior of the experimental design domain."
         end
         
-        write(io, Printf.@sprintf("*Optimization Summary: %s %s*\n\n", d_interp, b_interp))
+        write(io, Printf.@sprintf("*Optimisation Summary: %s %s*\n\n", d_interp, b_interp))
     else
-        write(io, "### VI. Multi-Response Numerical Optimization\n")
-        write(io, "*Numerical optimization not conducted or convergence incomplete.*\n\n")
+        write(io, "### VI. Multi-Response Numerical Optimisation\n")
+        write(io, "*Numerical optimisation not conducted or convergence incomplete.*\n\n")
     end
 
     # --- Report Stage VII: Radiochemical Decay Corrections ---
@@ -1645,7 +1645,7 @@ end
 
 """
     VISE_ResolveName_DDEF(ColumnName, Prefix, ConfigList, C) -> String
-Resolves the canonical variable or response name from column headers using configuration metadata with safe fallback.
+Resolves the variable or response name from column headers using configuration metadata with safe fallback.
 Handles underscore vs space differences, casing, and attached unit suffixes (e.g. `_` or `_%`).
 """
 function VISE_ResolveName_DDEF(ColumnName::AbstractString, Prefix::AbstractString, ConfigList, C)::String
@@ -1675,7 +1675,7 @@ function VISE_ResolveName_DDEF(ColumnName::AbstractString, Prefix::AbstractStrin
             end
         end
 
-        # 2. Normalized comparison (handling space vs underscore and units)
+        # 2. Normalised comparison (handling space vs underscore and units)
         col_clean = replace(raw_col, Regex("(?i)^" * Prefix) => "")
         col_norm  = norm_tok(col_clean)
 
@@ -1684,7 +1684,7 @@ function VISE_ResolveName_DDEF(ColumnName::AbstractString, Prefix::AbstractStrin
             isempty(nm) && continue
             nm_norm = norm_tok(nm)
 
-            # Direct normalized match
+            # Direct normalised match
             if col_norm == nm_norm
                 return nm
             end
@@ -2286,7 +2286,7 @@ function VISE_GeneratePredictions_DDEF(X, Y, models, goals;
     
     k = length(models)
     inv_k = k > 0 ? (1.0 / k) : 1.0
-    neighbor_weights = [Main.Lib_Core.CORE_GetNeighborWeights_DDEF(g[5]) for g in pg]
+    neighbour_weights = [Main.Lib_Core.CORE_GetNeighbourWeights_DDEF(g[5]) for g in pg]
     
     n_points = size(X, 1)
     sc = zeros(n_points)
@@ -2309,7 +2309,7 @@ function VISE_GeneratePredictions_DDEF(X, Y, models, goals;
                 break
             end
 
-            w_m, w_c, w_p = neighbor_weights[j]
+            w_m, w_c, w_p = neighbour_weights[j]
             u = b^(w_c * inv_k)
             e = (b^(w_m * inv_k) + u + b^(w_p * inv_k)) / 3.0
             prod_u *= u
@@ -2317,7 +2317,7 @@ function VISE_GeneratePredictions_DDEF(X, Y, models, goals;
         end
         score = clamp(0.50 * prod_u + 0.50 * prod_e, 0.0, 1.0)
 
-        # Decay-Coupled Optimization
+        # Decay-Coupled Optimisation
         for dm in ModifiersDCYP
             if dm.TimeIndex >= 1 && dm.TimeIndex <= size(X, 2)
                 score = Main.Lib_Core.CORE_ApplyDCYP_DDEF(score, dm, view(X, i, :))
@@ -2527,11 +2527,11 @@ function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::AbstractString)
                 end
             end
 
-            # 5. Optimization Goals Sheet
+            # 5. Optimisation Goals Sheet
             if haskey(Res, "Goals") && !isnothing(Res["Goals"])
                 goals_list = Res["Goals"]
                 if !isempty(goals_list)
-                    sh_goals = XLSX.addsheet!(xf, "Optimization_Goals")
+                    sh_goals = XLSX.addsheet!(xf, "Optimisation_Goals")
                     sh_goals["A1"] = ["Parameter", "Criterion / Goal", "Target", "Lower Limit", "Upper Limit", "Weight", "Rating"]
                     for (g_idx, g) in enumerate(goals_list)
                         p_name = string(get(g, "Name", get(g, "Variable", "Parameter $g_idx")))
