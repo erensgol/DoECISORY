@@ -12,3 +12,5 @@ Run_DoE.bat
 README.md
 LICENSE
 CITATION.cff
+.codecov.yml
+docs/

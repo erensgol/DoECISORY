@@ -8,7 +8,7 @@ DoECISORY is open-source software licensed under the [Mozilla Public License 2.0
 
 ## Citation
 
-If you use DoECISORY in your academic research, thesis, or formulation development, please cite:
+If you use DoECISORY in your research, thesis, or publications, please cite:
 
 ```bibtex
 @software{Gol_DoECISORY_2026,
@@ -22,9 +22,10 @@ If you use DoECISORY in your academic research, thesis, or formulation developme
 
 ---
 
-## Author
+## Author & Contact
 
 **Eren Selim GÖL, MPharm**  
-Department of Radiopharmacy, Faculty of Pharmacy, Hacettepe University  
-ORCID: [0009-0000-4491-7759](https://orcid.org/0009-0000-4491-7759)  
-LinkedIn: [linkedin.com/in/erensgol](https://www.linkedin.com/in/erensgol)
+Radiopharmacy Researcher | Lead Software Architect & Developer  
+* Department of Radiopharmacy, Faculty of Pharmacy, Hacettepe University  
+* **ORCID**: [0009-0000-4491-7759](https://orcid.org/0009-0000-4491-7759)  
+* [linkedin.com/in/erensgol](https://www.linkedin.com/in/erensgol)

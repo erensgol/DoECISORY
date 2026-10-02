@@ -1,5 +1,5 @@
 [deps]
-Documenter = "e30172f5-a6a5-5a46-863b-1522a451dd07"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 DoECISORY = "e3f895c2-6780-4965-b778-e5473721e90d"
 
 [compat]

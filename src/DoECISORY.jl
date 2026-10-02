@@ -10,7 +10,7 @@ analytics in chemical and radiopharmaceutical research.
 - `Lib_Mole`: Stoichiometric mass conservation, unit conversions, and radiochemical decay kinetics.
 - `Lib_Vise`: Ordinary least-squares regression, AIC model selection, ANOVA diagnostics, and scientific report generation.
 - `Lib_Arts`: Visualisation routines built upon PlotlyJS with the Viridis colour palette.
-- `Sys_Flow`: Adaptive Continuous Transition Algorithm (ACTA) and iterative experimental space navigation.
+- `Sys_Flow`: Inter-Phase Knowledge Transfer via Adaptive Contraction & Translation Algorithm (ACTA) and Affine Space Transformation Model (ASTM).
 - `Sys_Fast`: Multi-threaded Excel data exchange, session caching, and workspace file management.
 - `Gui_Base`, `Gui_Deck`, `Gui_Lens`: Interactive Dash web application components and page layouts.
 

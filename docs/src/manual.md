@@ -103,9 +103,9 @@ println("Composite Desirability: ", round(D, digits=4))
 
 ---
 
-## 6. Sequential Transitions (ACTA)
+## 6. Sequential Transitions (ACTA & ASTM)
 
-The Adaptive Continuous Transition Algorithm (ACTA) calculates contracted and shifted factor boundaries for the next experimental phase based on the best result from Phase 1:
+The **Adaptive Contraction & Translation Algorithm (ACTA)** and **Affine Space Transformation Model (ASTM)** calculate contracted and translated factor boundaries for subsequent experimental phases based on leader formulation results:
 
 ```julia
 leader_coords = [0.2, -0.4, 0.6]

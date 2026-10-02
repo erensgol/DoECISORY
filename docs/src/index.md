@@ -2,15 +2,16 @@
 
 **Design of Experiments with Computational Interactive Sequential Optimisation for Response Yield**
 
-**DoECISORY.jl** is a Julia library and web application for experimental design, stoichiometry, statistical modelling, and response surface analysis:
+**DoECISORY.jl** is an open-source Julia package and interactive web application for Design of Experiments (DoE), statistical modelling, and multi-objective optimisation:
 
-- **Experimental Design**: 3-factor designs: Box-Behnken (BB15), Central Composite (CD17), Taguchi (TL09), and Fractional D-Optimal (DF14).
+- **3-Factor Experimental Designs**: Box-Behnken (BB15), Central Composite (CD17), Taguchi (TL09), and Fractional D-Optimal (DF14).
 - **Optimality Metrics**: D-, A-, G-, and I-efficiencies and condition numbers.
-- **Stoichiometry**: Mass conservation, physical unit checks, and radioactive decay equations.
-- **Statistical Modelling**: OLS linear and quadratic regression, ANOVA, AIC model selection, and VIF multicollinearity checks.
-- **Multi-Objective Optimisation**: Derringer-Suich desirability functions.
+- **Stoichiometry & Radiochemical Kinetics**: Mass balance audits, physical unit checks, and decay corrections.
+- **Statistical Modelling & Diagnostics**: OLS linear and quadratic regression, ANOVA, AIC model selection, and VIF multicollinearity checks.
+- **Sequential Multi-Phase Optimisation**: Adaptive Contraction & Translation Algorithm (ACTA) and Affine Space Transformation Model (ASTM).
+- **Multi-Objective Optimisation**: Derringer-Suich desirability functions via global metaheuristics.
 - **Visualisation**: 2D contour and 3D response surface plots using PlotlyJS.
-- **Web Interface**: Dash browser interface launched via `run_app()`.
+- **Web Interface**: Interactive Dash user interface launched via `run_app()`.
 
 ---
 
