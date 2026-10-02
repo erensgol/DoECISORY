@@ -1,12 +1,12 @@
-# Case Study: Sequential [¹⁸F]Radiotracer Optimisation
+# Case Study: Sequential Peptide Radiolabelling
 
-This case study demonstrates the sequential optimisation workflow in **DoECISORY.jl**, tracking an experimental Fluorine-18 formulation through initial design, radioactive decay adjustments, quadratic regression, multi-objective optimisation with kinetic penalties, and automated phase transition via **ACTA** and **ASTM**.
+This case study demonstrates the sequential optimisation workflow in **DoECISORY.jl**, tracking an experimental peptide formulation through initial design, radioactive decay adjustments, quadratic regression, multi-objective optimisation with kinetic penalties, and automated phase transition via **ACTA** and **ASTM**.
 
 ---
 
 ## Problem Formulation
 
-* **Objective:** Optimise synthesis and radiolabelling parameters for a Fluorine-18 ($^{18}\text{F}$) labelled prosthetic radiotracer model.
+* **Objective:** Optimise formulation parameters for a Gallium-68 labelled model peptide.
 * **Continuous Factors (3):**
   1. `Temperature` ($X_1$): $30.0$ to $90.0\,^\circ\text{C}$ (centre: $60.0\,^\circ\text{C}$)
   2. `ReactionTime` ($X_2$): $5.0$ to $35.0\,\text{min}$ (centre: $20.0\,\text{min}$)
@@ -15,7 +15,7 @@ This case study demonstrates the sequential optimisation workflow in **DoECISORY
   1. `RadiochemicalYield` ($Y_1$, %): Maximise (Target: 95.0%, Min: 60.0%, Weight: 1.5)
   2. `RadiolyticImpurity` ($Y_2$, %): Minimise (Target: 1.0%, Max: 8.0%, Weight: 1.0)
   3. `ColloidalFraction` ($Y_3$, %): Minimise (Target: 0.5%, Max: 5.0%, Weight: 1.0)
-* **Radionuclide:** Fluorine-18 ($t_{1/2} = 109.77\,\text{min}$, $\lambda = 0.006315\,\text{min}^{-1}$)
+* **Radionuclide:** Gallium-68 ($t_{1/2} = 67.71\,\text{min}$, $\lambda = 0.010237\,\text{min}^{-1}$)
 
 ---
 
@@ -28,10 +28,10 @@ using DoECISORY
 
 # Define formulation ingredients
 recipe = [
-    Dict("Name" => "Radiotracer_Precursor", "Role" => "VAR",  "MW" => 450.5,  "Unit" => "ug", "Mass" => 30.0),
-    Dict("Name" => "Buffer_Salt",           "Role" => "FIX",  "MW" => 82.03,  "Unit" => "mg", "Mass" => 15.0),
-    Dict("Name" => "Ascorbic_Acid",         "Role" => "FIX",  "MW" => 176.12, "Unit" => "mg", "Mass" => 5.0),
-    Dict("Name" => "Water_for_Inj",         "Role" => "FILL", "MW" => 18.015, "Unit" => "uL", "Mass" => 1000.0)
+    Dict("Name" => "Peptide_Precursor", "Role" => "VAR",  "MW" => 1435.6, "Unit" => "ug", "Mass" => 30.0),
+    Dict("Name" => "Sodium_Acetate",    "Role" => "FIX",  "MW" => 82.03,  "Unit" => "mg", "Mass" => 15.0),
+    Dict("Name" => "Ascorbic_Acid",     "Role" => "FIX",  "MW" => 176.12, "Unit" => "mg", "Mass" => 5.0),
+    Dict("Name" => "Water_for_Inj",     "Role" => "FILL", "MW" => 18.015, "Unit" => "uL", "Mass" => 1000.0)
 ]
 
 # Run stoichiometric audit
@@ -86,7 +86,7 @@ df_exp = DataFrame(
     Symbol("INPUT_ReactionTime") => X_physical[:, 2],
     Symbol("INPUT_Precursor")    => X_physical[:, 3],
     # Preparation delay before synthesis initiation (0 to 12 mins)
-    :TIME_FORW_MINS_Radiotracer_Precursor => rand(0.0:0.5:12.0, N),
+    :TIME_FORW_MINS_Peptide_Precursor => rand(0.0:0.5:12.0, N),
     # Analytical latency before HPLC quantification (5 to 25 mins)
     :TIME_REVE_MINS_RadiochemicalYield => rand(5.0:1.0:25.0, N)
 )
@@ -143,7 +143,7 @@ anova_yield = VISE_GenerateAnovaTable_DDEF(model_yield)
 
 ## 5. Multi-Objective Optimisation and DCYP
 
-We establish desirability criteria across all 3 responses, apply **DCYP** for Fluorine-18 on factor 2 (`ReactionTime`), and explore the multi-criteria Candidate Pool:
+We establish desirability criteria across all 3 responses, apply **DCYP** for Gallium-68 on factor 2 (`ReactionTime`), and explore the multi-criteria Candidate Pool:
 
 ```julia
 # 1. Multi-Objective Goals
@@ -153,9 +153,9 @@ goals = [
     Dict("Type" => "Minimise", "Min" => 0.2,  "Max" => 5.0,  "Target" => 0.5,  "Weight" => 1.0)
 ]
 
-# 2. DCYP Modifier: λ = ln(2) / 109.77 on Factor 2
-lambda_f18 = log(2) / 109.77
-dcyp_mod = CORE_ModifierDCYP_DDES(2, lambda_f18, "F-18")
+# 2. DCYP Modifier: λ = ln(2) / 67.71 on Factor 2
+lambda_ga68 = log(2) / 67.71
+dcyp_mod = CORE_ModifierDCYP_DDES(2, lambda_ga68, "Ga-68")
 
 # 3. Continuous Optimisation & Candidate Pool Generation
 bounds = hcat(minimum(X_mat; dims=1)', maximum(X_mat; dims=1)')
@@ -182,11 +182,11 @@ In `Gui_Lens` or batch scripts, the full portfolio is presented:
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
 | `TOP-01*` | 74.2 | 16.8 | 38.5 | 94.6 | 1.8 | 0.6 | 0.912 | Unconstrained Global Summit |
 | `TOP-02` | 75.0 | 17.0 | 40.0 | 94.8 | 1.9 | 0.5 | 0.908 | High-Density Grid Mode |
-| `INP-Temperature` | 62.5 | 22.0 | 42.0 | 90.2 | 1.1 | 0.8 | 0.845 | Minimal thermal stress on precursor |
+| `INP-Temperature` | 62.5 | 22.0 | 42.0 | 90.2 | 1.1 | 0.8 | 0.845 | Minimal thermal stress on peptide |
 | `INP-Precursor` | 76.0 | 17.5 | 24.5 | 92.4 | 1.9 | 0.9 | 0.885 | **36% Precursor API savings** |
 | `OUT-Impurity` | 68.0 | 14.0 | 36.0 | 89.8 | 0.9 | 0.7 | 0.862 | Stringent clinical purity release |
 
-*Decision:* Given that radiotracer precursor is costly and supply is limited, the researcher selects **`INP-Precursor`** (`[76.0, 17.5, 24.5]`), sacrificing only $2.2\%$ yield while conserving $36\%$ of active substrate.
+*Decision:* Given that peptide precursor is costly and supply is limited, the researcher selects **`INP-Precursor`** (`[76.0, 17.5, 24.5]`), sacrificing only $2.2\%$ yield while conserving $36\%$ of active substrate.
 
 ---
 

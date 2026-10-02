@@ -27,38 +27,45 @@ short_description: DoE with Computational Interactive SeqOpt for Response Yield
 
 ---
 
-## Capabilities
+## Core Capabilities
 
-* **3-Factor Experimental Designs**: Specialised matrices for 3-factor formulation spaces, including Box-Behnken (BB15), Central Composite (CD17), Taguchi (TL09), and Fractional D-Optimal (DF14).
-* **Optimality Metrics**: Evaluation of D-, A-, G-, and I-efficiencies and design matrix condition numbers.
-* **Statistical Modelling & Diagnostics**: Linear and quadratic OLS regression with AIC, adjusted $R^2$, VIF multicollinearity, and ANOVA diagnostics.
-* **Sequential Multi-Phase Optimisation**: Search-space transitions (ACTA&ASTM) tracking leader formulation conditions across stages.
-* **Stoichiometry & Radiochemical Kinetics**: Mass balance audits, physical unit checks, and decay corrections (DCYP incubation penalties, FORW/REVE decay alignment).
-* **Multi-Objective Optimisation**: Derringer-Suich desirability profiling with continuous and categorical objective functions via global metaheuristics.
-* **Scientific Reporting & Visualisation**: Automated multi-sheet Excel workbooks (`.xlsx`), interactive Plotly response surfaces, and project archives (`.zip`).
-
----
-
-## Architecture & Scientific Workflow
-
-DoECISORY follows an iterative three-stage experimental workflow:
-
-1. **Phase 1: Formulation Design (`Gui_Deck`)**  
-   * **Ingredient Specification & Audit**: Input active ingredients and excipients; automatic stoichiometric mass balancing and physical unit auditing (`Lib_Mole`).
-   * **Design Selection**: Generate 3-factor coded matrices (`BB15`, `CD17`, `TL09`, `DF14`) and evaluate D-, A-, G-, and I-optimality metrics (`Lib_Core`).
-   * **Protocol Generation**: Export laboratory execution workbooks (`.xlsx`) with automated randomised run orders (`Sys_Fast`).
-
-2. **Phase 2: Statistical Modelling & Analytics (`Gui_Lens`)**  
-   * **OLS Regression & ANOVA**: Import experimental responses, fit linear or quadratic models, compute $R^2$, AIC, VIF multicollinearity, and ANOVA diagnostics (`Lib_Vise`).
-   * **Multi-Objective Desirability**: Optimise competing responses simultaneously using Derringer-Suich desirability profiling (`Lib_Core`).
-   * **Visual Analytics & Reporting**: Generate 2D contour and 3D response surface plots (`Lib_Arts`) and export scientific report workbooks (`.xlsx`).
-
-3. **Phase 3: Sequential Space Transitions (`Sys_Flow`)**  
-   * **Adaptive Navigation (ACTA&ASTM)**: Identify optimal leader formulation coordinates and perform automated search-space contraction and translation to define factor boundaries for subsequent iterative phases.
+* **3-Factor Experimental Designs**: Matrices for 3-factor formulation spaces, including Box-Behnken (BB15), Central Composite (CD17), Taguchi (TL09), and Fractional D-Optimal (DF14).
+* **Information Optimality Metrics**: Evaluation of D-, A-, G-, and I-efficiencies and design matrix condition numbers.
+* **Stoichiometry and Mass Balance**: Automated mass balance audits, excipient balancing, molar ratios, and concentration consistency checks (`Lib_Mole`).
+* **Decay Adjustments**: Pre-reaction preparation decay normalisation and post-reaction measurement restoration back to End of Synthesis (EOS) via `VISE_ApplyForwReveDecay_DDEF` and `MOLE_CalcRadioDecay_DDEF`.
+* **Multi-Objective Optimisation and DCYP**: Derringer-Suich desirability profiling with continuous and categorical criteria:
+  - **Decay-Coupled Yield Penalty (DCYP)**: In-reaction kinetic trade-off arbitration penalising prolonged duration against exponential isotope decay.
+  - **Gaussian Neighbour-Weighting Regularisation**: Smoothens multi-objective landscape ridges for stable metaheuristic and grid convergence.
+* **Candidate Pool Formulation**: Generates a tiered portfolio of viable formulations rather than a single point:
+  - *Absolute Leaders (`TOP-XX`)*: Highest unconstrained composite desirability.
+  - *Input Minimisation (`INP-<Factor>`)*: Cost-saving formulations achieving $\ge 90\%$ desirability with minimal reagent consumption or thermal stress.
+  - *Output Specialisation (`OUT-<Response>`)*: Solutions prioritising critical quality attributes like purity or specific activity.
+* **Sequential Interphase Transfer (ACTA and ASTM)**: Bridges successive experimental phases through:
+  - *ACTA (Adaptive Contraction & Translation Algorithm)*: Evaluates relative position ($p_i$) to contract search boundaries ($c$) around the leader or translate them ($\delta$) upon boundary contact.
+  - *ASTM (Affine Space Transformation Model)*: Applies affine scaling ($x_{\text{new}} = \alpha \cdot x_{\text{old}} + \beta$) and absolute physical clamping.
+* **Statistical Diagnostics**: Seven-stage scientific analysis report featuring OLS linear and quadratic regression, ANOVA, Lack-of-Fit tests, cross-validated $Q^2$ (overfitting protection), and VIF multicollinearity screening.
+* **Visualisation**: PlotlyJS 3D response surfaces, equipotential 2D contour maps with fixed-factor slicing, and IPKT interval shift charts (`Lib_Arts`).
+* **Spreadsheet Data Exchange (Excel)**: Multi-sheet protocol workbooks (`.xlsx`) with formatting standards, formula preservation, and zero data loss (`Sys_Fast`).
 
 ---
 
-## Getting Started & Usage Workflows
+## System Workspaces and Sequential Workflow
+
+DoECISORY separates functional interfaces from sequential experimental phases:
+
+### User Workspaces
+* **`Gui_Deck` (Design & Formulation Workspace)**: Stoichiometric mass balance checks (`Lib_Mole`), factor definitions, 3-factor matrix generation (`BB15`, `CD17`, `TL09`, `DF14`), and protocol workbook export (`Sys_Fast`).
+* **`Gui_Lens` (Analytics & Decision Workspace)**: Ingestion of completed experimental datasets, automatic decay corrections (precursor forward decay and EOS reverse decay via `VISE_ApplyForwReveDecay_DDEF`), OLS quadratic regression, ANOVA, cross-validated $Q^2$, Lack-of-Fit, DCYP multi-objective optimisation, Candidate Pool inspection, and 7-stage reporting (`Lib_Vise`, `Lib_Arts`).
+* **`Sys_Flow` (Interphase Transition Engine)**: Executes IPKT (ACTA boundary contraction/translation + ASTM affine space projection and clamping) to transition between sequential experimental phases.
+
+### Sequential Experimental Workflow
+1. **Phase 1 (Screening / Exploration)**: Formulate in `Gui_Deck` $\rightarrow$ execute laboratory runs $\rightarrow$ analyse and generate candidate pool in `Gui_Lens`.
+2. **Interphase Knowledge Transfer (IPKT = ACTA + ASTM)**: Select a candidate leader from the pool in `Gui_Lens` $\rightarrow$ apply ACTA contraction/translation ($c$, $\delta$) $\rightarrow$ apply ASTM affine scaling/regeneration ($\alpha \cdot x + \beta$) and clamping via `Sys_Flow`.
+3. **Phase 2 (Refinement / Optimisation)**: Automatically load adapted boundaries into `Gui_Deck` $\rightarrow$ generate Phase 2 protocol matrix with prior variance preserved $\rightarrow$ execute and verify in `Gui_Lens`.
+
+---
+
+## Usage Pathways
 
 DoECISORY supports three distinct execution pathways depending on operational and research requirements:
 

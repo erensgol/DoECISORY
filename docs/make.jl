@@ -18,7 +18,12 @@ makedocs_kwargs = Dict{Symbol, Any}(
     ),
     :pages => [
         "Home" => "index.md",
-        "Workflow Manual" => "manual.md",
+        "Methodology" => "methodology.md",
+        "Case Study" => "manual.md",
+        "Statistical Diagnostics" => "diagnostics.md",
+        "Visualisation" => "visualisation.md",
+        "Graphical Guide" => "interface.md",
+        "Scripting Guide" => "scripting.md",
         "API Reference" => "api.md",
         "Licence & Citation" => "licence.md"
     ],
