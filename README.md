@@ -17,7 +17,6 @@ short_description: DoE with Computational Interactive SeqOpt for Response Yield
 [![codecov](https://codecov.io/gh/erensgol/DoECISORY.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/erensgol/DoECISORY.jl)
 [![Julia Version](https://img.shields.io/badge/Julia-v1.10+-9558B2)](https://julialang.org)
 [![License: MPL 2.0](https://img.shields.io/badge/License-MPL_2.0-brightgreen.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows_%7C_Linux_%7C_macOS-lightgrey)]()
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Cloud_App-FFD21E)](https://erensgol-doecisory.hf.space)
 [![ORCID](https://img.shields.io/badge/-0009--0000--4491--7759-A6CE39?logo=orcid&logoColor=white)](https://orcid.org/0009-0000-4491-7759)
 
