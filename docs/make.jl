@@ -17,15 +17,15 @@ makedocs_kwargs = Dict{Symbol, Any}(
         assets = String[]
     ),
     :pages => [
-        "Home" => "index.md",
-        "Methodology" => "methodology.md",
-        "Case Study" => "manual.md",
-        "Statistical Diagnostics" => "diagnostics.md",
-        "Visualisation" => "visualisation.md",
-        "Graphical Guide" => "interface.md",
-        "Scripting Guide" => "scripting.md",
-        "API Reference" => "api.md",
-        "Licence & Citation" => "licence.md"
+        "Overview"                => "index.md",
+        "Methodology"             => "methodology.md",
+        "Graphical Guide"         => "interface.md",
+        "Scripting Guide"         => "scripting.md",
+        "Case Study"              => "tutorial.md",
+        "Statistics"              => "statistics.md",
+        "Visualisations"          => "visuals.md",
+        "API Reference"           => "api.md",
+        "Citation"                => "citation.md"
     ],
     :checkdocs => :exports,
     :warnonly => true

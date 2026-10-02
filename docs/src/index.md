@@ -11,14 +11,14 @@
 * **3-Factor Experimental Designs**: Matrices for 3-factor formulation spaces, including Box-Behnken (BB15), Central Composite (CD17), Taguchi (TL09), and Fractional D-Optimal (DF14).
 * **Information Optimality Metrics**: Evaluation of D-, A-, G-, and I-efficiencies and design matrix condition numbers.
 * **Stoichiometry and Mass Balance**: Automated mass balance audits, excipient balancing, molar ratios, and concentration consistency checks (`Lib_Mole`).
-* **Decay Adjustments**: Pre-reaction preparation decay normalisation and post-reaction measurement restoration back to End of Synthesis (EOS) via `VISE_ApplyForwReveDecay_DDEF` and `MOLE_CalcRadioDecay_DDEF`.
-* **Multi-Objective Optimisation and DCYP**: Derringer-Suich desirability profiling with continuous and categorical criteria:
-  - **Decay-Coupled Yield Penalty (DCYP)**: In-reaction kinetic trade-off arbitration penalising prolonged duration against exponential isotope decay.
+* **Temporal Kinetic Adjustments**: Pre-reaction ingredient degradation normalisation (e.g. stock holding delay, radionuclide decay, or labile precursor degradation) and post-reaction analytical latency restoration back to reference state (e.g. End of Synthesis - EOS) via `VISE_ApplyForwReveDecay_DDEF` and `MOLE_CalcRadioDecay_DDEF`.
+* **Multi-Objective Optimisation and Kinetic Penalties (DCYP)**: Derringer-Suich desirability profiling with continuous and categorical criteria:
+  - **Decay-Coupled Yield Penalty (DCYP)**: Universal kinetic trade-off arbitration penalising excessive reaction duration against exponential half-life decay ($t_{1/2}$, e.g. radionuclide decay or labile compound degradation).
   - **Gaussian Neighbour-Weighting Regularisation**: Smoothens multi-objective landscape ridges for stable metaheuristic and grid convergence.
 * **Candidate Pool Formulation**: Generates a tiered portfolio of viable formulations rather than a single point:
   - *Absolute Leaders (`TOP-XX`)*: Highest unconstrained composite desirability.
-  - *Input Minimisation (`INP-<Factor>`)*: Cost-saving formulations achieving $\ge 90\%$ desirability with minimal reagent consumption or thermal stress.
-  - *Output Specialisation (`OUT-<Response>`)*: Solutions prioritising critical quality attributes like purity or specific activity.
+  - *Input Minimisation (`INP-<Factor>`)*: Green chemistry and cost-saving formulations achieving $\ge 90\%$ desirability with minimal reagent consumption, reduced heating load, or shortest residence time.
+  - *Output Specialisation (`OUT-<Response>`)*: Solutions prioritising critical quality attributes like purity, specific activity, or minimal by-product formation.
 * **Sequential Interphase Transfer (ACTA and ASTM)**: Bridges successive experimental phases through:
   - *ACTA (Adaptive Contraction & Translation Algorithm)*: Evaluates relative position ($p_i$) to contract search boundaries ($c$) around the leader or translate them ($\delta$) upon boundary contact.
   - *ASTM (Affine Space Transformation Model)*: Applies affine scaling ($x_{\text{new}} = \alpha \cdot x_{\text{old}} + \beta$) and absolute physical clamping.
@@ -33,12 +33,12 @@
 DoECISORY provides two operational interfaces:
 
 ### [Graphical Interface (GUI)](interface.md)
-* **Users:** Laboratory chemists, radiopharmacists, and formulation scientists.
+* **Users:** Laboratory chemists, radiopharmacists, radiochemists, and formulation scientists.
 * **Interface:** Browser-based interactive Dash platform (`run_app()`).
 * **Workflow:** Graphical factor setup, automatic Excel workbook download, dropzone data ingestion, interactive 3D Plotly surfaces, and slider-controlled IPKT transitions without terminal coding.
 
 ### [Scripting and Batch Pipeline](scripting.md)
-* **Users:** Biostatisticians, data scientists, and automation engineers.
+* **Users:** Biostatisticians, data scientists, chemical engineers, and automation specialists.
 * **Interface:** Julia REPL, Jupyter/Pluto notebooks, or automated batch scripts.
 * **Workflow:** Direct API dispatch, multi-threaded high-density grid evaluations (`--threads=auto`), and ahead-of-time sysimage compilation (`system/compiler.jl`).
 
@@ -64,13 +64,13 @@ Pkg.add(url="https://github.com/erensgol/DoECISORY.jl")
 
 ## Minimal Verification Example
 
-Generate a 14-point directional D-optimal design (`"DF14"`), evaluate optimality, fit a quadratic response surface, and apply an IPKT contraction step:
+Generate a standard 15-point Box-Behnken design (`"BB15"`), evaluate optimality, fit a quadratic response surface, and apply an IPKT contraction step:
 
 ```julia
 using DoECISORY
 
-# 1. Generate coded 14-run directional design matrix
-X_coded = CORE_GenDesign_DDEF("DF14", 3; Direction=[1, -1, 1])
+# 1. Generate coded 15-run Box-Behnken design matrix
+X_coded = CORE_GenDesign_DDEF("BB15", 3)
 
 # 2. Evaluate D-efficiency
 metrics = CORE_CalcDesignMetrics_DDEF(Float64.(X_coded), "quadratic")
@@ -101,13 +101,13 @@ println("Adapted Phase 2 Coded Levels (IPKT): ", round.(phase2_levels, digits=3)
 ```@contents
 Pages = [
     "methodology.md",
-    "manual.md",
-    "diagnostics.md",
-    "visualisation.md",
     "interface.md",
     "scripting.md",
+    "tutorial.md",
+    "statistics.md",
+    "visuals.md",
     "api.md",
-    "licence.md"
+    "citation.md"
 ]
 Depth = 2
 ```

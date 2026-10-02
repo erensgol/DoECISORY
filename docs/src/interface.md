@@ -28,7 +28,7 @@ The **Deck** workspace manages formulation setup, mass balance auditing, and exp
             │
   [2. Select Design]  ───► Choose Design Geometry (BB15, CD17, TL09, or DF14 Directional)
             │
-  [3. Recipe Audit]   ───► Specify Active Precursor, Buffer, Excipients & Run Stoichiometric Check
+  [3. Recipe Audit]   ───► Specify Precursor, Buffer, Excipients & Run Stoichiometric Check
             │
   [4. Export Excel]   ───► Click "Generate & Download Protocol Workbook (.xlsx)"
 ```
@@ -42,7 +42,7 @@ The **Deck** workspace manages formulation setup, mass balance auditing, and exp
 3. Click **Audit Mass Balance** to verify that concentration and total volume constraints are strictly satisfied.
 
 ### 2.2. Generating the Protocol Sheet
-1. Select your target design geometry (e.g. `DF14 Directional D-Optimal`).
+1. Select your target design geometry (e.g. `BB15 Box-Behnken`).
 2. Click **Download Protocol Workbook**. An Excel file (`DoECISORY_Protocol.xlsx`) is downloaded containing pre-formatted, colour-coded worksheets ready for benchtop execution.
 
 ---
@@ -98,3 +98,27 @@ To advance from Phase 1 to Phase 2:
    * $c = 0.25$: Aggressive 75% zoom for precise fine-tuning.
 4. Review the **IPKT Interval Bar Chart** to visually confirm that the new boundaries are valid and safely clamped away from equipment limits.
 5. Click **Commit Phase Transition & Download Phase 2 Protocol**. The updated workbook is immediately generated with Phase 1 variance preserved in metadata.
+
+---
+
+## 5. UI to Engine Parameter Mapping
+
+For researchers coordinating computational scripts and laboratory interfaces, the table below maps each graphical control in **Deck** and **Lens** to its underlying functional Julia routine:
+
+| Graphical Control / Widget | Workspace | User Operation | Underlying Julia API Function | Engine Arguments & Structs |
+| :--- | :--- | :--- | :--- | :--- |
+| **Audit Mass Balance Button** | Deck | Verifies formulation conservation | [`MOLE_QuickAudit_DDEF`](@ref) | `recipe::Vector{Dict}`, `total_vol_uL`, `target_conc` |
+| **Design Geometry Dropdown** | Deck | Generates design matrix | [`CORE_GenDesign_DDEF`](@ref) | `DesignType::String`, `nFactors::Int`, `Direction` |
+| **Factor Level Inputs [Min, Mid, Max]** | Deck | Maps coded space to units | [`CORE_MapLevels_DDEF`](@ref) | `X_coded::Matrix`, `FactorConfig::Vector{Dict}` |
+| **Download Protocol Workbook Button** | Deck | Builds formatted `.xlsx` | [`FAST_SafeExcelWrite_DDEF`](@ref) | `filepath::String`, `worksheets::Dict` |
+| **Dataset Ingestion Dropzone** | Lens | Parses sheet & applies decay | [`FAST_ReadExcel_DDEF`](@ref) & [`VISE_ApplyForwReveDecay_DDEF`](@ref) | `df::DataFrame`, `decay_map::Dict` |
+| **Model Type Selector** | Lens | Fits response surfaces | [`VISE_Regress_DDEF`](@ref) | `X::Matrix`, `Y::Vector`, `ModelType::String` |
+| **Analytical Summary Modal** | Lens | Displays 7-stage diagnostic report | [`VISE_GenerateScientificReport_DDEF`](@ref) | `models::Vector{Dict}`, `alpha::Float64` |
+| **ANOVA & Lack-of-Fit Display** | Lens | Evaluates model adequacy | [`VISE_GenerateAnovaTable_DDEF`](@ref) | `model::Dict`, `SS_Type::String` |
+| **DCYP Kinetic Penalty Toggle** | Lens | Enforces duration trade-off | [`CORE_ApplyDCYP_DDEF`](@ref) | [`CORE_ModifierDCYP_DDES`](@ref)`(factor_idx, lambda, label)` |
+| **Execute Optimization Button** | Lens | Solves multi-objective landscape | [`CORE_OptimiseDesirability_DDEF`](@ref) | `models`, `goals::Vector{Dict}`, `bounds` |
+| **Candidate Portfolio Selector** | Lens | Extracts multi-criteria leaders | [`FLOW_GetCandidates_DDEF`](@ref) | `opt_results::Dict`, `tier_threshold=0.90` |
+| **ACTA Contraction Slider ($c$)** | Lens | Adapts domain boundaries | [`FLOW_CalcACTA_DDEF`](@ref) | `leader_val`, `old_levels`, `c::Float64`, `delta` |
+| **ASTM Transformation Inputs** | Lens | Scales and clamps physical space | [`FLOW_ApplyASTM_DDEF`](@ref) | `coord`, `alpha::Float64`, `beta::Float64`, `limits` |
+| **Transfer Knowledge Button** | Lens $\rightarrow$ Deck | Bridges sequential phase | [`FLOW_CommitIPKT_DDEF`](@ref) & [`FLOW_BuildIPKT_DDEF`](@ref) | `ipkt_payload::Dict` |
+

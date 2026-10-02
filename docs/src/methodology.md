@@ -1,66 +1,101 @@
-# Methodology
+# Novel Methodological Features
 
-This section details the theoretical and mathematical formulations implemented in **DoECISORY.jl**, covering physical decay adjustments, multi-objective optimisation with kinetic penalties, candidate pool generation, and sequential interphase knowledge transfer.
+While classical experimental designs, Ordinary Least Squares (OLS) regression, and ANOVA procedures follow established literature (detailed in [Statistics](statistics.md) and [API Reference](api.md)), this section details the four **novel methodological features** introduced in **DoECISORY.jl**:
 
-All formulations are defined in standard mathematical notation and implemented via functional Julia routines.
+1. **Temporal Latency Adjustments:** Accounting for precursor preparation decay and post-reaction analytical measurement delays via half-life ($t_{1/2}$) kinetics.
+2. **Decay-Coupled Yield Penalty (DCYP) & Regularisation:** Reconciling chemical conversion duration with continuous half-life loss.
+3. **Candidate Pool Architecture:** Deriving a structured portfolio of operational compromises (unconstrained leaders, input conservation, and output specialisation) rather than forcing a single deterministic optimum.
+4. **Interphase Knowledge Transfer (IPKT = ACTA + ASTM):** Sequentially transferring historical variance, contracting operational bounds, and transforming coordinates between successive experimental phases.
 
 ---
 
-## 1. Radioactive Decay Corrections: Pre- and Post-Reaction Latency
+## 1. Temporal Latency Adjustments: Pre- and Post-Reaction Delays
 
-In systems involving radioisotopes or decaying chemical species, elapsed time is a physical variable that alters reagent mass and product activity. Precursor decay before synthesis and analytical latency after reaction completion are managed via [`VISE_ApplyForwReveDecay_DDEF`](@ref) and [`MOLE_CalcRadioDecay_DDEF`](@ref):
+In experiments involving radioisotopes or labile chemical compounds with a known half-life ($t_{1/2}$), elapsed time is an active physical variable that alters reagent mass and product yield. Precursor decay prior to reaction initiation and analytical latency following synthesis completion are managed via [`VISE_ApplyForwReveDecay_DDEF`](@ref) and [`MOLE_CalcRadioDecay_DDEF`](@ref):
 
 * **Precursor Preparation Delay ($\Delta t_{\text{forw}}$):** The elapsed time between stock precursor calibration and addition to the reaction vessel at $t_0$.
 * **Reaction Duration ($\Delta t_{\text{reaction}}$):** The controlled residence time in the reactor.
-* **Measurement Latency ($\Delta t_{\text{reve}}$):** The post-reaction elapsed time between synthesis completion (End of Synthesis, EOS) and analytical quantification (HPLC, SPE, or dose calibrator).
+* **Measurement Latency ($\Delta t_{\text{reve}}$):** The post-reaction elapsed time between synthesis completion (or reaction quenching) and analytical quantification (e.g. HPLC, SPE, or dose calibrator).
 
-### 1.1. Forward Precursor Decay Correction
-Between precursor calibration and reaction initiation ($t_0$), elapsed preparation time ($\Delta t_{\text{forw}}$) leads to radioactive decay.
-
-If uncorrected, the nominal activity recorded in the design matrix introduces systematic bias into the regression model. The true starting activity $A_{\text{actual}}$ is computed using `MOLE_CalcRadioDecay_DDEF` with `Reverse=false`:
+### Exponential Half-Life Principle
+Any decaying or labile species experiences depletion governed by its characteristic half-life ($t_{1/2}$):
 
 ```math
-A_{\text{actual}} = A_{\text{nominal}} \cdot \exp(-\lambda \cdot \Delta t_{\text{forw}})
+C(t) = C_0 \cdot \exp(-\lambda \cdot t) = C_0 \cdot 2^{-t / t_{1/2}}, \quad \text{where } \lambda = \frac{\ln 2}{t_{1/2}}
+```
+
+The half-life parameter $t_{1/2}$ operates across two primary scientific paradigms:
+
+| Scientific Paradigm | Sensitive / Labile Entity | Physical Meaning of $t_{1/2}$ | Practical Laboratory Consequence |
+| :--- | :--- | :--- | :--- |
+| **Radiopharmaceutical Chemistry & Nuclear Medicine** | Short-lived radionuclide ($^{18}\text{F}$, $^{68}\text{Ga}$, $^{11}\text{C}$, $^{177}\text{Lu}$, etc.) | Physical isotope half-life (invariant nuclear constant) | Precursor radioactive decay pre-synthesis & analytical loss during HPLC waiting queue |
+| **Labile Chemical Synthesis & Sensitive APIs** | Unstable reactive intermediate, photolabile or hydrolytically labile active molecule | Measured chemical degradation half-life under operating conditions | Active substrate loss prior to reactor charging & degradation during autosampler holding delay |
+
+### 1.1. Forward Precursor Degradation Correction
+Between reagent calibration and reaction initiation ($t_0$), elapsed preparation time ($\Delta t_{\text{forw}}$) leads to substrate loss.
+
+If uncorrected, the nominal concentration or activity recorded in the design matrix introduces systematic bias into the regression model. The true starting quantity $C_{\text{actual}}$ is computed using `MOLE_CalcRadioDecay_DDEF` with `Reverse=false`:
+
+```math
+C_{\text{actual}} = C_{\text{nominal}} \cdot \exp(-\lambda \cdot \Delta t_{\text{forw}})
 ```
 
 where:
-* $A_{\text{nominal}}$ is the nominal precursor activity or mass,
-* $\lambda = \frac{\ln 2}{t_{1/2}}$ is the physical decay constant derived from the half-life ($t_{1/2}$),
-* $\Delta t_{\text{forw}}$ is the preparation duration.
+* $C_{\text{nominal}}$ is the nominal precursor activity, mass, or concentration,
+* $\lambda = \frac{\ln 2}{t_{1/2}}$ is the physical or experimental decay constant derived from the half-life ($t_{1/2}$),
+* $\Delta t_{\text{forw}}$ is the preparation delay.
 
 The training matrix column (`ACTUAL_<Precursor>`) is populated with these values, removing preparation latency variance from the model.
 
-### 1.2. Reverse Product Decay Correction (EOS Alignment)
-Following synthesis completion (EOS), analytical chromatography and quantification involve variable delay ($\Delta t_{\text{reve}}$).
+> [!NOTE] Primary Application: Radiopharmaceutical Benchmark
+> In PET/SPECT radiotracer synthesis, elapsed time between radionuclide calibration and vessel charging ($\Delta t_{\text{forw}}$) leads to physical decay of radioactive atoms. For $^{18}\text{F}$ ($t_{1/2} = 109.77\,\text{min}$), a 15-minute bench delay causes an approximate $9.1\%$ loss of starting precursor activity. Correcting with `Reverse=false` reconstructs true starting radioactivity $A_{\text{actual}}$, removing benchtop timing noise from the design matrix.
 
-To compare product yields across all design runs on an equivalent basis, raw measured activity $A_{\text{measured}}$ is reconstructed back to the EOS reference state using `MOLE_CalcRadioDecay_DDEF` with `Reverse=true`:
+> [!TIP] General Chemical Analogy: Labile Reagents & Reactive Intermediates
+> In organic synthesis and pharmaceutical formulation, reactive intermediates (e.g. moisture-sensitive acid chlorides, diazo reagents, or short-lived free radicals) or labile active pharmaceutical ingredients (APIs) often have documented chemical degradation half-lives ($t_{1/2}$). By supplying this measured half-life to the engine, nominal amounts are adjusted to actual effective concentrations at the moment of addition.
+
+### 1.2. Reverse Analyte Restoration (Reference State Alignment)
+Following synthesis completion or reaction quenching, analytical chromatography and quantification involve variable delay ($\Delta t_{\text{reve}}$).
+
+To compare product yields across all design runs on an equivalent baseline, raw measured quantity $C_{\text{measured}}$ is reconstructed back to the reference state (End of Synthesis - EOS, or quenching moment) using `MOLE_CalcRadioDecay_DDEF` with `Reverse=true`:
 
 ```math
-A_{\text{EOS}} = A_{\text{measured}} \cdot \exp(+\lambda \cdot \Delta t_{\text{reve}})
+C_{\text{ref}} = C_{\text{measured}} \cdot \exp(+\lambda \cdot \Delta t_{\text{reve}})
 ```
 
-Updating the response column (`ACTUAL_<Output>`) isolates chemical conversion yield from post-synthesis analytical waiting times.
+Updating the response column (`ACTUAL_<Output>`) isolates chemical conversion efficiency from post-synthesis analytical waiting times.
+
+> [!NOTE] Radiopharmaceutical Benchmark
+> Analytical HPLC, solid-phase extraction (SPE) purification, and dose calibration involve variable holding delays ($\Delta t_{\text{reve}}$) between sequential runs. Reconstructing measured activity back to EOS via `Reverse=true` decouples chemical radiolabelling yield from post-synthesis analytical waiting queues.
+
+> [!TIP] General Analytical Chemistry Analogy
+> When quantifying hydrolytically or photolytically unstable products, samples standing in an automated autosampler queue undergo progressive degradation. Reverse correction restores the analyte concentration back to the exact quenching time ($t_{\text{quench}}$).
 
 ---
 
-## 2. Decay-Coupled Yield Penalty (DCYP) and Desirability Regularisation
+## 2. Kinetic Trade-Off: Decay-Coupled Yield Penalty (DCYP)
 
 ### 2.1. Decay-Coupled Yield Penalty (DCYP)
-During reaction execution, chemical transformation often exhibits an asymptotic plateau or sigmoidal rise with respect to duration ($\Delta t_{\text{reaction}}$). However, exponential physical decay concurrently diminishes the remaining radioactive payload:
+During reaction execution, chemical transformation typically exhibits an asymptotic plateau or sigmoidal rise with respect to duration ($\Delta t_{\text{reaction}}$). However, exponential half-life decay concurrently diminishes the remaining active payload:
 
 ```math
-Y_{\text{net}}(t) = Y_{\text{chemical}}(t) \cdot \exp(-\lambda \cdot t)
+Y_{\text{net}}(t) = Y_{\text{chemical}}(t) \cdot \exp(-\lambda \cdot t) = Y_{\text{chemical}}(t) \cdot 2^{-t / t_{1/2}}
 ```
 
-Optimising solely for percentage conversion yield ($Y_{\text{chemical}}$) leads to artificially prolonged reaction times that produce severely degraded net injectable radioactivity.
+Optimising solely for percentage conversion yield ($Y_{\text{chemical}}$) leads to artificially prolonged reaction times that produce severely degraded net active product or depleted radiotracer doses.
 
-In DoECISORY, the **Decay-Coupled Yield Penalty (DCYP)** integrates physical decay directly into the multi-criteria composite desirability function $D$:
+In DoECISORY, the **Decay-Coupled Yield Penalty (DCYP)** integrates physical kinetic decay directly into the multi-criteria composite desirability function $D$:
 
 ```math
 D_{\text{adjusted}} = D \cdot \exp(-\lambda \cdot \Delta t_{\text{reaction}})
 ```
 
-By embedding this penalty into both gradient-free metaheuristics and continuous landscape evaluations, DoECISORY identifies the precise kinetic optimum that balances chemical synthesis kinetics against nuclear half-life.
+By embedding this penalty into both gradient-free metaheuristics and continuous landscape evaluations, DoECISORY identifies the precise kinetic optimum that balances reaction completion against exponential first-order loss.
+
+> [!NOTE] Radiopharmaceutical Application
+> For short-lived radionuclides ($^{11}\text{C}$, $^{18}\text{F}$, $^{68}\text{Ga}$), a reaction taking 45 minutes to reach 90% radiochemical conversion will yield significantly less net injectable radioactivity than a 15-minute reaction reaching 75% conversion, due to continuous half-life decay. DCYP mathematically arbitrates this dilemma to maximise injectable patient dose at EOS.
+
+> [!TIP] Labile Intermediate & Sensitive API Analogy
+> When synthesising products from unstable or thermally delicate active ingredients with a known degradation half-life $t_{1/2}$, extending reaction duration past the kinetic peak degrades the isolated product. DCYP balances chemical conversion rate against compound stability to identify the true productive optimum.
 
 ### 2.2. Gaussian Neighbour-Weighting Regularisation
 Standard Derringer-Suich desirability functions combine individual desirability transformations $d_i(y_i)$ via geometric averaging:
@@ -107,22 +142,23 @@ Rather than restricting the output to a single theoretical point $x^*$, DoECISOR
 ### 3.2. Candidate Classification
 From the deduplicated search results, DoECISORY builds a multi-criteria portfolio of candidates rather than forcing a single deterministic compromise:
 
-* **1. Absolute Global Leaders:**
-  * `TOP-01*`: Continuous metaheuristic global optimum from `BlackBoxOptim`.
-  * `TOP-02`: Highest-scoring discrete node identified on the high-density grid.
+* **1. Absolute Global Leaders (`TOP-01` to `TOP-08`):**
+  The continuous metaheuristic solution ($\mathbf{x}_{\text{BBO}}$) and top discrete grid nodes are pooled together and sorted descending by composite desirability. Up to 8 unconstrained candidates (`TOP-01` through `TOP-08`) are extracted:
+  * **The Asterisk (`*`) Identifier:** The candidate originating from continuous `BlackBoxOptim` carries an asterisk (e.g. `TOP-01*` or `TOP-02*`). While BBO often captures the global summit (`TOP-01*`), under tight computational time budgets or rugged multimodal surfaces, a high-density grid node may outscore it, placing BBO at `TOP-02*` or lower.
+  * **Discrete Grid Leaders:** The remaining unflagged entries represent distinct discrete grid coordinates that maintain spatial diversity ($\text{dist} > 0.01$) across the peak desirability region.
 * **2. Input Minimisation Leaders (`INP-<Factor>`):**
   Isolated within the top performance tier ($D(\mathbf{x}) \ge 0.90 \cdot D_{\max}$). For each active experimental factor $j \in \{1, \dots, d\}$, the algorithm extracts the coordinate that individually minimises that specific input:
   ```math
   \mathbf{x}_{\text{INP-}j} = \arg\min_{\mathbf{x} \in \text{Tier}_{90}} x_j
   ```
-  * `INP-X1` (e.g. `INP-Temperature`): Formulations that operate at the lowest possible thermal load to prevent substrate decomposition.
-  * `INP-X2` (e.g. `INP-ReactionTime`): Formulations with minimal residence time, reducing physical radioactive decay and equipment occupancy.
-  * `INP-X3` (e.g. `INP-Precursor`): Formulations that conserve scarce or expensive active pharmaceutical ingredients (APIs).
+  * `INP-X1` (e.g. `INP-Temperature`): Formulations operating at minimal thermal load to prevent substrate decomposition, thermal side-reactions, or excessive energy consumption.
+  * `INP-X2` (e.g. `INP-ReactionTime`): Formulations with minimal residence time, reducing physical radioactive decay, chemical degradation during holding, and overall cycle duration.
+  * `INP-X3` (e.g. `INP-Precursor`): Green chemistry formulations conserving scarce, costly, or high-purity active pharmaceutical ingredients (APIs).
 * **3. Output Specialisation Leaders (`OUT-<Response>`):**
   Identified within the same $90\%$ desirability tier by evaluating which candidate maximises or minimises individual quality attributes:
-  * `OUT-Y1` (e.g. `OUT-RadiochemicalYield`): Prioritises maximal conversion.
-  * `OUT-Y2` (e.g. `OUT-RadiolyticImpurity`): Prioritises minimal radiolytic fragmentation.
-  * `OUT-Y3` (e.g. `OUT-ColloidalFraction`): Prioritises minimal colloidal suspension.
+  * `OUT-Y1` (e.g. `OUT-Yield`): Maximises overall chemical conversion or isolated recovery.
+  * `OUT-Y2` (e.g. `OUT-Impurity`): Minimises degradation by-products, radiolytic fragments, or isomeric impurities.
+  * `OUT-Y3` (e.g. `OUT-SpecificActivity` / `OUT-Purity`): Maximises specific activity, radiochemical purity, or enantiomeric excess.
 
 This multi-faceted portfolio allows the research team to select a leader tailored to specific laboratory limitations (e.g. reagent scarcity, heating constraints, or purity thresholds) before advancing to the next sequential phase.
 
@@ -177,29 +213,4 @@ This operator supports four distinct experimental scenarios:
 3. **Systematic Offset ($\alpha = 1.0, \beta \neq 0.0$):** Incorporates systematic calibration offsets when changing analytical instruments or reagent batches.
 4. **Space Regeneration & Factor Replacement:** When a solvent or catalyst is substituted between phases, common continuous factors retain their historical knowledge, peak positions, and variance through IPKT, while the novel factor is initialised with new physical levels. This avoids resetting the entire experimental campaign.
 
----
 
-## 5. Directional D-Optimal Design (DF14)
-
-In sequential DoE, standard symmetrical screening designs (such as Box-Behnken with 15 runs or Central Composite with 17 runs) distribute points uniformly. When prior screening or preliminary runs indicate a preferred directional gradient, DoECISORY offers the **DF14 (14-Point Directional D-Optimal)** matrix geometry.
-
-### 5.1. D-Efficiency Formulation
-The information matrix $M$ for a quadratic model $f(\mathbf{x})$ evaluated across design matrix $X$ ($N \times p$) is:
-
-```math
-M = \frac{1}{N} X^T X
-```
-
-D-optimality maximises the determinant of the information matrix, which is inversely proportional to the volume of the confidence ellipsoid for model parameters $\boldsymbol{\beta}$:
-
-```math
-D\text{-efficiency} = 100 \cdot \left( \frac{|X^T X|^{1/p}}{N} \right)
-```
-
-where $p$ is the number of estimated model terms (10 for a 3-factor full quadratic model) and $N = 14$.
-
-### 5.2. Geometrical Construction
-The DF14 design consists of:
-* A central coordinate $[0, 0, 0]$,
-* Replicated axial points oriented along the directional search vector $\mathbf{v}_{\text{dir}} \in \{-1, 0, 1\}^3$,
-* Face-centred and fractional corner points selected to minimise the condition number $\kappa(X^T X)$ while maintaining estimability of all linear, interaction, and pure quadratic terms in fewer runs than standard 15-run Box-Behnken matrices.
