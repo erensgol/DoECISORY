@@ -21,7 +21,7 @@ short_description: DoE with Computational Interactive SeqOpt for Response Yield
 [![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97-Cloud_App-FFD21E)](https://erensgol-doecisory.hf.space)
 [![ORCID](https://img.shields.io/badge/-0009--0000--4491--7759-A6CE39?logo=orcid&logoColor=white)](https://orcid.org/0009-0000-4491-7759)
 
-**DoECISORY** is a Julia package and interactive web application for Design of Experiments (DoE), statistical modelling, and multi-objective optimisation. Developed for formulation science and scientific research, it supports cloud deployment, local workstation execution, and integration with the Julia REPL, Pluto.jl, and Jupyter computational environments.
+**DoECISORY** is a Julia package and interactive web application for Design of Experiments (DoE), statistical modelling, and multi-objective optimisation. Developed for formulation science and scientific research, it supports cloud deployment, local workstation execution, and integration with the Julia REPL, Pluto.jl, and Jupyter environments.
 
 > *If you use DoECISORY in your research, please [cite this repository](#citation).*
 

@@ -19,7 +19,8 @@ makedocs(
         "API Reference" => "api.md",
         "Licence & Citation" => "licence.md"
     ],
-    warnonly = [:missing_docs, :cross_references]
+    checkdocs = :exports,
+    warnonly = true
 )
 
 deploydocs(

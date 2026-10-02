@@ -195,6 +195,21 @@ end
 
 CORE_GetModelType_DDEF(m::CORE_AbstractModelType_DDET) = m
 
+"""
+    CORE_GenerateMatrix_DDEF(Method, fc=3, dir=[-1, -1, -1]) -> Matrix{Float64}
+
+Generate the normalised design matrix for the specified experimental method.
+Dispatches on design method types (`CORE_MethodTL09_DDES`, `CORE_MethodBB15_DDES`,
+`CORE_MethodCD17_DDES`, `CORE_MethodDF14_DDES`) or method string identifiers.
+
+# Arguments
+- `Method`: Design method object or string identifier (`"TL09"`, `"BB15"`, `"CD17"`, `"DF14"`).
+- `fc`: Factor count (must be 3 for standard response surface topologies).
+- `dir`: Search direction vector for directional designs (e.g. DF14).
+
+# Returns
+- A `Matrix{Float64}` containing normalised coordinate points in the domain `[-1, 1]`.
+"""
 CORE_GenerateMatrix_DDEF(::CORE_MethodTL09_DDES, fc::Integer, dir::AbstractVector=[-1, -1, -1]) = 
     fc == 3 ? copy(CORE_Tl09Design_DDEC) : throw(ArgumentError("Method TL09 requires exactly 3 factors (received $fc)."))
 CORE_GenerateMatrix_DDEF(::CORE_MethodBB15_DDES, fc::Integer, dir::AbstractVector=[-1, -1, -1]) = 

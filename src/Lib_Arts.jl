@@ -984,6 +984,19 @@ ARTS_GetInteractionMatrix_DDEF(::Main.Lib_Core.CORE_ModelLinear_DDES, B::Abstrac
 # SECTION 18: DIAGNOSTIC PLOTS
 # ------------------------------------------------------------------------------
 
+"""
+    ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::AbstractString) -> Plot
+
+Render a Quantile-Quantile (Q-Q) normal probability diagnostic plot for regression residuals.
+Compares standardised residuals against theoretical standard normal quantiles to evaluate normality.
+
+# Arguments
+- `Residuals`: Vector of model residuals (observed minus predicted).
+- `OutName`: Name of the response variable for plot titling.
+
+# Returns
+- A `PlotlyJS.Plot` object formatted with academic styling.
+"""
 function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotQQ_DDES(), Residuals, OutName)
 end
@@ -1005,6 +1018,19 @@ function ARTS_Draw_DDEF(::ARTS_PlotQQ_DDES, Residuals::AbstractVector{Float64}, 
     return Plot([t_pts, t_line], layout)
 end
 
+"""
+    ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residuals::AbstractVector{Float64}, OutName::AbstractString) -> Plot
+
+Render a residuals versus predicted values diagnostic plot to assess variance homogeneity (homoscedasticity).
+
+# Arguments
+- `Y_Pred`: Vector of model predictions.
+- `Residuals`: Vector of model residuals.
+- `OutName`: Name of the response variable for plot titling.
+
+# Returns
+- A `PlotlyJS.Plot` object formatted with academic styling.
+"""
 function ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residuals::AbstractVector{Float64}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotResiduals_DDES(), Y_Pred, Residuals, OutName)
 end
@@ -1021,6 +1047,19 @@ function ARTS_Draw_DDEF(::ARTS_PlotResiduals_DDES, Y_Pred::AbstractVector{Float6
     return Plot([t_pts, t_zero], layout)
 end
 
+"""
+    ARTS_RenderSensitivityPlot_DDEF(Sens::AbstractVector{Float64}, InNames::AbstractVector{<:AbstractString}, OutName::AbstractString) -> Plot
+
+Render a bar chart illustrating percentage contributions of experimental factors based on local sensitivity analysis.
+
+# Arguments
+- `Sens`: Vector of fractional sensitivities summing to 1.0.
+- `InNames`: Vector of factor names.
+- `OutName`: Name of the response variable for plot titling.
+
+# Returns
+- A `PlotlyJS.Plot` object formatted with academic styling.
+"""
 function ARTS_RenderSensitivityPlot_DDEF(Sens::AbstractVector{Float64}, InNames::AbstractVector{<:AbstractString}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotSensitivity_DDES(), Sens, InNames, OutName)
 end

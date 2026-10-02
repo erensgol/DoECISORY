@@ -89,6 +89,12 @@ Base.@kwdef struct FAST_Constants_DDES
     METHOD_DF14::String    = "DF14"
 end
 
+"""
+    FAST_Data_DDEC
+
+Global constant instance of `FAST_Constants_DDES` providing system-wide sheet names,
+column headers, status indicators, and design topology identifiers.
+"""
 const FAST_Data_DDEC = FAST_Constants_DDES()
 
 # ------------------------------------------------------------------------------

@@ -675,6 +675,21 @@ function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_B
     return Candidates, Predictions, Scores
 end
 
+"""
+    VISE_SensitivityAnalysis_DDEF(Model::AbstractDict, X_Point::AbstractVector{Float64}, X_Clean::AbstractMatrix{Float64}) -> Vector{Float64}
+
+Compute normalised local sensitivity gradients around an evaluation coordinate `X_Point`.
+Evaluates finite-difference numerical partial derivatives of the response model with respect
+to each factor coordinate scaled by the factor span, returning fractional sensitivities.
+
+# Arguments
+- `Model`: Fitted regression model dictionary.
+- `X_Point`: Coordinate vector at which local sensitivity is evaluated.
+- `X_Clean`: Matrix of baseline design coordinates used to determine factor domain spans.
+
+# Returns
+- A 3-element `Vector{Float64}` of normalised fractional sensitivities summing to 1.0.
+"""
 function VISE_SensitivityAnalysis_DDEF(Model::AbstractDict, X_Point::AbstractVector{Float64}, X_Clean::AbstractMatrix{Float64})
     Dim, gradients = 3, zeros(3)
     base_pred = VISE_Predict_DDEF(Model, reshape(X_Point, 1, 3))[1]
@@ -777,6 +792,19 @@ function VISE_GetWeightRating_DDEF(w::Any)::String
     return "3/5"
 end
 
+"""
+    VISE_GenerateScientificReport_DDEF(Res::AbstractDict) -> String
+
+Generate a publication-grade scientific Markdown audit report from regression analysis results.
+Compiles design vitals (D-, A-, G-, I-efficiencies, condition number, VIF), model performance
+metrics (R², Q²_LOO, RMSE), ANOVA tables, regression equations, and desirability optimisation.
+
+# Arguments
+- `Res`: Analysis results dictionary produced by `VISE_Execute_DDEF`.
+
+# Returns
+- A `String` containing the formatted scientific report in Markdown syntax.
+"""
 function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     io = IOBuffer()
     
@@ -1380,6 +1408,29 @@ end
 # SECTION 14: SYSTEM EXECUTION GATEWAY (VISE_EXECUTE)
 # ------------------------------------------------------------------------------
 
+"""
+    VISE_Execute_DDEF(DataFile::AbstractString, Phase::AbstractString, Goals::AbstractVector, ModelType::AbstractString="Auto"; kwargs...) -> Dict{String, Any}
+
+Execute the complete statistical modelling and optimisation pipeline for a designated experimental phase.
+Loads data, audits mass conservation, fits regression models, performs ANOVA, evaluates diagnostics,
+and conducts multi-criteria desirability optimisation.
+
+# Arguments
+- `DataFile`: Path to the Excel workbook containing experimental data.
+- `Phase`: Name of the phase sheet to analyse (e.g. `"Phase1"`, `"Phase2"`).
+- `Goals`: Vector of response optimisation goals (`"Max"`, `"Min"`, `"Target"`, etc.).
+- `ModelType`: Model selection strategy (`"Auto"`, `"Linear"`, `"Interaction"`, `"Quadratic"`).
+
+# Keyword Arguments
+- `Opts`: Optimisation options dictionary.
+- `ConfigUpdates`: Configuration override dictionary.
+- `t_start`: Pipeline start timestamp for execution telemetry.
+- `RenderMode`: Visualisation rendering level (`:Full` or `:Minimal`).
+- `Optim`: Whether to perform desirability surface optimisation (`true` by default).
+
+# Returns
+- A `Dict{String, Any}` containing fitted models, diagnostics, audit vitals, candidates, and visualisations.
+"""
 function VISE_Execute_DDEF(DataFile::AbstractString, Phase::AbstractString, Goals::AbstractVector, ModelType::AbstractString="Auto"; 
     Opts::AbstractDict=Dict{String,Any}(), ConfigUpdates::AbstractDict=Dict{String,Any}(), t_start::Float64=time(), RenderMode::Symbol=:Full, Optim::Bool=true)
     t0 = t_start
