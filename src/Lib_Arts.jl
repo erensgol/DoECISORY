@@ -394,8 +394,18 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    ARTS_RenderPareto_DDEF(Model, OutName, R2_Adj, Q2) -> Plot
-Convenience dispatch wrapper for the Pareto Draw pipeline.
+    ARTS_RenderPareto_DDEF(Model::AbstractDict, OutName::AbstractString, R2_Adj::AbstractFloat, R2_Pred::AbstractFloat) -> PlotlyJS.Plot
+Render a horizontal Pareto bar chart ranking standardised regression factor effects by absolute t-value magnitude.
+Includes a Bonferroni-corrected critical significance threshold line to highlight statistically influential experimental factors.
+
+# Arguments
+- `Model::AbstractDict`: Fitted regression model dictionary containing coefficients and term labels.
+- `OutName::AbstractString`: Response variable name for chart titling.
+- `R2_Adj::AbstractFloat`: Adjusted coefficient of determination for model context.
+- `R2_Pred::AbstractFloat`: Predictive cross-validation coefficient of determination (Q²).
+
+# Returns
+- `PlotlyJS.Plot`: Formatted Plotly figure ready for interactive web display.
 """
 function ARTS_RenderPareto_DDEF(Model::AbstractDict, OutName::AbstractString, R2_Adj::AbstractFloat, R2_Pred::AbstractFloat)
     return ARTS_Draw_DDEF(ARTS_PlotPareto_DDES(), Model, OutName, R2_Adj, R2_Pred)
@@ -455,8 +465,17 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    ARTS_RenderFit_DDEF(Y_Real, Y_Pred, OutName) -> Plot
-Convenience dispatch wrapper for the Fit Accuracy Draw pipeline.
+    ARTS_RenderFit_DDEF(Y_Real::AbstractVector{Float64}, Y_Pred::AbstractVector{Float64}, OutName::AbstractString) -> PlotlyJS.Plot
+Render a scatter plot comparing experimental response observations against model-predicted values.
+Overlays a diagonal 45-degree dashed reference line to visualize regression accuracy and prediction dispersion.
+
+# Arguments
+- `Y_Real::AbstractVector{Float64}`: Observed experimental response measurements.
+- `Y_Pred::AbstractVector{Float64}`: Model-estimated response values.
+- `OutName::AbstractString`: Response variable name.
+
+# Returns
+- `PlotlyJS.Plot`: Plotly scatter figure with diagnostic reference styling.
 """
 function ARTS_RenderFit_DDEF(Y_Real::AbstractVector{Float64}, Y_Pred::AbstractVector{Float64}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotFit_DDES(), Y_Real, Y_Pred, OutName)
@@ -567,8 +586,19 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    ARTS_RenderSurface_DDEF(Model, X_Train, Idx, Lbls, OutName) -> Plot
-Convenience dispatch wrapper for the 3D Surface Draw pipeline.
+    ARTS_RenderSurface_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString) -> PlotlyJS.Plot
+Render an interactive 3D response surface mesh illustrating response behaviour across two active factors.
+Holds unselected factors constant at their domain midpoint while evaluating curvature using continuous Viridis colours.
+
+# Arguments
+- `Model::AbstractDict`: Fitted response surface regression model dictionary.
+- `X::AbstractMatrix{Float64}`: Experimental factor coordinate matrix.
+- `Idx::AbstractVector{<:Integer}`: Pair of column indices for the x and y axes.
+- `Lbls::AbstractVector{<:AbstractString}`: Human-readable factor labels for axis annotation.
+- `OutName::AbstractString`: Name of the plotted response variable.
+
+# Returns
+- `PlotlyJS.Plot`: Interactive 3D Plotly surface visualization.
 """
 function ARTS_RenderSurface_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotSurface_DDES(), Model, X, Idx, Lbls, OutName)
@@ -609,8 +639,19 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    ARTS_RenderContour_DDEF(Model, X_Train, Idx, Lbls, OutName) -> Plot
-Convenience dispatch wrapper for the Contour Draw pipeline.
+    ARTS_RenderContour_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString) -> PlotlyJS.Plot
+Render a 2D contour projection index representing response surface topography across two factors.
+Computes iso-response contour curves over an interpolated grid using the academic Viridis colour palette.
+
+# Arguments
+- `Model::AbstractDict`: Fitted regression model dictionary.
+- `X::AbstractMatrix{Float64}`: Factor coordinate matrix.
+- `Idx::AbstractVector{<:Integer}`: Indices of the two continuous factors to project.
+- `Lbls::AbstractVector{<:AbstractString}`: Axis labels for the selected factors.
+- `OutName::AbstractString`: Plotted response variable name.
+
+# Returns
+- `PlotlyJS.Plot`: Plotly 2D contour plot with labelled iso-lines.
 """
 function ARTS_RenderContour_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotContour_DDES(), Model, X, Idx, Lbls, OutName)
@@ -651,8 +692,19 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    ARTS_RenderSlice_DDEF(Model, X, Idx, Lbls, OutName) -> Plot
-Convenience dispatch wrapper for the Interaction Slice Draw pipeline.
+    ARTS_RenderSlice_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString) -> PlotlyJS.Plot
+Render a 2D interaction slice diagram demonstrating two-factor interaction effects on a target response.
+Plots the response curve across factor 1 at the minimum, mean, and maximum settings of factor 2.
+
+# Arguments
+- `Model::AbstractDict`: Fitted regression model dictionary.
+- `X::AbstractMatrix{Float64}`: Experimental design factor matrix.
+- `Idx::AbstractVector{<:Integer}`: Column indices of primary and moderating factors.
+- `Lbls::AbstractVector{<:AbstractString}`: Descriptive labels for the evaluated factor pair.
+- `OutName::AbstractString`: Response variable name.
+
+# Returns
+- `PlotlyJS.Plot`: Multi-trace interaction plot showing conditional trajectories.
 """
 function ARTS_RenderSlice_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotSlice_DDES(), Model, X, Idx, Lbls, OutName)
@@ -691,8 +743,20 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    ARTS_RenderTrend_DDEF(Model, X, Y_Real, Idx, Lbls, OutName) -> Plot
-Convenience dispatch wrapper for the Main Effect Trend Draw pipeline.
+    ARTS_RenderTrend_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Y_Real::AbstractVector{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString) -> PlotlyJS.Plot
+Render a main effect trend line showing predicted response variation across a single factor dimension.
+Superimposes experimental observations onto the model estimation curve while holding remaining factors at their centres.
+
+# Arguments
+- `Model::AbstractDict`: Fitted regression model dictionary.
+- `X::AbstractMatrix{Float64}`: Experimental factor coordinate matrix.
+- `Y_Real::AbstractVector{Float64}`: Observed experimental response data.
+- `Idx::AbstractVector{<:Integer}`: Single-element vector or index specifying the active factor.
+- `Lbls::AbstractVector{<:AbstractString}`: Factor label for x-axis annotation.
+- `OutName::AbstractString`: Response variable name.
+
+# Returns
+- `PlotlyJS.Plot`: Main effect plot with overlaid experimental observations.
 """
 function ARTS_RenderTrend_DDEF(Model::AbstractDict, X::AbstractMatrix{Float64}, Y_Real::AbstractVector{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotTrend_DDES(), Model, X, Y_Real, Idx, Lbls, OutName)
@@ -725,16 +789,40 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    ARTS_RenderSpace_DDEF(Models, Goals, X, Idx, Lbls, [Best_Point]) -> Plot
-Visualises the multi-objective desirability space.
+    ARTS_RenderSpace_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame=DataFrame()) -> PlotlyJS.Plot
+Render multi-slice 3D desirability space surfaces representing composite multi-criteria optimisation feasibility.
+Displays simultaneous horizontal planar slices through the third factor dimension with optional leader formulation markers.
+
+# Arguments
+- `Models`: Vector of active regression model dictionaries.
+- `Goals`: Multi-response optimisation goal specifications.
+- `X::AbstractMatrix{Float64}`: Experimental factor coordinate matrix.
+- `Idx::AbstractVector{<:Integer}`: Indices of factors chosen for x and y planar projection.
+- `Lbls::AbstractVector{<:AbstractString}`: Factor axis labels.
+- `Leaders_DF::AbstractDataFrame`: Formulations table containing candidate leader runs (default: empty).
+
+# Returns
+- `PlotlyJS.Plot`: 3D multi-surface desirability exploration figure.
 """
 function ARTS_RenderSpace_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Idx::AbstractVector{<:Integer}, Lbls::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame=DataFrame())
     return ARTS_Draw_DDEF(ARTS_PlotDesignSpace_DDES(), Models, Goals, X, Idx, Lbls, Leaders_DF)
 end
 
 """
-    ARTS_RenderCandidates_DDEF(Models, Goals, X, Idx, Lbls, [Best_Point]) -> (Plot, PctString)
-Visualises the top quartile of the desirability space (Optimal Solution Space).
+    ARTS_RenderCandidates_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Idx::Union{AbstractVector{<:Integer}, Tuple{Integer, Integer}}, Lbls::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame=DataFrame()) -> Tuple{PlotlyJS.Plot, String}
+Visualise top-quartile candidate solution spaces isolating high-desirability regions within the design space.
+Applies alpha-thresholded Viridis shading to mask sub-optimal zones and highlights leader coordinate points.
+
+# Arguments
+- `Models`: Vector of fitted regression models.
+- `Goals`: Multi-response optimisation goals.
+- `X::AbstractMatrix{Float64}`: Experimental design coordinates.
+- `Idx::Union{AbstractVector{<:Integer}, Tuple{Integer, Integer}}`: Planar factor coordinate indices.
+- `Lbls::AbstractVector{<:AbstractString}`: Factor dimension names.
+- `Leaders_DF::AbstractDataFrame`: Candidate leader records table (default: empty).
+
+# Returns
+- `Tuple{PlotlyJS.Plot, String}`: Pair containing the Plotly figure and the percentage volume string.
 """
 function ARTS_RenderCandidates_DDEF(Models, Goals, X::AbstractMatrix{Float64}, Idx::Union{AbstractVector{<:Integer}, Tuple{Integer, Integer}}, Lbls::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame=DataFrame())
     return ARTS_Draw_DDEF(ARTS_PlotCandidates_DDES(), Models, Goals, X, Idx, Lbls, Leaders_DF)
@@ -857,8 +945,19 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    ARTS_RenderOptimalZone_DDEF(Models, Goals, X, InNames, [Leaders_DF]) -> (Plot, PctString)
-Convenience dispatch wrapper for the Optimal Zone Draw pipeline.
+    ARTS_RenderOptimalZone_DDEF(Models, Goals, X::AbstractMatrix{Float64}, InNames::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame=DataFrame()) -> Tuple{PlotlyJS.Plot, String}
+Render a 3D volumetric iso-surface enclosing regions that satisfy multi-criteria desirability thresholds.
+Discretises the factor bounding box into a 3D coordinate lattice and identifies contiguous optimal zones.
+
+# Arguments
+- `Models`: Active regression models for all responses.
+- `Goals`: Optimisation goal specifications.
+- `X::AbstractMatrix{Float64}`: Baseline factor matrix establishing coordinate limits.
+- `InNames::AbstractVector{<:AbstractString}`: Labels for all three continuous factors.
+- `Leaders_DF::AbstractDataFrame`: Optimal candidate solutions table (default: empty).
+
+# Returns
+- `Tuple{PlotlyJS.Plot, String}`: Pair containing the 3D volumetric plot and percentage volume coverage string.
 """
 function ARTS_RenderOptimalZone_DDEF(Models, Goals, X::AbstractMatrix{Float64}, InNames::AbstractVector{<:AbstractString}, Leaders_DF::AbstractDataFrame=DataFrame())
     return ARTS_Draw_DDEF(ARTS_PlotOptimalZone_DDES(), Models, Goals, X, InNames, Leaders_DF)
@@ -935,8 +1034,17 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    ARTS_RenderInteractionMatrix_DDEF(Model, InNames, OutName) -> Plot
-Convenience dispatch wrapper for the Interaction Matrix Draw pipeline.
+    ARTS_RenderInteractionMatrix_DDEF(Model::AbstractDict, InNames::AbstractVector{<:AbstractString}, OutName::AbstractString) -> PlotlyJS.Plot
+Render an interaction coefficient heatmap displaying pairwise synergy and antagonism between experimental factors.
+Extracts off-diagonal second-order model coefficients and normalises them to evaluate relative coupling magnitude.
+
+# Arguments
+- `Model::AbstractDict`: Fitted quadratic regression model dictionary.
+- `InNames::AbstractVector{<:AbstractString}`: Factor component labels.
+- `OutName::AbstractString`: Response variable name.
+
+# Returns
+- `PlotlyJS.Plot`: Heatmap figure indicating interaction magnitudes and directions.
 """
 function ARTS_RenderInteractionMatrix_DDEF(Model::AbstractDict, InNames::AbstractVector{<:AbstractString}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotInteractionMatrix_DDES(), Model, InNames, OutName)
@@ -985,17 +1093,16 @@ ARTS_GetInteractionMatrix_DDEF(::Main.Lib_Core.CORE_ModelLinear_DDES, B::Abstrac
 # ------------------------------------------------------------------------------
 
 """
-    ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::AbstractString) -> Plot
-
-Render a Quantile-Quantile (Q-Q) normal probability diagnostic plot for regression residuals.
-Compares standardised residuals against theoretical standard normal quantiles to evaluate normality.
+    ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::AbstractString) -> PlotlyJS.Plot
+Render a normal probability Quantile-Quantile (Q-Q) diagnostic plot for model regression residuals.
+Compares standardised residuals against theoretical normal distribution quantiles to verify error normality.
 
 # Arguments
-- `Residuals`: Vector of model residuals (observed minus predicted).
-- `OutName`: Name of the response variable for plot titling.
+- `Residuals::AbstractVector{Float64}`: Raw regression residuals (`Y_observed - Y_predicted`).
+- `OutName::AbstractString`: Response variable name.
 
 # Returns
-- A `PlotlyJS.Plot` object formatted with academic styling.
+- `PlotlyJS.Plot`: Diagnostic Q-Q plot with theoretical reference line.
 """
 function ARTS_RenderQQPlot_DDEF(Residuals::AbstractVector{Float64}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotQQ_DDES(), Residuals, OutName)
@@ -1019,17 +1126,17 @@ function ARTS_Draw_DDEF(::ARTS_PlotQQ_DDES, Residuals::AbstractVector{Float64}, 
 end
 
 """
-    ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residuals::AbstractVector{Float64}, OutName::AbstractString) -> Plot
-
-Render a residuals versus predicted values diagnostic plot to assess variance homogeneity (homoscedasticity).
+    ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residuals::AbstractVector{Float64}, OutName::AbstractString) -> PlotlyJS.Plot
+Render a residuals versus predicted response values diagnostic plot to evaluate variance homogeneity.
+Displays error dispersion around a zero-deviation baseline to diagnose heteroscedasticity and non-linear drift.
 
 # Arguments
-- `Y_Pred`: Vector of model predictions.
-- `Residuals`: Vector of model residuals.
-- `OutName`: Name of the response variable for plot titling.
+- `Y_Pred::AbstractVector{Float64}`: Model-estimated response predictions.
+- `Residuals::AbstractVector{Float64}`: Model residual errors.
+- `OutName::AbstractString`: Response variable name.
 
 # Returns
-- A `PlotlyJS.Plot` object formatted with academic styling.
+- `PlotlyJS.Plot`: Scatter plot formatted for residual variance analysis.
 """
 function ARTS_RenderResidualsVsPred_DDEF(Y_Pred::AbstractVector{Float64}, Residuals::AbstractVector{Float64}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotResiduals_DDES(), Y_Pred, Residuals, OutName)
@@ -1048,17 +1155,17 @@ function ARTS_Draw_DDEF(::ARTS_PlotResiduals_DDES, Y_Pred::AbstractVector{Float6
 end
 
 """
-    ARTS_RenderSensitivityPlot_DDEF(Sens::AbstractVector{Float64}, InNames::AbstractVector{<:AbstractString}, OutName::AbstractString) -> Plot
-
-Render a bar chart illustrating percentage contributions of experimental factors based on local sensitivity analysis.
+    ARTS_RenderSensitivityPlot_DDEF(Sens::AbstractVector{Float64}, InNames::AbstractVector{<:AbstractString}, OutName::AbstractString) -> PlotlyJS.Plot
+Render a bar chart displaying fractional percentage contributions of experimental factors from local sensitivity analysis.
+Normalises partial derivative gradient contributions to rank dominant drivers influencing the response surface.
 
 # Arguments
-- `Sens`: Vector of fractional sensitivities summing to 1.0.
-- `InNames`: Vector of factor names.
-- `OutName`: Name of the response variable for plot titling.
+- `Sens::AbstractVector{Float64}`: Fractional sensitivity values summing to 1.0.
+- `InNames::AbstractVector{<:AbstractString}`: Factor labels.
+- `OutName::AbstractString`: Response variable name.
 
 # Returns
-- A `PlotlyJS.Plot` object formatted with academic styling.
+- `PlotlyJS.Plot`: Bar chart displaying relative factor influence percentages.
 """
 function ARTS_RenderSensitivityPlot_DDEF(Sens::AbstractVector{Float64}, InNames::AbstractVector{<:AbstractString}, OutName::AbstractString)
     return ARTS_Draw_DDEF(ARTS_PlotSensitivity_DDES(), Sens, InNames, OutName)
@@ -1082,7 +1189,26 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, Leaders_DF, Sens, Residuals) -> Vector{Dict}
+    ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts, Leaders_DF::AbstractDataFrame=DataFrame(), Sens::AbstractVector=Vector{Vector{Float64}}[], Residuals::AbstractVector=Vector{Vector{Float64}}[]) -> Vector{Dict{String, Any}}
+Execute the parallel visual rendering orchestrator generating publication-grade charts for all modelled responses.
+Dispatches multi-threaded workers across Pareto charts, surface projections, residual diagnostics, and decision spaces.
+
+# Arguments
+- `Models`: Vector of regression model dictionaries.
+- `X`: Factor coordinate data.
+- `Y`: Response measurement data.
+- `InNames`: Factor component labels.
+- `OutNames`: Response variable labels.
+- `Goals`: Multi-response optimisation specifications.
+- `R2s`: Adjusted R² values for each response.
+- `Q2s`: Cross-validated Q² values for each response.
+- `Opts`: Rendering and pipeline options dictionary.
+- `Leaders_DF`: Candidate leader records table (default: empty).
+- `Sens`: Factor sensitivity vectors per response (default: empty).
+- `Residuals`: Residual error vectors per response (default: empty).
+
+# Returns
+- `Vector{Dict{String, Any}}`: Collection of generated plot descriptors with type tags and Plotly figures.
 """
 function ARTS_Render_DDEF(Models, X, Y, InNames, OutNames, Goals, R2s, Q2s, Opts,
     Leaders_DF::AbstractDataFrame=DataFrame(), Sens::AbstractVector=Vector{Vector{Float64}}[], Residuals::AbstractVector=Vector{Vector{Float64}}[])

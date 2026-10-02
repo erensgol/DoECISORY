@@ -243,6 +243,20 @@ end
 # SECTION 5: FILENAME SANITISATION & COMPATIBILITY
 # ------------------------------------------------------------------------------
 
+"""
+    FAST_Log_DDEF(Source::AbstractString, Event::AbstractString, Detail::Any="", Type::AbstractString="INFO") -> Nothing
+Format and emit a structured console telemetry log with timestamp and severity colour coding.
+Dispatches value types to render ANSI terminal escapes for real-time operation tracking.
+
+# Arguments
+- `Source::AbstractString`: Emitting subsystem tag (e.g. `"CORE"`, `"VISE"`, `"FAST"`).
+- `Event::AbstractString`: Operation or event identifier.
+- `Detail::Any`: Contextual message, metric, or status payload (default: `""`).
+- `Type::AbstractString`: Severity level (`"INFO"`, `"OK"`, `"WAIT"`, `"WARN"`, or `"FAIL"`).
+
+# Returns
+- `Nothing`.
+"""
 function FAST_Log_DDEF(Source::AbstractString, Event::AbstractString, Detail::Any="", Type::AbstractString="INFO")
     FAST_Log_DDEF(Val(Symbol(Type)), Source, Event, Detail)
 end
@@ -297,9 +311,16 @@ function FAST_NormaliseCols_DDEF!(df::DataFrame; force_upper::Bool=false)::DataF
 end
 
 """
-    FAST_ReadExcel_DDEF(FilePath::String, SheetName::String)::DataFrame
-Reads an Excel sheet into a DataFrame with normalised column names.
-Returns an empty DataFrame if the file doesn't exist.
+    FAST_ReadExcel_DDEF(FilePath, SheetName::AbstractString) -> DataFrame
+Read an Excel workbook worksheet into a DataFrame with normalised header symbols.
+Validates structural columns, strips invalid characters, and handles transient file-access retries.
+
+# Arguments
+- `FilePath`: Path to workbook file (returns empty DataFrame if `nothing` or non-existent).
+- `SheetName::AbstractString`: Target worksheet name.
+
+# Returns
+- `DataFrame`: Extracted sheet tabular data.
 """
 function FAST_ReadExcel_DDEF(FilePath::Nothing, SheetName::AbstractString)::DataFrame
     return DataFrame()
@@ -580,9 +601,16 @@ FAST_ApplyExcelStyle_DDEF(File::AbstractString, Updates::Dict{<:AbstractString,D
 FAST_ApplyExcelStyle_DDEF(sheet, df::DataFrame) = nothing
 
 """
-    FAST_SafeExcelWrite_DDEF(File, Updates) -> Nothing
-Writes to the Excel file using a buffered approach to prevent data truncation.
-Implements robust retry logic for "File in Use" scenarios.
+    FAST_SafeExcelWrite_DDEF(File::AbstractString, Updates::Dict{<:AbstractString, DataFrame}) -> Nothing
+Atomically write or update sheets in an Excel workbook with transient backup and file-lock retry handling.
+Merges existing sheets, sanitises IEEE 754 numeric tokens, and auto-fits column widths via OpenXML repackaging.
+
+# Arguments
+- `File::AbstractString`: Target workbook path.
+- `Updates::Dict{<:AbstractString, DataFrame}`: Mapping from worksheet names to DataFrames to write or update.
+
+# Returns
+- `Nothing`.
 """
 function FAST_SafeExcelWrite_DDEF(File::AbstractString, Updates::Dict{<:AbstractString,DataFrame})::Nothing
     isempty(File) && return nothing
@@ -734,8 +762,15 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    FAST_SafeNum_DDEF(Input::Any)::Float64
-Type-safe numeric conversion. Handles missing, nothing, and specialised formats.
+    FAST_SafeNum_DDEF(x) -> Float64
+Convert numeric, string, or missing inputs into a valid Float64 representation, returning NaN on failure.
+Normalises European comma decimals, hyphen placeholders, and sentinel tokens to ensure scientific arithmetic safety.
+
+# Arguments
+- `x`: Input value to parse (supports commas, decimals, hyphens, and missing tokens).
+
+# Returns
+- `Float64`: Parsed numerical value or `NaN`.
 """
 FAST_SafeNum_DDEF(::Nothing) = NaN
 FAST_SafeNum_DDEF(::Missing) = NaN
@@ -914,8 +949,19 @@ FAST_SanitiseJson_DDEF(x::Any) = x
 # ------------------------------------------------------------------------------
 
 """
-    FAST_InitialiseMaster_DDEF(File, InNames, OutNames, DesignData, Config) -> Bool
-Internal dispatcher for master record initialisation.
+    FAST_InitialiseMaster_DDEF(File::String, InNames::Vector{String}, OutNames::Vector{String}, DesignData::DataFrame, Config::Dict{String,Any}=Dict{String,Any}()) -> Bool
+Construct and initialise the master Excel workbook containing design runs, config metadata, and audit records.
+Merges incoming experimental topologies with existing historical phases and preserves JSON-encoded configuration state.
+
+# Arguments
+- `File::String`: Destination path for master workbook.
+- `InNames::Vector{String}`: Experimental factor names.
+- `OutNames::Vector{String}`: Response metric names.
+- `DesignData::DataFrame`: Formatted experimental design run table.
+- `Config::Dict{String, Any}`: Formulation boundaries and operational settings (default: empty dictionary).
+
+# Returns
+- `Bool`: `true` if initialisation succeeded, `false` otherwise.
 """
 function FAST_InitialiseMaster_DDEF(File::String, InNames::Vector{String}, OutNames::Vector{String}, 
     DesignData::DataFrame, Config::Dict{String,Any}=Dict{String,Any}())::Bool
@@ -1089,9 +1135,18 @@ FAST_InitialiseMaster_DDEF(::Nothing, args...) = false
 # ------------------------------------------------------------------------------
 
 """
-    FAST_GenerateSmartName_DDEF(Project, Phase, Tag, [Extension]) -> String
-Generates a standardised, timestamped protocol filename according to the DoECISORY specification.
-Template: DoECISORY_[Proj]_[Phase]_[Tag]_[Timestamp].[Ext]
+    FAST_GenerateSmartName_DDEF(Project::AbstractString, Phase::AbstractString, Tag::AbstractString, Ext::AbstractString="xlsx") -> String
+Generate a standardised, timestamped filename for protocol workbooks and reports.
+Sanitises non-ASCII characters, encodes phase and subproject tags, and appends chronological timestamps.
+
+# Arguments
+- `Project::AbstractString`: Project name identifier.
+- `Phase::AbstractString`: Phase code (e.g. `"Phase1"`).
+- `Tag::AbstractString`: Context tag (e.g. `"Deck"`, `"Lens"`).
+- `Ext::AbstractString`: File extension without leading dot (default: `"xlsx"`).
+
+# Returns
+- `String`: Formatted filename matching `DoECISORY_<Project>_<Phase>_<Tag>_<Timestamp>.<Ext>`.
 """
 function FAST_GenerateSmartName_DDEF(Project::AbstractString, Phase::AbstractString, Tag::AbstractString, Ext::AbstractString="xlsx")::String
     p_raw    = strip(Project)

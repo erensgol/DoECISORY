@@ -80,8 +80,16 @@ function FLOW_DetermineBoundaryStatus_DDEF(Val::Real, Min::Real, Max::Real)::Abs
 end
 
 """
-    FLOW_AskLeader_DDEF(LeaderVal, CurrentRange) -> (Valid, Msg)
-Evaluates the proximity of the selected leader to existing boundaries to prevent search space clipping.
+    FLOW_AskLeader_DDEF(LeaderVal::Real, CurrentRange::Vector{Float64}) -> Tuple{Bool, String}
+Evaluate whether a chosen leader factor coordinate is in proximity to boundary limits, detecting potential space clipping.
+Flags coordinates lying dangerously close to the lower or upper physical thresholds to protect subsequent phase search volumes.
+
+# Arguments
+- `LeaderVal::Real`: Candidate optimal factor coordinate.
+- `CurrentRange::Vector{Float64}`: Current factor domain range `[min, mid, max]`.
+
+# Returns
+- `Tuple{Bool, String}`: `(is_safe, alert_message)`.
 """
 function FLOW_AskLeader_DDEF(LeaderVal::Real, CurrentRange::Vector{Float64})
     status = FLOW_DetermineBoundaryStatus_DDEF(LeaderVal, CurrentRange[1], CurrentRange[3])
@@ -89,8 +97,19 @@ function FLOW_AskLeader_DDEF(LeaderVal::Real, CurrentRange::Vector{Float64})
 end
 
 """
-    FLOW_BuildIPKT_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ContractionFactor, TranslationFactor) -> Dict
-Orchestrates the IPKT transition pipeline by generating the baseline search space via ACTA (Adaptive Contraction & Translation Algorithm).
+    FLOW_BuildIPKT_DDEF(MasterFile, CurrentPhase, SelectedLeaderID="", ContractionFactor=0.5, TranslationFactor=0.0) -> Dict{String, Any}
+Construct sequential phase transition boundaries by applying ACTA (Adaptive Contraction & Translation Algorithm).
+Extracts the selected leader run, scales continuous factor spreads, and computes contracted coordinate bounds for the subsequent design.
+
+# Arguments
+- `MasterFile`: Path to master workbook.
+- `CurrentPhase`: Current experimental phase identifier.
+- `SelectedLeaderID`: Optional leader identifier (defaults to highest desirability run).
+- `ContractionFactor`: Search domain scaling factor in `(0.0, 1.0]` (default: `0.5`).
+- `TranslationFactor`: Search domain shift factor in `[-1.0, 1.0]` (default: `0.0`).
+
+# Returns
+- `Dict{String, Any}`: Dictionary containing adapted factor configurations, boundary alerts, and leader coordinates.
 """
 function FLOW_BuildIPKT_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentPhase::Union{AbstractString,Nothing},
     SelectedLeaderID::Union{AbstractString,Nothing}="", ContractionFactor::Real=0.5, TranslationFactor::Real=0.0)::Dict{String,Any}
@@ -177,8 +196,16 @@ function FLOW_BuildIPKT_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentP
 end
 
 """
-    FLOW_GetCandidates_DDEF(MasterFile::String, CurrentPhase::String)::Vector{Dict{String, Any}}
-Extracts potential leaders for the specified phase, sorted by scientific score.
+    FLOW_GetCandidates_DDEF(MasterFile, CurrentPhase) -> Vector{Dict{String, Any}}
+Retrieve and sort all candidate optimal runs from the designated phase record by composite desirability.
+Parses the leader sheet in the workbook and returns a descending priority queue of experimental formulations.
+
+# Arguments
+- `MasterFile`: Path to master workbook.
+- `CurrentPhase`: Phase identifier from which candidates are loaded.
+
+# Returns
+- `Vector{Dict{String, Any}}`: Sorted array of candidate runs with associated factors, responses, and desirability scores.
 """
 function FLOW_GetCandidates_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentPhase::Union{AbstractString,Nothing})::Vector{Dict{String,Any}}
     (isnothing(MasterFile) || isempty(MasterFile) || !isfile(MasterFile)) && return Dict{String,Any}[]
@@ -199,8 +226,19 @@ function FLOW_GetCandidates_DDEF(MasterFile::Union{AbstractString,Nothing}, Curr
 end
 
 """
-    FLOW_CalcACTA_DDEF(Val, L_Old, Contraction, Translation, [MinLimit]) -> Vector{Float64}
-Internal helper for ACTA search space adaptation logic. Enforces MinLimit boundary clamping.
+    FLOW_CalcACTA_DDEF(Val::Real, L_Old::Vector{Float64}, Contraction::Real, Translation::Real, MinLimit::Real=0.0) -> Vector{Float64}
+Calculate updated continuous factor levels `[L1, L2, L3]` via contraction around an optimum and directional translation.
+Enforces non-negative physical limits and boundary clamping to maintain valid experimental formulation spaces.
+
+# Arguments
+- `Val::Real`: Selected leader coordinate value.
+- `L_Old::Vector{Float64}`: Previous 3-level boundaries `[L1, L2, L3]`.
+- `Contraction::Real`: Domain contraction ratio in `(0.0, 1.0]`.
+- `Translation::Real`: Directional translation factor in `[-1.0, 1.0]`.
+- `MinLimit::Real`: Minimum physical boundary clamp (default: `0.0`).
+
+# Returns
+- `Vector{Float64}`: 3-element vector containing updated `[lower, centre, upper]` levels.
 """
 function FLOW_CalcACTA_DDEF(Val::Real, L_Old::Vector{Float64}, Contraction::Real, Translation::Real, MinLimit::Real=0.0)::Vector{Float64}
     rng      = L_Old[3] - L_Old[1]
@@ -225,8 +263,25 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    FLOW_CommitIPKT_DDEF(MasterFile, CurrentPhase, SelectedLeaderID, ContractionFactor, Method, TranslationFactor; Direction, CustomConfig) -> Dict
-Commits the complete IPKT synthesis (ACTA baseline adapted with any custom ASTM factor transformations) into a coded design matrix and Vault workbook.
+    FLOW_CommitIPKT_DDEF(MasterFile, CurrentPhase, SelectedLeaderID="", ContractionFactor=0.5, Method="TL09", TranslationFactor=0.0; kwargs...) -> Dict{String, Any}
+Finalise and persist sequential phase transition configurations and generated design matrices into the master workbook.
+Generates the new experimental protocol sheet, updates configuration tracking records, and logs the evolutionary step.
+
+# Arguments
+- `MasterFile`: Path to master workbook.
+- `CurrentPhase`: Active experimental phase code.
+- `SelectedLeaderID`: Run identifier to advance as phase leader.
+- `ContractionFactor`: ACTA search space contraction ratio.
+- `Method`: Design method code for subsequent phase (`"TL09"`, `"BB15"`, `"CD17"`, `"DF14"`).
+- `TranslationFactor`: ACTA search space translation offset.
+
+# Keywords
+- `Direction`: Directional vector for `"DF14"` design method.
+- `CustomConfig`: Optional overridden factor boundaries and units.
+- `ProjectName`: Optional project title for metadata tracking.
+
+# Returns
+- `Dict{String, Any}`: Status dictionary with write confirmation and destination sheet details.
 """
 function FLOW_CommitIPKT_DDEF(MasterFile::Union{AbstractString,Nothing}, CurrentPhase::Union{AbstractString,Nothing},
     SelectedLeaderID::Union{AbstractString,Nothing}="", ContractionFactor::Real=0.5, Method::AbstractString="TL09", TranslationFactor::Real=0.0;
@@ -412,8 +467,17 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    FLOW_ApplyACTA_DDEF(LeaderInfo, ContractionFactor, TranslationFactor) -> Vector{Dict}
-Calculates the adaptive search space for the subsequent phase using Contraction or Translation.
+    FLOW_ApplyACTA_DDEF(LeaderInfo::Dict, ContractionFactor::Float64=0.5, TranslationFactor::Float64=0.0) -> Vector{Dict{String, Any}}
+Apply Adaptive Contraction & Translation Algorithm (ACTA) to all variable factors in a configuration set.
+Iterates over continuous formulation ingredients, updating discrete boundary triplets based on leader coordinates.
+
+# Arguments
+- `LeaderInfo::Dict`: Leader metadata containing `"OldConfig"` and `"Vals"`.
+- `ContractionFactor::Float64`: Contraction ratio applied to factor level spans (default: `0.5`).
+- `TranslationFactor::Float64`: Offset ratio applied to centre coordinates (default: `0.0`).
+
+# Returns
+- `Vector{Dict{String, Any}}`: Updated factor configuration list with contracted/translated levels.
 """
 function FLOW_ApplyACTA_DDEF(LeaderInfo::Dict, ContractionFactor::Float64=0.5, TranslationFactor::Float64=0.0)
     C       = Main.Sys_Fast.FAST_Data_DDEC
@@ -446,8 +510,17 @@ function FLOW_ApplyACTA_DDEF(LeaderInfo::Dict, ContractionFactor::Float64=0.5, T
 end
 
 """
-    FLOW_WriteLeaders_DDEF(File, Phase, LeadersDF) -> Bool
-Persists prioritised candidates for the current phase to the shared master record.
+    FLOW_WriteLeaders_DDEF(File, Phase, LeadersDF::DataFrame) -> Bool
+Write prioritised candidate runs for the specified phase into the master Excel workbook.
+Stores evaluated factor combinations and desirability ranks under dedicated leader tracking worksheets.
+
+# Arguments
+- `File`: Path to target workbook file.
+- `Phase`: Experimental phase identifier.
+- `LeadersDF::DataFrame`: Table containing candidate coordinates, predictions, and desirability scores.
+
+# Returns
+- `Bool`: `true` if write operation succeeded, `false` otherwise.
 """
 function FLOW_WriteLeaders_DDEF(File::Union{AbstractString,Nothing}, Phase::Union{AbstractString,Nothing}, LeadersDF::DataFrame)
     (isnothing(File) || isempty(File) || isnothing(Phase) || isempty(Phase)) && return false
@@ -471,16 +544,34 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    FLOW_ApplyASTM_DDEF(Val, Alpha, Beta) -> Float64
-Applies ASTM (Affine Space Transformation Model: y = Alpha * Val + Beta) to transfer a leader value across experimental systems.
+    FLOW_ApplyASTM_DDEF(Val::Real, Alpha::Real, Beta::Real) -> Float64
+Apply the Affine Space Transformation Model (ASTM: `y = Alpha * Val + Beta`) to project factor levels across experimental domains.
+Performs linear scaling and translation to adapt formulation boundaries when switching equipment, scales, or reactors.
+
+# Arguments
+- `Val::Real`: Source factor coordinate.
+- `Alpha::Real`: Affine scaling factor.
+- `Beta::Real`: Affine translation offset.
+
+# Returns
+- `Float64`: Transformed coordinate value.
 """
 function FLOW_ApplyASTM_DDEF(Val::Real, Alpha::Real, Beta::Real)::Float64
     return Float64(Alpha * Val + Beta)
 end
 
 """
-    FLOW_ValidateASTM_DDEF(Val, MinLimit, MaxLimit) -> (Valid, ClampedVal, Warning)
-Enforces physical laboratory constraints on an ASTM-transformed value.
+    FLOW_ValidateASTM_DDEF(Val::Real, MinLimit::Real, MaxLimit::Real) -> Tuple{Bool, Float64, String}
+Validate and clamp an ASTM-transformed value against physical experimental bounds.
+Prevents projected factor levels from violating laboratory operating limits or reagent solubility thresholds.
+
+# Arguments
+- `Val::Real`: Transformed coordinate value.
+- `MinLimit::Real`: Minimum admissible physical threshold.
+- `MaxLimit::Real`: Maximum admissible physical threshold.
+
+# Returns
+- `Tuple{Bool, Float64, String}`: `(is_valid, clamped_value, warning_message)`.
 """
 function FLOW_ValidateASTM_DDEF(Val::Real, MinLimit::Real, MaxLimit::Real)::Tuple{Bool,Float64,String}
     min_f = MinLimit
@@ -504,9 +595,21 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    FLOW_RenderIPKT_DDEF(OldConfig, NewConfig, LeaderVals) -> Dict
-Visualises the IPKT adaptation of search space boundaries between sequential experimental phases.
-Standardised Coded Scale: Current boundaries are mapped to [-1, 1].
+    FLOW_RenderIPKT_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVector, LeaderVals::AbstractVector; kwargs...) -> Dict{String, Any}
+Generate a Plotly visual representation of search domain shifts (contraction and translation) between successive phases.
+Renders relative horizontal bar intervals showing previous boundaries, adapted search ranges, and leader operating points.
+
+# Arguments
+- `OldConfig::AbstractVector`: Previous phase factor level configurations.
+- `NewConfig::AbstractVector`: Adapted phase factor level configurations.
+- `LeaderVals::AbstractVector`: Chosen leader factor coordinates.
+
+# Keywords
+- `Method::AbstractString`: Design method for new phase (default: `"TL09"`).
+- `Direction::AbstractVector`: Direction vector for directional designs.
+
+# Returns
+- `Dict{String, Any}`: Dictionary containing Plotly `"data"` traces and `"layout"` specifications.
 """
 function FLOW_RenderIPKT_DDEF(OldConfig::AbstractVector, NewConfig::AbstractVector, LeaderVals::AbstractVector;
     Method::AbstractString="TL09", Direction::AbstractVector=[-1, -1, -1])

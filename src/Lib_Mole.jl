@@ -90,8 +90,16 @@ const MOLE_TimeFactorMap_DDEC = Dict{String, Float64}(
 # ------------------------------------------------------------------------------
 
 """
-    MOLE_ConvertTimeToMinutes_DDEF(Value, Unit) -> Float64
-Normalises arbitrary time units (Seconds, Hours, Days) to Minutes for system-wide consistency.
+    MOLE_ConvertTimeToMinutes_DDEF(Value::Real, Unit::AbstractString) -> Float64
+Normalise arbitrary time duration units (seconds, hours, days) into minutes.
+Provides dimensional time standardisation across kinetic calculations and decay compensation models.
+
+# Arguments
+- `Value::Real`: Numeric time duration value.
+- `Unit::AbstractString`: Time unit string (`"s"`, `"sec"`, `"min"`, `"h"`, `"hr"`, `"d"`).
+
+# Returns
+- `Float64`: Duration converted into decimal minutes.
 """
 function MOLE_ConvertTimeToMinutes_DDEF(Value::Real, Unit::AbstractString)::Float64
     Value <= 0.0 && return 0.0
@@ -100,9 +108,15 @@ function MOLE_ConvertTimeToMinutes_DDEF(Value::Real, Unit::AbstractString)::Floa
 end
 
 """
-    MOLE_IsTimeUnit_DDEF(UnitStr) -> Bool
-Determines whether a given unit string represents a temporal dimension.
-Used by the Decay-Coupled Optimisation engine to automatically identify time variables.
+    MOLE_IsTimeUnit_DDEF(UnitStr::AbstractString) -> Bool
+Determine whether a given physical unit string represents a temporal dimension.
+Enables the Decay-Coupled Yield Penalty engine to automatically detect incubation time variables among formulation factors.
+
+# Arguments
+- `UnitStr::AbstractString`: Unit string to evaluate.
+
+# Returns
+- `Bool`: `true` if unit matches recognised time dimensions, `false` otherwise.
 """
 function MOLE_IsTimeUnit_DDEF(UnitStr::AbstractString)::Bool
     u = uppercase(strip(UnitStr))
@@ -115,8 +129,21 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    MOLE_CalcRadioDecay_DDEF(RawValue, HalfLife, HalfLifeUnit, DeltaTMinutes; Reverse=false) -> Float64
-Calculates effective activity or mass following the radioactive decay law N(t) = N_0 * exp(±lambda * t).
+    MOLE_CalcRadioDecay_DDEF(RawValue::Real, HalfLife::Real, HalfLifeUnit::AbstractString, DeltaTMinutes::Real; Reverse::Bool=false) -> Float64
+Calculate decayed activity or mass using first-order radioactive kinetics `N(t) = N_0 * exp(±lambda * t)`.
+Supports forward decay compensation and backward initial-activity reconstruction for short-lived radiotracers.
+
+# Arguments
+- `RawValue::Real`: Initial radioactivity or compound quantity.
+- `HalfLife::Real`: Radionuclide half-life value.
+- `HalfLifeUnit::AbstractString`: Half-life time unit (e.g. `"min"`, `"h"`, `"days"`).
+- `DeltaTMinutes::Real`: Elapsed time interval in minutes.
+
+# Keywords
+- `Reverse::Bool`: If `true`, computes pre-decay activity `N_0 = N(t) * exp(+lambda * t)` (default: `false`).
+
+# Returns
+- `Float64`: Decay-corrected quantity.
 """
 function MOLE_CalcRadioDecay_DDEF(RawValue::Real, HalfLife::Real, HalfLifeUnit::AbstractString, DeltaTMinutes::Real; Reverse::Bool=false)::Float64
     hl_minutes = MOLE_ConvertTimeToMinutes_DDEF(HalfLife, HalfLifeUnit)
@@ -134,8 +161,19 @@ end
 
 const MOLE_StoiTolerance_DDEC = 1e-6   
 """
-    MOLE_ApproxEq_DDEF(a::Real, b::Real; atol=1e-6) -> Bool
-Tolerance-based equality for floating-point chemical calculations.
+    MOLE_ApproxEq_DDEF(a::Real, b::Real; atol::Float64=1e-6) -> Bool
+Evaluate floating-point equality between chemical quantities within a predefined absolute tolerance.
+Prevents false-negative validation failures arising from floating-point rounding during mass balance checks.
+
+# Arguments
+- `a::Real`: First numeric quantity.
+- `b::Real`: Second numeric quantity.
+
+# Keywords
+- `atol::Float64`: Absolute comparison tolerance (default: `1e-6`).
+
+# Returns
+- `Bool`: `true` if absolute difference `|a - b| <= atol`, `false` otherwise.
 """
 MOLE_ApproxEq_DDEF(a::Real, b::Real; atol::Float64=MOLE_StoiTolerance_DDEC) = isapprox(a, b; atol)
 
@@ -148,8 +186,15 @@ MOLE_ApproxEq_DDEF(a::Real, b::Real; atol::Float64=MOLE_StoiTolerance_DDEC) = is
 # ------------------------------------------------------------------------------
 
 """
-    MOLE_ParseTable_DDEF(TableData::AbstractVector) -> Dict
-Parses structured data from the UI's DataTable into operational categories.
+    MOLE_ParseTable_DDEF(TableData::AbstractVector) -> Dict{String, Any}
+Parse tabular formulation records from the UI DataTable into categorized operational arrays.
+Extracts component identifiers, functional roles, discrete level bounds, and molecular weights into indexed dictionaries.
+
+# Arguments
+- `TableData::AbstractVector`: Array of row dictionaries containing formulation parameters.
+
+# Returns
+- `Dict{String, Any}`: Dictionary containing `"Names"`, `"Roles"`, `"Mins"`, `"Mids"`, `"Maxs"`, and `"MWs"`.
 """
 function MOLE_ParseTable_DDEF(TableData::AbstractVector)
     clean_data, input_warnings = Main.Sys_Fast.FAST_SanitiseInput_DDEF(TableData)
@@ -221,9 +266,19 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    MOLE_GetPercentageEquivalent_DDEF(Value, UnitStr, MW, Vol, Conc) -> Float64
-Calculates the molar percentage contribution of a component within the system budget.
-This is used for accurate baseline validation (rough check) before full matrix generation.
+    MOLE_GetPercentageEquivalent_DDEF(Value::Float64, UnitStr::AbstractString, MW::Float64, Vol::Float64, Conc::Float64) -> Float64
+Calculate the equivalent molar percentage contribution of a formulation component within the total system budget.
+Translates absolute masses, molar concentrations, and percentage ratios into a unified percentage scale for mass audit.
+
+# Arguments
+- `Value::Float64`: Ingredient level value.
+- `UnitStr::AbstractString`: Physical unit string (e.g. `"mg"`, `"mM"`, `"%"`).
+- `MW::Float64`: Molecular weight in grams per mole.
+- `Vol::Float64`: Total formulation volume in millilitres.
+- `Conc::Float64`: Target overall molar concentration in millimoles per litre.
+
+# Returns
+- `Float64`: Equivalent molar percentage contribution in `[0.0, 100.0]`.
 """
 function MOLE_GetPercentageEquivalent_DDEF(Value::Float64, UnitStr::AbstractString, MW::Float64, Vol::Float64, Conc::Float64)::Float64
     (isnan(Vol) || isnan(Conc) || Vol <= 0.0 || Conc <= 0.0 || MW <= 0.0) && return 0.0
@@ -239,8 +294,16 @@ MOLE_CalculatePercentage_DDEF(::MOLE_UnitConcentration_DDES, v::Float64, s::Floa
 MOLE_CalculatePercentage_DDEF(::MOLE_UnitOther_DDES, v::Float64, s::Float64, mw::Float64, vol::Float64, b::Float64, u_str::AbstractString)::Float64 = 0.0
 
 """
-    MOLE_ValidatePhysicalUnit_DDEF(ValueStr::String, ExpectedType::String) -> (Bool, Float64, String)
-Uses strict dimensional analysis via Unitful.jl to ensure chemical/physical safety.
+    MOLE_ValidatePhysicalUnit_DDEF(ValueStr::AbstractString, ExpectedType::AbstractString) -> Tuple{Bool, Float64, String}
+Validate physical dimensional correctness using strict Unitful dimensional analysis.
+Ensures entered values match expected physical dimensions (Volume, Concentration, Mass, or Time) and converts them to base units.
+
+# Arguments
+- `ValueStr::AbstractString`: Input string containing numeric magnitude and unit (e.g. `"250 uL"`).
+- `ExpectedType::AbstractString`: Expected physical dimension (`"Volume"`, `"Concentration"`, `"Mass"`, `"Time"`, or `"Ratio"`).
+
+# Returns
+- `Tuple{Bool, Float64, String}`: `(is_valid, magnitude_in_system_units, status_message)`.
 """
 function MOLE_ValidatePhysicalUnit_DDEF(ValueStr::AbstractString, ExpectedType::AbstractString)
     val_clean = strip(ValueStr)
@@ -300,8 +363,17 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    MOLE_QuickAudit_DDEF(TableData, Vol, Conc) -> (Success, Report, ResultDF, TotalMass, FillInfo)
-Performs a stoichiometry audit and automatically balances 'Filler' components.
+    MOLE_QuickAudit_DDEF(TableData::AbstractVector, Vol::Float64, Conc::Float64) -> Tuple{Bool, String, DataFrame, Float64, Dict}
+Execute a rapid gravimetric and stoichiometric audit on baseline formulation recipes.
+Verifies variable factor counts, checks mass conservation limits, and automatically computes filler reagent quantities.
+
+# Arguments
+- `TableData::AbstractVector`: Vector of formulation component dictionaries.
+- `Vol::Float64`: Target batch volume in millilitres.
+- `Conc::Float64`: Target overall molar concentration in millimoles per litre.
+
+# Returns
+- `Tuple`: `(is_valid, audit_report_text, summary_dataframe, total_batch_mass_mg, filler_info_dict)`.
 """
 function MOLE_QuickAudit_DDEF(TableData::AbstractVector, Vol::Float64, Conc::Float64)
     D = MOLE_ParseTable_DDEF(TableData)
@@ -441,9 +513,24 @@ MOLE_GetAuditLabel_DDEF(::AbstractIngredientRole, is_fix) = is_fix ? "(Absolute/
 # ------------------------------------------------------------------------------
 
 """
-    MOLE_CalcMass_DDEF(Names, MWs, Ratios, Vol, Conc, Units, [Scale]) -> DataFrame
-Universal Stoichiometry Engine utilising a integrated multiple-pass resolution model.
-Execution involves sequential resolution of absolute, internal percentage, and residual relative components.
+    MOLE_CalcMass_DDEF(Names::AbstractVector{<:AbstractString}, MWs::AbstractVector{Float64}, Ratios::AbstractVector{Float64}, Tgt_Vol::Float64, Tgt_Conc::Float64, Units::AbstractVector{<:AbstractString}, Scale::Float64=1.0; kwargs...) -> DataFrame
+Resolve multi-component gravimetric mass requirements using a multi-pass stoichiometric reconciliation engine.
+Processes absolute mass and concentration constraints first, allocates internal percentages, and distributes residual moles across stoichiometric components.
+
+# Arguments
+- `Names`: Vector of ingredient names.
+- `MWs`: Molecular weights in g/mol.
+- `Ratios`: Component formulation ratios or level values.
+- `Tgt_Vol`: Total batch volume in millilitres.
+- `Tgt_Conc`: Target total concentration in millimolar.
+- `Units`: Component physical unit strings.
+- `Scale`: Optional scaling factor (default: `1.0`).
+
+# Keywords
+- `SuppressLog::Bool`: Mutes warning logs during iterative solver loops (default: `false`).
+
+# Returns
+- `DataFrame`: Table containing resolved masses (`TARGET_MASS_mg`), millimoles (`Moles_mmol`), and normalised percentages.
 """
 function MOLE_CalcMass_DDEF(Names::AbstractVector{<:AbstractString}, MWs::AbstractVector{Float64},
     Ratios::AbstractVector{Float64}, Tgt_Vol::Float64, Tgt_Conc::Float64,
@@ -522,8 +609,20 @@ MOLE_ResolvePrimaryPass_DDEF!(::MOLE_UnitConcentration_DDES, i, r, s, mw, vol, r
 MOLE_ResolvePrimaryPass_DDEF!(::AbstractStoicUnit, i, r, s, mw, vol, rm, rmoles, fix) = nothing
 
 """
-    MOLE_AuditMatrix_DDEF(Design, Names, MWs, Vol, Conc, [Units]) -> Vector{Float64}
-Determine integrated mass requirements for individual runs to detect anomalies.
+    MOLE_AuditMatrix_DDEF(Design::AbstractMatrix, Names::AbstractVector, MWs::AbstractVector, Vol::Float64, Conc::Float64, Units::AbstractVector=fill("-", length(Names))) -> Vector{Float64}
+Compute total gravimetric mass requirements for every individual run in an experimental design matrix.
+Iterates across all design coordinate rows to evaluate run-by-run batch masses and detect gravimetric inconsistencies.
+
+# Arguments
+- `Design::AbstractMatrix`: Matrix of experimental runs (`N × k`).
+- `Names::AbstractVector`: Ingredient identifiers.
+- `MWs::AbstractVector`: Molecular weights in g/mol.
+- `Vol::Float64`: Target batch volume in millilitres.
+- `Conc::Float64`: Target concentration in millimolar.
+- `Units::AbstractVector`: Physical unit strings for each ingredient.
+
+# Returns
+- `Vector{Float64}`: Array of total batch masses in milligrams for each experimental run.
 """
 function MOLE_AuditMatrix_DDEF(Design::AbstractMatrix, Names::AbstractVector,
     MWs::AbstractVector, Vol::Float64, Conc::Float64, Units::AbstractVector=fill("-", length(Names)))
@@ -548,8 +647,18 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    MOLE_AuditBatch_DDEF(TableData, Design, Vol, Conc) -> Dict
-Execute comprehensive feasibility analysis for proposed experimental batches.
+    MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix, Vol::Float64, Conc::Float64) -> Dict{String, Any}
+Conduct a batch-wide stoichiometric feasibility assessment for an experimental design matrix.
+Computes mass statistics across all candidate runs, identifies negative component quantities, and verifies budget feasibility.
+
+# Arguments
+- `TableData::AbstractVector`: Formulation table metadata.
+- `Design::AbstractMatrix`: Coded or physical experimental design matrix.
+- `Vol::Float64`: Batch volume in millilitres.
+- `Conc::Float64`: Target batch concentration in millimolar.
+
+# Returns
+- `Dict{String, Any}`: Dictionary containing `"IsFeasible"`, `"AvgMass_mg"`, `"MaxMass_mg"`, `"MinMass_mg"`, `"StdDev_mg"`, and `"RunMasses"`.
 """
 function MOLE_AuditBatch_DDEF(TableData::AbstractVector, Design::AbstractMatrix,
     Vol::Float64, Conc::Float64)
@@ -641,9 +750,18 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    MOLE_ValidateDesignFeasibility_DDEF(DesignMatrix, InMeta, [Vol], [Conc]) -> (Bool, String)
-Advanced stoichiometric feasibility check for design matrices. 
-Validated against actual run coordinates to ensure operational safety.
+    MOLE_ValidateDesignFeasibility_DDEF(DesignMatrix::AbstractMatrix, InMeta::AbstractVector, Vol::Float64=100.0, Conc::Float64=10.0) -> Tuple{Bool, String}
+Validate stoichiometric mass balance feasibility across all coordinate points of an experimental design.
+Checks every design run for molar budget overconsumption and verifies that continuous factor levels do not generate negative quantities.
+
+# Arguments
+- `DesignMatrix::AbstractMatrix`: Physical experimental factor coordinates (`N × 3`).
+- `InMeta::AbstractVector`: Ingredient metadata dictionaries with roles, units, and molecular weights.
+- `Vol::Float64`: Batch volume in millilitres (default: `100.0`).
+- `Conc::Float64`: Target concentration in millimolar (default: `10.0`).
+
+# Returns
+- `Tuple{Bool, String}`: `(is_valid, validation_report)` detailing any violating run indices.
 """
 function MOLE_ValidateDesignFeasibility_DDEF(DesignMatrix::AbstractMatrix, InMeta::AbstractVector, Vol::Float64=100.0, Conc::Float64=10.0)
     R, C   = size(DesignMatrix)
@@ -704,8 +822,17 @@ end
 
 """
     MOLE_ProcessDesign_DDEF(DesignMatrix::AbstractMatrix, TableData::AbstractVector, Vol::Float64, Conc::Float64) -> DataFrame
-Expand design matrices into integrated experimental protocols with mass calculations and stoichiometric consistency.
-Centralises logical operations to ensure enterprise-wide scientific integrity.
+Translate a design matrix into a fully specified laboratory protocol worksheet with mass balance calculations.
+Constructs standardised input, fixed, and filler column headers while resolving run-by-run masses and residual volumes.
+
+# Arguments
+- `DesignMatrix::AbstractMatrix`: Physical coordinate matrix (`N × 3`).
+- `TableData::AbstractVector`: Formulation component rows.
+- `Vol::Float64`: Total formulation volume in millilitres.
+- `Conc::Float64`: Total concentration in millimoles per litre.
+
+# Returns
+- `DataFrame`: Complete experimental protocol table ready for execution and Excel workbook export.
 """
 function MOLE_ProcessDesign_DDEF(DesignMatrix::AbstractMatrix, TableData::AbstractVector, Vol::Float64, Conc::Float64)
     D = MOLE_ParseTable_DDEF(TableData)

@@ -136,36 +136,18 @@ end
 
 """
     CORE_GenDesign_DDEF(Method::AbstractString, FactorCount::Integer=3; Direction=[-1, -1, -1]) -> Matrix{Int8}
-
-Generate a coded (-1, 0, 1) experimental design matrix for the specified method.
-
-# Supported Methods
-- `"BB15"`: Box-Behnken Design (15 experimental runs, 3 factors)
-- `"CD17"`: Central Composite Design (17 experimental runs with face-centred axial points)
-- `"TL09"`: Taguchi L9 Orthogonal Array (9 experimental runs)
-- `"DF14"`: Directional Fractional D-Optimal Design (14 experimental runs, guided by `Direction`)
+Generate a coded (-1, 0, 1) design matrix for a 3-factor response surface topology.
+Constructs standard Box-Behnken (BB15), Central Composite (CD17), Taguchi (TL09), or Directional Fractional (DF14) coordinate runs.
 
 # Arguments
-- `Method::AbstractString`: Design identifier code (`"BB15"`, `"CD17"`, `"TL09"`, or `"DF14"`). Case-insensitive.
-- `FactorCount::Integer`: Number of continuous factors (currently strictly 3).
-- `Direction::AbstractVector`: Directional vector for DF14 search orientation (default: `[-1, -1, -1]`).
+- `Method::AbstractString`: Design identifier (`"BB15"`, `"CD17"`, `"TL09"`, or `"DF14"`).
+- `FactorCount::Integer`: Number of continuous factors (fixed at 3).
+
+# Keywords
+- `Direction::AbstractVector`: Search orientation vector for `"DF14"` design (default: `[-1, -1, -1]`).
 
 # Returns
-- `Matrix{Int8}`: Coded design matrix of size `N x 3` where `N` is the run count.
-
-# Examples
-```julia
-using DoECISORY
-
-# Generate Box-Behnken 15-run design
-X_bb = CORE_GenDesign_DDEF("BB15")
-
-# Generate Central Composite 17-run design
-X_ccd = CORE_GenDesign_DDEF("CD17")
-
-# Generate Taguchi L9 design
-X_tag = CORE_GenDesign_DDEF("TL09")
-```
+- `Matrix{Int8}`: Coded coordinate matrix of size `N × 3`.
 """
 function CORE_GenDesign_DDEF(Method::AbstractString, FactorCount::Integer=3; Direction::AbstractVector=[-1, -1, -1])
     if FactorCount != 3
@@ -197,10 +179,8 @@ CORE_GetModelType_DDEF(m::CORE_AbstractModelType_DDET) = m
 
 """
     CORE_GenerateMatrix_DDEF(Method, fc=3, dir=[-1, -1, -1]) -> Matrix{Float64}
-
-Generate the normalised design matrix for the specified experimental method.
-Dispatches on design method types (`CORE_MethodTL09_DDES`, `CORE_MethodBB15_DDES`,
-`CORE_MethodCD17_DDES`, `CORE_MethodDF14_DDES`) or method string identifiers.
+Generate the normalised design matrix for the specified experimental method dispatch type or string identifier.
+Validates the factor count requirement and dispatches to the corresponding topology constructor.
 
 # Arguments
 - `Method`: Design method object or string identifier (`"TL09"`, `"BB15"`, `"CD17"`, `"DF14"`).
@@ -228,9 +208,16 @@ CORE_GenerateMatrix_DDEF(Method::AbstractString, fc::Integer=3, dir::AbstractVec
 # ------------------------------------------------------------------------------
 
 """
-    CORE_MapLevels_DDEF(CodedMatrix, Config) -> Matrix{Float64}
-Maps coded entries in [-1, 1] to physical units via piecewise linear interpolation.
-Integer coded coordinates (-1, 0, 1) map directly to discrete level boundaries (L1, L2, L3).
+    CORE_MapLevels_DDEF(CodedMatrix::AbstractMatrix, Config::AbstractVector) -> Matrix{Float64}
+Map coded coordinates in `[-1.0, 1.0]` to physical engineering units via piecewise linear interpolation.
+Interpolates discrete level boundaries to translate dimensionless designs into actual laboratory formulations.
+
+# Arguments
+- `CodedMatrix::AbstractMatrix`: Matrix of coded coordinates (`N × 3`).
+- `Config::AbstractVector`: Factor configurations containing lower (`L1`), centre (`L2`), and upper (`L3`) physical levels.
+
+# Returns
+- `Matrix{Float64}`: Interpolated physical values of size `N × 3`.
 """
 function CORE_MapLevels_DDEF(CodedMatrix::AbstractMatrix, Config::AbstractVector)
     rows = size(CodedMatrix, 1)
@@ -272,8 +259,15 @@ const CORE_GoalMap_DDEC = Dict{String, CORE_AbstractGoalType_DDET}(
 )
 
 """
-    CORE_ExtractGoal_DDEF(Goal) -> Tuple
-Extracts and normalises goal parameters and returns a Trait + Parameter tuple.
+    CORE_ExtractGoal_DDEF(Goal::AbstractDict) -> Tuple{CORE_AbstractGoalType_DDET, Float64, Float64, Float64, Float64}
+Parse and validate response desirability goal parameters into a typed dispatch tuple.
+Extracts numerical limits, target thresholds, and exponential importance weights while resolving default midpoints.
+
+# Arguments
+- `Goal::AbstractDict`: Dictionary containing `"Type"` (`"Max"`, `"Min"`, or `"Nominal"`), `"Min"`, `"Max"`, `"Target"`, and `"Weight"`.
+
+# Returns
+- `Tuple`: `(Trait, G_Min, G_Max, G_Tgt, Weight)` where `Trait` is a `CORE_AbstractGoalType_DDET`.
 """
 function CORE_ExtractGoal_DDEF(Goal::AbstractDict)::Tuple{CORE_AbstractGoalType_DDET, Float64, Float64, Float64, Float64}
     G_Min = Float64(get(Goal, "Min", -Inf))
@@ -296,8 +290,16 @@ end
 CORE_ExtractGoal_DDEF(G::Tuple) = G
 
 """
-    CORE_CalcDesirability_DDEF(Val, Goal) -> Float64
-Calculates desirability scores via Multiple Dispatch.
+    CORE_CalcDesirability_DDEF(Val::Float64, Goal) -> Float64
+Calculate the Derringer-Suich individual desirability score in `[0.0, 1.0]` for an evaluated response.
+Applies one-sided or two-sided piecewise exponential utility curves based on the assigned optimisation goal.
+
+# Arguments
+- `Val::Float64`: Evaluated or predicted response value.
+- `Goal`: Goal parameter dictionary or extracted `Tuple` containing type, limits, target, and exponential weight.
+
+# Returns
+- `Float64`: Normalised desirability index clamped between `0.0` (unacceptable) and `1.0` (ideal).
 """
 function CORE_CalcDesirability_DDEF(Val::Float64, Goal::AbstractDict)::Float64
     return CORE_CalcDesirability_DDEF(Val, CORE_ExtractGoal_DDEF(Goal))
@@ -351,17 +353,14 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    CORE_ModifierDCYP_DDES
-Carries radioactive decay parameters into the optimisation loop for the DCYP mechanism.
-When a reaction time variable is identified among the design factors, this struct
-enables the objective function to penalise composite desirability by the exponential
-decay factor e^(-lambda * t), solving the incubation time-yield paradox described in
-radiopharmaceutical DoE literature.
+    CORE_ModifierDCYP_DDES(TimeIndex::Int, Lambda::Float64, IsotopeName::String)
+Decay-Corrected Yield Penalty structure for radiochemical multi-objective optimisation.
+Stores the reaction time column index and decay constant to penalise desirability as physical time elapses.
 
-Fields:
-- TimeIndex:   Column index of the reaction time variable in the X matrix.
-- Lambda:      Decay constant in minutes (ln(2) / half_life_minutes).
-- IsotopeName: Display name for logging and audit trail.
+# Fields
+- `TimeIndex::Int`: Column index of the incubation or reaction duration factor.
+- `Lambda::Float64`: Radioactive decay constant in reciprocal time units (`ln(2) / half_life`).
+- `IsotopeName::String`: Radionuclide identifier for tracking and reporting.
 """
 struct CORE_ModifierDCYP_DDES
     TimeIndex::Int
@@ -370,9 +369,17 @@ struct CORE_ModifierDCYP_DDES
 end
 
 """
-    CORE_ApplyDCYP_DDEF(Score, Mod, x) -> Float64
-Applies the exponential decay penalty e^(-lambda * t) to a composite desirability score
-based on the reaction incubation time extracted from candidate point x at Mod.TimeIndex.
+    CORE_ApplyDCYP_DDEF(Score::Float64, Mod::CORE_ModifierDCYP_DDES, x) -> Float64
+Apply an exponential radio-decay penalty factor `exp(-lambda * t)` to composite desirability.
+Resolves the trade-off between chemical reaction completion and radioactive decay loss during formulation.
+
+# Arguments
+- `Score::Float64`: Raw composite desirability score in `[0.0, 1.0]`.
+- `Mod::CORE_ModifierDCYP_DDES`: Decay modifier specifying time factor index and decay constant.
+- `x`: Candidate factor coordinate vector containing the reaction duration.
+
+# Returns
+- `Float64`: Decay-penalised desirability score in `[0.0, 1.0]`.
 """
 function CORE_ApplyDCYP_DDEF(Score::Float64, Mod::CORE_ModifierDCYP_DDES, x)::Float64
     (Mod.TimeIndex < 1 || Mod.TimeIndex > length(x)) && return Score
@@ -382,11 +389,22 @@ function CORE_ApplyDCYP_DDEF(Score::Float64, Mod::CORE_ModifierDCYP_DDES, x)::Fl
 end
 
 """
-    CORE_OptimiseDesirability_DDEF(Models, Goals, X_Bounds; MaxTime, PenaltyFn, ModifiersDCYP) -> (Vector{Float64}, Float64)
-Globally optimises parameters by maximising composite desirability using BlackBoxOptim.
-When ModifiersDCYP are supplied, the objective function applies exponential decay
-penalties to composite desirability, enabling the solver to locate the peak time point
-where chemical conversion and radioactive preservation intersect.
+    CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractVector, X_Bounds::AbstractMatrix{Float64}; kwargs...) -> Tuple{Vector{Float64}, Float64}
+Locate optimal continuous factor coordinates by maximising composite multi-response desirability via global metaheuristics.
+Evaluates geometric-mean composite objective functions across all active response models within the designated bounding box.
+
+# Arguments
+- `Models::AbstractVector`: Fitted regression models for all active responses.
+- `Goals::AbstractVector`: Optimisation goals and target specifications per response.
+- `X_Bounds::AbstractMatrix{Float64}`: Lower and upper search domain bounds of size `3 × 2`.
+
+# Keywords
+- `MaxTime::Float64`: Maximum optimisation time budget in seconds (default: `2.0`).
+- `PenaltyFn::Union{Function,Nothing}`: Optional boundary constraint penalty function.
+- `ModifiersDCYP::Vector{CORE_ModifierDCYP_DDES}`: Optional radiochemical decay penalty modifiers.
+
+# Returns
+- `Tuple{Vector{Float64}, Float64}`: `(best_coordinates, best_composite_desirability)`.
 """
 function CORE_OptimiseDesirability_DDEF(Models::AbstractVector, Goals::AbstractVector, X_Bounds::AbstractMatrix{Float64};
     MaxTime::Float64=2.0, PenaltyFn::Union{Function,Nothing}=nothing,
@@ -524,8 +542,18 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    CORE_ExtractLeader_DDEF(FilePath, PhaseCode, [SelectedID], [VarNames]) -> Dict
-Retrieves experiment data for the optimal (leader) run from a previous phase record.
+    CORE_ExtractLeader_DDEF(FilePath::AbstractString, PhaseCode::AbstractString, SelectedID::AbstractString="", VarNames::AbstractVector{<:AbstractString}=String[]) -> Dict{String, Any}
+Extract the optimal leader run coordinates and desirability score from an experimental phase record.
+Reads the specified phase candidate table, retrieves the global best or user-selected run, and extracts factor levels.
+
+# Arguments
+- `FilePath::AbstractString`: Path to the master Excel workbook.
+- `PhaseCode::AbstractString`: Phase identifier (e.g. `"Phase1"`).
+- `SelectedID::AbstractString`: Optional specific run identifier (defaults to highest score if empty).
+- `VarNames::AbstractVector{<:AbstractString}`: Specific factor names to extract.
+
+# Returns
+- `Dict{String, Any}`: Dictionary containing `"ID"`, `"Score"`, `"Vals"` (factor coordinates), and `"InputNames"`.
 """
 function CORE_ExtractLeader_DDEF(FilePath::AbstractString, PhaseCode::AbstractString, SelectedID::AbstractString="", VarNames::AbstractVector{<:AbstractString}=String[])
     C     = Main.Sys_Fast.FAST_Data_DDEC
@@ -594,8 +622,16 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    CORE_ValidateDesign_DDEF(DesignMatrix::Matrix, Config::AbstractVector) -> (Bool, String)
-Pre-flight integrity check for generated designs (detects singular matrices/degeneracy).
+    CORE_ValidateDesign_DDEF(DesignMatrix::AbstractMatrix, Config::AbstractVector=[]) -> Tuple{Bool, String}
+Perform pre-flight numerical and structural validation on an experimental design matrix.
+Checks for minimum sample size, zero-variance columns, excessive duplicate runs, and matrix near-singularity.
+
+# Arguments
+- `DesignMatrix::AbstractMatrix`: Matrix of candidate experimental runs (`N × k`).
+- `Config::AbstractVector`: Optional factor configurations.
+
+# Returns
+- `Tuple{Bool, String}`: `(is_valid, report)` indicating rank sufficiency, column variance, and duplicate runs.
 """
 function CORE_ValidateDesign_DDEF(DesignMatrix::AbstractMatrix, Config::AbstractVector=[])
     R, C   = size(DesignMatrix)
@@ -645,8 +681,16 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    CORE_CodeMatrix_DDEF(X::Matrix, [Bounds]) -> Matrix{Float64}
-Codes a physical matrix into the [-1, 1] interval for scale-invariant mathematical analysis.
+    CORE_CodeMatrix_DDEF(X::AbstractMatrix, Bounds::Union{AbstractMatrix, Nothing}=nothing) -> Matrix{Float64}
+Transform physical factor values into dimensionless coded coordinates in the standard range `[-1.0, 1.0]`.
+Enables scale-invariant model fitting and condition number evaluation across factors with differing physical dimensions.
+
+# Arguments
+- `X::AbstractMatrix`: Matrix of physical experimental factor coordinates (`N × k`).
+- `Bounds::Union{AbstractMatrix, Nothing}`: Optional explicit `k × 2` matrix of `[min, max]` domain bounds.
+
+# Returns
+- `Matrix{Float64}`: Dimensionless coded matrix with coordinates scaled to `[-1.0, 1.0]`.
 """
 function CORE_CodeMatrix_DDEF(X::AbstractMatrix, Bounds::Union{AbstractMatrix, Nothing}=nothing)
     R, C = size(X)
@@ -677,10 +721,16 @@ function CORE_CodeMatrix_DDEF(X::AbstractMatrix, Bounds::Union{AbstractMatrix, N
 end
 
 """
-    CORE_ExpandModelMatrix_DDEF(X::AbstractMatrix, ModelType::CORE_AbstractModelType_DDET) -> Matrix{Float64}
-Expands coded 3-factor design matrix to full linear (p=4) or quadratic (p=10) model matrix.
-Columns for Quadratic: [1, x1, x2, x3, x1*x2, x1*x3, x2*x3, x1^2, x2^2, x3^2].
-Columns for Linear:    [1, x1, x2, x3].
+    CORE_ExpandModelMatrix_DDEF(X::AbstractMatrix, ModelType=CORE_ModelQuadratic_DDES()) -> Matrix{Float64}
+Expand a 3-factor coded matrix into linear (p=4) or full quadratic (p=10) model design columns.
+Generates intercept, linear terms, cross-product two-way interactions, and pure quadratic squared columns.
+
+# Arguments
+- `X::AbstractMatrix`: Coded factor matrix of size `N × 3`.
+- `ModelType`: Model type object (`CORE_ModelLinear_DDES`, `CORE_ModelQuadratic_DDES`) or name string (`"linear"`, `"quadratic"`).
+
+# Returns
+- `Matrix{Float64}`: Expanded model matrix of size `N × 4` (linear) or `N × 10` (intercept, linear, interaction, quadratic).
 """
 function CORE_ExpandModelMatrix_DDEF(X::AbstractMatrix, ModelType::CORE_AbstractModelType_DDET=CORE_ModelQuadratic_DDES())::Matrix{Float64}
     R, C = size(X)
@@ -719,9 +769,16 @@ function CORE_ExpandModelMatrix_DDEF(X::AbstractMatrix, ModelType::AbstractStrin
 end
 
 """
-    CORE_D_Efficiency_DDEF(X::AbstractMatrix, [ModelType]) -> Float64
-Calculates academic D-Efficiency based on normalised Fisher information determinant:
-D = (|X'X| / N^p)^(1/p) where N is run count and p is number of model parameters (10 for quadratic, 4 for linear).
+    CORE_D_Efficiency_DDEF(X::AbstractMatrix, ModelType=CORE_ModelQuadratic_DDES()) -> Float64
+Calculate the normalised D-optimality efficiency criterion based on the Fisher information matrix determinant.
+Quantifies the volume of the joint confidence ellipsoid for parameter estimates relative to an ideal orthogonal design.
+
+# Arguments
+- `X::AbstractMatrix`: Experimental factor coordinates (`N × 3`).
+- `ModelType`: Model specification type or name string (`"linear"` or `"quadratic"`).
+
+# Returns
+- `Float64`: D-efficiency metric `(|X'X| / N^p)^(1/p)` in `[0.0, 1.0]`.
 """
 function CORE_D_Efficiency_DDEF(X::AbstractMatrix, ModelType::CORE_AbstractModelType_DDET=CORE_ModelQuadratic_DDES())::Float64
     R, _ = size(X)
@@ -747,9 +804,16 @@ function CORE_D_Efficiency_DDEF(X::AbstractMatrix, ModelType::AbstractString)::F
 end
 
 """
-    CORE_CalcDesignMetrics_DDEF(X::AbstractMatrix, [ModelType]) -> Dict
-Calculates a comprehensive suite of design quality metrics including D, A, G, and I efficiency
-using the expanded model matrix (10 parameters for quadratic, 4 parameters for linear).
+    CORE_CalcDesignMetrics_DDEF(X::AbstractMatrix, ModelType=CORE_ModelQuadratic_DDES()) -> Dict{String, Float64}
+Compute information matrix conditioning and optimality criteria (D-, A-, G-, and I-efficiencies).
+Provides a comprehensive diagnostic assessment of parameter variance, prediction error dispersion, and numerical stability.
+
+# Arguments
+- `X::AbstractMatrix`: Experimental factor coordinates (`N × 3`).
+- `ModelType`: Model specification type or name string (`"linear"` or `"quadratic"`).
+
+# Returns
+- `Dict{String, Float64}`: Dictionary containing `"D"`, `"A"`, `"G"`, `"I"` efficiency scores and matrix `"Condition"`.
 """
 function CORE_CalcDesignMetrics_DDEF(X::AbstractMatrix, ModelType::CORE_AbstractModelType_DDET=CORE_ModelQuadratic_DDES())
     R, C = size(X)

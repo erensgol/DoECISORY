@@ -74,8 +74,16 @@ Base.Dict(r::VISE_RegressionResult_DDES) = Dict{String, Any}(
 
 
 """
-    VISE_GetTermNames_DDEF(InNames, ModelType) -> Vector{String}
-Generates human-readable names for regression terms (Factor Interactions and Polynomials).
+    VISE_GetTermNames_DDEF(InNames::AbstractVector{<:AbstractString}, ModelType::Any) -> Vector{String}
+Generate standardised labels for regression model terms including linear, interaction, and quadratic components.
+Formats polynomial combinations using mathematical unicode symbols according to the chosen model specification.
+
+# Arguments
+- `InNames::AbstractVector{<:AbstractString}`: Experimental factor labels.
+- `ModelType::Any`: Model specification (`"linear"` or `"quadratic"`).
+
+# Returns
+- `Vector{String}`: Ordered list of regression parameter names.
 """
 function VISE_GetTermNames_DDEF(InNames::AbstractVector{<:AbstractString}, ModelType::Any)
     m_type = Main.Lib_Core.CORE_GetModelType_DDEF(ModelType)
@@ -106,8 +114,16 @@ VISE_GetParamCount_DDEF(m) = VISE_GetParamCount_DDEF(Main.Lib_Core.CORE_GetModel
 # ------------------------------------------------------------------------------
 
 """
-    VISE_ExpandDesign_DDEF(X, ModelType) -> Matrix{Float64}
-Expands raw factor matrix into a design matrix (intercept + linear + interactions + quadratic).
+    VISE_ExpandDesign_DDEF(X::AbstractMatrix{Float64}, ModelType::AbstractString) -> Matrix{Float64}
+Expand continuous factor coordinates into a full polynomial design matrix for regression estimation.
+Constructs column blocks for the unit intercept, linear terms, two-factor interaction cross-products, and squared quadratics.
+
+# Arguments
+- `X::AbstractMatrix{Float64}`: Raw factor coordinates of size `N × k`.
+- `ModelType::AbstractString`: Expansion topology (`"linear"` or `"quadratic"`).
+
+# Returns
+- `Matrix{Float64}`: Expanded model matrix of size `N × p`.
 """
 function VISE_ExpandDesign_DDEF(X::AbstractMatrix{Float64}, ModelType::AbstractString)
     m_type = Main.Lib_Core.CORE_GetModelType_DDEF(ModelType)
@@ -136,8 +152,16 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    VISE_Predict_DDEF(Model::Dict, X_Raw) -> Vector{Float64}
-Universal prediction gateway for OLS models (Linear / Quadratic).
+    VISE_Predict_DDEF(Model::AbstractDict, X_Raw::Any) -> Vector{Float64}
+Compute response predictions for candidate factor coordinates using fitted regression coefficients.
+Expands input coordinates to match the underlying model topology and computes matrix-vector inner products.
+
+# Arguments
+- `Model::AbstractDict`: Fitted regression model dictionary containing coefficients and model type.
+- `X_Raw::Any`: Coordinate matrix or vector of evaluation points.
+
+# Returns
+- `Vector{Float64}`: Model-predicted response values.
 """
 function VISE_Predict_DDEF(Model::AbstractDict, X_Raw::Any)
     X = VISE_PrepareMatrix_DDEF(X_Raw)
@@ -181,8 +205,20 @@ VISE_ClampIndex_DDEF(idx::Integer, len::Integer) = clamp(Int(idx), 1, Int(len))
 VISE_ClampIndex_DDEF(idx::AbstractFloat, len::Integer) = clamp(round(Int, idx), 1, Int(len))
 
 """
-    VISE_Regress_DDEF(X, Y, ModelType; [InNames]) -> Dict
-Strict OLS regression for experimental data analysis and modelling.
+    VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, ModelType::AbstractString; InNames::AbstractVector{<:AbstractString}=String[]) -> Dict{String, Any}
+Fit an ordinary least squares (OLS) regression model with comprehensive diagnostic telemetry.
+Computes parameter estimates via QR decomposition alongside leverage, Student's t-statistics, variance inflation, and condition numbers.
+
+# Arguments
+- `X_Raw::AbstractMatrix{Float64}`: Experimental design factor matrix (`N × k`).
+- `Y::AbstractVector{Float64}`: Observed experimental response vector (`N`).
+- `ModelType::AbstractString`: Model structure (`"linear"` or `"quadratic"`).
+
+# Keywords
+- `InNames::AbstractVector{<:AbstractString}`: Optional factor labels for parameter naming (default: `String[]`).
+
+# Returns
+- `Dict{String, Any}`: Model dictionary containing coefficients, goodness-of-fit metrics, and diagnostic indicators.
 """
 function VISE_Regress_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, ModelType::AbstractString; InNames::AbstractVector{<:AbstractString}=String[])
     Xd = VISE_ExpandDesign_DDEF(X_Raw, ModelType)
@@ -244,8 +280,15 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    VISE_CalcVIF_DDEF(X_Design) -> Vector{Float64}
-Calculates Variance Inflation Factors (VIF) to detect multicollinearity.
+    VISE_CalcVIF_DDEF(X_Design::AbstractMatrix) -> Vector{Float64}
+Calculate Variance Inflation Factors (VIF) to detect multicollinearity among regression terms.
+Inverts the correlation matrix of predictor columns with Tikhonov regularisation for ill-conditioned designs.
+
+# Arguments
+- `X_Design::AbstractMatrix`: Expanded model design matrix including intercept.
+
+# Returns
+- `Vector{Float64}`: Variance inflation factors corresponding to each model parameter.
 """
 function VISE_CalcVIF_DDEF(X_Design::AbstractMatrix)
     n, p = size(X_Design)
@@ -275,8 +318,16 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    VISE_LackOfFit_DDEF(X_Design, Y) -> (F_Stat, P_Value)
-Performs Lack-of-Fit test to determine if model structure is adequate (requires replicates).
+    VISE_LackOfFit_DDEF(X_Design::AbstractMatrix, Y::AbstractVector) -> Tuple{Float64, Float64}
+Perform a formal Lack-of-Fit F-test to assess whether regression residual error exceeds experimental pure error.
+Partitions residual variance by grouping replicate design coordinates to evaluate model structural adequacy.
+
+# Arguments
+- `X_Design::AbstractMatrix`: Expanded model design matrix.
+- `Y::AbstractVector`: Observed experimental responses.
+
+# Returns
+- `Tuple{Float64, Float64}`: `(F_Statistic, P_Value)` where `NaN` indicates absence of coordinate replicates.
 """
 function VISE_LackOfFit_DDEF(X_Design::AbstractMatrix, Y::AbstractVector)
     n, p = size(X_Design)
@@ -313,8 +364,17 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    VISE_GenerateAnovaTable_DDEF(Model::Dict, X::AbstractMatrix, Y::AbstractVector) -> DataFrame
-Constructs a comprehensive ANOVA table for experimental validation.
+    VISE_GenerateAnovaTable_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::Any) -> DataFrame
+Construct an analysis of variance (ANOVA) table partitioning total response variance into regression and residual components.
+Computes degrees of freedom, sums of squares, mean squares, F-statistics, and p-values for model and lack-of-fit terms.
+
+# Arguments
+- `Model::AbstractDict`: Fitted regression model dictionary.
+- `X_Raw::Any`: Experimental factor design coordinates.
+- `Y_Raw::Any`: Observed response observations.
+
+# Returns
+- `DataFrame`: Standardised ANOVA summary table.
 """
 function VISE_GenerateAnovaTable_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::Any)
     X = VISE_PrepareMatrix_DDEF(X_Raw)
@@ -422,8 +482,17 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    VISE_PerformNormalityTest_DDEF(Model, X, Y) -> Dict
-Executes the Shapiro-Wilk test on model residuals for normality assessment.
+    VISE_PerformNormalityTest_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::Any) -> Dict{String, Any}
+Conduct a Shapiro-Wilk statistical hypothesis test on model residuals to verify Gaussian distribution assumptions.
+Calculates residual deviations between observed responses and model predictions before computing the test p-value.
+
+# Arguments
+- `Model::AbstractDict`: Fitted regression model dictionary.
+- `X_Raw::Any`: Factor coordinate data.
+- `Y_Raw::Any`: Observed response data.
+
+# Returns
+- `Dict{String, Any}`: Dictionary containing the p-value, normality conclusion flag, and test identifier.
 """
 function VISE_PerformNormalityTest_DDEF(Model::AbstractDict, X_Raw::Any, Y_Raw::Any)
     X      = VISE_PrepareMatrix_DDEF(X_Raw)
@@ -454,8 +523,17 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    VISE_CalcMetrics_DDEF(Y_Real, Y_Pred, p) -> (R2, R2_Adj, RMSE, AIC)
-Calculates core statistical metrics (R², Adjusted R², RMSE, AIC).
+    VISE_CalcMetrics_DDEF(Y_Real::AbstractVector{Float64}, Y_Pred::AbstractVector{Float64}, p::Int) -> Tuple{Float64, Float64, Float64, Float64}
+Calculate fundamental goodness-of-fit and information theoretic metrics for regression validation.
+Computes raw coefficient of determination (R²), adjusted R², root mean square error (RMSE), and Akaike Information Criterion (AIC).
+
+# Arguments
+- `Y_Real::AbstractVector{Float64}`: Observed response measurements.
+- `Y_Pred::AbstractVector{Float64}`: Model-predicted response values.
+- `p::Int`: Number of estimated parameters in the regression model.
+
+# Returns
+- `Tuple{Float64, Float64, Float64, Float64}`: `(R2, R2_Adj, RMSE, AIC)`.
 """
 function VISE_CalcMetrics_DDEF(Y_Real::AbstractVector{Float64}, Y_Pred::AbstractVector{Float64}, p::Int)
     n     = length(Y_Real)
@@ -478,8 +556,18 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    VISE_SelectBestModel_DDEF(X, Y, InNames) -> (BestModel, LogMsg)
-Evaluates multiple candidate model structures and selects the optimal model.
+    VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, InNames::AbstractVector{<:AbstractString}, RequestedType::AbstractString="Auto") -> Tuple{Dict{String, Any}, String}
+Evaluate candidate model architectures and select the optimal regression structure based on predictive validity.
+Compares linear and quadratic formulations using cross-validated Q² and adjusted R² while preventing over-parameterisation.
+
+# Arguments
+- `X::AbstractMatrix{Float64}`: Factor coordinate matrix (`N × k`).
+- `Y::AbstractVector{Float64}`: Observed experimental response vector (`N`).
+- `InNames::AbstractVector{<:AbstractString}`: Factor names.
+- `RequestedType::AbstractString`: Architectural directive (`"Auto"`, `"linear"`, or `"quadratic"`).
+
+# Returns
+- `Tuple{Dict{String, Any}, String}`: `(BestModelDictionary, SelectionAuditMessage)`.
 """
 function VISE_SelectBestModel_DDEF(X::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, InNames::AbstractVector{<:AbstractString}, RequestedType::AbstractString="Auto")::Tuple{Dict{String, Any}, String}
     n      = size(X, 1)
@@ -548,8 +636,17 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    VISE_CrossValidate_DDEF(X, Y, ModelType) -> Float64
-Calculates Predicted R² (Q²) using the PRESS statistic and Hat Matrix shortcut.
+    VISE_CrossValidate_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, ModelType::AbstractString) -> Float64
+Compute leave-one-out cross-validated coefficient of determination (Q²) via the prediction error sum of squares (PRESS).
+Utilises the hat matrix diagonal shortcut to evaluate out-of-sample predictive performance without iterative re-fitting.
+
+# Arguments
+- `X_Raw::AbstractMatrix{Float64}`: Factor coordinate matrix.
+- `Y::AbstractVector{Float64}`: Observed response vector.
+- `ModelType::AbstractString`: Model structure (`"linear"` or `"quadratic"`).
+
+# Returns
+- `Float64`: Cross-validation metric Q² in `(-Inf, 1.0]`.
 """
 function VISE_CrossValidate_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVector{Float64},
     ModelType::AbstractString)::Float64
@@ -574,10 +671,21 @@ function VISE_CrossValidate_DDEF(X_Raw::AbstractMatrix{Float64}, Y::AbstractVect
 end
 
 """
-    VISE_GridSearch_DDEF(Models, Goals, Bounds; [Steps], [ModifiersDCYP]) -> (X, Y_Pred, Scores)
-Performs high-density grid search across factor space for desirability exploration.
-When ModifiersDCYP are provided, composite desirability is penalised by the exponential
-decay factor e^(-lambda * t_reaction) for the reaction incubation time.
+    VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_Bounds::AbstractMatrix{Float64}; Steps::Int=41, ModifiersDCYP::Vector{Main.Lib_Core.CORE_ModifierDCYP_DDES}=Main.Lib_Core.CORE_ModifierDCYP_DDES[]) -> Tuple{Matrix{Float64}, Matrix{Float64}, Vector{Float64}}
+Execute a high-density grid evaluation across continuous factor bounds to explore multi-response desirability landscapes.
+Evaluates multi-model predictions and computes composite desirability scores with optional radiochemical decay penalties.
+
+# Arguments
+- `Models::AbstractVector`: Fitted regression models for each response variable.
+- `Goals::AbstractVector`: Target criteria and desirability specifications.
+- `X_Bounds::AbstractMatrix{Float64}`: Lower and upper coordinate limits for each factor (`k × 2`).
+
+# Keywords
+- `Steps::Int`: Discretisation density per factor dimension (default: `41` or `21` depending on CPU threads).
+- `ModifiersDCYP::Vector{CORE_ModifierDCYP_DDES}`: Optional radiochemical decay modifiers.
+
+# Returns
+- `Tuple{Matrix{Float64}, Matrix{Float64}, Vector{Float64}}`: `(CandidateCoordinates, PredictionsMatrix, DesirabilityScores)`.
 """
 function VISE_GridSearch_DDEF(Models::AbstractVector, Goals::AbstractVector, X_Bounds::AbstractMatrix{Float64};
     Steps::Int=41, ModifiersDCYP::Vector{Main.Lib_Core.CORE_ModifierDCYP_DDES}=Main.Lib_Core.CORE_ModifierDCYP_DDES[])
@@ -677,18 +785,16 @@ end
 
 """
     VISE_SensitivityAnalysis_DDEF(Model::AbstractDict, X_Point::AbstractVector{Float64}, X_Clean::AbstractMatrix{Float64}) -> Vector{Float64}
-
-Compute normalised local sensitivity gradients around an evaluation coordinate `X_Point`.
-Evaluates finite-difference numerical partial derivatives of the response model with respect
-to each factor coordinate scaled by the factor span, returning fractional sensitivities.
+Compute normalised local sensitivity gradients around an evaluation coordinate point.
+Evaluates finite-difference numerical partial derivatives scaled by factor domain spans to determine fractional contributions.
 
 # Arguments
-- `Model`: Fitted regression model dictionary.
-- `X_Point`: Coordinate vector at which local sensitivity is evaluated.
-- `X_Clean`: Matrix of baseline design coordinates used to determine factor domain spans.
+- `Model::AbstractDict`: Fitted regression model dictionary.
+- `X_Point::AbstractVector{Float64}`: Evaluation coordinate point (`k` factors).
+- `X_Clean::AbstractMatrix{Float64}`: Experimental design coordinates used to resolve factor domain ranges.
 
 # Returns
-- A 3-element `Vector{Float64}` of normalised fractional sensitivities summing to 1.0.
+- `Vector{Float64}`: Normalised fractional sensitivities summing to `1.0`.
 """
 function VISE_SensitivityAnalysis_DDEF(Model::AbstractDict, X_Point::AbstractVector{Float64}, X_Clean::AbstractMatrix{Float64})
     Dim, gradients = 3, zeros(3)
@@ -794,16 +900,14 @@ end
 
 """
     VISE_GenerateScientificReport_DDEF(Res::AbstractDict) -> String
-
-Generate a publication-grade scientific Markdown audit report from regression analysis results.
-Compiles design vitals (D-, A-, G-, I-efficiencies, condition number, VIF), model performance
-metrics (R², Q²_LOO, RMSE), ANOVA tables, regression equations, and desirability optimisation.
+Generate an academic Markdown audit report detailing statistical findings and experimental design metrics.
+Compiles design vitals, regression equations, cross-validation metrics, ANOVA tables, and multi-response optimisation summaries.
 
 # Arguments
-- `Res`: Analysis results dictionary produced by `VISE_Execute_DDEF`.
+- `Res::AbstractDict`: Results dictionary produced by `VISE_Execute_DDEF`.
 
 # Returns
-- A `String` containing the formatted scientific report in Markdown syntax.
+- `String`: Formatted publication-grade Markdown document.
 """
 function VISE_GenerateScientificReport_DDEF(Res::AbstractDict)
     io = IOBuffer()
@@ -1410,26 +1514,24 @@ end
 
 """
     VISE_Execute_DDEF(DataFile::AbstractString, Phase::AbstractString, Goals::AbstractVector, ModelType::AbstractString="Auto"; kwargs...) -> Dict{String, Any}
-
-Execute the complete statistical modelling and optimisation pipeline for a designated experimental phase.
-Loads data, audits mass conservation, fits regression models, performs ANOVA, evaluates diagnostics,
-and conducts multi-criteria desirability optimisation.
+Execute the complete statistical modelling and multi-objective optimisation pipeline for a designated experimental phase.
+Coordinates data ingestion, radiochemical decay compensation, ensemble model fitting, ANOVA diagnostics, and desirability optimisation.
 
 # Arguments
-- `DataFile`: Path to the Excel workbook containing experimental data.
-- `Phase`: Name of the phase sheet to analyse (e.g. `"Phase1"`, `"Phase2"`).
-- `Goals`: Vector of response optimisation goals (`"Max"`, `"Min"`, `"Target"`, etc.).
-- `ModelType`: Model selection strategy (`"Auto"`, `"Linear"`, `"Interaction"`, `"Quadratic"`).
+- `DataFile::AbstractString`: Path to the Excel workbook containing experimental data.
+- `Phase::AbstractString`: Target experimental phase identifier (e.g. `"Phase1"`).
+- `Goals::AbstractVector`: Vector of response optimisation criteria.
+- `ModelType::AbstractString`: Model selection strategy (`"Auto"`, `"linear"`, or `"quadratic"`).
 
-# Keyword Arguments
-- `Opts`: Optimisation options dictionary.
-- `ConfigUpdates`: Configuration override dictionary.
-- `t_start`: Pipeline start timestamp for execution telemetry.
-- `RenderMode`: Visualisation rendering level (`:Full` or `:Minimal`).
-- `Optim`: Whether to perform desirability surface optimisation (`true` by default).
+# Keywords
+- `Opts::AbstractDict`: Optimisation and radio-decay configuration options (default: empty dictionary).
+- `ConfigUpdates::AbstractDict`: Configuration metadata overrides (default: empty dictionary).
+- `t_start::Float64`: Execution start timestamp for pipeline telemetry (default: `time()`).
+- `RenderMode::Symbol`: Visualisation level (`:Full` or `:Minimal`).
+- `Optim::Bool`: Whether to execute numerical desirability optimisation (default: `true`).
 
 # Returns
-- A `Dict{String, Any}` containing fitted models, diagnostics, audit vitals, candidates, and visualisations.
+- `Dict{String, Any}`: Comprehensive analytical results dictionary.
 """
 function VISE_Execute_DDEF(DataFile::AbstractString, Phase::AbstractString, Goals::AbstractVector, ModelType::AbstractString="Auto"; 
     Opts::AbstractDict=Dict{String,Any}(), ConfigUpdates::AbstractDict=Dict{String,Any}(), t_start::Float64=time(), RenderMode::Symbol=:Full, Optim::Bool=true)
@@ -1807,14 +1909,26 @@ function VISE_InsertColAfter_DDEF!(df::DataFrame, new_col::String, ref_col::Stri
 end
 
 """
-    VISE_ApplyForwReveDecay_DDEF(X, Y, InNames, OutNames, DataFrame, Config, Opts, Constants, Log; mask) -> Vector{Dict}
-Executes forward and reverse radioactive decay corrections across experimental data matrices:
-1. Forward Phase (Precursor Inputs): Decays precursor amounts from preparation to synthesis time (Reverse=false).
-   Always populates `ACTUAL_<Isotope>` columns in `DataFrame` based on physical decay laws regardless of UI toggles.
-2. Reverse Phase (Product Outputs): Pure reverse radioactive decay correction restoring delayed measured product activity
-   back to End of Synthesis (EOS, Reverse=true). Populates `ACTUAL_<OutputName>` immediately to the right of the precursor
-   `ACTUAL_` column without altering raw experimental records (`RESULT_`).
-All physical radioactive decay factors are calculated via `Lib_Mole.MOLE_CalcRadioDecay_DDEF`.
+    VISE_ApplyForwReveDecay_DDEF(X, Y, in_n, out_n, df, config, opts, C, Log; mask=trues(nrow(df))) -> Vector{Dict{String, Any}}
+Apply forward precursor decay and reverse product decay corrections across experimental data matrices.
+Adjusts precursor masses for elapsed synthesis duration and reconstructs delayed product activity back to end of synthesis.
+
+# Arguments
+- `X`: Input factor coordinate matrix.
+- `Y`: Output response measurement matrix.
+- `in_n`: Factor component names.
+- `out_n`: Response variable names.
+- `df`: Experimental data table.
+- `config`: Formulation configuration dictionary.
+- `opts`: Analysis options dictionary.
+- `C`: System constants instance (`FAST_Data_DDEC`).
+- `Log`: Logging function dispatch.
+
+# Keywords
+- `mask`: Row selection bitmask for filtering valid experimental runs (default: all rows).
+
+# Returns
+- `Vector{Dict{String, Any}}`: Audit records detailing decay corrections and applied decay factors.
 """
 function VISE_ApplyForwReveDecay_DDEF(X, Y, in_n, out_n, df, config, opts, C, Log; mask=trues(nrow(df)))
     audit = Dict{String,Any}[]
@@ -2056,11 +2170,18 @@ end
 # ------------------------------------------------------------------------------
 
 """
-    VISE_ExtractDCYP_DDEF(InNames, OutNames, Config, Opts) -> Vector{CORE_ModifierDCYP_DDES}
-Extracts decay modifier parameters for the DCYP (Decay Penalty) mechanism.
-Decoupled from individual outputs, DCYP directly penalises composite desirability
-D by e^(-lambda * t_reaction) over the incubation time, balancing chemical conversion
-against isotope physical decay.
+    VISE_ExtractDCYP_DDEF(in_n::AbstractVector{<:AbstractString}, out_n::AbstractVector{<:AbstractString}, config::AbstractDict, opts::AbstractDict) -> Vector{Main.Lib_Core.CORE_ModifierDCYP_DDES}
+Extract Decay-Coupled Yield Penalty (DCYP) modifier structures from configuration and runtime options.
+Identifies reaction incubation time factors and resolves radionuclide half-lives to penalise multi-response desirability.
+
+# Arguments
+- `in_n::AbstractVector{<:AbstractString}`: Factor component names.
+- `out_n::AbstractVector{<:AbstractString}`: Response metric names.
+- `config::AbstractDict`: Formulation configuration dictionary.
+- `opts::AbstractDict`: Analytical execution options.
+
+# Returns
+- `Vector{CORE_ModifierDCYP_DDES}`: Decay modifier parameter structures for desirability penalisation.
 """
 function VISE_ExtractDCYP_DDEF(in_n::AbstractVector{<:AbstractString}, out_n::AbstractVector{<:AbstractString},
     config::AbstractDict, opts::AbstractDict)::Vector{Main.Lib_Core.CORE_ModifierDCYP_DDES}
@@ -2430,8 +2551,16 @@ function VISE_AssembleBundle_DDEF(phase, in_n, out_n, disp_in, disp_out, models,
 end
 
 """
-    VISE_ExportToExcel_DDEF(Res::Dict, FilePath::AbstractString) -> Bool
-Produces a high-fidelity academic Excel report with multiple analytical sheets.
+    VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::AbstractString) -> Bool
+Export statistical results, model coefficients, and candidate leader formulations into a formatted multi-sheet Excel workbook.
+Generates structured worksheets for executive summaries, ANOVA tables, parameter estimates, and optimisation rankings.
+
+# Arguments
+- `Res::AbstractDict`: Analytical results dictionary produced by `VISE_Execute_DDEF`.
+- `FilePath::AbstractString`: Destination path for the exported workbook.
+
+# Returns
+- `Bool`: `true` if export succeeded, `false` otherwise.
 """
 function VISE_ExportToExcel_DDEF(Res::AbstractDict, FilePath::AbstractString)
     Main.Sys_Fast.FAST_Log_DDEF("VISE", "EXPORT", "Generating High-Fidelity Scientific Portfolio: $FilePath", "WAIT")

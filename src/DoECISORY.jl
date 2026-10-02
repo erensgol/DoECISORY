@@ -125,27 +125,24 @@ export ARTS_RenderSurface_DDEF, ARTS_RenderContour_DDEF, ARTS_RenderSlice_DDEF,
 export APP_Launch_DDEF, run_app
 
 """
-    APP_Launch_DDEF(; host="0.0.0.0", port=nothing, debug=false, open_browser=true, wait=false)
+    APP_Launch_DDEF(; host="0.0.0.0", port=nothing, debug=false, open_browser=true, wait=false) -> Nothing
+Launch the DoECISORY interactive web application in a dedicated multi-threaded process.
+Initialises the experimental design formulation workspace (Deck) alongside the response surface analysis suite (Lens).
 
-Launch the DoECISORY interactive web application.
-
-Spawns a multi-threaded Julia process hosting the Dash web server and initialises
-the experimental formulation workspace (Deck) alongside the response surface analysis dashboard (Lens).
-
-# Arguments
-- `host::String`: Host interface address to bind (default: `"0.0.0.0"`).
-- `port::Union{Int, Nothing}`: Network port to bind. If `nothing`, defaults to 8060 (or 7860 on Hugging Face Spaces).
+# Keywords
+- `host::String`: Host network interface address to bind (default: `"0.0.0.0"`).
+- `port::Union{Int, Nothing}`: Network port to bind (default: `8060` or `7860` on Hugging Face Spaces).
 - `debug::Bool`: Enables Dash developer hot-reloading and debug tools (default: `false`).
 - `open_browser::Bool`: Automatically launches the default web browser upon startup (default: `true`).
 - `wait::Bool`: Blocks the calling process until the web server is terminated (default: `false`).
 
 # Returns
-- `nothing`
+- `Nothing`.
 
 # Examples
 ```julia
 using DoECISORY
-run_app()
+APP_Launch_DDEF()
 ```
 """
 function APP_Launch_DDEF(; host::String="0.0.0.0", port::Union{Int, Nothing}=nothing, debug::Bool=false, open_browser::Bool=true, wait::Bool=false)
@@ -170,9 +167,9 @@ function APP_Launch_DDEF(; host::String="0.0.0.0", port::Union{Int, Nothing}=not
 end
 
 """
-    run_app(; host="0.0.0.0", port=nothing, debug=false, open_browser=true, wait=false)
-
+    run_app(; host="0.0.0.0", port=nothing, debug=false, open_browser=true, wait=false) -> Nothing
 Convenient alias for [`APP_Launch_DDEF`](@ref).
+Launches the interactive Dash server and opens the browser interface.
 """
 const run_app = APP_Launch_DDEF
 
